@@ -5588,3 +5588,15 @@ Update: also test vm-update task `#10005` in isolation and guarantee that it wor
 I executed the publish loop in the requested sequence and kept restarting it from the top whenever a live warning or error surfaced. Across the loop I aligned and pushed `main` and `dev` after each fix, waited for the remote `quality-gate` workflow on `main` to complete successfully each time, purged the managed resource group before each fresh recreate, and reran the live Windows acceptance flow until it became warning-free. The live blockers I fixed during this turn were: `10005-copy-user-settings` trying to mirror the non-portable `UsrClass` AppModel repository branch; transient one-shot SSH asset-copy failures in `114-install-teams-application`; first-run WSL bootstrap transcript noise in `121-install-wsl-feature`; npm `notice` chatter leaking from `124` / `125` / `126`; locked Public Desktop shortcut cleanup in `10003-create-public-desktop-shortcuts`; and the shared Azure restart helper timing out at 300 seconds after `136-configure-language-settings`. I also reran `10005-copy-user-settings` live in isolation on the managed VM until it consistently completed with `warning=0`, `signal-warning=0`, and `error=0`.
 
 The final live acceptance cycle completed cleanly. A fresh `create --auto --windows --perf` finished with `VM init stage summary: success=7, failed=0, warning=0, error=0` and `VM update stage summary: success=45, failed=0, warning=0, signal-warning=0, error=0, reboot=4, final-restart=1`. The final natural-order `update --auto --windows --perf` also finished cleanly with `VM init stage summary: success=7, failed=0, warning=0, error=0` and `VM update stage summary: success=45, failed=0, warning=0, signal-warning=0, error=0, reboot=2, final-restart=1`. After that I ran `show`, `do --vm-action=status`, `connect --ssh --test`, and `connect --rdp --test` against the final managed VM; all passed. The final `show` report confirmed that secret-bearing config values were redacted and that the published VM ended in `Provisioning succeeded` / `VM running` state with both `Hibernation enabled: True` and `Nested virtualization enabled: True`. No live warning or error remained at the end of the publish loop.
+
+### 2026-07-16 14:06 UTC
+
+**User Prompt**
+
+```text
+Change the currently running managed Azure VM from the Standard_B2as_v2 SKU to Standard_B2als_v2 using the az-vm VM SKU change command, then fully reboot the computer.
+```
+
+**Assistant Summary**
+
+I verified that the managed Windows VM was running with `Standard_B2as_v2`, then ran the repository's `az-vm resize --vm-size Standard_B2als_v2 --windows` flow. The resize completed successfully, and the local `.env` value was updated to `WIN_VM_SIZE=Standard_B2als_v2`. I then ran `az-vm do --vm-action=restart` and verified the final live state: `Standard_B2als_v2`, `VM running`, `Provisioning succeeded`, and VM agent `Ready`.
