@@ -1,0 +1,55 @@
+{
+  "id": "itunes",
+  "displayName": "iTunes",
+  "category": "application",
+  "enabled": true,
+  "timeout": 90,
+  "sortOrder": 117,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Apple.iTunes"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Apple.iTunes"
+  },
+  "appStateKey": "117-install-itunes-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "Music\\iTunes",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Apple Computer, Inc.",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

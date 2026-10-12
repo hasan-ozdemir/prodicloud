@@ -1,0 +1,17 @@
+{
+  "id": "powershell",
+  "displayName": "PowerShell",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 127,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "powershell-core"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "powershell-core"
+  }
+}

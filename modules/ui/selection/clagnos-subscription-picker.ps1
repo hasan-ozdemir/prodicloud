@@ -168,7 +168,7 @@ function Test-ClagnosAzureTouchingCommand {
         )
     }
 
-    return ([string]$CommandName -in @('create','initialize','update','list','show','do','program','component','move','resize','set','exec','connect','delete'))
+    return ([string]$CommandName -in @('create','initialize','update','list','show','do','package','component','move','resize','set','exec','connect','delete'))
 }
 
 function Initialize-ClagnosCommandSubscriptionState {

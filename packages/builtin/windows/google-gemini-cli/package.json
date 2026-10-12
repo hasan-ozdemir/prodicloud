@@ -1,0 +1,56 @@
+{
+  "id": "google-gemini-cli",
+  "displayName": "Google Gemini CLI",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 300,
+  "sortOrder": 126,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "npm",
+    "value": "@google/gemini-cli"
+  },
+  "uninstall": {
+    "kind": "npm",
+    "value": "@google/gemini-cli"
+  },
+  "appStateKey": "126-install-google-gemini-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": ".gemini",
+        "targetProfiles": [],
+        "excludeNames": [
+          "tmp",
+          "bin",
+          "Cache",
+          "Code Cache",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [
+      {
+        "path": ".npmrc",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  },
+  "dependsOn": [
+    "nodejs"
+  ]
+}

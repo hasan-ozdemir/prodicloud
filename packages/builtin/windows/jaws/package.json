@@ -1,0 +1,64 @@
+{
+  "id": "jaws",
+  "displayName": "JAWS",
+  "category": "application",
+  "enabled": true,
+  "timeout": 360,
+  "sortOrder": 133,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "FreedomScientific.JAWS.2025"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "FreedomScientific.JAWS.2025"
+  },
+  "appStateKey": "133-install-jaws-application",
+  "appState": {
+    "portableProfilePayload": true,
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings",
+        "targetProfiles": [
+          "manager"
+        ],
+        "excludeNames": [
+          "transient-focus",
+          "transient-session",
+          "MessageCenter"
+        ],
+        "excludePathPatterns": [
+          "*\\MessageCenter\\*"
+        ],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [
+      {
+        "path": "HKLM\\Software\\Freedom Scientific",
+        "distributionAllowList": []
+      },
+      {
+        "path": "HKLM\\Software\\WOW6432Node\\Freedom Scientific",
+        "distributionAllowList": []
+      }
+    ],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Freedom Scientific",
+        "targetProfiles": [
+          "manager"
+        ],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

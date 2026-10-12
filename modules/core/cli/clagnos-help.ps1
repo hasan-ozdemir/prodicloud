@@ -1,7 +1,7 @@
 # Shared CLI help helpers.
 
 function Get-ClagnosValidCommandList {
-    return @('configure', 'create', 'initialize', 'update', 'list', 'show', 'do', 'task', 'program', 'component', 'connect', 'move', 'resize', 'set', 'exec', 'delete', 'help')
+    return @('configure', 'create', 'initialize', 'update', 'list', 'show', 'do', 'task', 'package', 'component', 'connect', 'move', 'resize', 'set', 'exec', 'delete', 'help')
 }
 
 function Write-ClagnosHelpLines {
@@ -35,12 +35,12 @@ function Show-ClagnosCommandHelpOverview {
         '  configure  Open the interactive .env editor and validate saved settings safely.'
         '  create     Create a fresh managed resource group, network, and VM.'
         '  initialize Run vm-init tasks on one existing managed virtual computer.'
-        '  update     Run non-program maintenance tasks on one existing managed VM.'
+        '  update     Run non-package maintenance tasks on one existing managed VM.'
         '  list       List managed resource groups and managed Azure resources by type.'
         '  show       Print system and configuration dump for resource groups and VMs.'
         '  do         Apply one VM lifecycle action or print current VM state.'
         '  task       List tasks, enable/disable one task, run one task, or save/restore task app-state.'
-        '  program    Check, install, update, or uninstall a catalogued VM program.'
+        '  package    Check, install, update, or uninstall a catalogued VM package.'
         '  component  Manage Clagnos-owned Azure resource components.'
         '  connect    Launch SSH or RDP client/test for a managed VM.'
         '  move       Move an existing VM to another Azure region.'
@@ -54,7 +54,7 @@ function Show-ClagnosCommandHelpOverview {
         '  --version                  Print the current clagnos release version and exit.'
         '  --auto[=true|false]         Auto mode (create/initialize/update/delete only).'
         '  --perf[=true|false]         Print timing metrics.'
-        '  --windows / --linux         Force VM platform where supported (create/initialize/update/exec/resize/program).'
+        '  --windows / --linux         Force VM platform where supported (create/initialize/update/exec/resize/package).'
         '  -g, --group                 Target resource group where required.'
         '  -v, --vm-name               Target VM name where required.'
         '  -s, --subscription-id       Target Azure subscription for Azure-touching commands.'
@@ -74,6 +74,7 @@ function Show-ClagnosCommandHelpOverview {
         '  clagnos task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>'
         '  clagnos task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name>'
         '  clagnos task --save-app-state --vm-update-task=115 --group <resource-group> --vm-name <vm-name>'
+        '  clagnos task --save-app-state --package=visual-studio-code --package-catalog=builtin --group <resource-group> --vm-name <vm-name>'
         '  clagnos task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows'
         '  clagnos task --restore-app-state --target=lm --user=.current. --vm-update-task=115 --windows'
         '  clagnos exec --command "Get-Date" --group <resource-group> --vm-name <vm-name>'
@@ -102,8 +103,8 @@ function Show-ClagnosCommandHelpDetailed {
             '  --version                # print the current clagnos release version and exit'
             '  --auto[=true|false]      # create/initialize/update/delete only'
             '  --perf[=true|false]'
-            '  --windows[=true|false]   # create/initialize/update/exec/resize/program'
-            '  --linux[=true|false]     # create/initialize/update/exec/resize/program'
+            '  --windows[=true|false]   # create/initialize/update/exec/resize/package'
+            '  --linux[=true|false]     # create/initialize/update/exec/resize/package'
             '  -g, --group'
             '  -v, --vm-name'
             '  -s, --subscription-id'
@@ -118,12 +119,12 @@ function Show-ClagnosCommandHelpDetailed {
             '  configure  : interactive .env editor with validation and next-create preview'
             '  create     : fresh infrastructure and VM deployment flow'
             '  initialize : vm-init tasks for one existing managed VM'
-            '  update     : non-program vm-update maintenance flow'
+            '  update     : non-package vm-update maintenance flow'
             '  list       : managed inventory output'
             '  show       : system and configuration dump'
             '  do         : lifecycle and repair actions'
             '  task       : task inventory, enable/disable, isolated task runs, task app-state save/restore'
-            '  program    : catalogued program status, install/update, and uninstall'
+            '  package    : catalogued package status, install/update, and uninstall'
             '  component  : managed Azure component CRUD and dependency-aware deletion'
             '  connect    : connect --ssh / connect --rdp plus --test'
             '  move       : managed region move'
@@ -132,7 +133,7 @@ function Show-ClagnosCommandHelpDetailed {
             '  exec       : remote command or interactive shell only'
             '  delete     : resource deletion by target scope'
             ''
-            'For per-command docs: clagnos help <configure|create|initialize|update|list|show|do|task|program|component|connect|move|resize|set|exec|delete>'
+            'For per-command docs: clagnos help <configure|create|initialize|update|list|show|do|task|package|component|connect|move|resize|set|exec|delete>'
         )
         return
     }
@@ -142,7 +143,7 @@ function Show-ClagnosCommandHelpDetailed {
             -Detail ("Unknown help topic '{0}'." -f $topicText) `
             -Code 2 `
             -Summary 'Unknown help topic.' `
-            -Hint 'Use clagnos help or clagnos help <configure|create|initialize|update|list|show|do|task|program|component|connect|move|resize|set|exec|delete>.'
+            -Hint 'Use clagnos help or clagnos help <configure|create|initialize|update|list|show|do|task|package|component|connect|move|resize|set|exec|delete>.'
     }
 
     switch ($topicName) {
@@ -176,7 +177,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos create --auto --windows --vm-name <vm-name> --vm-region <azure-region> --vm-size <vm-sku> -s <subscription-guid>'
                 '  clagnos initialize --group <resource-group> --vm-name <vm-name>'
                 'Allowed steps: configure, group, network, vm-deploy, vm-summary'
-                'Notes: create targets a fresh managed resource group, its initial network resources, and one fresh VM. It never reuses existing resource groups or names and stops after the read-only VM summary; run initialize for vm-init tasks and use program for catalogued software. Interactive mode prompts for Azure subscription when --subscription-id is omitted, asks for VM OS type first when --windows/--linux is omitted, proposes the next global gX name plus globally unique nX resource ids, and asks yes/no/cancel only before group creation and VM deployment. Auto mode runs from the fully resolved selection set: CLI overrides win, otherwise .env SELECTED_* values plus platform defaults must resolve platform, VM name, Azure region, and VM size. Use initialize and update for guest stages; use do for explicit lifecycle and repair actions. vm-summary always renders, even for partial step windows. For a destructive rebuild, run delete first and then create again.'
+                'Notes: create targets a fresh managed resource group, its initial network resources, and one fresh VM. It never reuses existing resource groups or names and stops after the read-only VM summary; run initialize for vm-init tasks and use package for catalogued software. Interactive mode prompts for Azure subscription when --subscription-id is omitted, asks for VM OS type first when --windows/--linux is omitted, proposes the next global gX name plus globally unique nX resource ids, and asks yes/no/cancel only before group creation and VM deployment. Auto mode runs from the fully resolved selection set: CLI overrides win, otherwise .env SELECTED_* values plus platform defaults must resolve platform, VM name, Azure region, and VM size. Use initialize and update for guest stages; use do for explicit lifecycle and repair actions. vm-summary always renders, even for partial step windows. For a destructive rebuild, run delete first and then create again.'
             )
             return
         }
@@ -195,7 +196,7 @@ function Show-ClagnosCommandHelpDetailed {
         'update' {
             Write-ClagnosHelpLines @(
                 'Command: update'
-                'Description: run enabled non-program vm-update maintenance tasks on one existing managed VM.'
+                'Description: run enabled non-package vm-update maintenance tasks on one existing managed VM.'
                 'Usage:'
                 '  clagnos update [--windows|--linux] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--perf]'
                 '  clagnos update --auto [--subscription-id <subscription-id>] [--perf]'
@@ -208,7 +209,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos update --group <resource-group>'
                 '  clagnos update --auto -s <subscription-guid>'
                 '  clagnos update --auto --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
-                'Notes: update requires an existing managed resource group and VM. It does not create, redeploy, or initialize Azure resources; it runs enabled non-program vm-update maintenance tasks and then renders the read-only summary. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise .env SELECTED_RESOURCE_GROUP and SELECTED_VM_NAME are used, with single-VM resolution allowed when the selected managed group contains exactly one VM. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-program maintenance tasks. vm-summary always renders, even for partial step windows.'
+                'Notes: update requires an existing managed resource group and VM. It does not create, redeploy, or initialize Azure resources; it runs enabled non-package vm-update maintenance tasks and then renders the read-only summary. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise .env SELECTED_RESOURCE_GROUP and SELECTED_VM_NAME are used, with single-VM resolution allowed when the selected managed group contains exactly one VM. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-package maintenance tasks. vm-summary always renders, even for partial step windows.'
             )
             return
         }
@@ -270,6 +271,8 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos task --save-app-state --vm-update-task <task-number|task-name> [--source <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
                 '  clagnos task --restore-app-state --vm-init-task <task-number|task-name> [--target <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
                 '  clagnos task --restore-app-state --vm-update-task <task-number|task-name> [--target <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
+                '  clagnos task --save-app-state --package <package-id> --package-catalog <builtin|custom> [--source <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux]'
+                '  clagnos task --restore-app-state --package <package-id> --package-catalog <builtin|custom> [--target <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux]'
                 'Examples:'
                 '  clagnos task --list --vm-update'
                 '  clagnos task --disable --vm-update-task 114 --windows'
@@ -280,21 +283,23 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=vm --user=assistant --vm-update-task=115 --group <resource-group> --vm-name <vm-name>'
-                'Notes: --list, --enable, and --disable are local task-catalog operations and do not require az login. Enable/disable requires exactly one task selector and a typed confirmation. Disable moves the task folder to its matching disabled directory; enable restores it to the active directory and sets task.json enabled=true while preserving other metadata. The change applies to future runs for every VM using this shared repository and does not change a running VM. Program status and uninstall remain available while a program task is disabled; install/update requires enabling it first. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts, it does not perform the workflow-only final vm-update restart, and Windows Store-backed isolated reruns append `10003-create-public-desktop-shortcuts` so Public Desktop shortcuts refresh in the same task-run path. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only, reads or deploys only `<task-folder>/app-state/app-state.zip`, and writes a restore journal plus backup root before local replay.'
+                'Notes: --list, --enable, and --disable are local task-catalog operations and do not require az login. Enable/disable applies only to task folders and requires a typed confirmation. Use `package --action enable|disable` for package availability. Package app-state uses --package plus --package-catalog and shares the same VM/local-machine profile rules. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts and does not perform the workflow-only final vm-update restart. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only and writes a restore journal plus backup root before local replay.'
             )
             return
         }
-        'program' {
+        'package' {
             Write-ClagnosHelpLines @(
-                'Command: program'
-                'Description: inspect, install/update, or uninstall one platform-specific program declared by an active or disabled init/update task.'
+                'Command: package'
+                'Description: manage packages in the isolated builtin or custom catalog and install them on one managed VC.'
                 'Usage:'
-                '  clagnos program --action list [--group <resource-group>] [--vm-name <vm-name>] [--windows|--linux]'
-                '  clagnos program --action status|install|uninstall --program <program-id> --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
+                '  clagnos package --action list --catalog <builtin|custom> [--group <resource-group>] [--vm-name <vm-name>] [--windows|--linux]'
+                '  clagnos package --action status|install|uninstall --catalog <builtin|custom> --package <package-id> --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
+                '  clagnos package --action enable|disable --catalog <builtin|custom> --package <package-id> [--windows|--linux]'
                 'Examples:'
-                '  clagnos program --action list --group <resource-group> --vm-name <vm-name> --windows'
-                '  clagnos program --action install --program visual-studio-code --group <resource-group> --vm-name <vm-name> --windows'
-                'Notes: disabled programs stay visible in the catalog. Status checks and uninstall actions come from validated task.json program metadata. Status and uninstall work while the program task is disabled; install/update requires the task to be enabled. Use task --enable/--disable or the TUI program menu to change availability. Installations run the owning task synchronously. Uninstall requires an explicit confirmation unless --yes is supplied.'
+                '  clagnos package --action list --catalog builtin --group <resource-group> --vm-name <vm-name> --windows'
+                '  clagnos package --action install --catalog builtin --package visual-studio-code --group <resource-group> --vm-name <vm-name> --windows'
+                '  clagnos package --action disable --catalog custom --package my-tool --windows'
+                'Notes: packages/builtin/<platform> and packages/custom/<platform> are separate catalogs. Every package directory contains package.json and its installer script. Manage Programs opens a catalog selector and labels each row [builtin] or [custom]. Custom packages use the same validated status, uninstall, assets, app-state, and timeout manifest contract. Enable/disable modifies only package.json after typed confirmation, affects future operations in this repository, and does not change an installed package on a VC. Status and uninstall remain available while disabled; install/update requires an enabled package. Installers run synchronously on the selected VC. Uninstall requires explicit confirmation unless --yes is supplied.'
             )
             return
         }

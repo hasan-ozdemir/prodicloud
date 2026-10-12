@@ -1,0 +1,41 @@
+{
+  "id": "rclone",
+  "displayName": "Rclone",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 60,
+  "sortOrder": 105,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Rclone.Rclone"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Rclone.Rclone"
+  },
+  "appStateKey": "105-install-rclone-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Roaming\\rclone",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      },
+      {
+        "path": ".config\\rclone",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

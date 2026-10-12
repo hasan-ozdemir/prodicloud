@@ -1,0 +1,125 @@
+{
+  "id": "visual-studio-community",
+  "displayName": "Visual Studio Community",
+  "category": "application",
+  "enabled": true,
+  "timeout": 1800,
+  "sortOrder": 132,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "visualstudio2022community"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "visualstudio2022community"
+  },
+  "appStateKey": "132-install-vs2022community-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Roaming\\Microsoft\\VisualStudio",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs",
+          "Packages",
+          "ImageLibrary",
+          "ImageLibrary.cache",
+          "Search",
+          "SettingsLogs",
+          "ComponentModelCache",
+          "vshub"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      },
+      {
+        "path": "AppData\\Local\\Microsoft\\VisualStudio",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs",
+          "Packages",
+          "ImageLibrary",
+          "ImageLibrary.cache",
+          "Search",
+          "SettingsLogs",
+          "ComponentModelCache",
+          "vshub"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      },
+      {
+        "path": ".vs",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs",
+          "Packages",
+          "ImageLibrary",
+          "ImageLibrary.cache",
+          "Search",
+          "SettingsLogs",
+          "ComponentModelCache",
+          "vshub"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Microsoft\\VisualStudio",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      },
+      {
+        "path": "HKCU\\Software\\Microsoft\\VSCommon",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

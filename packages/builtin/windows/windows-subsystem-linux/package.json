@@ -1,0 +1,42 @@
+{
+  "id": "windows-subsystem-linux",
+  "displayName": "Windows Subsystem for Linux",
+  "category": "feature",
+  "enabled": true,
+  "timeout": 120,
+  "sortOrder": 121,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "appx",
+    "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
+  },
+  "uninstall": {
+    "kind": "appx",
+    "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
+  },
+  "appStateKey": "121-install-wsl-feature",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [],
+    "profileFiles": [
+      {
+        "path": ".wslconfig",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss",
+        "targetProfiles": [],
+        "distributionAllowList": [
+          "docker-desktop"
+        ]
+      }
+    ]
+  }
+}

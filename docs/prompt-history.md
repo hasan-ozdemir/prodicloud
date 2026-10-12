@@ -5685,3 +5685,14 @@ Task update: In the Manage programs screen, always identify a task/package/progr
 **Assistant Summary**
 
 Labeled Manage programs entries with their lifecycle stage (`initial` or `add-on`) and execution target (`local` or `remote`). Local-only task-catalog entries receive a separate `[local catalog]` marker so catalog origin is not confused with execution on the selected VM. Program actions use the entry's stage when enabling, disabling, or running its install task.
+
+### 2026-10-12 15:44 UTC
+**User Prompt**
+
+````text
+Task: Clarify package/program types by making a definitive conversion in this repository and application code. Rename code entities and folders/files accordingly, leaving no stale artifacts. Split the package catalogs into two fully isolated catalogs: "builtin package catalog" and "custom package catalog". In Manage Programs, show [builtin] for standard packages from the builtin catalog and [custom] for special packages from the custom catalog. Implement this end to end with a stable design.
+````
+
+**Assistant Summary**
+
+Replaced task-backed programs with isolated builtin/custom package catalogs. Moved the 36 standard Windows installers under `packages/builtin/windows/`, renamed scripts and manifests to `install.ps1` and `package.json`, and added custom Windows/Linux catalog roots. Renamed the public command and runtime entities to `package`; Manage Programs now selects one catalog and labels each package `[builtin]` or `[custom]`. Package availability, remote status/install/uninstall, and app-state selection now use the package manifest. Existing app-state archives were moved without inspection and retain their prior identity through `appStateKey`.

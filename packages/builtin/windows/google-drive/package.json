@@ -1,0 +1,93 @@
+{
+  "id": "google-drive",
+  "displayName": "Google Drive",
+  "category": "application",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 129,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Google.GoogleDrive"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Google.GoogleDrive"
+  },
+  "appStateKey": "129-install-google-drive-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Local\\Google\\DriveFS",
+        "targetProfiles": [],
+        "excludeNames": [
+          "webview2_user_data",
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.db",
+          "*.db-shm",
+          "*.db-wal",
+          "*.sqlite",
+          "*.sqlite-shm",
+          "*.sqlite-wal",
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log",
+          "pid.txt"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Google\\DriveFS",
+        "targetProfiles": [],
+        "excludeNames": [
+          "webview2_user_data",
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.db",
+          "*.db-shm",
+          "*.db-wal",
+          "*.sqlite",
+          "*.sqlite-shm",
+          "*.sqlite-wal",
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log",
+          "pid.txt"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Google\\DriveFS",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

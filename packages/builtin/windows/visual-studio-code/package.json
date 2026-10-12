@@ -1,0 +1,69 @@
+{
+  "id": "visual-studio-code",
+  "displayName": "Visual Studio Code",
+  "category": "application",
+  "enabled": true,
+  "timeout": 120,
+  "sortOrder": 116,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "vscode"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "vscode"
+  },
+  "appStateKey": "116-install-vscode-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Roaming\\Code\\User",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      },
+      {
+        "path": "AppData\\Roaming\\Code\\Workspaces",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      },
+      {
+        "path": ".vscode\\extensions",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Microsoft\\VSCommon",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

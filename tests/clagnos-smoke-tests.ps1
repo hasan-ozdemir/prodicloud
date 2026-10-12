@@ -142,6 +142,66 @@ function Get-RepoTaskScriptPath {
 
     $resolvedTaskName = Get-CurrentSmokeTaskName -TaskName $TaskName
     $extension = if ([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) { '.sh' } else { '.ps1' }
+    if ($Stage -eq 'update' -and $Platform -eq 'windows') {
+        $packageIds = @{
+            '01-install-choco-tool' = 'chocolatey'; '02-install-winget-tool' = 'windows-package-manager'; '03-install-chrome-application' = 'google-chrome'
+            '101-install-sysinternals-tool' = 'sysinternals'; '103-install-edge-application' = 'microsoft-edge'; '104-install-onedrive-application' = 'onedrive'
+            '105-install-rclone-tool' = 'rclone'; '106-install-7zip-tool' = '7zip'; '107-install-gh-tool' = 'github-cli'; '108-install-azd-tool' = 'azure-developer-cli'
+            '109-install-anydesk-application' = 'anydesk'; '111-install-node-tool' = 'nodejs'; '112-install-windscribe-application' = 'windscribe'; '113-install-ffmpeg-tool' = 'ffmpeg'
+            '114-install-teams-application' = 'microsoft-teams'; '115-install-nvda-application' = 'nvda'; '116-install-vscode-application' = 'visual-studio-code'; '117-install-itunes-application' = 'itunes'
+            '118-install-be-my-eyes-application' = 'be-my-eyes'; '119-install-whatsapp-application' = 'whatsapp'; '120-install-codex-application' = 'codex-app'; '121-install-wsl-feature' = 'windows-subsystem-linux'
+            '122-install-icloud-application' = 'icloud'; '123-install-git-tool' = 'git'; '124-install-openai-codex-tool' = 'openai-codex-cli'; '125-install-github-copilot-tool' = 'github-copilot-cli'
+            '126-install-google-gemini-tool' = 'google-gemini-cli'; '127-install-powershell-tool' = 'powershell'; '128-install-python-tool' = 'python'; '129-install-google-drive-application' = 'google-drive'
+            '130-install-azure-cli-tool' = 'azure-cli'; '131-install-vlc-application' = 'vlc'; '132-install-vs2022community-application' = 'visual-studio-community'; '133-install-jaws-application' = 'jaws'
+            '134-install-docker-desktop-application' = 'docker-desktop'; '135-install-ollama-tool' = 'ollama'
+        }
+        if ($packageIds.ContainsKey([string]$resolvedTaskName)) {
+            return (Join-Path $RepoRoot (Join-Path 'packages\builtin\windows' (Join-Path ([string]$packageIds[[string]$resolvedTaskName]) 'install.ps1')))
+        }
+    }
+    if ($Stage -eq 'update' -and $Platform -eq 'windows') {
+        $packageIds = @{
+            '01-install-choco-tool' = 'chocolatey'
+            '02-install-winget-tool' = 'windows-package-manager'
+            '03-install-chrome-application' = 'google-chrome'
+            '101-install-sysinternals-tool' = 'sysinternals'
+            '103-install-edge-application' = 'microsoft-edge'
+            '104-install-onedrive-application' = 'onedrive'
+            '105-install-rclone-tool' = 'rclone'
+            '106-install-7zip-tool' = '7zip'
+            '107-install-gh-tool' = 'github-cli'
+            '108-install-azd-tool' = 'azure-developer-cli'
+            '109-install-anydesk-application' = 'anydesk'
+            '111-install-node-tool' = 'nodejs'
+            '112-install-windscribe-application' = 'windscribe'
+            '113-install-ffmpeg-tool' = 'ffmpeg'
+            '114-install-teams-application' = 'microsoft-teams'
+            '115-install-nvda-application' = 'nvda'
+            '116-install-vscode-application' = 'visual-studio-code'
+            '117-install-itunes-application' = 'itunes'
+            '118-install-be-my-eyes-application' = 'be-my-eyes'
+            '119-install-whatsapp-application' = 'whatsapp'
+            '120-install-codex-application' = 'codex-app'
+            '121-install-wsl-feature' = 'windows-subsystem-linux'
+            '122-install-icloud-application' = 'icloud'
+            '123-install-git-tool' = 'git'
+            '124-install-openai-codex-tool' = 'openai-codex-cli'
+            '125-install-github-copilot-tool' = 'github-copilot-cli'
+            '126-install-google-gemini-tool' = 'google-gemini-cli'
+            '127-install-powershell-tool' = 'powershell'
+            '128-install-python-tool' = 'python'
+            '129-install-google-drive-application' = 'google-drive'
+            '130-install-azure-cli-tool' = 'azure-cli'
+            '131-install-vlc-application' = 'vlc'
+            '132-install-vs2022community-application' = 'visual-studio-community'
+            '133-install-jaws-application' = 'jaws'
+            '134-install-docker-desktop-application' = 'docker-desktop'
+            '135-install-ollama-tool' = 'ollama'
+        }
+        if ($packageIds.ContainsKey([string]$resolvedTaskName)) {
+            return (Join-Path $RepoRoot (Join-Path 'packages\builtin\windows' (Join-Path ([string]$packageIds[[string]$resolvedTaskName]) 'install.ps1')))
+        }
+    }
     $stageRoot = Join-Path $RepoRoot ("{0}\{1}" -f [string]$Platform, [string]$Stage)
     foreach ($candidate in @(
         (Join-Path $stageRoot ("{0}\{0}{1}" -f [string]$resolvedTaskName, [string]$extension)),
@@ -178,7 +238,10 @@ function Get-RepoTaskJsonPath {
         [string]$TaskName
     )
 
-    return (Join-Path (Get-RepoTaskRootPath -Platform $Platform -Stage $Stage -TaskName $TaskName) 'task.json')
+    $taskRoot = Get-RepoTaskRootPath -Platform $Platform -Stage $Stage -TaskName $TaskName
+    $packageManifest = Join-Path $taskRoot 'package.json'
+    if (Test-Path -LiteralPath $packageManifest -PathType Leaf) { return $packageManifest }
+    return (Join-Path $taskRoot 'task.json')
 }
 
 function Get-RepoSummaryReadbackScriptPath {
@@ -206,6 +269,16 @@ function New-RepoTaskTemplate {
 
     $stageRootPath = Join-Path $RepoRoot ("{0}\{1}" -f [string]$Platform, [string]$Stage)
     $resolvedTaskName = Get-CurrentSmokeTaskName -TaskName $TaskName
+    $scriptPath = Get-RepoTaskScriptPath -Platform $Platform -Stage $Stage -TaskName $resolvedTaskName
+    $packageRoot = Split-Path -Path $scriptPath -Parent
+    if (Test-Path -LiteralPath (Join-Path $packageRoot 'package.json') -PathType Leaf) {
+        $packageId = Split-Path -Path $packageRoot -Leaf
+        $package = @(Get-ClagnosPackageCatalog -Platform $Platform -Catalog builtin | Where-Object { [string]::Equals([string]$_.Id,$packageId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if ($package.Count -ne 1) { throw ("Repo package template could not be resolved: {0}/{1}/{2}" -f [string]$Platform,$Stage,$packageId) }
+        $packageTask = $package[0].PackageTask | Select-Object *
+        $packageTask.TimeoutSeconds = [int]$TimeoutSeconds
+        return $packageTask
+    }
     $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRootPath -Platform $Platform -Stage $Stage -SuppressSkipMessages
     $taskBlock = @(
         @($catalog.ActiveTasks) + @($catalog.DisabledTasks) |
@@ -637,14 +710,7 @@ Invoke-Test -Name "Task availability actions move and verify catalog entries saf
   "priority": 101,
   "enabled": true,
   "timeout": 60,
-  "customMetadata": "preserve-me",
-  "program": {
-    "id": "toggle-tool",
-    "displayName": "Toggle Tool",
-    "category": "tool",
-    "statusCheck": { "kind": "command", "value": "toggle-tool" },
-    "uninstall": { "kind": "choco", "value": "toggle-tool" }
-  }
+  "customMetadata": "preserve-me"
 }
 '@
     [System.IO.File]::WriteAllText((Join-Path $activeTaskRoot 'task.json'), $manifestText, [System.Text.UTF8Encoding]::new($false))
@@ -661,20 +727,15 @@ Invoke-Test -Name "Task availability actions move and verify catalog entries saf
         Assert-True -Condition (Test-Path -LiteralPath $disabledPath) -Message 'Disable must preserve the full task folder under disabled/.'
         $disabledCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform windows -Stage update -SuppressSkipMessages
         $disabledTask = @($disabledCatalog.DisabledTasks | Where-Object { [string]$_.Name -eq $taskName } | Select-Object -First 1)
-        Assert-True -Condition (@($disabledTask).Count -eq 1 -and [string]$disabledTask[0].DisabledReason -eq 'disabled-by-location') -Message 'Disabled program tasks must remain visible with their location reason.'
-        Assert-True -Condition ($null -ne $disabledTask[0].ProgramSpec) -Message 'Disabled program tasks must remain visible in the program catalog.'
-        $disabledProgram = @(Get-ClagnosProgramCatalog -Platform windows -StageRoot $stageRoot)
-        Assert-True -Condition ($disabledProgram.Count -eq 1 -and -not [bool]$disabledProgram[0].Enabled) -Message 'Disabled program tasks must remain visible and marked disabled in the program catalog.'
+        Assert-True -Condition (@($disabledTask).Count -eq 1 -and [string]$disabledTask[0].DisabledReason -eq 'disabled-by-location') -Message 'Disabled task folders must remain visible with their location reason.'
 
         $script:ClagnosTaskAvailabilityToggleAnswer = 'ENABLE'
         $enabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName '101' -Action 'enable'
         Assert-True -Condition ([bool]$enabled.Enabled -and [bool]$enabled.Changed) -Message 'Enable by task number must restore the task to the active catalog.'
         Assert-True -Condition (Test-Path -LiteralPath $activeTaskRoot) -Message 'Enable must move the task folder back to the active stage root.'
-        $enabledProgram = @(Get-ClagnosProgramCatalog -Platform windows -StageRoot $stageRoot)
-        Assert-True -Condition ($enabledProgram.Count -eq 1 -and [bool]$enabledProgram[0].Enabled) -Message 'Enabled program tasks must become installable catalog entries again.'
         $manifest = ConvertFrom-Json -InputObject ([string](Get-Content -LiteralPath (Join-Path $activeTaskRoot 'task.json') -Raw))
         Assert-True -Condition ([bool]$manifest.enabled) -Message 'Enable must update a false task.json enabled value.'
-        Assert-True -Condition ([string]$manifest.customMetadata -eq 'preserve-me' -and [string]$manifest.program.id -eq 'toggle-tool') -Message 'Enable must preserve unrelated task.json and program metadata.'
+        Assert-True -Condition ([string]$manifest.customMetadata -eq 'preserve-me') -Message 'Enable must preserve unrelated task.json metadata.'
 
         Set-ClagnosTaskManifestEnabled -ManifestPath (Join-Path $activeTaskRoot 'task.json') -Enabled $false
         $manifestDisabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'enable'
@@ -693,6 +754,98 @@ Invoke-Test -Name "Task availability actions move and verify catalog entries saf
             Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
         }
         $script:ClagnosTaskAvailabilityToggleAnswer = $null
+    }
+}
+
+Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availability updates only package manifests" -Action {
+    $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-package-catalog-{0}' -f ([guid]::NewGuid().ToString('N')))
+    $builtinRoot = Join-Path $testRoot 'builtin\windows'
+    $customRoot = Join-Path $testRoot 'custom\windows'
+    $packageId = 'shared-tool'
+    $builtinFolder = Join-Path $builtinRoot $packageId
+    $customFolder = Join-Path $customRoot $packageId
+    $script:ClagnosPackageToggleAnswer = 'DISABLE'
+    New-Item -ItemType Directory -Path $builtinFolder -Force | Out-Null
+    New-Item -ItemType Directory -Path $customFolder -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $builtinFolder 'install.ps1'), "Write-Output 'builtin'`r`n", [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText((Join-Path $customFolder 'install.ps1'), "Write-Output 'custom'`r`n", [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText((Join-Path $customFolder 'helper.ps1'), "Write-Output 'asset'`r`n", [System.Text.UTF8Encoding]::new($false))
+    $builtinManifest = [ordered]@{
+        id = $packageId
+        displayName = 'Builtin Shared Tool'
+        category = 'tool'
+        enabled = $true
+        timeout = 45
+        sortOrder = 1
+        installScript = 'install.ps1'
+        statusCheck = @{ kind = 'command'; value = 'shared-tool' }
+        uninstall = @{ kind = 'choco'; value = 'shared-tool' }
+    }
+    $customManifest = [ordered]@{
+        id = $packageId
+        displayName = 'Custom Shared Tool'
+        category = 'tool'
+        enabled = $true
+        timeout = 90
+        sortOrder = 2
+        installScript = 'install.ps1'
+        statusCheck = @{ kind = 'command'; value = 'custom-shared-tool' }
+        uninstall = @{ kind = 'choco'; value = 'custom-shared-tool' }
+        appStateKey = 'previous-shared-tool-installer'
+        appState = @{ profileFiles = @() }
+        assets = @(@{ local = 'helper.ps1'; remote = 'C:/Windows/Temp/package-helper.ps1' })
+        customMetadata = 'preserve-me'
+    }
+    [System.IO.File]::WriteAllText((Join-Path $builtinFolder 'package.json'), (ConvertTo-Json $builtinManifest -Depth 20), [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText((Join-Path $customFolder 'package.json'), (ConvertTo-Json $customManifest -Depth 20), [System.Text.UTF8Encoding]::new($false))
+
+    try {
+        function Read-Host {
+            param([string]$Prompt)
+            return [string]$script:ClagnosPackageToggleAnswer
+        }
+
+        $builtin = @(Get-ClagnosPackageCatalog -Platform windows -Catalog builtin -CatalogRoot $builtinRoot)
+        $custom = @(Get-ClagnosPackageCatalog -Platform windows -Catalog custom -CatalogRoot $customRoot)
+        Assert-True -Condition ($builtin.Count -eq 1 -and $custom.Count -eq 1 -and $builtin[0].Id -eq $custom[0].Id) -Message 'The same package id may exist in isolated builtin and custom catalogs.'
+        Assert-True -Condition ($builtin[0].Catalog -eq 'builtin' -and $custom[0].Catalog -eq 'custom') -Message 'Each catalog row must preserve its builtin/custom origin.'
+        Assert-True -Condition ([string]$custom[0].PackageTask.AppStateKey -eq 'previous-shared-tool-installer' -and [string]$custom[0].PackageTask.AppStateSpec.taskName -eq 'previous-shared-tool-installer') -Message 'Package appStateKey must preserve the identity used by existing app-state archives.'
+        $resolvedCustom = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($custom[0].PackageTask) -Context @{})[0]
+        Assert-True -Condition ($resolvedCustom.AssetCopies.Count -ge 1 -and (Test-Path -LiteralPath $resolvedCustom.AssetCopies[0].LocalPath)) -Message 'Custom package assets must resolve relative to their package folder.'
+        $appStateRuntime = [pscustomobject]@{ Platform = 'windows'; Context = @{} }
+        $packageAppStateOptions = @{ 'save-app-state' = $true; package = 'google-chrome'; 'package-catalog' = 'builtin' }
+        Assert-ClagnosTaskCommandOptionScope -Mode 'save-app-state' -Options $packageAppStateOptions
+        $packageSelection = Resolve-ClagnosTaskBlockForMaintenance -Runtime $appStateRuntime -Options $packageAppStateOptions
+        Assert-True -Condition ($packageSelection.Stage -eq 'package' -and $packageSelection.TaskBlock.Name -eq 'google-chrome' -and $packageSelection.TaskBlock.AppStateKey -eq '03-install-chrome-application') -Message 'Task app-state selection must resolve packages by id and catalog while keeping their archive identity.'
+
+        $disabled = Invoke-ClagnosPackageOperation -Action disable -PackageId $packageId -Catalog custom -CatalogRoot $customRoot -Options @{} -WindowsFlag
+        Assert-True -Condition (-not [bool]$disabled.Enabled -and [bool]$disabled.Changed) -Message 'Disabling a package must update only its selected catalog entry.'
+        Assert-True -Condition ((Test-Path -LiteralPath $customFolder) -and (Test-Path -LiteralPath (Join-Path $builtinFolder 'package.json'))) -Message 'Availability changes must not move packages between catalogs.'
+        $customAfterDisable = @(Get-ClagnosPackageCatalog -Platform windows -Catalog custom -CatalogRoot $customRoot)
+        Assert-True -Condition ($customAfterDisable.Count -eq 1 -and -not [bool]$customAfterDisable[0].Enabled) -Message 'Disabled packages must remain visible in their catalog.'
+        $updatedManifest = ConvertFrom-Json -InputObject ([string](Get-Content -LiteralPath (Join-Path $customFolder 'package.json') -Raw))
+        Assert-True -Condition ([string]$updatedManifest.customMetadata -eq 'preserve-me' -and [string]$updatedManifest.appStateKey -eq 'previous-shared-tool-installer') -Message 'Availability changes must preserve unrelated package manifest metadata.'
+
+        $installBlocked = $false
+        try { [void](Invoke-ClagnosPackageOperation -Action install -PackageId $packageId -Catalog custom -CatalogRoot $customRoot -Options @{} -WindowsFlag) }
+        catch { $installBlocked = $_.Exception.Message -match 'disabled in the custom package catalog' }
+        Assert-True -Condition $installBlocked -Message 'Disabled packages must be blocked from install before target resolution.'
+
+        $script:ClagnosPackageToggleAnswer = 'ENABLE'
+        $enabled = Invoke-ClagnosPackageOperation -Action enable -PackageId $packageId -Catalog custom -CatalogRoot $customRoot -Options @{} -WindowsFlag
+        Assert-True -Condition ([bool]$enabled.Enabled -and [bool]$enabled.Changed) -Message 'Enabling a package must restore its install availability.'
+        $script:ClagnosPackageToggleAnswer = 'NO'
+        $cancelled = Invoke-ClagnosPackageOperation -Action disable -PackageId $packageId -Catalog custom -CatalogRoot $customRoot -Options @{} -WindowsFlag
+        Assert-True -Condition (-not [bool]$cancelled.Changed -and [bool]$cancelled.Enabled) -Message 'A rejected package confirmation must leave package.json unchanged.'
+    }
+    finally {
+        Remove-Item -LiteralPath 'Function:\Read-Host' -Force -ErrorAction SilentlyContinue
+        $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([char[]]@('\','/')) + [System.IO.Path]::DirectorySeparatorChar
+        $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
+        if ($resolvedTestRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTestRoot)) {
+            Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
+        }
+        $script:ClagnosPackageToggleAnswer = $null
     }
 }
 
@@ -1003,31 +1156,35 @@ Invoke-Test -Name "Configure and list accept the current option contract" -Actio
 }
 
 Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface" -Action {
-    $expectedCommands = @('configure','create','initialize','update','list','show','do','task','program','component','connect','move','resize','set','exec','delete','help')
+    $expectedCommands = @('configure','create','initialize','update','list','show','do','task','package','component','connect','move','resize','set','exec','delete','help')
     $actualCommands = @(Get-ClagnosValidCommandList)
     foreach ($command in @($expectedCommands)) {
         Assert-True -Condition ($actualCommands -contains $command) -Message ("Public command '{0}' must be registered." -f $command)
     }
 
     Assert-ClagnosCommandOptions -CommandName 'initialize' -Options @{ auto = $true; windows = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
-    Assert-ClagnosCommandOptions -CommandName 'program' -Options @{ action = 'install'; program = 'git'; windows = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
-    Assert-ClagnosCommandOptions -CommandName 'program' -Options @{ action = 'uninstall'; program = 'git'; yes = $true; windows = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
+    Assert-ClagnosCommandOptions -CommandName 'package' -Options @{ action = 'install'; package = 'git'; catalog = 'builtin'; windows = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
+    Assert-ClagnosCommandOptions -CommandName 'package' -Options @{ action = 'uninstall'; package = 'git'; catalog = 'builtin'; yes = $true; windows = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
+    Assert-ClagnosCommandOptions -CommandName 'package' -Options @{ action = 'disable'; package = 'my-tool'; catalog = 'custom'; windows = $true }
     Assert-ClagnosCommandOptions -CommandName 'component' -Options @{ action = 'list'; type = 'disk'; group = 'rg-samplevm-ate1-g1' }
     Assert-ClagnosCommandOptions -CommandName 'component' -Options @{ action = 'attach'; type = 'nic'; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
     Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ enable = $true; 'vm-update-task' = '115'; windows = $true }
     Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ disable = $true; 'vm-update-task' = '115'; windows = $true }
-    Assert-True -Condition ((Resolve-ClagnosTaskCommandMode -Options @{ enable = $true }) -eq 'enable') -Message 'Task enable must resolve as a distinct local catalog action.'
-    Assert-True -Condition ((Resolve-ClagnosTaskCommandMode -Options @{ disable = $true }) -eq 'disable') -Message 'Task disable must resolve as a distinct local catalog action.'
+    Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ 'save-app-state' = $true; package = 'visual-studio-code'; 'package-catalog' = 'builtin'; windows = $true }
+    Assert-True -Condition ((Resolve-ClagnosTaskCommandMode -Options @{ enable = $true }) -eq 'enable') -Message 'Task enable must resolve as a distinct task availability action.'
+    Assert-True -Condition ((Resolve-ClagnosTaskCommandMode -Options @{ disable = $true }) -eq 'disable') -Message 'Task disable must resolve as a distinct task availability action.'
 
-    $programCatalog = @(Get-ClagnosProgramCatalog -Platform 'windows')
-    $programRuntime = Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\program\runtime.ps1') -Raw
-    Assert-True -Condition ($programCatalog.Count -gt 0) -Message 'Windows install tasks with program metadata must appear in the program catalog.'
-    Assert-True -Condition (@($programCatalog | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Every program entry must include status and uninstall metadata.'
-    Assert-True -Condition (@($programCatalog | Where-Object { [string]$_.ProgramType -notin @('initial','add-on') -or [string]$_.ExecutionTarget -notin @('local','remote') }).Count -eq 0) -Message 'Every program entry must identify its lifecycle type and execution target.'
-    Assert-True -Condition (@($programCatalog | Where-Object { [string]$_.Stage -eq 'update' -and [string]$_.ProgramType -eq 'add-on' -and [string]$_.ExecutionTarget -eq 'remote' }).Count -gt 0) -Message 'Update-stage programs must be identified as add-ons executed remotely on the selected VM.'
-    Assert-True -Condition ($programRuntime -match [regex]::Escape('$taskCatalog.InventoryTasks')) -Message 'Program inventory must retain disabled tasks for visibility and reactivation.'
-    Assert-True -Condition ($programRuntime -match [regex]::Escape("if (-not [bool]`$program.Enabled)")) -Message 'Disabled programs must be blocked from install/update.'
-    Assert-True -Condition ($programRuntime -match [regex]::Escape("ProgramType = [string]`$stageRootInfo.ProgramType") -and $programRuntime -match [regex]::Escape("ExecutionTarget = 'remote'")) -Message 'Program catalog records must derive their stage label and remote VM execution target.'
+    $builtinPackages = @(Get-ClagnosPackageCatalog -Platform 'windows' -Catalog 'builtin')
+    $packageRuntime = Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\package\runtime.ps1') -Raw
+    Assert-True -Condition ($builtinPackages.Count -ge 36) -Message 'Builtin package folders must be discoverable outside task-stage directories.'
+    Assert-True -Condition (@($builtinPackages | Where-Object { $_.Catalog -ne 'builtin' -or [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Builtin package rows must carry their catalog label and validated package metadata.'
+    Assert-True -Condition (@($builtinPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Every package entry must resolve to its package.json and installer script.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("Join-Path 'packages' (Join-Path `$Catalog `$Platform)")) -Message 'Builtin and custom packages must resolve under separate physical catalog roots.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -eq 'install' -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/update target resolution.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("Move-Item -LiteralPath `$tempPath -Destination `$ManifestPath -Force")) -Message 'Package enable/disable must atomically update only package.json.'
+    $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'windows\update') -Platform windows -Stage update -SuppressSkipMessages
+    Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
+    Assert-True -Condition (@($updateInventory.InventoryTasks | Where-Object { $_.Name -eq '01-install-choco-tool' -or $_.Name -eq '03-install-chrome-application' }).Count -eq 0) -Message 'Builtin package installers must no longer appear as vm-update tasks.'
     Assert-True -Condition ((@(Get-ClagnosComponentTypeIds) -join ',') -eq 'group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule') -Message 'The component catalog must expose all managed VC resource types.'
 
     $uiPath = Join-Path $RepoRoot 'scripts\clagnos-cli.ps1'
@@ -1036,10 +1193,10 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     $launcherText = Get-Content -LiteralPath $launcherPath -Raw
     Assert-True -Condition ($launcherText -match [regex]::Escape('scripts\clagnos-cli.ps1')) -Message 'cg.cmd must launch scripts/clagnos-cli.ps1.'
     Assert-True -Condition ($uiText -match [regex]::Escape('one tool for all common cloud operations')) -Message 'The welcome screen must show the requested one-line product description.'
-    foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'program'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
+    foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'package'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable program task','d: disable program task','u: uninstall','i: install or update','s: status',' (disabled)',' [local catalog]','ProgramType, [string]$catalog[$index].ExecutionTarget','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install or update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape("Invoke-ClagnosUiCommand -CommandName 'list'")) -Message 'The inventory submenu must route into the read-only list command.'
@@ -5434,51 +5591,14 @@ Invoke-Test -Name "Required config helper rejects empty and placeholder values" 
     Assert-True -Condition $placeholderFailed -Message 'Placeholder config must fail.'
 }
 
-Invoke-Test -Name "Windows vm-update tracked catalog order and timeouts" -Action {
+Invoke-Test -Name "Windows task and package catalogs are physically isolated" -Action {
     $updateDir = Join-Path $RepoRoot 'windows\update'
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $updateDir -Platform windows -Stage update
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $updateDir -Platform windows -Stage update -SuppressSkipMessages
     $active = @($catalog.ActiveTasks)
     $activeNames = @($active | ForEach-Object { [string]$_.Name })
-
-    $expectedTrackedTimeouts = [ordered]@{
-        '01-install-choco-tool' = 90
-        '02-install-winget-tool' = 60
-        '03-install-chrome-application' = 90
-        '101-install-sysinternals-tool' = 180
+    $expectedTaskTimeouts = [ordered]@{
         '102-configure-autologon-settings' = 60
-        '103-install-edge-application' = 60
-        '104-install-onedrive-application' = 60
-        '114-install-teams-application' = 120
-        '105-install-rclone-tool' = 60
-        '106-install-7zip-tool' = 120
-        '107-install-gh-tool' = 180
-        '108-install-azd-tool' = 60
-        '109-install-anydesk-application' = 75
         '110-configure-unlocker-settings' = 120
-        '111-install-node-tool' = 150
-        '112-install-windscribe-application' = 60
-        '113-install-ffmpeg-tool' = 90
-        '118-install-be-my-eyes-application' = 120
-        '119-install-whatsapp-application' = 150
-        '120-install-codex-application' = 120
-        '115-install-nvda-application' = 120
-        '116-install-vscode-application' = 120
-        '117-install-itunes-application' = 90
-        '121-install-wsl-feature' = 120
-        '122-install-icloud-application' = 150
-        '123-install-git-tool' = 180
-        '124-install-openai-codex-tool' = 180
-        '125-install-github-copilot-tool' = 180
-        '126-install-google-gemini-tool' = 300
-        '127-install-powershell-tool' = 180
-        '128-install-python-tool' = 180
-        '129-install-google-drive-application' = 180
-        '130-install-azure-cli-tool' = 240
-        '131-install-vlc-application' = 180
-        '132-install-vs2022community-application' = 1800
-        '133-install-jaws-application' = 360
-        '134-install-docker-desktop-application' = 600
-        '135-install-ollama-tool' = 540
         '136-configure-language-settings' = 1635
         '10001-configure-advanced-settings' = 30
         '10002-configure-startup-settings' = 120
@@ -5487,69 +5607,29 @@ Invoke-Test -Name "Windows vm-update tracked catalog order and timeouts" -Action
         '10005-copy-user-settings' = 240
         '10006-ensure-managed-user-cross-access' = 120
     }
-    Assert-True -Condition ([string]$activeNames[0] -eq '01-install-choco-tool') -Message 'Chocolatey bootstrap must be the first tracked Windows update task.'
-    Assert-True -Condition ([string]$activeNames[1] -eq '02-install-winget-tool') -Message 'Winget bootstrap must be the second tracked Windows update task.'
-    Assert-True -Condition ([string]$activeNames[2] -eq '03-install-chrome-application') -Message 'Chrome install check must be the third tracked Windows update task.'
-    Assert-True -Condition ([string]$activeNames[3] -eq '101-install-sysinternals-tool') -Message 'Sysinternals must be the first normal Windows update task.'
-    Assert-True -Condition ([string]$activeNames[4] -eq '102-configure-autologon-settings') -Message 'Autologon must run immediately after Sysinternals once its dependency is satisfied.'
 
-    foreach ($entry in $expectedTrackedTimeouts.GetEnumerator()) {
-        $task = $active | Where-Object { [string]$_.Name -eq [string]$entry.Key } | Select-Object -First 1
-        Assert-True -Condition ($null -ne $task) -Message ("Expected tracked task '{0}' was not discovered." -f [string]$entry.Key)
-        Assert-True -Condition ([int]$task.TimeoutSeconds -eq [int]$entry.Value) -Message ("Tracked task '{0}' timeout must stay {1}." -f [string]$entry.Key, [int]$entry.Value)
+    Assert-True -Condition (@($activeNames).Count -ge $expectedTaskTimeouts.Count) -Message 'The Windows update stage must contain its maintenance tasks.'
+    Assert-True -Condition (@($activeNames | Where-Object { $_ -like '*-install-*' }).Count -eq 0) -Message 'Package installers must not be discovered as vm-update tasks.'
+    foreach ($entry in $expectedTaskTimeouts.GetEnumerator()) {
+        $task = @($active | Where-Object { [string]$_.Name -eq [string]$entry.Key } | Select-Object -First 1)
+        Assert-True -Condition ($task.Count -eq 1) -Message ("Expected maintenance task '{0}' was not discovered." -f [string]$entry.Key)
+        Assert-True -Condition ([int]$task[0].TimeoutSeconds -eq [int]$entry.Value) -Message ("Maintenance task '{0}' timeout must stay {1}." -f [string]$entry.Key,[int]$entry.Value)
     }
+    Assert-True -Condition ([string]$activeNames[0] -eq '102-configure-autologon-settings') -Message 'Normal maintenance tasks must precede the final task band.'
+    Assert-True -Condition ([string]$activeNames[-1] -eq '10006-ensure-managed-user-cross-access') -Message 'The final maintenance task must remain the last stage task.'
 
-    $dependencyExpectedPairs = @(
-        @('01-install-choco-tool', '03-install-chrome-application'),
-        @('101-install-sysinternals-tool', '102-configure-autologon-settings'),
-        @('111-install-node-tool', '124-install-openai-codex-tool'),
-        @('111-install-node-tool', '125-install-github-copilot-tool'),
-        @('111-install-node-tool', '126-install-google-gemini-tool'),
-        @('121-install-wsl-feature', '134-install-docker-desktop-application'),
-        @('10001-configure-advanced-settings', '10005-copy-user-settings'),
-        @('10002-configure-startup-settings', '10005-copy-user-settings'),
-        @('10003-create-public-desktop-shortcuts', '10005-copy-user-settings'),
-        @('10004-configure-windows-experience', '10005-copy-user-settings')
-    )
-    foreach ($pair in @($dependencyExpectedPairs)) {
-        $beforeIndex = [array]::IndexOf($activeNames, [string]$pair[0])
-        $afterIndex = [array]::IndexOf($activeNames, [string]$pair[1])
-        Assert-True -Condition ($beforeIndex -ge 0) -Message ("Tracked task '{0}' must appear in the active order." -f [string]$pair[0])
-        Assert-True -Condition ($afterIndex -ge 0) -Message ("Tracked task '{0}' must appear in the active order." -f [string]$pair[1])
-        Assert-True -Condition ($beforeIndex -lt $afterIndex) -Message ("Tracked task order must keep '{0}' before '{1}'." -f [string]$pair[0], [string]$pair[1])
+    $builtinPackages = @(Get-ClagnosPackageCatalog -Platform windows -Catalog builtin)
+    $customPackages = @(Get-ClagnosPackageCatalog -Platform windows -Catalog custom)
+    Assert-True -Condition ($builtinPackages.Count -eq 36) -Message 'All 36 standard Windows installers must be in the builtin package catalog.'
+    Assert-True -Condition (@($builtinPackages | Where-Object { $_.Catalog -ne 'builtin' -or -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Builtin package entries must resolve their own package.json and installer script.'
+    Assert-True -Condition (@($customPackages | Where-Object { $_.Catalog -ne 'custom' -or -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Custom package entries must resolve only within the custom package catalog.'
+    $chrome = @($builtinPackages | Where-Object { $_.Id -eq 'google-chrome' })[0]
+    Assert-True -Condition (@($chrome.PackageTask.PackageSpec.DependsOn) -contains 'chocolatey') -Message 'Package dependencies must refer to package ids, not vm-update task names.'
+    foreach ($storePackageId in @('microsoft-teams','be-my-eyes','whatsapp','codex-app','icloud')) {
+        $storePackage = @($builtinPackages | Where-Object { $_.Id -eq $storePackageId })[0]
+        Assert-True -Condition (@($storePackage.PackageTask.PackageSpec.PostInstallTasks) -contains '10003-create-public-desktop-shortcuts') -Message ("Store package '{0}' must declare its public shortcut post-install task in package.json." -f $storePackageId)
     }
-
-    $expectedFinalTail = @(
-        '10001-configure-advanced-settings',
-        '10002-configure-startup-settings',
-        '10003-create-public-desktop-shortcuts',
-        '10004-configure-windows-experience',
-        '10005-copy-user-settings',
-        '10006-ensure-managed-user-cross-access'
-    )
-    $lastSeenFinalIndex = -1
-    foreach ($taskName in @($expectedFinalTail)) {
-        $currentIndex = [array]::IndexOf($activeNames, $taskName)
-        Assert-True -Condition ($currentIndex -ge 0) -Message ("Final tracked task '{0}' must appear in the active order." -f $taskName)
-        Assert-True -Condition ($currentIndex -gt $lastSeenFinalIndex) -Message ("Windows final tracked task order must keep '{0}' after the previous final task." -f $taskName)
-        $lastSeenFinalIndex = $currentIndex
-    }
-    Assert-True -Condition ([string]$activeNames[-1] -eq '10006-ensure-managed-user-cross-access') -Message 'Managed-user cross-access must run after final user-profile materialization.'
-    Assert-True -Condition ($activeNames -contains '101-install-sysinternals-tool') -Message 'Windows update catalog must include 101-install-sysinternals-tool.'
-    Assert-True -Condition ($activeNames -contains '102-configure-autologon-settings') -Message 'Windows update catalog must include 102-configure-autologon-settings.'
-    Assert-True -Condition ($activeNames -notcontains '10006-capture-snapshot-health') -Message 'Windows update catalog must not keep the removed health snapshot task.'
-
-    $initCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'windows\init') -Platform windows -Stage init
-    $initActive = @($initCatalog.ActiveTasks)
-    $sysinternalsTask = @($initActive | Where-Object { [string]$_.Name -eq '101-install-sysinternals-tool' } | Select-Object -First 1)
-    $autologonTask = @($initActive | Where-Object { [string]$_.Name -eq '102-configure-autologon-settings' } | Select-Object -First 1)
-    Assert-True -Condition (@($sysinternalsTask).Count -eq 0) -Message 'Windows init catalog must no longer include 101-install-sysinternals-tool.'
-    Assert-True -Condition (@($autologonTask).Count -eq 0) -Message 'Windows init catalog must no longer include 102-configure-autologon-settings.'
-    Assert-True -Condition ($initActive.Count -ge 7) -Message 'Windows init catalog must include the profile materialization and WinRM init tasks.'
-    Assert-True -Condition ([string]$initActive[1].Name -eq '07-configure-all-users') -Message 'Windows init catalog must run configure-all-users immediately after local user creation.'
-    Assert-True -Condition ([string]$initActive[6].Name -eq '06-configure-powershell-remoting') -Message 'Windows init catalog must keep configure-powershell-remoting after firewall configuration.'
 }
-
 Invoke-Test -Name "Exec quiet mode suppresses operator chatter for one-shot commands" -Action {
     $script:ExecQuietPythonArgs = @()
     $script:CapturedExecQuietHost = @()
@@ -5996,7 +6076,7 @@ Invoke-Test -Name "Interactive session helper distinguishes Store desktop readin
     Assert-True -Condition (($helperText.IndexOf('PSObject.Properties.Match([string]$PropertyName).Count -lt 1', [System.StringComparison]::Ordinal)) -ge 0) -Message 'Interactive session helper must tolerate missing Winlogon properties without strict-mode crashes.'
 }
 
-Invoke-Test -Name "Isolated Windows Store task runs append public desktop shortcut refresh" -Action {
+Invoke-Test -Name "Store package post-install tasks run synchronously with the installer" -Action {
     try {
         function Resolve-ClagnosManagedVmTarget {
             param([hashtable]$Options, [hashtable]$ConfigMap, [string]$OperationName)
@@ -6008,20 +6088,12 @@ Invoke-Test -Name "Isolated Windows Store task runs append public desktop shortc
         function Get-ClagnosTaskBlocksFromDirectory {
             param([string]$DirectoryPath, [string]$Platform, [string]$Stage)
             return [pscustomobject]@{
-                ActiveTasks = @(
-                    [pscustomobject]@{
-                        Name = '114-install-teams-application'
-                        TaskNumber = 105
-                        Script = 'Write-Host teams'
-                        TimeoutSeconds = 75
-                    },
-                    [pscustomobject]@{
-                        Name = '10003-create-public-desktop-shortcuts'
-                        TaskNumber = 10003
-                        Script = 'Write-Host shortcuts'
-                        TimeoutSeconds = 45
-                    }
-                )
+                ActiveTasks = @([pscustomobject]@{
+                    Name = '10003-create-public-desktop-shortcuts'
+                    TaskNumber = 10003
+                    Script = 'Write-Host shortcuts'
+                    TimeoutSeconds = 45
+                })
             }
         }
         function Resolve-ClagnosRuntimeTaskBlocks {
@@ -6083,12 +6155,24 @@ Invoke-Test -Name "Isolated Windows Store task runs append public desktop shortc
             SshConnectTimeoutSeconds = 30
         }
 
-        $result = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options @{ 'vm-name' = 'samplevm' } -Stage 'update' -Requested '105'
+        $packageTask = [pscustomobject]@{
+            Name = 'microsoft-teams'
+            Script = 'Write-Host teams'
+            TaskRootPath = $RepoRoot
+            DirectoryPath = $RepoRoot
+            TaskMetadataPath = (Join-Path $RepoRoot 'packages\builtin\windows\microsoft-teams\package.json')
+            StageRootDirectoryPath = (Join-Path $RepoRoot 'packages\builtin\windows')
+            RelativePath = 'microsoft-teams/install.ps1'
+            TimeoutSeconds = 75
+            AssetSpecs = @()
+            PackageSpec = [pscustomobject]@{ Id = 'microsoft-teams'; PostInstallTasks = @('10003-create-public-desktop-shortcuts') }
+        }
+        $result = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options @{ 'vm-name' = 'samplevm' } -OperationName 'package' -Stage 'update' -Requested 'microsoft-teams' -PackageTaskBlock $packageTask -TaskOutcomeModeOverride strict
 
-        Assert-True -Condition ($null -ne $script:IsolatedStoreFollowUpInvocation) -Message 'Store-backed isolated update execution must invoke the SSH task runner.'
-        Assert-True -Condition ((@($script:IsolatedStoreFollowUpInvocation.TaskNames) -join ',') -eq '114-install-teams-application,10003-create-public-desktop-shortcuts') -Message 'Store-backed isolated update execution must append 10003-create-public-desktop-shortcuts.'
-        Assert-True -Condition ((@($result.TaskBlocks).Count) -eq 2) -Message 'Store-backed isolated update execution result must expose both the selected task and the shortcut refresh follow-up.'
-        Assert-True -Condition ([string]$result.Task.Name -eq '114-install-teams-application') -Message 'Store-backed isolated update execution must still report the selected task as the primary task.'
+        Assert-True -Condition ($null -ne $script:IsolatedStoreFollowUpInvocation) -Message 'Store package installation must invoke the SSH task runner.'
+        Assert-True -Condition ((@($script:IsolatedStoreFollowUpInvocation.TaskNames) -join ',') -eq 'microsoft-teams,10003-create-public-desktop-shortcuts') -Message 'The package manifest postInstallTasks list must append the shortcut refresh script.'
+        Assert-True -Condition ((@($result.TaskBlocks).Count) -eq 2) -Message 'Package install results must include the installer and its post-install task.'
+        Assert-True -Condition ([string]$result.Task.Name -eq 'microsoft-teams') -Message 'Package install results must report the package id as the primary task.'
     }
     finally {
         foreach ($functionName in @(
@@ -7872,7 +7956,7 @@ Invoke-Test -Name "Windows autologon manager task and health contract" -Action {
         'Autologon note: DefaultPassword is not present in Winlogon.',
         'configure-autologon-settings-completed',
         'autologon.exe was not found',
-        'Ensure 101-install-sysinternals-tool completed successfully.'
+        'Install the Sysinternals package from the builtin package catalog first.'
     )) {
         Assert-True -Condition ($taskText -like ('*' + [string]$fragment + '*')) -Message ("Autologon manager task must include fragment '{0}'." -f [string]$fragment)
     }

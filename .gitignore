@@ -23,6 +23,10 @@ windows/init/**/backup-app-states/**
 windows/update/**/backup-app-states/**
 linux/init/**/backup-app-states/**
 linux/update/**/backup-app-states/**
+packages/builtin/**/app-state/**
+packages/custom/**/app-state/**
+packages/builtin/**/backup-app-states/**
+packages/custom/**/backup-app-states/**
 windows/init/local/**
 !windows/init/local/
 !windows/init/local/.gitkeep

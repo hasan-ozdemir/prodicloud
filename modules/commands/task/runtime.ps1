@@ -341,7 +341,7 @@ function Assert-ClagnosTaskCommandOptionScope {
     )
 
     if ([string]::Equals($Mode, 'list', [System.StringComparison]::OrdinalIgnoreCase)) {
-        foreach ($optionName in @('group', 'vm-name', 'subscription-id', 'vm-init-task', 'vm-update-task', 'run-vm-init', 'run-vm-update', 'source', 'target', 'user')) {
+        foreach ($optionName in @('group', 'vm-name', 'subscription-id', 'vm-init-task', 'vm-update-task', 'package', 'package-catalog', 'run-vm-init', 'run-vm-update', 'source', 'target', 'user')) {
             if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task list mode does not support --{0}." -f [string]$optionName) `
@@ -367,7 +367,7 @@ function Assert-ClagnosTaskCommandOptionScope {
                 -Summary 'Task stage selection is missing or conflicting.' `
                 -Hint 'Choose the task number or name and provide exactly one stage-specific task selector.'
         }
-        foreach ($optionName in @('list','disabled','vm-init','vm-update','run-vm-init','run-vm-update','save-app-state','restore-app-state','source','target','user','group','vm-name','subscription-id')) {
+        foreach ($optionName in @('list','disabled','vm-init','vm-update','run-vm-init','run-vm-update','save-app-state','restore-app-state','source','target','user','package','package-catalog','group','vm-name','subscription-id')) {
             if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task availability mode does not support --{0}." -f [string]$optionName) `
@@ -391,10 +391,29 @@ function Assert-ClagnosTaskCommandOptionScope {
             }
         }
 
+        $hasPackage = Test-ClagnosCliOptionPresent -Options $Options -Name 'package'
+        $hasPackageCatalog = Test-ClagnosCliOptionPresent -Options $Options -Name 'package-catalog'
+        if ($hasPackage -ne $hasPackageCatalog) {
+            Throw-FriendlyError `
+                -Detail 'Package app-state selectors require both --package and --package-catalog.' `
+                -Code 2 `
+                -Summary 'Package app-state selection is incomplete.' `
+                -Hint 'Provide both --package <id> and --package-catalog <builtin|custom>.'
+        }
+        $hasInitTask = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init-task'
+        $hasUpdateTask = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update-task'
+        if (($hasPackage -and ($hasInitTask -or $hasUpdateTask)) -or (-not $hasPackage -and ($hasInitTask -eq $hasUpdateTask))) {
+            Throw-FriendlyError `
+                -Detail 'Task app-state selection requires either one task selector or one package plus catalog selector.' `
+                -Code 2 `
+                -Summary 'Task app-state selection is missing or conflicting.' `
+                -Hint 'Use exactly one of --vm-init-task, --vm-update-task, or the pair --package and --package-catalog.'
+        }
+
         return
     }
 
-    foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'vm-init-task', 'vm-update-task', 'save-app-state', 'restore-app-state', 'source', 'target', 'user')) {
+    foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'vm-init-task', 'vm-update-task', 'package', 'package-catalog', 'save-app-state', 'restore-app-state', 'source', 'target', 'user')) {
         if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
             Throw-FriendlyError `
                 -Detail ("Task run mode does not support --{0}." -f [string]$optionName) `
@@ -537,6 +556,31 @@ function Resolve-ClagnosTaskBlockForMaintenance {
         [switch]$AutoMode
     )
 
+    $hasPackage = Test-ClagnosCliOptionPresent -Options $Options -Name 'package'
+    $hasPackageCatalog = Test-ClagnosCliOptionPresent -Options $Options -Name 'package-catalog'
+    if ($hasPackage -or $hasPackageCatalog) {
+        $packageId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'package')
+        $packageCatalog = [string](Get-ClagnosCliOptionText -Options $Options -Name 'package-catalog')
+        if ($packageCatalog -notin @('builtin','custom')) {
+            Throw-FriendlyError `
+                -Detail ("Unsupported package catalog '{0}'." -f $packageCatalog) `
+                -Code 2 `
+                -Summary 'Package catalog selection is invalid.' `
+                -Hint 'Use --package-catalog=builtin or --package-catalog=custom.'
+        }
+        $packages = @(Get-ClagnosPackageCatalog -Platform ([string]$Runtime.Platform) -Catalog $packageCatalog)
+        $selectedPackage = @($packages | Where-Object { [string]::Equals([string]$_.Id,$packageId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if ($selectedPackage.Count -ne 1) {
+            Throw-FriendlyError `
+                -Detail ("Package '{0}' was not found in the {1} catalog." -f $packageId,$packageCatalog) `
+                -Code 60 `
+                -Summary 'Package app-state target is unavailable.' `
+                -Hint 'Choose a package from the selected package catalog.'
+        }
+        $resolvedPackageTask = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($selectedPackage[0].PackageTask) -Context $Runtime.Context)[0]
+        return [pscustomobject]@{ Stage = 'package'; TaskBlock = $resolvedPackageTask }
+    }
+
     $selection = Resolve-ClagnosTaskStageSelection -Options $Options -AutoMode:$AutoMode
     $stage = [string]$selection.Stage
     $requested = [string]$selection.Requested
@@ -609,30 +653,6 @@ function Resolve-ClagnosTaskBlockForStage {
     return (Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode)
 }
 
-function Test-ClagnosStoreBackedShortcutRefreshTask {
-    param(
-        [AllowNull()]
-        [psobject]$TaskBlock
-    )
-
-    if ($null -eq $TaskBlock) {
-        return $false
-    }
-
-    $taskName = ''
-    if ($TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) {
-        $taskName = [string]$TaskBlock.Name
-    }
-
-    return ($taskName -in @(
-        '114-install-teams-application',
-        '118-install-be-my-eyes-application-application',
-        '119-install-whatsapp-application',
-        '120-install-codex-application',
-        '122-install-icloud-application'
-    ))
-}
-
 function Resolve-ClagnosTaskExecutionPlanForStage {
     param(
         [pscustomobject]$Runtime,
@@ -652,23 +672,10 @@ function Resolve-ClagnosTaskExecutionPlanForStage {
     $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
     $tasks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context)
     $selectedTaskBlock = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode
-    $executionTaskBlocks = New-Object 'System.Collections.Generic.List[object]'
-    $executionTaskBlocks.Add($selectedTaskBlock) | Out-Null
-
-    if ([string]::Equals([string]$Runtime.Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase) -and
-        (Test-ClagnosStoreBackedShortcutRefreshTask -TaskBlock $selectedTaskBlock)) {
-        $shortcutRefreshTask = $tasks |
-            Where-Object { [string]::Equals([string]$_.Name, '10003-create-public-desktop-shortcuts', [System.StringComparison]::OrdinalIgnoreCase) } |
-            Select-Object -First 1
-        if ($null -ne $shortcutRefreshTask -and
-            -not [string]::Equals([string]$shortcutRefreshTask.Name, [string]$selectedTaskBlock.Name, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $executionTaskBlocks.Add($shortcutRefreshTask) | Out-Null
-        }
-    }
 
     return [pscustomobject]@{
         SelectedTaskBlock = $selectedTaskBlock
-        ExecutionTaskBlocks = @($executionTaskBlocks.ToArray())
+        ExecutionTaskBlocks = @($selectedTaskBlock)
     }
 }
 
@@ -679,6 +686,7 @@ function Invoke-ClagnosTaskExecutionWithTarget {
         [string]$OperationName = 'task',
         [string]$Stage,
         [string]$Requested,
+        [psobject]$PackageTaskBlock,
         [switch]$AutoMode,
         [ValidateSet('continue','strict')]
         [string]$TaskOutcomeModeOverride = ''
@@ -692,7 +700,38 @@ function Invoke-ClagnosTaskExecutionWithTarget {
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName $OperationName
     $Runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $Runtime.Context.VmName = [string]$target.VmName
-    $executionPlan = Resolve-ClagnosTaskExecutionPlanForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
+    if ($null -ne $PackageTaskBlock) {
+        if (-not [string]::Equals([string]$Stage, 'update', [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Package installers must use the remote VM update transport.'
+        }
+        $resolvedPackageBlocks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($PackageTaskBlock) -Context $Runtime.Context)
+        $packageTaskBlock = $resolvedPackageBlocks[0]
+        $executionBlocks = New-Object 'System.Collections.Generic.List[object]'
+        $executionBlocks.Add($packageTaskBlock) | Out-Null
+
+        $postInstallTaskNames = @()
+        if ($null -ne $PackageTaskBlock.PackageSpec -and $null -ne $PackageTaskBlock.PackageSpec.PostInstallTasks) {
+            $postInstallTaskNames = @($PackageTaskBlock.PackageSpec.PostInstallTasks | ForEach-Object { [string]$_ })
+        }
+        if ($postInstallTaskNames.Count -gt 0) {
+            $updateCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update' -SuppressSkipMessages
+            $updateTasks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($updateCatalog.ActiveTasks) -Context $Runtime.Context)
+            foreach ($postInstallTaskName in $postInstallTaskNames) {
+                $postInstallTask = @($updateTasks | Where-Object { [string]::Equals([string]$_.Name, $postInstallTaskName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+                if ($postInstallTask.Count -ne 1) {
+                    throw ("Package '{0}' requires missing post-install task '{1}'." -f [string]$PackageTaskBlock.Name, $postInstallTaskName)
+                }
+                $executionBlocks.Add($postInstallTask[0]) | Out-Null
+            }
+        }
+        $executionPlan = [pscustomobject]@{
+            SelectedTaskBlock = $packageTaskBlock
+            ExecutionTaskBlocks = @($executionBlocks.ToArray())
+        }
+    }
+    else {
+        $executionPlan = Resolve-ClagnosTaskExecutionPlanForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
+    }
     $taskBlock = $executionPlan.SelectedTaskBlock
     $executionTaskBlocks = @($executionPlan.ExecutionTaskBlocks)
 

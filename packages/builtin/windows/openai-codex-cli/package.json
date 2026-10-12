@@ -1,0 +1,57 @@
+{
+  "id": "openai-codex-cli",
+  "displayName": "OpenAI Codex CLI",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 124,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "npm",
+    "value": "@openai/codex"
+  },
+  "uninstall": {
+    "kind": "npm",
+    "value": "@openai/codex"
+  },
+  "appStateKey": "124-install-openai-codex-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": ".codex",
+        "targetProfiles": [],
+        "excludeNames": [
+          "vendor_imports",
+          ".git",
+          "Cache",
+          "Code Cache",
+          "Logs",
+          "tmp"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [
+      {
+        "path": ".npmrc",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  },
+  "dependsOn": [
+    "nodejs"
+  ]
+}

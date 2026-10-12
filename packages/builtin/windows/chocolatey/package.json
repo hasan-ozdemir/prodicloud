@@ -1,0 +1,17 @@
+{
+  "id": "chocolatey",
+  "displayName": "Chocolatey",
+  "category": "package",
+  "enabled": true,
+  "timeout": 90,
+  "sortOrder": 1,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "choco-self",
+    "value": "choco"
+  },
+  "uninstall": {
+    "kind": "choco-self",
+    "value": "C:\\ProgramData\\chocolatey"
+  }
+}

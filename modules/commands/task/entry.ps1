@@ -8,18 +8,20 @@ function Assert-ClagnosTaskAppStatePluginReadyOrThrow {
 
     $pluginInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $TaskBlock
     if ($pluginInfo.Status -eq 'missing-plugin') {
+        $saveHint = if ($null -ne $TaskBlock.PackageSpec) { "Save package state first with 'clagnos task --save-app-state --package=$($TaskBlock.PackageSpec.Id) --package-catalog=$($TaskBlock.PackageSpec.Catalog)'." } else { ("Save state first with 'clagnos task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber) }
         Throw-FriendlyError `
             -Detail ("App-state plugin folder was not found for task '{0}'." -f [string]$TaskBlock.Name) `
             -Code 61 `
             -Summary "Task app-state restore input is missing." `
-            -Hint ("Save state first with 'clagnos task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber)
+            -Hint $saveHint
     }
     if ($pluginInfo.Status -eq 'missing-zip') {
+        $saveHint = if ($null -ne $TaskBlock.PackageSpec) { "Save package state first with 'clagnos task --save-app-state --package=$($TaskBlock.PackageSpec.Id) --package-catalog=$($TaskBlock.PackageSpec.Catalog)'." } else { ("Save state first with 'clagnos task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber) }
         Throw-FriendlyError `
             -Detail ("app-state.zip was not found for task '{0}'." -f [string]$TaskBlock.Name) `
             -Code 61 `
             -Summary "Task app-state restore input is missing." `
-            -Hint ("Save state first with 'clagnos task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber)
+            -Hint $saveHint
     }
     if ($pluginInfo.Status -eq 'invalid') {
         Throw-FriendlyError `
@@ -39,13 +41,13 @@ function New-ClagnosTaskAppStateFilteredTaskBlock {
     )
 
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-app-state-filter-{0}' -f ([guid]::NewGuid().ToString('N')))
-    $tempTaskRoot = Join-Path $tempRoot ([string]$TaskBlock.Name)
+    $tempTaskRoot = Join-Path $tempRoot (Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock)
     $tempAppStateRoot = Join-Path $tempTaskRoot 'app-state'
     Ensure-ClagnosAppStatePluginDirectory -Path $tempAppStateRoot
 
     $sourceZipPath = Get-ClagnosTaskAppStateZipPath -TaskBlock $TaskBlock
     $filteredZipPath = Join-Path $tempAppStateRoot 'app-state.zip'
-    [void](New-ClagnosTaskAppStateFilteredZip -SourceZipPath $sourceZipPath -TaskName ([string]$TaskBlock.Name) -SelectedProfiles $SelectedProfiles -DestinationZipPath $filteredZipPath)
+    [void](New-ClagnosTaskAppStateFilteredZip -SourceZipPath $sourceZipPath -TaskName (Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock) -SelectedProfiles $SelectedProfiles -DestinationZipPath $filteredZipPath)
 
     $clone = [pscustomobject]@{}
     foreach ($property in @($TaskBlock.PSObject.Properties)) {
@@ -281,7 +283,7 @@ function Invoke-ClagnosTaskCommand {
                 if (Test-Path -LiteralPath $savedZipPath) {
                     $tempFilteredZipPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-app-state-save-filter-{0}.zip' -f ([guid]::NewGuid().ToString('N')))
                     try {
-                        [void](New-ClagnosTaskAppStateFilteredZip -SourceZipPath $savedZipPath -TaskName ([string]$taskBlock.Name) -SelectedProfiles @($vmProfileSelection.SelectedProfiles) -DestinationZipPath $tempFilteredZipPath)
+                        [void](New-ClagnosTaskAppStateFilteredZip -SourceZipPath $savedZipPath -TaskName (Get-ClagnosTaskAppStateIdentity -TaskBlock $taskBlock) -SelectedProfiles @($vmProfileSelection.SelectedProfiles) -DestinationZipPath $tempFilteredZipPath)
                         Copy-Item -LiteralPath $tempFilteredZipPath -Destination $savedZipPath -Force
                     }
                     finally {

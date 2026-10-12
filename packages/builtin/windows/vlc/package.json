@@ -1,0 +1,55 @@
+{
+  "id": "vlc",
+  "displayName": "VLC media player",
+  "category": "application",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 131,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "VideoLAN.VLC"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "VideoLAN.VLC"
+  },
+  "appStateKey": "131-install-vlc-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Roaming\\vlc",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\VideoLAN\\VLC",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

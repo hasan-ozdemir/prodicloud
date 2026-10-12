@@ -1,0 +1,39 @@
+{
+  "id": "ollama",
+  "displayName": "Ollama",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 540,
+  "sortOrder": 150,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Ollama.Ollama"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Ollama.Ollama"
+  },
+  "appStateKey": "135-install-ollama-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [],
+    "profileFiles": [
+      {
+        "path": "AppData\\Local\\Ollama\\config.json",
+        "targetProfiles": []
+      },
+      {
+        "path": "AppData\\Roaming\\Ollama\\config.json",
+        "targetProfiles": []
+      },
+      {
+        "path": "AppData\\Roaming\\ollama app.exe\\config.json",
+        "targetProfiles": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

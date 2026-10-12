@@ -3,6 +3,20 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.402] - 2026-10-12
+
+### Changed
+- Replaced the task-backed program catalog with the `package` command and package-specific runtime entities.
+- Moved 36 standard Windows installers into `packages/builtin/windows/<package-id>/`, renamed each installer to `install.ps1`, and converted metadata to `package.json`.
+- Added physically separate builtin and custom package catalogs for Windows and Linux. Manage Programs now offers a catalog selector and labels rows `[builtin]` or `[custom]`.
+- Added package-specific enable/disable, status, install/update, uninstall, and app-state selection. Disabled packages remain visible; install/update is blocked until enabled.
+- Kept package installers out of `windows/update` task discovery and moved Store shortcut refresh follow-ups into `package.json` post-install declarations.
+- Preserved existing app-state archives without opening or rewriting them by carrying their identity in `appStateKey`.
+
+### Tests
+- Validated catalog isolation, same-id packages across catalogs, typed availability changes, disabled-install blocking, package assets, app-state identity, and synchronous post-install tasks.
+- Revalidated task/runtime compatibility, documentation, code quality, Bash syntax, and sensitive-content checks under PowerShell 5.1 and PowerShell 7+.
+
 ## [2026.10.12.401] - 2026-10-12
 
 ### Changed

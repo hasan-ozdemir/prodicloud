@@ -1,0 +1,40 @@
+{
+  "id": "azure-cli",
+  "displayName": "Azure CLI",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 240,
+  "sortOrder": 130,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Microsoft.AzureCLI"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Microsoft.AzureCLI"
+  },
+  "appStateKey": "130-install-azure-cli-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": ".azure",
+        "targetProfiles": [],
+        "excludeNames": [
+          "logs",
+          ".azure",
+          "telemetry"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

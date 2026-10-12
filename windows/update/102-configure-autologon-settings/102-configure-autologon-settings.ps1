@@ -278,7 +278,7 @@ if (Test-PlaceholderValue -Value $vmAdminPass) {
 Refresh-SessionPath
 $autologonExe = Resolve-AutologonExe
 if ([string]::IsNullOrWhiteSpace([string]$autologonExe)) {
-    throw "autologon.exe was not found. Ensure 101-install-sysinternals-tool completed successfully."
+    throw "autologon.exe was not found. Install the Sysinternals package from the builtin package catalog first."
 }
 
 Assert-LocalCredentialValid -UserName $vmAdminUser -Password $vmAdminPass

@@ -1,0 +1,115 @@
+{
+  "id": "whatsapp",
+  "displayName": "WhatsApp",
+  "category": "application",
+  "enabled": true,
+  "timeout": 150,
+  "sortOrder": 119,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "appx",
+    "value": "WhatsApp"
+  },
+  "uninstall": {
+    "kind": "appx",
+    "value": "WhatsApp"
+  },
+  "assets": [
+    {
+      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
+    },
+    {
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+    }
+  ],
+  "appStateKey": "119-install-whatsapp-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_*\\Settings",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp"
+        ]
+      },
+      {
+        "path": "AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_*\\LocalState",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "rotatedLogs",
+          "logq",
+          "Microsoft.AppCenter.Storage",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [
+          "*\\sessions\\*",
+          "*\\transfers\\*",
+          "*\\Microsoft\\AppCenter\\*"
+        ],
+        "excludeFilePatterns": [
+          "*.db",
+          "*.lock",
+          "*.tmp",
+          "*.db-shm",
+          "*.db-wal",
+          "*.etl",
+          "*.log",
+          "applog.txt",
+          "wa_voip_history.json"
+        ]
+      },
+      {
+        "path": "AppData\\Local\\Packages\\5319275A.WhatsAppDesktop_*\\RoamingState",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [
+          "*\\sessions\\*",
+          "*\\transfers\\*",
+          "*\\Microsoft\\AppCenter\\*"
+        ],
+        "excludeFilePatterns": [
+          "*.db",
+          "*.lock",
+          "*.tmp",
+          "*.db-shm",
+          "*.db-wal",
+          "*.etl",
+          "*.log",
+          "applog.txt",
+          "wa_voip_history.json"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  },
+  "postInstallTasks": [
+    "10003-create-public-desktop-shortcuts"
+  ]
+}

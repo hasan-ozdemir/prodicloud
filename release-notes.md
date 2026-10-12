@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.402 - 2026-10-12
+
+### Summary
+Manage Programs now uses two isolated package catalogs: builtin packages maintained by Clagnos and custom packages maintained in this repository.
+
+### Highlights
+- Moved all 36 existing standard Windows installers into `packages/builtin/windows/` with `package.json` manifests and `install.ps1` scripts.
+- Added custom catalog roots for Windows and Linux packages, with the package manifest contract documented in `packages/README.md`.
+- Manage Programs offers separate builtin/custom catalog paths and labels packages `[builtin]` or `[custom]`.
+- Package availability, status, install/update, uninstall, and package app-state operate through the selected catalog. Disabled packages remain visible; install/update requires an enabled package.
+- Existing app-state archives were moved with their package folders and retained their legacy identity through `appStateKey`.
+
+### Validation
+- Catalog isolation, manifest updates, package install planning, status paths, and app-state selection passed the non-live smoke suite.
+- PowerShell compatibility, documentation, code quality, Bash syntax, sensitive-content, and release-document checks passed. No Azure resources were changed.
+
 ## Release 2026.10.12.401 - 2026-10-12
 
 ### Summary

@@ -1,5 +1,16 @@
 # Shared vm-update app-state plugin helpers.
 
+function Get-ClagnosTaskAppStateIdentity {
+    param([psobject]$TaskBlock)
+
+    if ($null -eq $TaskBlock) { return '' }
+    if ($TaskBlock.PSObject.Properties.Match('AppStateKey').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$TaskBlock.AppStateKey)) {
+        return [string]$TaskBlock.AppStateKey
+    }
+    if ($TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { return [string]$TaskBlock.Name }
+    return ''
+}
+
 function Initialize-ClagnosAppStateZipSupport {
     if (-not ([System.Management.Automation.PSTypeName]'System.IO.Compression.ZipArchive').Type) {
         Add-Type -AssemblyName 'System.IO.Compression.FileSystem' -ErrorAction SilentlyContinue
@@ -133,7 +144,7 @@ function Get-ClagnosTaskAppStateBackupRootDirectoryPath {
 
     $taskName = ''
     if ($TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) {
-        $taskName = [string]$TaskBlock.Name
+        $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock
     }
     if ([string]::IsNullOrWhiteSpace([string]$taskName)) {
         return ''
@@ -268,7 +279,7 @@ function Get-ClagnosTaskAppStateManifestFromZip {
 function Get-ClagnosTaskAppStatePluginInfo {
     param([psobject]$TaskBlock)
 
-    $taskName = if ($null -ne $TaskBlock -and $TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$TaskBlock.Name } else { '' }
+    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock
     $pluginDirectory = Get-ClagnosTaskAppStatePluginDirectoryPath -TaskBlock $TaskBlock
     $zipPath = Get-ClagnosTaskAppStateZipPath -TaskBlock $TaskBlock
     $guestHelperPath = Get-ClagnosAppStateGuestHelperPath

@@ -1,0 +1,17 @@
+{
+  "id": "windows-package-manager",
+  "displayName": "Windows Package Manager",
+  "category": "package",
+  "enabled": true,
+  "timeout": 60,
+  "sortOrder": 2,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "appx",
+    "value": "Microsoft.DesktopAppInstaller"
+  },
+  "uninstall": {
+    "kind": "appx",
+    "value": "Microsoft.DesktopAppInstaller"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "id": "github-cli",
+  "displayName": "GitHub CLI",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 107,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "gh"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "gh"
+  },
+  "appStateKey": "107-install-gh-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Roaming\\GitHub CLI",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

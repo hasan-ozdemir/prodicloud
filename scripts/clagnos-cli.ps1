@@ -446,33 +446,66 @@ function New-ClagnosUiTargetOptions {
     return $options
 }
 
-function Show-ClagnosUiProgramMenu {
-    param([psobject]$Vm)
+function Show-ClagnosUiPackageAppStateMenu {
+    param(
+        [psobject]$Vm,
+        [psobject]$Package,
+        [ValidateSet('builtin','custom')][string]$Catalog,
+        [string]$Platform
+    )
 
+    Write-ClagnosUiHeader -Title ('App-state for {0}' -f [string]$Package.DisplayName)
+    Write-Host '1. Save package app-state'
+    Write-Host '2. Restore package app-state'
+    Write-Host 'b: back'
+    $choice = (Read-ClagnosUiChoice 'App-state action').ToLowerInvariant()
+    if ($choice -eq 'b' -or $choice -notin @('1','2')) { return }
+    $save = $choice -eq '1'
+    Write-Host 'v: virtual computer | l: local Windows host'
+    $surfaceChoice = (Read-ClagnosUiChoice 'App-state source or target').ToLowerInvariant()
+    $surface = switch ($surfaceChoice) { 'v' { 'vm' } 'l' { 'lm' } default { '' } }
+    if ([string]::IsNullOrWhiteSpace($surface)) { return }
+    if ($surface -eq 'lm' -and $Platform -ne 'windows') {
+        Write-Host 'Local-machine package app-state is available only on a Windows host.' -ForegroundColor Yellow
+        Wait-ClagnosUiContinue
+        return
+    }
+
+    $options = New-ClagnosUiTargetOptions -Vm $Vm
+    $options['package'] = [string]$Package.Id
+    $options['package-catalog'] = $Catalog
+    $options[$(if ($save) { 'save-app-state' } else { 'restore-app-state' })] = $true
+    $options[$(if ($save) { 'source' } else { 'target' })] = $surface
+    $options['user'] = Read-ClagnosUiChoice 'User (.all., .current., manager, or assistant)'
+    Invoke-ClagnosUiCommand -CommandName 'task' -Options $options
+}
+
+function Show-ClagnosUiPackageCatalogMenu {
+    param([psobject]$Vm, [ValidateSet('builtin','custom')][string]$Catalog)
+
+    $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
     while ($true) {
-        Write-ClagnosUiHeader -Title ('Programs on {0}' -f [string]$Vm.name)
-        $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
-        $catalog = @(Get-ClagnosProgramCatalog -Platform $platform)
+        Write-ClagnosUiHeader -Title (('{0} package catalog on {1}' -f $Catalog, [string]$Vm.name))
+        $packages = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog)
         $statusMap = @{}
-        if ($catalog.Count -gt 0) {
+        if ($packages.Count -gt 0) {
             try {
                 $statusOptions = New-ClagnosUiTargetOptions -Vm $Vm
-                $statusMap = Get-ClagnosProgramStatusSnapshot -Programs $catalog -Options $statusOptions -Platform $platform
+                $statusMap = Get-ClagnosPackageStatusSnapshot -Packages $packages -Options $statusOptions -Platform $platform
             }
             catch {
-                Write-Host ('Program status could not be read: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+                Write-Host ('Package status could not be read: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
             }
         }
-        if ($catalog.Count -eq 0) {
-            Write-Host 'No program installers are registered for this platform yet.' -ForegroundColor Yellow
+        if ($packages.Count -eq 0) {
+            Write-Host ('No packages are registered in the {0} catalog for {1}.' -f $Catalog, $platform) -ForegroundColor Yellow
         }
         else {
-            for ($index = 0; $index -lt $catalog.Count; $index++) {
-                $status = if ($statusMap.ContainsKey([string]$catalog[$index].Id)) { [string]$statusMap[[string]$catalog[$index].Id] } else { 'unavailable' }
-                $disabledLabel = if ([bool]$catalog[$index].Enabled) { '' } else { ' (disabled)' }
-                $programTypeLabel = '({0} / {1})' -f [string]$catalog[$index].ProgramType, [string]$catalog[$index].ExecutionTarget
-                $catalogSourceLabel = if ([string]::Equals([string]$catalog[$index].CatalogSource, 'local', [System.StringComparison]::OrdinalIgnoreCase)) { ' [local catalog]' } else { '' }
-                Write-Host ('{0}. {1} {2}{3}{4} [{5}]' -f ($index + 1), [string]$catalog[$index].DisplayName, $programTypeLabel, $catalogSourceLabel, $disabledLabel, [string]$status)
+            for ($index = 0; $index -lt $packages.Count; $index++) {
+                $status = if ($statusMap.ContainsKey([string]$packages[$index].Id)) { [string]$statusMap[[string]$packages[$index].Id] } else { 'unavailable' }
+                $disabledLabel = if ([bool]$packages[$index].Enabled) { '' } else { ' (disabled)' }
+                $catalogLabel = if ($Catalog -eq 'builtin') { '[builtin]' } else { '[custom]' }
+                Write-Host ('{0}. {1} {2}{3} [{4}]' -f ($index + 1), [string]$packages[$index].DisplayName, $catalogLabel, $disabledLabel, $status)
             }
         }
         Write-Host 'b: back'
@@ -481,39 +514,63 @@ function Show-ClagnosUiProgramMenu {
         if ($choice -eq 'b') { return }
         if ($choice -eq 'q') { exit }
         $number = 0
-        if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $catalog.Count) { continue }
-        $program = $catalog[$number - 1]
-        $programTypeLabel = '({0} / {1})' -f [string]$program.ProgramType, [string]$program.ExecutionTarget
-        Write-ClagnosUiHeader -Title ('{0} {1}' -f [string]$program.DisplayName, $programTypeLabel)
-        Write-Host 'e: enable program task'
-        Write-Host 'd: disable program task'
+        if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $packages.Count) { continue }
+        $package = $packages[$number - 1]
+        Write-ClagnosUiHeader -Title ([string]$package.DisplayName)
+        Write-Host ('Catalog: [{0}]' -f $Catalog)
+        if (@($package.PackageTask.PackageSpec.DependsOn).Count -gt 0) {
+            Write-Host ('Package prerequisites: {0}' -f (@($package.PackageTask.PackageSpec.DependsOn) -join ', ')) -ForegroundColor Yellow
+        }
+        Write-Host 'e: enable package'
+        Write-Host 'd: disable package'
         Write-Host 'u: uninstall'
         Write-Host 'i: install or update'
         Write-Host 's: status'
+        if ($null -ne $package.PackageTask.AppStateSpec) { Write-Host 'a: manage package app-state' }
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $action = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($action -eq 'b') { continue }
         if ($action -eq 'q') { exit }
-        if ($action -in @('e','d')) {
-            $taskOptions = @{}
-            $taskOptions[('vm-{0}-task' -f [string]$program.Stage)] = [string]$program.TaskName
-            $taskOptions[$(if ($action -eq 'e') { 'enable' } else { 'disable' })] = $true
-            $taskOptions[$platform] = $true
-            Invoke-ClagnosUiCommand -CommandName 'task' -Options $taskOptions
+        if ($action -eq 'a' -and $null -ne $package.PackageTask.AppStateSpec) {
+            Show-ClagnosUiPackageAppStateMenu -Vm $Vm -Package $package -Catalog $Catalog -Platform $platform
             continue
         }
-        $programAction = switch ($action) { 's' { 'status' } 'i' { 'install' } 'u' { 'uninstall' } default { '' } }
-        if ([string]::IsNullOrWhiteSpace($programAction)) { continue }
-        $options = New-ClagnosUiTargetOptions -Vm $Vm
-        $options['action'] = $programAction
-        $options['program'] = [string]$program.Id
-        if ($programAction -eq 'uninstall') {
-            $confirm = (Read-ClagnosUiChoice ('Type UNINSTALL to remove {0}' -f [string]$program.DisplayName))
+        if ($action -notin @('e','d','u','i','s')) { continue }
+        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 's' { 'status' } default { '' } }
+        $options = @{ catalog = $Catalog; package = [string]$package.Id }
+        $options[$platform] = $true
+        if ($packageAction -notin @('enable','disable')) {
+            $targetOptions = New-ClagnosUiTargetOptions -Vm $Vm
+            foreach ($optionName in $targetOptions.Keys) { $options[[string]$optionName] = $targetOptions[$optionName] }
+        }
+        if ($packageAction -eq 'uninstall') {
+            $confirm = (Read-ClagnosUiChoice ('Type UNINSTALL to remove {0}' -f [string]$package.DisplayName))
             if ($confirm -cne 'UNINSTALL') { continue }
             $options['yes'] = $true
         }
-        Invoke-ClagnosUiCommand -CommandName 'program' -Options $options
+        $commandOptions = @{ action = $packageAction }
+        foreach ($optionName in $options.Keys) { $commandOptions[[string]$optionName] = $options[$optionName] }
+        Invoke-ClagnosUiCommand -CommandName 'package' -Options $commandOptions
+    }
+}
+
+function Show-ClagnosUiPackageMenu {
+    param([psobject]$Vm)
+
+    while ($true) {
+        Write-ClagnosUiHeader -Title ('Manage programs on {0}' -f [string]$Vm.name)
+        Write-Host '1. Builtin package catalog'
+        Write-Host '2. Custom package catalog'
+        Write-Host 'b: back'
+        Write-Host 'q: exit'
+        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
+        if ($choice -eq 'b') { return }
+        if ($choice -eq 'q') { exit }
+        switch ($choice) {
+            '1' { Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'builtin' }
+            '2' { Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'custom' }
+        }
     }
 }
 
@@ -590,7 +647,7 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         Write-ClagnosUiHeader -Title ('Task availability for {0}' -f [string]$Vm.name)
         Write-Host 'Task availability is shared by this repository and affects future runs on matching VMs.' -ForegroundColor Yellow
         Write-Host '1. Initialization tasks'
-        Write-Host '2. Maintenance and program tasks'
+        Write-Host '2. Maintenance tasks'
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
@@ -793,7 +850,7 @@ function Show-ClagnosUiVmMenu {
         if ($choice -eq 'q') { exit }
         $target = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
-            'p' { Show-ClagnosUiProgramMenu -Vm $Vm }
+            'p' { Show-ClagnosUiPackageMenu -Vm $Vm }
             'i' { Invoke-ClagnosUiCommand -CommandName 'initialize' -Options $target }
             'u' { Invoke-ClagnosUiCommand -CommandName 'update' -Options $target }
             'm' { Show-ClagnosUiComponentMenu -Vm $Vm }

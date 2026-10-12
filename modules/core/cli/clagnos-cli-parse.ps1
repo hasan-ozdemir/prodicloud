@@ -123,7 +123,7 @@ function Parse-ClagnosCliArguments {
                 -Detail ("Unknown command '{0}'." -f $rawCommand) `
                 -Code 2 `
                 -Summary "Unknown command." `
-                -Hint "Use one command: create | initialize | update | configure | list | show | do | task | program | component | move | resize | set | exec | connect | delete | help."
+                -Hint "Use one command: create | initialize | update | configure | list | show | do | task | package | component | move | resize | set | exec | connect | delete | help."
         }
     }
 
@@ -269,7 +269,7 @@ function Parse-ClagnosCliArguments {
                 -Detail ("Unknown command '{0}'." -f $rawCommand) `
                 -Code 2 `
                 -Summary "Unknown command." `
-                -Hint "Use one command: create | initialize | update | configure | list | show | do | task | program | component | move | resize | set | exec | connect | delete | help."
+                -Hint "Use one command: create | initialize | update | configure | list | show | do | task | package | component | move | resize | set | exec | connect | delete | help."
         }
     }
     elseif ($options.ContainsKey('help')) {
@@ -283,7 +283,7 @@ function Parse-ClagnosCliArguments {
             -Detail "No command was provided." `
             -Code 2 `
             -Summary "Command is required." `
-            -Hint "Use one command: create | initialize | update | configure | list | show | do | task | program | component | move | resize | set | exec | connect | delete | help. Example: clagnos create --auto"
+            -Hint "Use one command: create | initialize | update | configure | list | show | do | task | package | component | move | resize | set | exec | connect | delete | help. Example: clagnos create --auto"
     }
 
     if ($command -eq 'help') {
@@ -526,7 +526,7 @@ function Resolve-ClagnosActionPlan {
         $singleTarget = Resolve-ClagnosActionValue -OptionName 'step' -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'step'))
         $allowedActions = if ($CommandName -eq 'create') { @('configure','group','network','vm-deploy','vm-summary') } else { @('configure','vm-update','vm-summary') }
         if ($allowedActions -notcontains $singleTarget) {
-            $hint = if ($CommandName -eq 'create') { "Use 'initialize' for vm-init and 'update' or 'program' for guest maintenance and software." } else { "Use 'initialize' for vm-init or the component and lifecycle commands for Azure resource changes." }
+            $hint = if ($CommandName -eq 'create') { "Use 'initialize' for vm-init and 'update' or 'package' for guest maintenance and software." } else { "Use 'initialize' for vm-init or the component and lifecycle commands for Azure resource changes." }
             Throw-FriendlyError -Detail ("Step '{0}' is outside the {1} command contract." -f $singleTarget,$CommandName) -Code 2 -Summary "Unsupported lifecycle step." -Hint $hint
         }
         return [pscustomobject]@{
@@ -570,7 +570,7 @@ function Resolve-ClagnosActionPlan {
     $allowedActions = if ($CommandName -eq 'create') { @('configure','group','network','vm-deploy','vm-summary') } else { @('configure','vm-update','vm-summary') }
     $unsupportedActions = @($actions | Where-Object { $allowedActions -notcontains [string]$_ })
     if ($unsupportedActions.Count -gt 0) {
-        $hint = if ($CommandName -eq 'create') { "Use 'initialize' for vm-init and 'update' or 'program' for guest maintenance and software." } else { "Use 'initialize' for vm-init or the component and lifecycle commands for Azure resource changes." }
+        $hint = if ($CommandName -eq 'create') { "Use 'initialize' for vm-init and 'update' or 'package' for guest maintenance and software." } else { "Use 'initialize' for vm-init or the component and lifecycle commands for Azure resource changes." }
         Throw-FriendlyError -Detail ("Step range includes unsupported {0} step(s): {1}." -f $CommandName,($unsupportedActions -join ', ')) -Code 2 -Summary "Unsupported lifecycle step window." -Hint $hint
     }
 

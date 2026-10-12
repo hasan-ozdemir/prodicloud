@@ -362,7 +362,7 @@ function Get-ClagnosTaskAppStateCapturePlan {
         return $null
     }
 
-    $taskName = if ($TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$TaskBlock.Name } else { '' }
+    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock
     if ([string]::IsNullOrWhiteSpace([string]$taskName)) {
         return $null
     }
@@ -474,7 +474,7 @@ function Save-ClagnosTaskAppStateFromVm {
     )
 
     $capturePlan = Get-ClagnosTaskAppStateCapturePlan -TaskBlock $TaskBlock
-    $taskName = if ($null -ne $TaskBlock -and $TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$TaskBlock.Name } else { '' }
+    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock
     if ($null -eq $capturePlan) {
         Write-Host ("App-state skipped: {0} => no app-state spec or legacy coverage" -f [string]$taskName)
         return [pscustomobject]@{ Status = 'skipped'; Message = 'no app-state spec or legacy coverage'; Warning = $false }

@@ -1,0 +1,94 @@
+{
+  "id": "microsoft-teams",
+  "displayName": "Microsoft Teams",
+  "category": "application",
+  "enabled": true,
+  "timeout": 120,
+  "sortOrder": 114,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "appx",
+    "value": "MSTeams"
+  },
+  "uninstall": {
+    "kind": "appx",
+    "value": "MSTeams"
+  },
+  "assets": [
+    {
+      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
+    },
+    {
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+    }
+  ],
+  "appStateKey": "114-install-teams-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Local\\Packages\\MSTeams_*\\Settings",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp"
+        ]
+      },
+      {
+        "path": "AppData\\Local\\Packages\\MSTeams_*\\LocalState",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      },
+      {
+        "path": "AppData\\Local\\Packages\\MSTeams_*\\RoamingState",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  },
+  "postInstallTasks": [
+    "10003-create-public-desktop-shortcuts"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "id": "github-copilot-cli",
+  "displayName": "GitHub Copilot CLI",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 125,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "npm",
+    "value": "@github/copilot"
+  },
+  "uninstall": {
+    "kind": "npm",
+    "value": "@github/copilot"
+  },
+  "appStateKey": "125-install-github-copilot-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": ".config\\github-copilot",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      },
+      {
+        "path": "AppData\\Roaming\\GitHub Copilot",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "profileFiles": [
+      {
+        "path": ".npmrc",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  },
+  "dependsOn": [
+    "nodejs"
+  ]
+}

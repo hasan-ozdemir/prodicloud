@@ -85,10 +85,10 @@ function Invoke-ClagnosCommandDispatcher {
                 Invoke-ClagnosUpdateCommand -Options $Options -WindowsFlag:$windowsFlag -LinuxFlag:$linuxFlag -AutoMode:$script:AutoMode
                 return
             }
-            'program' {
+            'package' {
                 $script:UpdateMode = $false
                 $script:ExecutionMode = 'default'
-                Invoke-ClagnosProgramCommand -Options $Options -AutoMode:$script:AutoMode -WindowsFlag:$windowsFlag -LinuxFlag:$linuxFlag | Out-Null
+                Invoke-ClagnosPackageCommand -Options $Options -AutoMode:$script:AutoMode -WindowsFlag:$windowsFlag -LinuxFlag:$linuxFlag | Out-Null
                 return
             }
             'component' {
@@ -134,7 +134,7 @@ function Invoke-ClagnosCommandDispatcher {
                 return
             }
             default {
-                Throw-FriendlyError -Detail ("Unknown command '{0}'." -f $CommandName) -Code 2 -Summary "Unknown command." -Hint "Use one command: create | initialize | update | configure | list | show | do | task | program | component | exec | connect | move | resize | set | delete | help."
+                Throw-FriendlyError -Detail ("Unknown command '{0}'." -f $CommandName) -Code 2 -Summary "Unknown command." -Hint "Use one command: create | initialize | update | configure | list | show | do | task | package | component | exec | connect | move | resize | set | delete | help."
             }
         }
     }

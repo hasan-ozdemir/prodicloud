@@ -356,9 +356,7 @@ function Invoke-ClagnosMain {
 
         if ($runUpdateAction) {
             $updateReview = Get-ClagnosReviewTaskRows -DirectoryPath ([string]$step1Context.VmUpdateTaskDir) -Platform $platform -Stage 'update' -Context $step1Context
-            $allUpdateTaskBlocks = @($updateReview.ActiveTasks)
-            $updateTaskBlocks = @($allUpdateTaskBlocks | Where-Object { $null -eq $_.ProgramSpec })
-            $programTaskCount = @($allUpdateTaskBlocks | Where-Object { $null -ne $_.ProgramSpec }).Count
+            $updateTaskBlocks = @($updateReview.ActiveTasks)
             $updateDisabledTasks = @($updateReview.DisabledTasks)
 
             $updateDecision = Invoke-ClagnosReviewCheckpoint `
@@ -368,7 +366,6 @@ function Invoke-ClagnosMain {
                     Platform = $platform
                     VmUpdateTaskDir = [string]$step1Context.VmUpdateTaskDir
                     ActiveTaskCount = @($updateTaskBlocks).Count
-                    ProgramTaskCount = [int]$programTaskCount
                     DisabledTaskCount = @($updateDisabledTasks).Count
                     TaskOutcomeMode = $taskOutcomeMode
                 }) `
@@ -388,9 +385,6 @@ function Invoke-ClagnosMain {
                 default {
                     Invoke-ClagnosPersistPendingSelections -Context $step1Context -EnvFilePath $envFilePath
                     $vmUpdateStageResult = Invoke-Step 'Step 6/7 - VM update' {
-                        if ($programTaskCount -gt 0) {
-                            Write-Host ("Program tasks are managed from the program menu and were skipped: {0}" -f [int]$programTaskCount) -ForegroundColor DarkCyan
-                        }
                         if (@($updateDisabledTasks).Count -gt 0) {
                             $disabledNames = @($updateDisabledTasks | ForEach-Object { [string]$_.Name })
                             Write-Host ("Disabled update tasks (ignored): {0}" -f ($disabledNames -join ', ')) -ForegroundColor Yellow

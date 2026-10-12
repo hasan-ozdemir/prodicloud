@@ -1,0 +1,17 @@
+{
+  "id": "7zip",
+  "displayName": "7-Zip",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 120,
+  "sortOrder": 106,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "7zip"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "7zip"
+  }
+}

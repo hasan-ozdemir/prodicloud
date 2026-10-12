@@ -53,7 +53,7 @@ At a glance:
   - [`show`](#show)
   - [`do`](#do)
   - [`task`](#task)
-  - [`program`](#program)
+  - [`package`](#package)
   - [`component`](#component)
   - [`exec`](#exec)
   - [`connect`](#connect)
@@ -111,17 +111,17 @@ At a glance:
 ### Why Start Here
 This section is optimized for the reader who wants usable value quickly without skipping the repo's safety model. The goal is simple: get from clone to one visible Azure VM outcome fast, while still understanding what the command surface is doing, which config matters first, and how to verify that the result is healthy.
 
-The workflow separates infrastructure creation, initial guest setup, maintenance, and individual program changes. Create the virtual computer first, initialize its `vm-init` tasks, then use the program menu to check, install/update, or uninstall catalogued software. Windows has the current program installer catalog; Linux keeps its existing system-maintenance tasks and can add program entries through task manifests.
+The workflow separates infrastructure creation, initial guest setup, maintenance, and package management. Create the virtual computer first, initialize its `vm-init` tasks, then use Manage Programs to choose the isolated builtin or custom package catalog. Both catalogs support Windows and Linux installer scripts.
 
 ### Interactive CLI
 Run `.\cg.cmd` to open the menu. The welcome screen shows the `one tool for all common cloud operations` line, the selected Azure subscription name/id. The main menu offers `1. Virtual computers`, `2. Managed resource inventory`, and `3. Cloud subscriptions`; choose a subscription by number to update both the Azure CLI default and Clagnos's saved subscription. Use numbers or the shown letter shortcuts and press Enter. Enter `q` to exit or `b` to return from a submenu. `.\cg.cmd <command> ...` forwards a direct command to the same `clagnos.ps1` runtime.
 
-The selected virtual computer opens with compute, CPU/RAM, disk, storage, network, IP, and attached-resource details. Its menus expose initialization, maintenance, program status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, app-state, reports, and deletion.
+The selected virtual computer opens with compute, CPU/RAM, disk, storage, network, IP, and attached-resource details. Its menus expose initialization, maintenance, builtin/custom package status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, package app-state, reports, and deletion.
 
 ### Prerequisites
 - Windows host with PowerShell and the Azure CLI available.
 - Azure subscription access with permission to create, update, and delete compute and networking resources.
-- Azure CLI sign-in is strictly required for Azure-touching commands. Run `az login` before using `create`, `initialize`, `update`, `list`, `show`, `do`, `task --run-*`, `task --save-app-state`, `task --restore-app-state`, `program`, `component`, `connect`, `move`, `resize`, `set`, `exec`, or `delete`. The TUI welcome screen can open without Azure sign-in; Azure inventory remains unavailable until `az login`. `configure` can open without Azure sign-in, but its Azure-backed pickers stay read-only until `az login` is available.
+- Azure CLI sign-in is strictly required for Azure-touching commands. Run `az login` before using `create`, `initialize`, `update`, `list`, `show`, `do`, remote `task` or `package` operations, `component`, `connect`, `move`, `resize`, `set`, `exec`, or `delete`. Local task/package availability changes do not require Azure sign-in. The TUI welcome screen can open without Azure sign-in; Azure inventory remains unavailable until `az login`. `configure` can open without Azure sign-in, but its Azure-backed pickers stay read-only until `az login` is available.
 - Local Git for the repo workflow and hook support.
 - Python available when the repo-managed pyssh helper is needed.
 
@@ -135,6 +135,7 @@ The selected virtual computer opens with compute, CPU/RAM, disk, storage, networ
 - `modules/commands/`: command-owned implementations split by command, plus shared pipeline/context/step/feature helpers.
 - `modules/ui/`: prompts, interactive selection, show/report rendering, and connection presentation helpers.
 - `modules/tasks/`: Azure Run Command and persistent SSH transport/runtime helpers.
+- `packages/builtin/<platform>/` and `packages/custom/<platform>/`: physically isolated standard and operator-authored package catalogs; see [`packages/README.md`](packages/README.md).
 - `windows/init/`, `windows/update/`: Windows stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
 - `linux/init/`, `linux/update/`: Linux stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
 - `tools/`: pyssh helper, scripts, Windows helper assets, and git-hook toggles.
@@ -159,8 +160,8 @@ If you want the fastest safe path to value, use this order. The target outcome i
 1. Open `.\cg.cmd`, choose `c: configure settings`, and review the `.env` values and next-create preview.
 2. Choose Virtual computers, then `c: create virtual computer`. This creates the managed group, network, and VM only.
 3. Select the new VM and use `i: initialize VC` to run its enabled `vm-init` tasks.
-4. Use `p: manage programs` to review status and install/update or uninstall each catalogued program.
-5. Use `u: update VC` for non-program maintenance, then verify the VM with its report and connection tests.
+4. Use `p: manage programs`, choose `Builtin package catalog` or `Custom package catalog`, then review status and install/update or uninstall packages.
+5. Use `u: update VC` for vm-update maintenance, then verify the VM with its report and connection tests.
 
 Representative PoC / PoE outcomes from the current repo shape:
 - Employee or knowledge-worker desktop: connect over RDP and land on a machine with browser, collaboration, storage, media, support, and accessibility tooling already staged, with desktop shortcuts and startup behavior already prepared.
@@ -192,7 +193,7 @@ In the menu, choose `c` to configure settings if needed, then choose `1` for Vir
 
 `clagnos` compresses the time between "we need a working Azure VM" and "someone can remotely connect and start real work" into one operator workflow. The practical benefit is not just faster provisioning; it is lower variance after provisioning. The repo keeps infrastructure intent, guest configuration, direct task reruns, diagnostics, release notes, and support-facing guidance together, so a team does not have to rediscover the same setup logic every time a VM must be rebuilt, updated, resized, repaired, or handed to another person.
 
-The strongest current story is the Windows workstation path. The menu separates infrastructure creation, guest initialization, individual program changes, and non-program maintenance, so operators can see and control each stage. The task catalog still configures startup behavior, public desktop shortcuts, Store-backed desktop launches, advanced Windows settings, app-state replay, and safe user preferences. Operators choose which catalogued applications and tools to install, update, or remove before connecting.
+The strongest current story is the Windows workstation path. The menu separates infrastructure creation, guest initialization, individual package changes, and vm-update maintenance, so operators can see and control each stage. The task catalog still configures startup behavior, public desktop shortcuts, Store-backed desktop launches, advanced Windows settings, app-state replay, and safe user preferences. Operators choose which catalogued applications and tools to install, update, or remove before connecting.
 
 From a customer-facing perspective, the value proposition is concrete:
 - guided path to a prepared remote Windows workstation in Azure, backed by the current portable task inventory
@@ -209,7 +210,7 @@ Representative PoC / PoE stories the current repo can already support:
 
 For decision-makers, `clagnos` is an operational standardization asset. It turns a previously manual, portal-heavy, and person-dependent VM build into a repo-governed process with validation before mutation, visible orchestration steps, repeatable guest task folders, and non-live quality gates. That matters because environment drift, undocumented post-install tweaks, and ad hoc support work are expensive even when the VM count is small.
 
-Viewed as a service outcome rather than a scripting repo, `clagnos` helps teams deliver an Azure-hosted computer experience, not just an Azure-hosted VM. The Windows path combines managed infrastructure with explicit guest initialization, selectable program actions, desktop configuration, startup behavior, advanced settings, and supportability. That shortens the path from "budget approved" to "someone is productively connected and working."
+Viewed as a service outcome rather than a scripting repo, `clagnos` helps teams deliver an Azure-hosted computer experience, not just an Azure-hosted VM. The Windows path combines managed infrastructure with explicit guest initialization, selectable package actions, desktop configuration, startup behavior, advanced settings, and supportability. That shortens the path from "budget approved" to "someone is productively connected and working."
 
 The executive-level outcomes are straightforward:
 - lower operational variance across fresh builds and maintenance windows
@@ -288,8 +289,8 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | --- | --- | --- | --- |
 | `--auto` | `create`, `initialize`, `update`, `delete` | Runs the command without waiting for interactive confirmation | Use it only when the target and intent are already explicit. |
 | `--perf` | Most public commands | Prints timing metrics for the current command | Useful during profiling, acceptance, and long-running change windows. |
-| `--windows` | `create`, `initialize`, `update`, `exec`, `resize`, `program` | Forces the Windows platform path or validates Windows expectation | Use this when the target platform must be explicit. |
-| `--linux` | `create`, `initialize`, `update`, `exec`, `resize`, `program` | Forces the Linux platform path or validates Linux expectation | Use this when the target platform must be explicit. |
+| `--windows` | `create`, `initialize`, `update`, `exec`, `resize`, `package` | Forces the Windows platform path or validates Windows expectation | Use this when the target platform must be explicit. |
+| `--linux` | `create`, `initialize`, `update`, `exec`, `resize`, `package` | Forces the Linux platform path or validates Linux expectation | Use this when the target platform must be explicit. |
 | `-s`, `--subscription-id=<subscription-guid>` | All Azure-touching commands plus `task --run-*` and `task --save/restore-app-state` | Targets Azure operations to one subscription and persists CLI-provided subscription intent locally | `-s`, `--subscription-id=<subscription-guid>`: target Azure subscription for every Azure-touching command; successful CLI usage also writes `SELECTED_AZURE_SUBSCRIPTION_ID` into `.env`. |
 | `-h`, `--help` | All public commands | Prints quick help or command-specific help | `-h`, `--help` are equivalent operator aliases. |
 
@@ -300,12 +301,12 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `configure` | Review, edit, validate, preview, and save the supported `.env` contract | Local `.env` only | Before create/update work, or whenever the next VM configuration needs a safe frontend | Validated `.env` values with a next-create preview |
 | `create` | Create a fresh managed group, initial network, and VM | Azure-mutating | First deployment or explicit rebuild flow | New virtual computer infrastructure; guest stages remain separate. |
 | `initialize` | Run enabled `vm-init` tasks on an existing managed VM | Guest-mutating | Initial guest bootstrap | Initialized guest access and base configuration. |
-| `update` | Run enabled non-program `vm-update` maintenance tasks | Guest-mutating | Ongoing maintenance | Updated guest settings and services; program tasks are excluded. |
+| `update` | Run enabled `vm-update` maintenance tasks | Guest-mutating | Ongoing maintenance | Package installers live in their isolated package catalogs. |
 | `list` | Print managed inventory by type | Azure-read-only | Inventory, targeting, quick visibility | Managed group/resource listings |
 | `show` | Print a full managed report plus focused target-derived config when one VM is in scope | Azure-read-only | Health review, support handoff, release verification | Inventory and read-only target-derived configuration |
 | `do` | Apply lifecycle or repair actions | Azure-mutating or read-only for `status` | Power-state control, reapply, redeploy, hibernation flow | Target VM lifecycle action |
-| `task` | List tasks, explicitly enable/disable a task, run one task, or save/restore task app-state | Local for inventory and confirmed enable/disable; Azure-touching for `--run-*` and VM app-state maintenance; local-machine for `--source=lm` / `--target=lm` | Review task state, change future task availability, rerun one task, or refresh one payload | Verified catalog change or one isolated task/app-state action |
-| `program` | Check status, install/update, or uninstall one catalogued program | Guest-mutating except status | Manage one VM application, tool, or package | Verified program action result |
+| `task` | List tasks, explicitly enable/disable a task, run one task, or save/restore task or package app-state | Local for inventory and confirmed availability changes; Azure-touching for remote task/app-state actions; local-machine for `--source=lm` / `--target=lm` | Review task state, change future task availability, rerun one task, or refresh one payload | Verified catalog change or one isolated task/app-state action |
+| `package` | Check status, install/update, uninstall, enable, or disable one builtin/custom package | Guest-mutating except status and catalog availability | Manage packages on one VC | Verified catalog or package action result |
 | `component` | List/read/create/update/delete a Clagnos-managed Azure component | Azure-read-only for list/show; Azure-mutating for create/update/delete | Inspect or change one VC component | Component state or dependency-reviewed mutation |
 | `connect` | Launch or test SSH/RDP access | Azure-touching, local-client action | Linux or Windows SSH access, or Windows desktop access | Direct client launch or connection test |
 | `exec` | Open direct remote shell path or run one remote command | Azure-touching and guest-touching | Interactive shell work or one-shot remote command execution | One direct shell or command result |
@@ -328,7 +329,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd create` | interactive | Creates a new managed group, initial network, and VM | First deployment | It stops after VM deployment; use initialize for vm-init and program for software. |
+| `.\cg.cmd create` | interactive | Creates a new managed group, initial network, and VM | First deployment | It stops after VM deployment; use initialize for vm-init and package for software. |
 | `.\cg.cmd create --auto` | `--auto` | Unattended fresh infrastructure/VM deployment | Controlled deployment | CLI overrides win over `.env`; platform, name, region, and size must resolve. |
 | `.\cg.cmd create --step-from=group --step-to=vm-deploy` | step window | Runs a validated infrastructure window | Recovery or diagnosis | Guest task stages are not part of create. |
 
@@ -343,18 +344,19 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd update` | interactive | Runs non-program maintenance tasks on an existing VM | Manual upkeep | Prompts for a subscription if needed. |
-| `.\cg.cmd update --auto --group=<resource-group> --vm-name=<vm-name>` | `--auto`, target selectors | Runs non-program vm-update tasks | Controlled maintenance | Catalogued program tasks are skipped. |
-| `.\cg.cmd update --step=vm-update --auto --group=<resource-group> --vm-name=<vm-name>` | `--step` | Runs the maintenance task stage | Isolated maintenance | Use program for software tasks. |
+| `.\cg.cmd update` | interactive | Runs vm-update maintenance tasks on an existing VM | Manual upkeep | Prompts for a subscription if needed. |
+| `.\cg.cmd update --auto --group=<resource-group> --vm-name=<vm-name>` | `--auto`, target selectors | Runs vm-update tasks | Controlled maintenance | Package operations are outside task-stage catalogs. |
+| `.\cg.cmd update --step=vm-update --auto --group=<resource-group> --vm-name=<vm-name>` | `--step` | Runs the maintenance task stage | Isolated maintenance | Use package for software tasks. |
 
-#### `program`
+#### `package`
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd program --action=list --group=<resource-group> --vm-name=<vm-name> --windows` | target, platform | Lists catalogued programs and their status | Software inventory | Status is detected from validated task.json metadata. |
-| `.\cg.cmd program --action=install --program=<id> --group=<resource-group> --vm-name=<vm-name> --windows` | program id, target | Runs the owning installer synchronously | Install or update one program | A failure is reported before returning to the menu. |
-| `.\cg.cmd program --action=uninstall --program=<id> --group=<resource-group> --vm-name=<vm-name> --windows` | program id, target | Runs the allow-listed package remover | Remove one program | Requires the exact `UNINSTALL` confirmation unless `--yes` is passed. |
-
+| `.\cg.cmd package --action=list --catalog=builtin --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists builtin packages and their status | Standard software inventory | Status is detected from validated package.json metadata. |
+| `.\cg.cmd package --action=list --catalog=custom --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists custom packages and their status | Operator-added software inventory | The custom and builtin catalogs remain isolated. |
+| `.\cg.cmd package --action=install --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the installer synchronously on the VC | Install or update one package | Disabled packages must be enabled first. |
+| `.\cg.cmd package --action=uninstall --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the allow-listed package remover | Remove one package | Requires exact `UNINSTALL` confirmation unless `--yes` is passed. |
+| `.\cg.cmd package --action=disable --catalog=custom --package=my-tool --windows` | catalog, package id | Disables future operations for one custom package | Block an operator package | Typed confirmation updates only its `package.json`. |
 #### `component`
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
@@ -397,13 +399,15 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd task --list --vm-init` | `--list`, `--vm-init` | Lists init tasks | Init audit | Shows real execution order. |
 | `.\cg.cmd task --list --vm-update --windows` | `--list`, `--vm-update`, `--windows` | Lists Windows update tasks | Update inspection | Good before isolated reruns. |
 | `.\cg.cmd task --list --disabled --vm-update --windows` | `--disabled` | Lists disabled tasks | Cleanup or contract review | Surfaces disabled reason and source. |
-| `.\cg.cmd task --disable --vm-update-task=114 --windows` | `--disable`, task selector, platform | Moves one task into the disabled catalog after typed confirmation | Stop a future program/task run | Changes the shared repository catalog for future VM runs; it does not uninstall software already present on a VM. |
-| `.\cg.cmd task --enable --vm-update-task=114 --windows` | `--enable`, task selector, platform | Restores one task to the active catalog after typed confirmation | Allow future install or task runs | Preserves the other `task.json` metadata and verifies the catalog state. |
+| `.\cg.cmd task --disable --vm-update-task=136 --windows` | `--disable`, task selector, platform | Moves one maintenance task into the disabled catalog after typed confirmation | Stop future task runs | Package availability is managed by the package command. |
+| `.\cg.cmd task --enable --vm-update-task=136 --windows` | `--enable`, task selector, platform | Restores one maintenance task to the active catalog after typed confirmation | Allow future task runs | Preserves the other `task.json` metadata and verifies the catalog state. |
 | `.\cg.cmd task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>` | `--run-vm-init`, target selectors | Runs one init task directly | Isolated bootstrap rerun | Uses Azure run-command against one managed VM. |
-| `.\cg.cmd task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name> --windows` | `--run-vm-update`, platform | Runs one update task directly | Isolated guest fix | Uses the SSH task runner against one managed VM; task-signaled immediate restarts still run, Windows Store-backed app tasks also append `10003-create-public-desktop-shortcuts` in the same isolated rerun so Public Desktop shortcuts refresh immediately, and the workflow-only final vm-update restart still does not run. |
+| `.\cg.cmd task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name> --windows` | `--run-vm-update`, platform | Runs one update task directly | Isolated guest fix | Uses the SSH task runner against one managed VM; task-signaled immediate restarts still run, Isolated task reruns do not run package installers or their declared post-install tasks. |
 | `.\cg.cmd task --save-app-state --vm-update-task=115 --group=<resource-group> --vm-name=<vm-name> -s <subscription-guid>` | `--save-app-state`, `--vm-update-task`, target selectors | Captures one live task-owned app-state payload into the task-local `<task-folder>/app-state/app-state.zip` | Refreshing an operator-owned payload from the active VM | Cleanly skips when no capture coverage exists. |
 | `.\cg.cmd task --restore-app-state --vm-update-task=115 --group=<resource-group> --vm-name=<vm-name> -s <subscription-guid>` | `--restore-app-state`, `--vm-update-task`, target selectors | Replays one saved task-owned app-state payload to the active VM | Targeted state restore after reinstall or cleanup | Fails cleanly when the requested zip is missing or invalid, and otherwise verifies the guest replayed content and rolls back from guest-side backup staging on mismatch. |
 | `.\cg.cmd task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows` | `--save-app-state`, `--source=lm`, `--user=.current.` | Captures one local-machine task payload into the same task-local zip path | Refreshing a portable app-state payload from the operator machine | Windows-host-only. |
+| `.\cg.cmd task --save-app-state --package=visual-studio-code --package-catalog=builtin --group=<resource-group> --vm-name=<vm-name> --windows` | package id, catalog, target | Captures package app-state from the active VC into that package folder | Refreshing a package app-state payload | Uses `appStateKey` so existing archives remain valid. |
+| `.\cg.cmd task --restore-app-state --package=visual-studio-code --package-catalog=builtin --group=<resource-group> --vm-name=<vm-name> --windows` | package id, catalog, target | Replays package app-state to the active VC | Restoring package settings after reinstall | Uses the package folder's app-state zip with shared verification and rollback. |
 | `.\cg.cmd task --restore-app-state --target=lm --user=.current. --vm-update-task=115 --windows` | `--restore-app-state`, `--target=lm`, `--user=.current.` | Restores one task-local payload back onto the operator machine | Safe local replay and troubleshooting | Validates `task.json`, writes task-adjacent `backup-app-states/<task-name>/` snapshots plus `restore-journal.json` and `verify-report.json`, and rolls back on verification failure. |
 
 #### `exec`
@@ -493,7 +497,7 @@ Practical outcomes:
 Practical outcomes:
 - the command fails fast if the managed resource group or VM does not exist, and it points the operator to `create`
 - auto mode requires an explicit platform plus `--group` and `--vm-name`
-- `update` runs enabled non-program `vm-update` maintenance tasks against the existing VM
+- `update` runs enabled vm-update `vm-update` maintenance tasks against the existing VM
 - use `initialize` for `vm-init`; use `do --vm-action=reapply|redeploy` for explicit Azure-side repair
 
 ### Inspect Managed Resource Groups And VM State
@@ -596,7 +600,7 @@ Behavior notes:
 Purpose: build one fresh managed resource group, its initial network, and one VM.
 
 Behavior notes:
-- `create` stops after VM deployment and the read-only summary. Run `initialize` for vm-init tasks and use `program` for catalogued software.
+- `create` stops after VM deployment and the read-only summary. Run `initialize` for vm-init tasks and use `package` for catalogued software.
 - `create` never reuses an existing managed resource group or existing managed resource names, and `update` never falls through to an implicit fresh-create path.
 - Auto `create` succeeds when CLI overrides or `.env` `SELECTED_*` values plus the platform defaults resolve platform, VM name, Azure region, and VM size.
 - The infra flow keeps deterministic resource naming, validation, and review checkpoints before group and VM deployment.
@@ -614,25 +618,26 @@ Behavior notes:
 - It requires a managed resource group and VM, supplied directly or resolved from `.env`.
 
 ### `update`
-Purpose: run enabled non-program vm-update maintenance tasks on one existing managed VM.
+Purpose: run enabled vm-update maintenance tasks on one existing managed VM.
 
 Behavior notes:
 - `update` requires an existing managed resource group and VM. It does not create or redeploy the VM.
 - Auto `update` resolves its target from CLI overrides first, then `.env` `SELECTED_RESOURCE_GROUP` and `SELECTED_VM_NAME`, with single-VM auto-resolution allowed when the selected group contains exactly one VM.
-- Program tasks are skipped and are managed individually through `program`.
+- Packages are managed separately from task stages through their package catalogs.
 - Use `do` for explicit redeploy/repair and lifecycle actions.
 - Best fit for day-two guest setting and service maintenance.
 
-### `program`
-Purpose: check status, install/update, or uninstall one task-catalogued VM program.
+### `package`
+Purpose: manage the separate builtin and custom package catalogs, and install or remove packages on one managed VC.
 
 Behavior notes:
-- The program screen lists active and disabled install tasks. Each row identifies its lifecycle type (`initial` or `add-on`) and execution target (`local` or `remote`); local-only task folders also display `[local catalog]`. Disabled entries display `(disabled)` beside the program name.
-- Select a program by number, then choose `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, or `s: status`.
-- `e` and `d` update the shared task catalog after typed confirmation, affecting future runs for all VMs using the repository. They do not install or remove software already on the selected VM.
-- Status and uninstall remain available while disabled. Install/update is blocked until the task is enabled. Linux program entries appear as platform tasks add validated program metadata.
-- Each task manifest supplies a display name, category, installed-state detector, and explicit uninstall action.
-- Installs run the task script synchronously; uninstalls require confirmation and are verified against the status detector.
+- `packages/builtin/<platform>/<package-id>/` and `packages/custom/<platform>/<package-id>/` are physically separate catalogs. Each package folder contains `package.json` and its platform installer script.
+- Manage Programs first offers `Builtin package catalog` and `Custom package catalog`. Rows are labeled `[builtin]` or `[custom]`; disabled packages display `(disabled)`.
+- Select a package by number, then choose `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, or `s: status`. Packages with app-state policies also offer `a: manage package app-state`. Packages with app-state policies also offer `a: manage package app-state`.
+- `e` and `d` update only that package's `package.json` after typed confirmation. The change affects future operations for VCs using this repository; it does not change software already installed on a VC.
+- Status and uninstall remain available while disabled. Install/update is blocked until the package is enabled.
+- Package manifests supply a display name, category, installed-state detector, explicit uninstall action, and optional installer assets, timeout, app-state policy, dependencies, and post-install tasks.
+- Installers run synchronously on the selected VC; uninstalls require confirmation and are verified against the status detector.
 
 ### `component`
 Purpose: manage the Azure resources that make up a Clagnos virtual computer.
@@ -758,8 +763,8 @@ Every task is a portable folder. The folder name defines the task identity, the 
 
 ### Timeouts, Priority, And Enable Flags
 - every task folder uses `task.json` for `priority`, `enabled`, `timeout`, optional `assets`, and optional `appState`
-- The TUI program screen marks disabled program entries and offers `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, and `s: status`. Status and uninstall remain available while disabled; install/update is blocked until enabled.
-- Enable/disable changes the shared repository task catalog for future runs on any VM using that repository. The task command requires typing `ENABLE` or `DISABLE`; disabling moves a task under its corresponding `disabled/` folder, while enabling restores it and sets `task.json` `enabled` to `true` without dropping other metadata. It does not change an already-running VM or uninstall a package already installed there.
+- The TUI Manage Programs screen selects the builtin or custom package catalog and offers `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, and `s: status`. Status and uninstall remain available while disabled; install/update is blocked until enabled.
+- Enable/disable changes the shared repository task catalog for future runs on any VM using that repository. Task enable/disable requires typing `ENABLE` or `DISABLE`; disabling moves a task under its corresponding `disabled/` folder, while enabling restores it and sets `task.json` `enabled` to `true` without dropping other metadata. Package enable/disable changes only the selected package manifest. It does not change an already-running VM or uninstall a package already installed there.
 - local-only tasks under `local/` are discovered from disk dynamically
 - local-only tasks under `local/disabled/` remain disabled by location
 - task asset paths are resolved relative to the owning task folder
@@ -774,7 +779,7 @@ Direct `task --run-vm-init` and `task --run-vm-update` are the main diagnosis pa
 
 Current task template replacement uses the public selected-value placeholders: `__SELECTED_VM_NAME__`, `__SELECTED_AZURE_REGION__`, `__SELECTED_RESOURCE_GROUP__`, `__SELECTED_COMPANY_NAME__`, `__SELECTED_COMPANY_WEB_ADDRESS__`, `__SELECTED_COMPANY_EMAIL_ADDRESS__`, `__SELECTED_EMPLOYEE_EMAIL_ADDRESS__`, and `__SELECTED_EMPLOYEE_FULL_NAME__`.
 
-Task-scoped app-state capture and replay use the same portable task folder contract. The current task-local zip path is always `<task-folder>/app-state/app-state.zip`, and the current app-state allow-list lives beside it in the same folder's `task.json`. Local-machine restore snapshots live beside the stage as `backup-app-states/<task-name>/`, or `local/backup-app-states/<task-name>/` for local-only tasks, and those roots carry both `restore-journal.json` and `verify-report.json`.
+Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Local-machine restore snapshots are written under the owning task stage or package catalog `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
 
 ## Configuration Guide
 
@@ -830,14 +835,14 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 - One orchestrator means less context switching between separate scripts for provisioning, update, connection, and repair.
 - The same command surface covers Windows and Linux, so platform differences stay narrow and explicit.
 - `create` now stays dedicated to one fresh managed resource group plus one fresh managed VM; use `delete` and then `create` when a destructive rebuild is intentional.
-- `initialize` runs initial guest bootstrap on an existing managed VM; `update` runs non-program maintenance tasks without recreating or redeploying Azure resources.
+- `initialize` runs initial guest bootstrap on an existing managed VM; `update` runs vm-update maintenance tasks without recreating or redeploying Azure resources.
 - `resize --disk-size=... --expand` gives a safe in-place managed OS disk growth path, while `resize --disk-size=... --shrink` stops early and explains the supported alternatives instead of risking data loss.
 - Direct `task` and `exec` flows let maintainers inspect and rerun exactly the step or task that matters.
 
 ### Daily Maintainer Flow
 1. Confirm the target with `list`, `show`, `configure`, and `do --vm-action=status`.
 2. Use `create` for first deploys and fresh environments; when a full destructive rebuild is intentional, run `delete` first and then run `create`.
-3. Use `initialize` for initial guest setup, `update` for ongoing non-program maintenance, and `do` for explicit Azure lifecycle or repair actions.
+3. Use `initialize` for initial guest setup, `update` for ongoing vm-update maintenance, and `do` for explicit Azure lifecycle or repair actions.
 4. Use `task` and `exec` to isolate one failing init or update task instead of replaying the whole chain.
 5. Use `move`, `resize`, `set`, and `delete` only after the inventory and current state are explicit.
 
@@ -856,7 +861,7 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 6. `vm-update`
 7. `vm-summary`
 
-`create` runs the infrastructure steps through `vm-deploy`; `initialize` runs `vm-init`; `update` runs non-program `vm-update` tasks. Program tasks are invoked individually through `program`.
+`create` runs the infrastructure steps through `vm-deploy`; `initialize` runs `vm-init`; `update` runs vm-update `vm-update` tasks. Package operations are invoked through `package`.
 
 ### Init Tasks Versus Update Tasks
 - `vm-init` is Azure Run Command driven and is used for early guest bootstrap, one task at a time.
@@ -865,8 +870,8 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 - Both stages use portable task folders plus `task.json` as the source of truth for ordering, timeout, and enable/disable state, and both now invoke the same per-task app-state restore helper as a post-task step when a matching task-local plugin zip exists.
 - The natural execution order for both stages is: builtin `initial` task folders, builtin `normal` task folders, local task folders from `local/`, then builtin `final` task folders.
 - Every task timeout is normalized to a minimum of `30` seconds and then rounded up in `15`-second slots.
-- Reboot-signaling tasks restart the VM immediately, wait for the required transport recovery, and then resume from the next task. The `update` stage retains its Windows final restart after the non-program maintenance stage; isolated `task --run-vm-update` reruns skip that workflow-only final restart.
-- Windows Store-backed isolated `task --run-vm-update` reruns append `10003-create-public-desktop-shortcuts` automatically after the selected Store app task so Public Desktop shortcuts refresh in the same diagnostic run.
+- Reboot-signaling tasks restart the VM immediately, wait for the required transport recovery, and then resume from the next task. The `update` stage retains its Windows final restart after the vm-update maintenance stage; isolated `task --run-vm-update` reruns skip that workflow-only final restart.
+- Windows Store package manifests declare the public desktop shortcut refresh as a post-install task.
 - `vm-summary` begins with a read-only guest readback block and then continues with the normal summary and connection details.
 
 ### Interactive Versus Auto Mode
@@ -877,7 +882,7 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 - Auto `create` provisions infrastructure only and resolves platform, VM name, region, and size from CLI or `.env` selections.
 - Auto `update` resolves its managed target from CLI overrides first, then `.env` `SELECTED_RESOURCE_GROUP` and `SELECTED_VM_NAME`.
 - Auto mode prints the same review context, but it continues without waiting for checkpoint confirmation.
-- The TUI keeps every public command and registered component/program action reachable from a numbered or lettered submenu.
+- The TUI keeps every public command and registered component/package action reachable from a numbered or lettered submenu.
 - Legacy `managed-by=az-vm` groups remain readable and migrate to `managed-by=clagnos` after confirmation on the first inventory.
 - Operator commands such as `show`, `do`, `connect`, and `exec` stay direct and do not require `--auto`.
 
@@ -913,7 +918,7 @@ This matters because:
 - `.env` remains local and untracked
 
 ### Task Folder Model
-Each task directory is self-contained. The folder holds one same-named script, one `task.json`, optional helper assets, and an optional git-ignored `app-state/` directory. The runtime never auto-writes `task.json`, and a missing portable task folder is treated as absent rather than as a failure.
+Each task directory is self-contained. The folder holds one same-named script, one `task.json`, optional helper assets, and an optional git-ignored `app-state/` directory. The runtime never auto-writes `task.json`, and a missing portable task folder is treated as absent rather than as a failure. Package installer folders are separate from task stages and use `package.json` plus `install.ps1` or `install.sh`.
 
 ### Windows And Linux Execution Model
 - Windows and Linux share the same top-level orchestration model.
@@ -921,8 +926,8 @@ Each task directory is self-contained. The folder holds one same-named script, o
 - Help output, docs, and runtime wording try to stay parallel across both platforms.
 
 ### End-To-End Create And Update Flow
-- `create` creates one fresh managed group, network, and VM; `initialize` runs vm-init; `update` runs non-program maintenance tasks on an existing managed VM.
-- `program` manages catalogued program status/install/update/uninstall. `component` provides CRUD for the Azure resources Clagnos owns.
+- `create` creates one fresh managed group, network, and VM; `initialize` runs vm-init; `update` runs vm-update maintenance tasks on an existing managed VM.
+- `package` manages catalogued package status/install/update/uninstall. `component` provides CRUD for the Azure resources Clagnos owns.
 - `update` requires one existing managed group and VM and never falls through to implicit fresh-create behavior.
 - `configure` is the interactive `.env` frontend: it must stay focused on reviewing, editing, validating, previewing, and saving supported `.env` values, and it must not sync `.env` from a live Azure target.
 - `list` is the managed inventory command: it must stay Azure-read-only, must not mutate Azure resources, and must expose managed resource listings through `--type` plus optional exact `--group` filtering.

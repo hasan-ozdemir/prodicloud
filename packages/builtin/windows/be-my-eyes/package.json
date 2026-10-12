@@ -1,0 +1,91 @@
+{
+  "id": "be-my-eyes",
+  "displayName": "Be My Eyes",
+  "category": "application",
+  "enabled": true,
+  "timeout": 120,
+  "sortOrder": 118,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "store-state",
+    "value": "118-install-be-my-eyes-application-application"
+  },
+  "uninstall": {
+    "kind": "appx",
+    "value": "bemyeyes"
+  },
+  "assets": [
+    {
+      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
+    },
+    {
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+    }
+  ],
+  "appStateKey": "118-install-be-my-eyes-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Local\\Packages\\BeMyEyes.BeMyEyes_*\\Settings",
+        "targetProfiles": [],
+        "excludeNames": [],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": []
+      },
+      {
+        "path": "AppData\\Local\\Packages\\BeMyEyes.BeMyEyes_*\\LocalState",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      },
+      {
+        "path": "AppData\\Local\\Packages\\BeMyEyes.BeMyEyes_*\\RoamingState",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  },
+  "postInstallTasks": [
+    "10003-create-public-desktop-shortcuts"
+  ]
+}

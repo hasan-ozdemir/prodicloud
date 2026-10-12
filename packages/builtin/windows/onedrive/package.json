@@ -1,0 +1,89 @@
+{
+  "id": "onedrive",
+  "displayName": "Microsoft OneDrive",
+  "category": "application",
+  "enabled": true,
+  "timeout": 60,
+  "sortOrder": 104,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Microsoft.OneDrive"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Microsoft.OneDrive"
+  },
+  "appStateKey": "104-install-onedrive-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [
+      {
+        "path": "AppData\\Local\\Microsoft\\OneDrive",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.db",
+          "*.db-shm",
+          "*.db-wal",
+          "*.sqlite",
+          "*.sqlite-shm",
+          "*.sqlite-wal",
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Microsoft\\OneDrive",
+        "targetProfiles": [],
+        "excludeNames": [
+          "Cache",
+          "Code Cache",
+          "GPUCache",
+          "DawnCache",
+          "Crashpad",
+          "CrashDumps",
+          "Temp",
+          "tmp",
+          "Logs"
+        ],
+        "excludePathPatterns": [],
+        "excludeFilePatterns": [
+          "*.db",
+          "*.db-shm",
+          "*.db-wal",
+          "*.sqlite",
+          "*.sqlite-shm",
+          "*.sqlite-wal",
+          "*.lock",
+          "*.tmp",
+          "*.etl",
+          "*.log"
+        ]
+      }
+    ],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Microsoft\\OneDrive",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

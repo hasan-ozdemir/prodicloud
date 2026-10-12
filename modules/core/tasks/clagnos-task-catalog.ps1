@@ -605,44 +605,6 @@ function Get-ClagnosTaskFolderMetadata {
         $dependsOn = @(ConvertTo-ClagnosTaskFolderDependsOn -InputObject $metadata.dependsOn -TaskLabel $taskLabel)
     }
 
-    $programSpec = $null
-    if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('program').Count -gt 0 -and $null -ne $metadata.program) {
-        $rawProgram = $metadata.program
-        $displayName = [string]$rawProgram.displayName
-        if ([string]::IsNullOrWhiteSpace($displayName)) {
-            throw ("Invalid task.json program entry for '{0}': 'displayName' is required." -f $taskLabel)
-        }
-        $category = [string]$rawProgram.category
-        if ([string]::IsNullOrWhiteSpace($category)) { $category = 'application' }
-        $category = $category.Trim().ToLowerInvariant()
-        if ($category -notin @('application','tool','package','feature')) {
-            throw ("Invalid task.json program entry for '{0}': category must be application, tool, package, or feature." -f $taskLabel)
-        }
-        $statusCheck = $rawProgram.statusCheck
-        if ($null -eq $statusCheck -or [string]::IsNullOrWhiteSpace([string]$statusCheck.kind) -or [string]::IsNullOrWhiteSpace([string]$statusCheck.value)) {
-            throw ("Invalid task.json program entry for '{0}': statusCheck.kind and statusCheck.value are required." -f $taskLabel)
-        }
-        $uninstall = $rawProgram.uninstall
-        if ($null -eq $uninstall -or [string]::IsNullOrWhiteSpace([string]$uninstall.kind) -or [string]::IsNullOrWhiteSpace([string]$uninstall.value)) {
-            throw ("Invalid task.json program entry for '{0}': uninstall.kind and uninstall.value are required." -f $taskLabel)
-        }
-        $statusKind = [string]$statusCheck.kind
-        $uninstallKind = [string]$uninstall.kind
-        if ($statusKind -notin @('command','winget','choco','npm','appx','store-state','choco-self','dpkg','rpm')) {
-            throw ("Invalid task.json program entry for '{0}': unsupported status check '{1}'." -f $taskLabel,$statusKind)
-        }
-        if ($uninstallKind -notin @('winget','choco','npm','appx','windows-feature','choco-self','apt','dnf','snap')) {
-            throw ("Invalid task.json program entry for '{0}': unsupported uninstall action '{1}'." -f $taskLabel,$uninstallKind)
-        }
-        $programSpec = [pscustomobject]@{
-            Id = if (-not [string]::IsNullOrWhiteSpace([string]$rawProgram.id)) { [string]$rawProgram.id } else { [string]$TaskName }
-            DisplayName = $displayName.Trim()
-            Category = $category
-            StatusCheck = $statusCheck
-            Uninstall = $uninstall
-        }
-    }
-
     $extensions = $null
     if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('extensions').Count -gt 0 -and $null -ne $metadata.extensions) {
         $extensions = ConvertFrom-JsonCompat -InputObject (ConvertTo-JsonCompat -InputObject $metadata.extensions -Depth 20)
@@ -655,7 +617,6 @@ function Get-ClagnosTaskFolderMetadata {
         AssetSpecs = @($assets)
         AppStateSpec = $appStateSpec
         DependsOn = @($dependsOn)
-        ProgramSpec = $programSpec
         Extensions = $extensions
     }
 }
@@ -825,7 +786,6 @@ function Read-ClagnosTaskFolderRow {
         TimeoutSeconds = [int]$metadata.TimeoutSeconds
         Priority = [int]$priority
         AssetSpecs = @($metadata.AssetSpecs)
-        ProgramSpec = $metadata.ProgramSpec
         AppStateSpec = $metadata.AppStateSpec
         Extensions = $metadata.Extensions
         TaskType = [string]$taskType
@@ -916,7 +876,6 @@ function Get-ClagnosTaskBlocksFromDirectory {
                 Priority = [int]$task.Priority
                 TimeoutSeconds = [int]$task.TimeoutSeconds
                 Extensions = $task.Extensions
-                ProgramSpec = $task.ProgramSpec
                 TaskType = [string]$task.TaskType
                 Source = [string]$task.Source
                 DisabledReason = [string]$task.DisabledReason
@@ -940,7 +899,6 @@ function Get-ClagnosTaskBlocksFromDirectory {
             TimeoutSeconds = [int]$task.TimeoutSeconds
             Priority = [int]$task.Priority
             AssetSpecs = @($task.AssetSpecs)
-            ProgramSpec = $task.ProgramSpec
             AppStateSpec = $task.AppStateSpec
             Extensions = $task.Extensions
             TaskType = [string]$task.TaskType

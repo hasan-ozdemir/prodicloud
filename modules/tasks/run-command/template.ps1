@@ -175,7 +175,8 @@ function Apply-ClagnosTaskBlockReplacements {
             Source = if ($taskBlock.PSObject.Properties.Match('Source').Count -gt 0) { [string]$taskBlock.Source } else { '' }
             TaskNumber = if ($taskBlock.PSObject.Properties.Match('TaskNumber').Count -gt 0) { [int]$taskBlock.TaskNumber } else { 0 }
             AppStateSpec = if ($taskBlock.PSObject.Properties.Match('AppStateSpec').Count -gt 0) { $taskBlock.AppStateSpec } else { $null }
-            ProgramSpec = if ($taskBlock.PSObject.Properties.Match('ProgramSpec').Count -gt 0) { $taskBlock.ProgramSpec } else { $null }
+            PackageSpec = if ($taskBlock.PSObject.Properties.Match('PackageSpec').Count -gt 0) { $taskBlock.PackageSpec } else { $null }
+            AppStateKey = if ($taskBlock.PSObject.Properties.Match('AppStateKey').Count -gt 0) { [string]$taskBlock.AppStateKey } else { '' }
             Extensions = if ($taskBlock.PSObject.Properties.Match('Extensions').Count -gt 0) { $taskBlock.Extensions } else { $null }
             DependsOn = if ($taskBlock.PSObject.Properties.Match('DependsOn').Count -gt 0) { @($taskBlock.DependsOn) } else { @() }
             ObservedDurationSeconds = if ($taskBlock.PSObject.Properties.Match('ObservedDurationSeconds').Count -gt 0) { [double]$taskBlock.ObservedDurationSeconds } else { [double]::PositiveInfinity }

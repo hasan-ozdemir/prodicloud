@@ -14,7 +14,7 @@ function Get-ClagnosCommandOptionSpecifications {
         'show' { return @(Get-ClagnosShowOptionSpecifications) }
         'do' { return @(Get-ClagnosDoOptionSpecifications) }
         'task' { return @(Get-ClagnosTaskOptionSpecifications) }
-        'program' { return @(Get-ClagnosProgramOptionSpecifications) }
+        'package' { return @(Get-ClagnosPackageOptionSpecifications) }
         'component' { return @(Get-ClagnosComponentOptionSpecifications) }
         'move' { return @(Get-ClagnosMoveOptionSpecifications) }
         'resize' { return @(Get-ClagnosResizeOptionSpecifications) }
@@ -24,7 +24,7 @@ function Get-ClagnosCommandOptionSpecifications {
         'delete' { return @(Get-ClagnosDeleteOptionSpecifications) }
         'help' { return @(Get-ClagnosHelpOptionSpecifications) }
         default {
-            Throw-FriendlyError -Detail ("Unsupported command '{0}'." -f $CommandName) -Code 2 -Summary "Unknown command." -Hint "Use one command: create | initialize | update | configure | list | show | do | task | program | component | exec | connect | move | resize | set | delete | help."
+            Throw-FriendlyError -Detail ("Unsupported command '{0}'." -f $CommandName) -Code 2 -Summary "Unknown command." -Hint "Use one command: create | initialize | update | configure | list | show | do | task | package | component | exec | connect | move | resize | set | delete | help."
         }
     }
 }

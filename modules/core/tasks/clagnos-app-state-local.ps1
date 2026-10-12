@@ -336,53 +336,55 @@ function Assert-ClagnosTaskAppStateManifestAllowedForLocalRestore {
         [psobject]$Manifest
     )
 
-    $taskName = if ($null -ne $TaskBlock -and $TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$TaskBlock.Name } else { '' }
+    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock
+    $ownerType = if ($null -ne $TaskBlock.PackageSpec) { 'package' } else { 'task' }
+    $metadataFile = if ($ownerType -eq 'package') { 'package.json' } else { 'task.json' }
     $capturePlan = Get-ClagnosTaskAppStateCapturePlan -TaskBlock $TaskBlock
     if ($null -eq $capturePlan) {
         Throw-FriendlyError `
-            -Detail ("Task '{0}' does not declare an app-state capture plan in task.json." -f [string]$taskName) `
+            -Detail ("{0} '{1}' does not declare an app-state capture plan in {2}." -f $ownerType,[string]$taskName,$metadataFile) `
             -Code 61 `
-            -Summary "Task app-state restore input is invalid for local replay." `
-            -Hint "Define appState in task.json or re-save the task payload after the task plan exists."
+            -Summary "App-state restore input is invalid for local replay." `
+            -Hint ("Define appState in {0} or re-save the {1} payload after its plan exists." -f $metadataFile,$ownerType)
     }
 
     foreach ($entry in @($Manifest.machineDirectories)) {
         if (-not (Test-ClagnosLocalAppStateManifestEntryAllowed -Entry $entry -Rules @($capturePlan.machineDirectories) -PathPropertyName 'destinationPath')) {
             Throw-FriendlyError `
-                -Detail ("Machine directory restore path is outside the current task.json allow-list for task '{0}'." -f [string]$taskName) `
+                -Detail ("Machine directory restore path is outside the current {0} allow-list for {1} '{2}'." -f $metadataFile,$ownerType,[string]$taskName) `
                 -Code 61 `
                 -Summary "Task app-state restore input is invalid for local replay." `
-                -Hint "Re-save the task payload from the current task plan before running --target=lm restore."
+                -Hint ("Re-save the {0} payload from the current {1} before running --target=lm restore." -f $ownerType,$metadataFile)
         }
     }
 
     foreach ($entry in @($Manifest.machineFiles)) {
         if (-not (Test-ClagnosLocalAppStateManifestEntryAllowed -Entry $entry -Rules @($capturePlan.machineFiles) -PathPropertyName 'destinationPath')) {
             Throw-FriendlyError `
-                -Detail ("Machine file restore path is outside the current task.json allow-list for task '{0}'." -f [string]$taskName) `
+                -Detail ("Machine file restore path is outside the current {0} allow-list for {1} '{2}'." -f $metadataFile,$ownerType,[string]$taskName) `
                 -Code 61 `
                 -Summary "Task app-state restore input is invalid for local replay." `
-                -Hint "Re-save the task payload from the current task plan before running --target=lm restore."
+                -Hint ("Re-save the {0} payload from the current {1} before running --target=lm restore." -f $ownerType,$metadataFile)
         }
     }
 
     foreach ($entry in @($Manifest.profileDirectories)) {
         if (-not (Test-ClagnosLocalAppStateManifestEntryAllowed -Entry $entry -Rules @($capturePlan.profileDirectories) -PathPropertyName 'relativeDestinationPath')) {
             Throw-FriendlyError `
-                -Detail ("Profile directory restore path is outside the current task.json allow-list for task '{0}'." -f [string]$taskName) `
+                -Detail ("Profile directory restore path is outside the current {0} allow-list for {1} '{2}'." -f $metadataFile,$ownerType,[string]$taskName) `
                 -Code 61 `
                 -Summary "Task app-state restore input is invalid for local replay." `
-                -Hint "Re-save the task payload from the current task plan before running --target=lm restore."
+                -Hint ("Re-save the {0} payload from the current {1} before running --target=lm restore." -f $ownerType,$metadataFile)
         }
     }
 
     foreach ($entry in @($Manifest.profileFiles)) {
         if (-not (Test-ClagnosLocalAppStateManifestEntryAllowed -Entry $entry -Rules @($capturePlan.profileFiles) -PathPropertyName 'relativeDestinationPath')) {
             Throw-FriendlyError `
-                -Detail ("Profile file restore path is outside the current task.json allow-list for task '{0}'." -f [string]$taskName) `
+                -Detail ("Profile file restore path is outside the current {0} allow-list for {1} '{2}'." -f $metadataFile,$ownerType,[string]$taskName) `
                 -Code 61 `
                 -Summary "Task app-state restore input is invalid for local replay." `
-                -Hint "Re-save the task payload from the current task plan before running --target=lm restore."
+                -Hint ("Re-save the {0} payload from the current {1} before running --target=lm restore." -f $ownerType,$metadataFile)
         }
     }
 
@@ -395,7 +397,7 @@ function Assert-ClagnosTaskAppStateManifestAllowedForLocalRestore {
         $registryPath = if ($entry.PSObject.Properties.Match('registryPath').Count -gt 0) { [string]$entry.registryPath } else { '' }
         if ([string]::IsNullOrWhiteSpace([string]$registryPath)) {
             Throw-FriendlyError `
-                -Detail ("Task '{0}' app-state manifest is missing registryPath metadata required for safe local restore." -f [string]$taskName) `
+                -Detail ("{0} '{1}' app-state manifest is missing registryPath metadata required for safe local restore." -f $ownerType,[string]$taskName) `
                 -Code 61 `
                 -Summary "Task app-state restore input is too old for local replay." `
                 -Hint "Re-save the task payload with the current clagnos version, then retry --target=lm."
@@ -410,10 +412,10 @@ function Assert-ClagnosTaskAppStateManifestAllowedForLocalRestore {
 
         if (-not (Test-ClagnosLocalAppStateManifestEntryAllowed -Entry ([pscustomobject]@{ registryPath = $registryPath }) -Rules $rules -PathPropertyName 'registryPath')) {
             Throw-FriendlyError `
-                -Detail ("Registry restore path '{0}' is outside the current task.json allow-list for task '{1}'." -f [string]$registryPath, [string]$taskName) `
+                -Detail ("Registry restore path '{0}' is outside the current {1} allow-list for {2} '{3}'." -f [string]$registryPath,$metadataFile,$ownerType,[string]$taskName) `
                 -Code 61 `
                 -Summary "Task app-state restore input is invalid for local replay." `
-                -Hint "Re-save the task payload from the current task plan before running --target=lm restore."
+                -Hint ("Re-save the {0} payload from the current {1} before running --target=lm restore." -f $ownerType,$metadataFile)
         }
     }
 }
@@ -579,7 +581,7 @@ function Get-ClagnosTaskAppStateLocalBackupRootPath {
 
     $safeTaskName = (([string]$TaskName -replace '[^A-Za-z0-9\-]', '-').Trim('-'))
     if ([string]::IsNullOrWhiteSpace([string]$safeTaskName) -and $null -ne $TaskBlock -and $TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) {
-        $safeTaskName = (([string]$TaskBlock.Name -replace '[^A-Za-z0-9\-]', '-').Trim('-'))
+        $safeTaskName = (([string](Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock) -replace '[^A-Za-z0-9\-]', '-').Trim('-'))
     }
     if ([string]::IsNullOrWhiteSpace([string]$safeTaskName)) {
         $safeTaskName = 'task'
@@ -1709,7 +1711,7 @@ function Save-ClagnosTaskAppStateFromLocalMachine {
     }
 
     $capturePlan = Get-ClagnosTaskAppStateCapturePlan -TaskBlock $TaskBlock
-    $taskName = if ($null -ne $TaskBlock -and $TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$TaskBlock.Name } else { '' }
+    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $TaskBlock
     if ($null -eq $capturePlan) {
         Write-Host ("App-state skipped: {0} => no app-state spec or legacy coverage" -f [string]$taskName)
         return [pscustomobject]@{ Status = 'skipped'; Message = 'no app-state spec or legacy coverage'; Warning = $false; SelectedUsers = @() }

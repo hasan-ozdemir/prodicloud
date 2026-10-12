@@ -1,0 +1,17 @@
+{
+  "id": "sysinternals",
+  "displayName": "Sysinternals",
+  "category": "tool",
+  "enabled": true,
+  "timeout": 180,
+  "sortOrder": 101,
+  "installScript": "install.ps1",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "sysinternals"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "sysinternals"
+  }
+}

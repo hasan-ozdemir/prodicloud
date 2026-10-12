@@ -38,7 +38,7 @@ $script:PerfSuppressAzTimingDepth = 0
 $script:ManagedByTagKey = 'managed-by'
 $script:ManagedByTagValue = 'clagnos'
 $script:LegacyManagedByTagValue = 'az-vm'
-$script:ClagnosProgramStatusCache = @{}
+$script:ClagnosPackageStatusCache = @{}
 $script:ClagnosRepoRoot = $PSScriptRoot
 $env:PYTHONDONTWRITEBYTECODE = '1'
 
