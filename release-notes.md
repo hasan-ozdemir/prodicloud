@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.406 - 2026-10-12
+
+### Summary
+Added a non-live TUI acceptance suite covering the Clagnos menu hierarchy and all visible actions before an operator launches `cg.cmd`.
+
+### Highlights
+- Added 153 fixture-driven scenarios for the home menu, subscriptions, VC list/details, package catalogs, resource inventory, component CRUD, task/app-state menus, and VC operations.
+- Asserted rendered VC details, credential source presentation, endpoint fields, confirmation prompts, navigation, and command-option mapping.
+- The test harness blocks Azure CLI and the real command dispatcher. It verifies zero cloud calls and zero backend dispatches.
+- Added the suite to the PowerShell 5.1/7+ compatibility matrix used by CI.
+
+### Validation
+- TUI suite passed 153/153 scenarios under Windows PowerShell 5.1 and PowerShell 7+.
+- Both runs ended with zero native Azure CLI calls and zero real dispatcher calls. No Azure resources were changed.
+
 ## Release 2026.10.12.405 - 2026-10-12
 
 ### Summary

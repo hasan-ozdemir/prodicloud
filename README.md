@@ -1008,13 +1008,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\sensitive-content-ch
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\documentation-contract-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\powershell-compatibility-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\clagnos-smoke-tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\tui\run-tui-tests.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\package-app-state-contract-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\bash-syntax-check.ps1
 ```
 
 `code-quality-check.ps1` and the local commit hook keep the current tree and the current commit message clean. Run `.\tests\sensitive-content-check.ps1` directly when you also want the full reachable-history commit-message audit.
 
-GitHub Actions runs the non-destructive `.github/workflows/quality-gate.yml` workflow on pull requests, pushes to `main`, and manual dispatch. It covers static audit, an explicit documentation-contract check, PowerShell compatibility, Linux shell syntax, package app-state archive contracts, workflow linting, and the non-live smoke-contract suite. The live Azure E2E script is never run in CI.
+The TUI suite exercises each menu screen, numbered/lettered action, command routing, confirmation, and information display with the Azure CLI and real command dispatcher blocked. The PowerShell compatibility matrix runs it under both Windows PowerShell 5.1 and PowerShell 7+; the runner reports zero native Azure CLI calls and zero real dispatcher calls.
+
+GitHub Actions runs the non-destructive `.github/workflows/quality-gate.yml` workflow on pull requests, pushes to `main`, and manual dispatch. It covers static audit, an explicit documentation-contract check, PowerShell and TUI compatibility, Linux shell syntax, package app-state archive contracts, workflow linting, and the non-live smoke-contract suite. The live Azure E2E script is never run in CI.
 For a release push, the job is not finished until the pushed `main` SHA completes this workflow green.
 
 ### Live Release Acceptance

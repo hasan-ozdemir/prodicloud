@@ -3,6 +3,17 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.406] - 2026-10-12
+
+### Added
+- Added a fixture-driven TUI suite under `tests/tui/` that exercises all visible menu screens and action routes, including virtual computers, subscriptions, inventory, package catalogs, components, tasks, VM operations, confirmations, and VC detail rendering.
+- Blocked native Azure CLI and the real command dispatcher in the TUI harness; test runs assert zero native Azure calls and zero dispatched backend operations.
+- Included TUI tests in the PowerShell compatibility matrix and GitHub quality gate.
+
+### Validation
+- TUI suite passed 153/153 scenarios in Windows PowerShell 5.1 and PowerShell 7+.
+- Both runs reported zero native Azure CLI calls and zero real dispatcher calls; no Azure resources were mutated.
+
 ## [2026.10.12.405] - 2026-10-12
 
 ### Added

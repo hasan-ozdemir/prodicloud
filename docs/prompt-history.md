@@ -5762,3 +5762,14 @@ New feature: In the cg app, after selecting a VC, show that VC's SSH and RDP log
 **Assistant Summary**
 
 Expanded the selected VC detail screen with its VM/resource identity, SKU and CPU/RAM, OS image, disks, NIC/VNet/subnet/NSG, private and public addresses, public DNS/FQDN, security and feature settings, tags, and attached Azure resources. The screen now shows SSH/RDP host and port plus manager and assistant usernames/passwords read from local `.env`. Passwords are rendered only in the detail view and are not added to progress or operation logs; no Azure resources are changed.
+
+### 2026-10-12 23:38 UTC
+**User Prompt**
+
+````text
+Test request: Before I launch the cg application, write individual end-to-end tests under `tests/tui/` that cover every main and submenu, inspect each screen, and verify the displayed behavior and information. Aim for full TUI coverage, and do not write or run tests that mutate Azure VC/VM resources.
+````
+
+**Assistant Summary**
+
+Added a fixture-backed TUI suite that exercises all displayed menu categories and action routes, including the VC details screen, subscriptions, inventory, package catalogs, component operations, task/app-state flows, and all VM operations. The harness blocks the native Azure CLI and real command dispatcher and asserts both call counts stay at zero. All 153 scenarios passed under Windows PowerShell 5.1 and PowerShell 7+; no Azure resources were changed.

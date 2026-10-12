@@ -38,6 +38,7 @@ Run the non-live checks locally before opening a pull request:
 .\tests\code-quality-check.ps1
 .\tests\documentation-contract-check.ps1
 .\tests\clagnos-smoke-tests.ps1
+.\tests\tui\run-tui-tests.ps1
 .\tests\powershell-compatibility-check.ps1
 ```
 
