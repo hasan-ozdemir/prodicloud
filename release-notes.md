@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.401 - 2026-10-12
+
+### Summary
+Tasks can now be enabled or disabled deliberately from the Clagnos task and program menus. The operation updates the shared task catalog for future runs and reports the resulting availability state.
+
+### Highlights
+- The Manage programs list marks disabled entries and offers `e` enable, `d` disable, `u` uninstall, `i` install/update, and `s` status actions.
+- Program rows identify `initial` versus `add-on` tasks and `local` versus `remote` execution; local-only task catalogs have a separate marker.
+- Status and uninstall remain available for disabled programs; install/update is blocked until the program task is enabled.
+- Added task-wide availability management for init and update tasks, including local-only task folders.
+- Enable/disable requires a typed confirmation, preserves task manifest metadata, verifies the resulting catalog, and never changes an already-running VM.
+
+### Validation
+- All 168 smoke checks passed under Windows PowerShell 5.1 and PowerShell 7+.
+- Code quality, documentation, Bash syntax, and sensitive-content checks passed. No Azure resource changes were made.
+
 ## Release 2026.10.12.400 - 2026-10-12
 
 ### Summary

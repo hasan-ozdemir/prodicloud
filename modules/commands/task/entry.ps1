@@ -123,6 +123,32 @@ function Invoke-ClagnosTaskCommand {
         }
     }
 
+    if ([string]::Equals($mode, 'enable', [System.StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($mode, 'disable', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        $taskSelection = Resolve-ClagnosTaskStageSelection -Options $Options -AutoMode:$AutoMode
+        $stageRoot = if ([string]::Equals([string]$taskSelection.Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
+            [string]$runtime.VmInitTaskDir
+        }
+        else {
+            [string]$runtime.VmUpdateTaskDir
+        }
+        $toggleResult = Invoke-ClagnosTaskAvailabilityToggle `
+            -StageRoot $stageRoot `
+            -Platform ([string]$runtime.Platform) `
+            -Stage ([string]$taskSelection.Stage) `
+            -TaskNumberOrName ([string]$taskSelection.Requested) `
+            -Action $mode
+        return [pscustomobject]@{
+            Mode = [string]$mode
+            Platform = [string]$runtime.Platform
+            Stage = [string]$taskSelection.Stage
+            Task = $toggleResult.Task
+            Enabled = [bool]$toggleResult.Enabled
+            Changed = [bool]$toggleResult.Changed
+        }
+    }
+
     $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
     if ([string]::Equals($mode, 'run-vm-init', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($mode, 'run-vm-update', [System.StringComparison]::OrdinalIgnoreCase)) {

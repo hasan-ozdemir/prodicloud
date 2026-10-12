@@ -624,6 +624,78 @@ Invoke-Test -Name "Task catalog discovery" -Action {
     }
 }
 
+Invoke-Test -Name "Task availability actions move and verify catalog entries safely" -Action {
+    $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-toggle-{0}' -f ([guid]::NewGuid().ToString('N')))
+    $stageRoot = Join-Path $testRoot 'windows\update'
+    $taskName = '101-install-toggle-tool'
+    $activeTaskRoot = Join-Path $stageRoot $taskName
+    $script:ClagnosTaskAvailabilityToggleAnswer = 'DISABLE'
+    New-Item -ItemType Directory -Path $activeTaskRoot -Force | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $activeTaskRoot ($taskName + '.ps1')), "Write-Output 'toggle-test'`r`n", [System.Text.UTF8Encoding]::new($false))
+    $manifestText = @'
+{
+  "priority": 101,
+  "enabled": true,
+  "timeout": 60,
+  "customMetadata": "preserve-me",
+  "program": {
+    "id": "toggle-tool",
+    "displayName": "Toggle Tool",
+    "category": "tool",
+    "statusCheck": { "kind": "command", "value": "toggle-tool" },
+    "uninstall": { "kind": "choco", "value": "toggle-tool" }
+  }
+}
+'@
+    [System.IO.File]::WriteAllText((Join-Path $activeTaskRoot 'task.json'), $manifestText, [System.Text.UTF8Encoding]::new($false))
+
+    try {
+        function Read-Host {
+            param([string]$Prompt)
+            return [string]$script:ClagnosTaskAvailabilityToggleAnswer
+        }
+
+        $disabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'disable'
+        Assert-True -Condition (-not [bool]$disabled.Enabled -and [bool]$disabled.Changed) -Message 'Disable must move an active task into the disabled inventory.'
+        $disabledPath = Join-Path (Join-Path $stageRoot 'disabled') $taskName
+        Assert-True -Condition (Test-Path -LiteralPath $disabledPath) -Message 'Disable must preserve the full task folder under disabled/.'
+        $disabledCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform windows -Stage update -SuppressSkipMessages
+        $disabledTask = @($disabledCatalog.DisabledTasks | Where-Object { [string]$_.Name -eq $taskName } | Select-Object -First 1)
+        Assert-True -Condition (@($disabledTask).Count -eq 1 -and [string]$disabledTask[0].DisabledReason -eq 'disabled-by-location') -Message 'Disabled program tasks must remain visible with their location reason.'
+        Assert-True -Condition ($null -ne $disabledTask[0].ProgramSpec) -Message 'Disabled program tasks must remain visible in the program catalog.'
+        $disabledProgram = @(Get-ClagnosProgramCatalog -Platform windows -StageRoot $stageRoot)
+        Assert-True -Condition ($disabledProgram.Count -eq 1 -and -not [bool]$disabledProgram[0].Enabled) -Message 'Disabled program tasks must remain visible and marked disabled in the program catalog.'
+
+        $script:ClagnosTaskAvailabilityToggleAnswer = 'ENABLE'
+        $enabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName '101' -Action 'enable'
+        Assert-True -Condition ([bool]$enabled.Enabled -and [bool]$enabled.Changed) -Message 'Enable by task number must restore the task to the active catalog.'
+        Assert-True -Condition (Test-Path -LiteralPath $activeTaskRoot) -Message 'Enable must move the task folder back to the active stage root.'
+        $enabledProgram = @(Get-ClagnosProgramCatalog -Platform windows -StageRoot $stageRoot)
+        Assert-True -Condition ($enabledProgram.Count -eq 1 -and [bool]$enabledProgram[0].Enabled) -Message 'Enabled program tasks must become installable catalog entries again.'
+        $manifest = ConvertFrom-Json -InputObject ([string](Get-Content -LiteralPath (Join-Path $activeTaskRoot 'task.json') -Raw))
+        Assert-True -Condition ([bool]$manifest.enabled) -Message 'Enable must update a false task.json enabled value.'
+        Assert-True -Condition ([string]$manifest.customMetadata -eq 'preserve-me' -and [string]$manifest.program.id -eq 'toggle-tool') -Message 'Enable must preserve unrelated task.json and program metadata.'
+
+        Set-ClagnosTaskManifestEnabled -ManifestPath (Join-Path $activeTaskRoot 'task.json') -Enabled $false
+        $manifestDisabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'enable'
+        Assert-True -Condition ([bool]$manifestDisabled.Enabled -and [bool]$manifestDisabled.Changed) -Message 'Enable must also clear an explicit task.json disabled state.'
+
+        $script:ClagnosTaskAvailabilityToggleAnswer = 'NO'
+        $cancelled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'disable'
+        Assert-True -Condition (-not [bool]$cancelled.Changed -and [bool]$cancelled.Enabled) -Message 'A rejected typed confirmation must leave the task enabled.'
+        Assert-True -Condition (Test-Path -LiteralPath $activeTaskRoot) -Message 'A rejected typed confirmation must leave the task folder in place.'
+    }
+    finally {
+        Remove-Item -LiteralPath 'Function:\Read-Host' -Force -ErrorAction SilentlyContinue
+        $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([char[]]@('\','/')) + [System.IO.Path]::DirectorySeparatorChar
+        $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
+        if ($resolvedTestRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTestRoot)) {
+            Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
+        }
+        $script:ClagnosTaskAvailabilityToggleAnswer = $null
+    }
+}
+
 Invoke-Test -Name "CLI parse help contracts" -Action {
     $parsedGlobalHelp = Parse-ClagnosCliArguments -CommandToken "--help" -RawArgs @()
     Assert-True -Condition ([string]$parsedGlobalHelp.Command -eq "help") -Message "Global --help should resolve to help command."
@@ -942,10 +1014,20 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     Assert-ClagnosCommandOptions -CommandName 'program' -Options @{ action = 'uninstall'; program = 'git'; yes = $true; windows = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
     Assert-ClagnosCommandOptions -CommandName 'component' -Options @{ action = 'list'; type = 'disk'; group = 'rg-samplevm-ate1-g1' }
     Assert-ClagnosCommandOptions -CommandName 'component' -Options @{ action = 'attach'; type = 'nic'; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm' }
+    Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ enable = $true; 'vm-update-task' = '115'; windows = $true }
+    Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ disable = $true; 'vm-update-task' = '115'; windows = $true }
+    Assert-True -Condition ((Resolve-ClagnosTaskCommandMode -Options @{ enable = $true }) -eq 'enable') -Message 'Task enable must resolve as a distinct local catalog action.'
+    Assert-True -Condition ((Resolve-ClagnosTaskCommandMode -Options @{ disable = $true }) -eq 'disable') -Message 'Task disable must resolve as a distinct local catalog action.'
 
     $programCatalog = @(Get-ClagnosProgramCatalog -Platform 'windows')
+    $programRuntime = Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\program\runtime.ps1') -Raw
     Assert-True -Condition ($programCatalog.Count -gt 0) -Message 'Windows install tasks with program metadata must appear in the program catalog.'
     Assert-True -Condition (@($programCatalog | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Every program entry must include status and uninstall metadata.'
+    Assert-True -Condition (@($programCatalog | Where-Object { [string]$_.ProgramType -notin @('initial','add-on') -or [string]$_.ExecutionTarget -notin @('local','remote') }).Count -eq 0) -Message 'Every program entry must identify its lifecycle type and execution target.'
+    Assert-True -Condition (@($programCatalog | Where-Object { [string]$_.Stage -eq 'update' -and [string]$_.ProgramType -eq 'add-on' -and [string]$_.ExecutionTarget -eq 'remote' }).Count -gt 0) -Message 'Update-stage programs must be identified as add-ons executed remotely on the selected VM.'
+    Assert-True -Condition ($programRuntime -match [regex]::Escape('$taskCatalog.InventoryTasks')) -Message 'Program inventory must retain disabled tasks for visibility and reactivation.'
+    Assert-True -Condition ($programRuntime -match [regex]::Escape("if (-not [bool]`$program.Enabled)")) -Message 'Disabled programs must be blocked from install/update.'
+    Assert-True -Condition ($programRuntime -match [regex]::Escape("ProgramType = [string]`$stageRootInfo.ProgramType") -and $programRuntime -match [regex]::Escape("ExecutionTarget = 'remote'")) -Message 'Program catalog records must derive their stage label and remote VM execution target.'
     Assert-True -Condition ((@(Get-ClagnosComponentTypeIds) -join ',') -eq 'group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule') -Message 'The component catalog must expose all managed VC resource types.'
 
     $uiPath = Join-Path $RepoRoot 'scripts\clagnos-cli.ps1'
@@ -957,7 +1039,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'program'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable program task','d: disable program task','u: uninstall','i: install or update','s: status',' (disabled)',' [local catalog]','ProgramType, [string]$catalog[$index].ExecutionTarget','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape("Invoke-ClagnosUiCommand -CommandName 'list'")) -Message 'The inventory submenu must route into the read-only list command.'

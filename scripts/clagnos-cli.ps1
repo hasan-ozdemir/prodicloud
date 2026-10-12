@@ -469,7 +469,10 @@ function Show-ClagnosUiProgramMenu {
         else {
             for ($index = 0; $index -lt $catalog.Count; $index++) {
                 $status = if ($statusMap.ContainsKey([string]$catalog[$index].Id)) { [string]$statusMap[[string]$catalog[$index].Id] } else { 'unavailable' }
-                Write-Host ('{0}. {1} [{2}]' -f ($index + 1), [string]$catalog[$index].DisplayName, [string]$status)
+                $disabledLabel = if ([bool]$catalog[$index].Enabled) { '' } else { ' (disabled)' }
+                $programTypeLabel = '({0} / {1})' -f [string]$catalog[$index].ProgramType, [string]$catalog[$index].ExecutionTarget
+                $catalogSourceLabel = if ([string]::Equals([string]$catalog[$index].CatalogSource, 'local', [System.StringComparison]::OrdinalIgnoreCase)) { ' [local catalog]' } else { '' }
+                Write-Host ('{0}. {1} {2}{3}{4} [{5}]' -f ($index + 1), [string]$catalog[$index].DisplayName, $programTypeLabel, $catalogSourceLabel, $disabledLabel, [string]$status)
             }
         }
         Write-Host 'b: back'
@@ -480,15 +483,26 @@ function Show-ClagnosUiProgramMenu {
         $number = 0
         if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $catalog.Count) { continue }
         $program = $catalog[$number - 1]
-        Write-ClagnosUiHeader -Title ([string]$program.DisplayName)
-        Write-Host 's: status'
-        Write-Host 'i: install or update'
+        $programTypeLabel = '({0} / {1})' -f [string]$program.ProgramType, [string]$program.ExecutionTarget
+        Write-ClagnosUiHeader -Title ('{0} {1}' -f [string]$program.DisplayName, $programTypeLabel)
+        Write-Host 'e: enable program task'
+        Write-Host 'd: disable program task'
         Write-Host 'u: uninstall'
+        Write-Host 'i: install or update'
+        Write-Host 's: status'
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $action = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($action -eq 'b') { continue }
         if ($action -eq 'q') { exit }
+        if ($action -in @('e','d')) {
+            $taskOptions = @{}
+            $taskOptions[('vm-{0}-task' -f [string]$program.Stage)] = [string]$program.TaskName
+            $taskOptions[$(if ($action -eq 'e') { 'enable' } else { 'disable' })] = $true
+            $taskOptions[$platform] = $true
+            Invoke-ClagnosUiCommand -CommandName 'task' -Options $taskOptions
+            continue
+        }
         $programAction = switch ($action) { 's' { 'status' } 'i' { 'install' } 'u' { 'uninstall' } default { '' } }
         if ([string]::IsNullOrWhiteSpace($programAction)) { continue }
         $options = New-ClagnosUiTargetOptions -Vm $Vm
@@ -561,6 +575,71 @@ function Show-ClagnosUiComponentMenu {
     }
 }
 
+function Show-ClagnosUiTaskAvailabilityMenu {
+    param([psobject]$Vm)
+
+    $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
+    $runtime = if ($platform -eq 'windows') {
+        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -WindowsFlag
+    }
+    else {
+        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -LinuxFlag
+    }
+
+    while ($true) {
+        Write-ClagnosUiHeader -Title ('Task availability for {0}' -f [string]$Vm.name)
+        Write-Host 'Task availability is shared by this repository and affects future runs on matching VMs.' -ForegroundColor Yellow
+        Write-Host '1. Initialization tasks'
+        Write-Host '2. Maintenance and program tasks'
+        Write-Host 'b: back'
+        Write-Host 'q: exit'
+        $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
+        if ($stageChoice -eq 'b') { return }
+        if ($stageChoice -eq 'q') { exit }
+        if ($stageChoice -notin @('1','2')) { continue }
+
+        $stage = if ($stageChoice -eq '1') { 'init' } else { 'update' }
+        $stageRoot = if ($stage -eq 'init') { [string]$runtime.VmInitTaskDir } else { [string]$runtime.VmUpdateTaskDir }
+        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $platform -Stage $stage -SuppressSkipMessages
+        $tasks = @($catalog.InventoryTasks)
+        if ($tasks.Count -eq 0) {
+            Write-Host 'No tasks are registered for this stage.' -ForegroundColor Yellow
+            Wait-ClagnosUiContinue
+            continue
+        }
+
+        Write-ClagnosUiHeader -Title ('{0} tasks' -f $(if ($stage -eq 'init') { 'Initialization' } else { 'Maintenance' }))
+        for ($index = 0; $index -lt $tasks.Count; $index++) {
+            $state = if ([bool]$tasks[$index].Enabled) { 'enabled' } else { ('disabled: ' + [string]$tasks[$index].DisabledReason) }
+            Write-Host ('{0}. #{1} {2} [{3}]' -f ($index + 1), [int]$tasks[$index].TaskNumber, [string]$tasks[$index].Name, $state)
+        }
+        Write-Host 'b: back'
+        Write-Host 'q: exit'
+        $taskChoice = (Read-ClagnosUiChoice 'Task number from this list').ToLowerInvariant()
+        if ($taskChoice -eq 'b') { continue }
+        if ($taskChoice -eq 'q') { exit }
+        $taskIndex = 0
+        if (-not [int]::TryParse($taskChoice, [ref]$taskIndex) -or $taskIndex -lt 1 -or $taskIndex -gt $tasks.Count) { continue }
+
+        $selectedTask = $tasks[$taskIndex - 1]
+        Write-ClagnosUiHeader -Title ([string]$selectedTask.Name)
+        Write-Host 'e: enable'
+        Write-Host 'd: disable'
+        Write-Host 'b: back'
+        Write-Host 'q: exit'
+        $action = (Read-ClagnosUiChoice 'Availability action').ToLowerInvariant()
+        if ($action -eq 'b') { continue }
+        if ($action -eq 'q') { exit }
+        if ($action -notin @('e','d')) { continue }
+
+        $options = @{}
+        $options[('vm-{0}-task' -f $stage)] = [string]$selectedTask.Name
+        $options[$(if ($action -eq 'e') { 'enable' } else { 'disable' })] = $true
+        $options[$platform] = $true
+        Invoke-ClagnosUiCommand -CommandName 'task' -Options $options
+    }
+}
+
 function Show-ClagnosUiTaskMenu {
     param([psobject]$Vm)
 
@@ -572,6 +651,7 @@ function Show-ClagnosUiTaskMenu {
         Write-Host '4. Save task app-state'
         Write-Host '5. Restore task app-state'
         Write-Host '6. List disabled tasks'
+        Write-Host '7. Enable/disable a task'
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
@@ -606,6 +686,7 @@ function Show-ClagnosUiTaskMenu {
                 $target['user'] = Read-ClagnosUiChoice 'User (.all., .current., or name)'
                 Invoke-ClagnosUiCommand -CommandName 'task' -Options $target
             }
+            '7' { Show-ClagnosUiTaskAvailabilityMenu -Vm $Vm }
         }
     }
 }

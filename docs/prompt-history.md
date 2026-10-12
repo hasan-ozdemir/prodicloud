@@ -5664,3 +5664,24 @@ Plan update: set the target Azure subscription for this app to the subscription 
 **Assistant Summary**
 
 Added the numbered Cloud subscriptions menu with a refreshed Azure CLI subscription inventory, separate Clagnos-selected and CLI-active markers, disabled-subscription protection, and selection that updates both the Azure CLI default and persisted Clagnos subscription. Set the Azure CLI default to the configured app subscription. No legacy-tag resource groups were present, so the one-time group-tag migration had no eligible targets.
+### 2026-10-12 14:48 UTC
+**User Prompt**
+
+````text
+New feature: add an enable/disable option for every task under an appropriate menu. In the Manage programs screen, list packages/programs by number, mark disabled entries with `(disabled)`, and provide `e: enable`, `d: disable`, `u: uninstall`, `i: install`, and `s: status` options.
+````
+
+**Assistant Summary**
+
+Added confirmed task-catalog availability changes for init, update, and program tasks. The Manage programs catalog now includes disabled program entries with a `(disabled)` marker and offers enable, disable, uninstall, install/update, and status actions. Install/update is blocked while disabled; status and uninstall remain available. Enabling/disabling changes the shared repository catalog for future runs, preserves other task manifest fields, verifies the resulting state, and does not alter a deployed VM. Added temporary-catalog tests for disable, re-enable, metadata preservation, and confirmation cancellation.
+
+### 2026-10-12 14:52 UTC
+**User Prompt**
+
+````text
+Task update: In the Manage programs screen, always identify a task/package/program's type, such as (initial) or (add-on), and (local) or (remote).
+````
+
+**Assistant Summary**
+
+Labeled Manage programs entries with their lifecycle stage (`initial` or `add-on`) and execution target (`local` or `remote`). Local-only task-catalog entries receive a separate `[local catalog]` marker so catalog origin is not confused with execution on the selected VM. Program actions use the entry's stage when enabling, disabling, or running its install task.

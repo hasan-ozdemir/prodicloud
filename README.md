@@ -116,7 +116,7 @@ The workflow separates infrastructure creation, initial guest setup, maintenance
 ### Interactive CLI
 Run `.\cg.cmd` to open the menu. The welcome screen shows the `one tool for all common cloud operations` line, the selected Azure subscription name/id. The main menu offers `1. Virtual computers`, `2. Managed resource inventory`, and `3. Cloud subscriptions`; choose a subscription by number to update both the Azure CLI default and Clagnos's saved subscription. Use numbers or the shown letter shortcuts and press Enter. Enter `q` to exit or `b` to return from a submenu. `.\cg.cmd <command> ...` forwards a direct command to the same `clagnos.ps1` runtime.
 
-The selected virtual computer opens with compute, CPU/RAM, disk, storage, network, IP, and attached-resource details. Its menus expose initialization, maintenance, program status/install/update/uninstall, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, app-state, reports, and deletion.
+The selected virtual computer opens with compute, CPU/RAM, disk, storage, network, IP, and attached-resource details. Its menus expose initialization, maintenance, program status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, app-state, reports, and deletion.
 
 ### Prerequisites
 - Windows host with PowerShell and the Azure CLI available.
@@ -304,7 +304,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `list` | Print managed inventory by type | Azure-read-only | Inventory, targeting, quick visibility | Managed group/resource listings |
 | `show` | Print a full managed report plus focused target-derived config when one VM is in scope | Azure-read-only | Health review, support handoff, release verification | Inventory and read-only target-derived configuration |
 | `do` | Apply lifecycle or repair actions | Azure-mutating or read-only for `status` | Power-state control, reapply, redeploy, hibernation flow | Target VM lifecycle action |
-| `task` | List discovered task inventory, run one task, or save/restore task app-state | Local/read-only for `--list`; Azure-touching for `--run-*` and VM app-state maintenance; local-machine for `--source=lm` / `--target=lm` | Understand task order, rerun one task, or refresh one task payload | Visible task inventory or one isolated task/app-state action |
+| `task` | List tasks, explicitly enable/disable a task, run one task, or save/restore task app-state | Local for inventory and confirmed enable/disable; Azure-touching for `--run-*` and VM app-state maintenance; local-machine for `--source=lm` / `--target=lm` | Review task state, change future task availability, rerun one task, or refresh one payload | Verified catalog change or one isolated task/app-state action |
 | `program` | Check status, install/update, or uninstall one catalogued program | Guest-mutating except status | Manage one VM application, tool, or package | Verified program action result |
 | `component` | List/read/create/update/delete a Clagnos-managed Azure component | Azure-read-only for list/show; Azure-mutating for create/update/delete | Inspect or change one VC component | Component state or dependency-reviewed mutation |
 | `connect` | Launch or test SSH/RDP access | Azure-touching, local-client action | Linux or Windows SSH access, or Windows desktop access | Direct client launch or connection test |
@@ -397,6 +397,8 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd task --list --vm-init` | `--list`, `--vm-init` | Lists init tasks | Init audit | Shows real execution order. |
 | `.\cg.cmd task --list --vm-update --windows` | `--list`, `--vm-update`, `--windows` | Lists Windows update tasks | Update inspection | Good before isolated reruns. |
 | `.\cg.cmd task --list --disabled --vm-update --windows` | `--disabled` | Lists disabled tasks | Cleanup or contract review | Surfaces disabled reason and source. |
+| `.\cg.cmd task --disable --vm-update-task=114 --windows` | `--disable`, task selector, platform | Moves one task into the disabled catalog after typed confirmation | Stop a future program/task run | Changes the shared repository catalog for future VM runs; it does not uninstall software already present on a VM. |
+| `.\cg.cmd task --enable --vm-update-task=114 --windows` | `--enable`, task selector, platform | Restores one task to the active catalog after typed confirmation | Allow future install or task runs | Preserves the other `task.json` metadata and verifies the catalog state. |
 | `.\cg.cmd task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>` | `--run-vm-init`, target selectors | Runs one init task directly | Isolated bootstrap rerun | Uses Azure run-command against one managed VM. |
 | `.\cg.cmd task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name> --windows` | `--run-vm-update`, platform | Runs one update task directly | Isolated guest fix | Uses the SSH task runner against one managed VM; task-signaled immediate restarts still run, Windows Store-backed app tasks also append `10003-create-public-desktop-shortcuts` in the same isolated rerun so Public Desktop shortcuts refresh immediately, and the workflow-only final vm-update restart still does not run. |
 | `.\cg.cmd task --save-app-state --vm-update-task=115 --group=<resource-group> --vm-name=<vm-name> -s <subscription-guid>` | `--save-app-state`, `--vm-update-task`, target selectors | Captures one live task-owned app-state payload into the task-local `<task-folder>/app-state/app-state.zip` | Refreshing an operator-owned payload from the active VM | Cleanly skips when no capture coverage exists. |
@@ -625,7 +627,10 @@ Behavior notes:
 Purpose: check status, install/update, or uninstall one task-catalogued VM program.
 
 Behavior notes:
-- The enabled Windows `install-*` task folders are program entries; Linux entries appear as platform tasks add validated program metadata.
+- The program screen lists active and disabled install tasks. Each row identifies its lifecycle type (`initial` or `add-on`) and execution target (`local` or `remote`); local-only task folders also display `[local catalog]`. Disabled entries display `(disabled)` beside the program name.
+- Select a program by number, then choose `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, or `s: status`.
+- `e` and `d` update the shared task catalog after typed confirmation, affecting future runs for all VMs using the repository. They do not install or remove software already on the selected VM.
+- Status and uninstall remain available while disabled. Install/update is blocked until the task is enabled. Linux program entries appear as platform tasks add validated program metadata.
 - Each task manifest supplies a display name, category, installed-state detector, and explicit uninstall action.
 - Installs run the task script synchronously; uninstalls require confirmation and are verified against the status detector.
 
@@ -753,6 +758,8 @@ Every task is a portable folder. The folder name defines the task identity, the 
 
 ### Timeouts, Priority, And Enable Flags
 - every task folder uses `task.json` for `priority`, `enabled`, `timeout`, optional `assets`, and optional `appState`
+- The TUI program screen marks disabled program entries and offers `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, and `s: status`. Status and uninstall remain available while disabled; install/update is blocked until enabled.
+- Enable/disable changes the shared repository task catalog for future runs on any VM using that repository. The task command requires typing `ENABLE` or `DISABLE`; disabling moves a task under its corresponding `disabled/` folder, while enabling restores it and sets `task.json` `enabled` to `true` without dropping other metadata. It does not change an already-running VM or uninstall a package already installed there.
 - local-only tasks under `local/` are discovered from disk dynamically
 - local-only tasks under `local/disabled/` remain disabled by location
 - task asset paths are resolved relative to the owning task folder

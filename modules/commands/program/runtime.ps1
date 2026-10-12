@@ -1,33 +1,55 @@
 # Program catalog, status, and managed guest install/uninstall operations.
 
 function Get-ClagnosProgramCatalog {
-    param([ValidateSet('windows','linux')][string]$Platform)
-
-    $stageRoot = Join-Path (Get-ClagnosRepoRoot) (Join-Path $Platform 'update')
-    if (-not (Test-Path -LiteralPath $stageRoot)) { return @() }
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $Platform -Stage 'update' -SuppressSkipMessages
-    $programs = @(
-        $catalog.ActiveTasks |
-            Where-Object { $null -ne $_.ProgramSpec } |
-            ForEach-Object {
-                [pscustomobject]@{
-                    Id = [string]$_.ProgramSpec.Id
-                    DisplayName = [string]$_.ProgramSpec.DisplayName
-                    Category = [string]$_.ProgramSpec.Category
-                    StatusCheck = $_.ProgramSpec.StatusCheck
-                    Uninstall = $_.ProgramSpec.Uninstall
-                    TaskName = [string]$_.Name
-                    TaskNumber = [int]$_.TaskNumber
-                    Task = $_
-                    Platform = [string]$Platform
-                }
-            }
+    param(
+        [ValidateSet('windows','linux')][string]$Platform,
+        [string]$StageRoot = ''
     )
+
+    $isWindowsPlatform = [string]::Equals([string]$Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase)
+    $taskRuntime = if ($isWindowsPlatform) {
+        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -WindowsFlag
+    }
+    else {
+        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -LinuxFlag
+    }
+    $stageRoots = @(
+        [pscustomobject]@{ Stage = 'init'; Root = [string]$taskRuntime.VmInitTaskDir; ProgramType = 'initial' },
+        [pscustomobject]@{ Stage = 'update'; Root = $(if ([string]::IsNullOrWhiteSpace([string]$StageRoot)) { [string]$taskRuntime.VmUpdateTaskDir } else { [string]$StageRoot }); ProgramType = 'add-on' }
+    )
+    $programs = @()
+    foreach ($stageRootInfo in @($stageRoots)) {
+        if (-not (Test-Path -LiteralPath ([string]$stageRootInfo.Root))) { continue }
+        $taskCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$stageRootInfo.Root) -Platform $Platform -Stage ([string]$stageRootInfo.Stage) -SuppressSkipMessages
+        $programs += @(
+            $taskCatalog.InventoryTasks |
+                Where-Object { $null -ne $_.ProgramSpec } |
+                ForEach-Object {
+                    [pscustomobject]@{
+                        Id = [string]$_.ProgramSpec.Id
+                        DisplayName = [string]$_.ProgramSpec.DisplayName
+                        Category = [string]$_.ProgramSpec.Category
+                        StatusCheck = $_.ProgramSpec.StatusCheck
+                        Uninstall = $_.ProgramSpec.Uninstall
+                        TaskName = [string]$_.Name
+                        TaskNumber = [int]$_.TaskNumber
+                        Enabled = [bool]$_.Enabled
+                        DisabledReason = [string]$_.DisabledReason
+                        Stage = [string]$stageRootInfo.Stage
+                        ProgramType = [string]$stageRootInfo.ProgramType
+                        ExecutionTarget = 'remote'
+                        CatalogSource = [string]$_.Source
+                        Task = $_
+                        Platform = [string]$Platform
+                    }
+                }
+        )
+    }
     $duplicates = @($programs | Group-Object { [string]$_.Id } | Where-Object { $_.Count -gt 1 })
     if ($duplicates.Count -gt 0) {
         throw ("Program ids must be unique in the active task catalog: {0}" -f (($duplicates | ForEach-Object { [string]$_.Name }) -join ', '))
     }
-    return @($programs | Sort-Object { [int]$_.TaskNumber }, { [string]$_.DisplayName })
+    return @($programs | Sort-Object @{ Expression = { if ([string]$_.Stage -eq 'init') { 0 } else { 1 } } }, { [int]$_.TaskNumber }, { [string]$_.DisplayName })
 }
 
 function Get-ClagnosProgramStatusCacheKey {
@@ -334,7 +356,10 @@ function Invoke-ClagnosProgramOperation {
         $Options['vm-name'] = [string]$target.VmName
         $Options['subscription-id'] = [string](Get-ClagnosResolvedSubscriptionContext).SubscriptionId
         $programList = @(Get-ClagnosProgramStatusSnapshot -Programs $catalog -Options $Options -Platform $platform)
-        foreach ($program in @($catalog)) { Write-Host ("{0} | {1} | {2}" -f [string]$program.DisplayName,[string]$program.Category,[string]$programList[[string]$program.Id]) }
+        foreach ($program in @($catalog)) {
+            $availability = if ([bool]$program.Enabled) { 'enabled' } else { ('disabled: ' + [string]$program.DisabledReason) }
+            Write-Host ("{0} | {1} | {2} | {3}" -f [string]$program.DisplayName,[string]$program.Category,$availability,[string]$programList[[string]$program.Id])
+        }
         return
     }
     $selected = @($catalog | Where-Object { [string]::Equals([string]$_.Id,[string]$ProgramId,[System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals([string]$_.TaskName,[string]$ProgramId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
@@ -350,9 +375,13 @@ function Invoke-ClagnosProgramOperation {
         return
     }
     if ($Action -eq 'install') {
+        if (-not [bool]$program.Enabled) {
+            throw ("'{0}' is disabled in the shared task catalog. Enable it before installing or updating it." -f [string]$program.DisplayName)
+        }
         $installOptions = @{} + $Options
-        $installOptions['run-vm-update'] = [string]$program.TaskName
-        $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $installOptions -OperationName 'program' -Stage 'update' -Requested ([string]$program.TaskName) -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
+        $stage = [string]$program.Stage
+        $installOptions[('run-vm-{0}' -f $stage)] = [string]$program.TaskName
+        $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $installOptions -OperationName 'program' -Stage $stage -Requested ([string]$program.TaskName) -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
         Write-Host ("Installed or updated {0}." -f [string]$program.DisplayName) -ForegroundColor Green
         return $run
     }

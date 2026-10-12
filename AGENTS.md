@@ -58,7 +58,7 @@ Use these sources in this order when maintaining the repo:
 - Keep help output, README examples, and runtime messages aligned with the actual parser contract.
 - Canonical target selectors are `--group` / `-g`, `--vm-name` / `-v`, and `--subscription-id` / `-s`.
 - Value-taking options must accept both `--option=value` and `--option value`, plus short-form `-x=value` and `-x value` when a short alias exists.
-- `task` owns task inventory, isolated `vm-init` / `vm-update` task runs, and task-scoped app-state save/restore.
+- `task` owns task inventory, explicit task enable/disable, isolated `vm-init` / `vm-update` task runs, and task-scoped app-state save/restore.
 - `task --save-app-state` defaults to `--source=vm`; `task --restore-app-state` defaults to `--target=vm`; both default to `--user=.all.`.
 - `task --save-app-state` / `--restore-app-state` accept `--user=.all.`, `--user=.current.`, one explicit user, or a comma-separated user list.
 - Local-machine task app-state save/restore is Windows-host-only, must validate the current `task.json` allow-list before local restore, and must write task-adjacent backup snapshots plus both `restore-journal.json` and `verify-report.json` before mutating the operator machine.
@@ -132,11 +132,12 @@ Use these sources in this order when maintaining the repo:
 - App-state capture is settings-first. Exclude generated installers, models, telemetry trees, caches, and other low-value runtime artifacts unless a task explicitly proves they are durable required state.
 - `task.json` may supply `priority`, `enabled`, `timeout`, `assets`, `appState`, `dependsOn`, and validated `program` metadata.
 - Task priority precedence is: `task.json priority` -> filename task number -> deterministic fallback within the current task-number band.
-- Runtime code must not auto-write, auto-sync, or auto-reconcile `task.json` files.
+- Runtime discovery and execution must not auto-write, auto-sync, or auto-reconcile `task.json` files. The explicit `task --enable` / `task --disable` operation may change only the task's `enabled` field after typed confirmation, must preserve all other metadata, and must verify the resulting catalog state; location-disabled folders must move only between their matching active and `disabled/` roots.
 - For task folders with missing `priority`, default to the filename task number when available, otherwise `1000`.
 - For task folders with missing `timeout`, default to `180`.
 - Disabled tasks belong under `disabled/` and must be ignored by execution logic.
 - Program metadata must supply a display name, category, an installed-state check, and an explicit allow-listed uninstall action; `vm-update` excludes these program tasks from its maintenance run.
+- Program screens must label each entry's lifecycle type (`initial` or `add-on`) and execution target (`local` or `remote`); mark local-only catalog entries separately so catalog location is not confused with the guest execution target. They must list disabled program tasks with a disabled marker, allow explicit enable/disable, keep status and uninstall available while disabled, and block install/update until re-enabled.
 - Init and update task inventories may diverge by platform, but the orchestration model should remain parallel in concept.
 
 ## Reliability and Error-Handling Rules

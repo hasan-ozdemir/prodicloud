@@ -39,7 +39,7 @@ function Show-ClagnosCommandHelpOverview {
         '  list       List managed resource groups and managed Azure resources by type.'
         '  show       Print system and configuration dump for resource groups and VMs.'
         '  do         Apply one VM lifecycle action or print current VM state.'
-        '  task       List tasks, run one task, or save/restore one task app-state payload.'
+        '  task       List tasks, enable/disable one task, run one task, or save/restore task app-state.'
         '  program    Check, install, update, or uninstall a catalogued VM program.'
         '  component  Manage Clagnos-owned Azure resource components.'
         '  connect    Launch SSH or RDP client/test for a managed VM.'
@@ -122,7 +122,7 @@ function Show-ClagnosCommandHelpDetailed {
             '  list       : managed inventory output'
             '  show       : system and configuration dump'
             '  do         : lifecycle and repair actions'
-            '  task       : task list, isolated task runs, task app-state save/restore'
+            '  task       : task inventory, enable/disable, isolated task runs, task app-state save/restore'
             '  program    : catalogued program status, install/update, and uninstall'
             '  component  : managed Azure component CRUD and dependency-aware deletion'
             '  connect    : connect --ssh / connect --rdp plus --test'
@@ -259,9 +259,11 @@ function Show-ClagnosCommandHelpDetailed {
         'task' {
             Write-ClagnosHelpLines @(
                 'Command: task'
-                'Description: list discovered init/update tasks, run one task in isolation, or save/restore one task-owned app-state payload against a VM or the local Windows machine.'
+                'Description: list discovered init/update tasks, enable/disable a task for future runs, run one task in isolation, or save/restore one task-owned app-state payload against a VM or the local Windows machine.'
                 'Usage:'
                 '  clagnos task --list [--vm-init] [--vm-update] [--disabled] [--windows|--linux] [--perf]'
+                '  clagnos task --enable --vm-init-task <task-number|task-name> [--windows|--linux]'
+                '  clagnos task --disable --vm-update-task <task-number|task-name> [--windows|--linux]'
                 '  clagnos task --run-vm-init <task-number|task-name> [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
                 '  clagnos task --run-vm-update <task-number|task-name> [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
                 '  clagnos task --save-app-state --vm-init-task <task-number|task-name> [--source <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
@@ -270,27 +272,29 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos task --restore-app-state --vm-update-task <task-number|task-name> [--target <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
                 'Examples:'
                 '  clagnos task --list --vm-update'
+                '  clagnos task --disable --vm-update-task 114 --windows'
+                '  clagnos task --enable --vm-update-task 114 --windows'
                 '  clagnos task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>'
                 '  clagnos task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name>'
                 '  clagnos task --save-app-state --vm-update-task=115 --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
                 '  clagnos task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=vm --user=assistant --vm-update-task=115 --group <resource-group> --vm-name <vm-name>'
-                'Notes: --list is local-only and scans tracked plus local task trees with the same discovery rules used by init/update execution. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts, it does not perform the workflow-only final vm-update restart, and Windows Store-backed isolated reruns append `10003-create-public-desktop-shortcuts` so Public Desktop shortcuts refresh in the same task-run path. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only, reads or deploys only `<task-folder>/app-state/app-state.zip`, and writes a restore journal plus backup root before local replay.'
+                'Notes: --list, --enable, and --disable are local task-catalog operations and do not require az login. Enable/disable requires exactly one task selector and a typed confirmation. Disable moves the task folder to its matching disabled directory; enable restores it to the active directory and sets task.json enabled=true while preserving other metadata. The change applies to future runs for every VM using this shared repository and does not change a running VM. Program status and uninstall remain available while a program task is disabled; install/update requires enabling it first. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts, it does not perform the workflow-only final vm-update restart, and Windows Store-backed isolated reruns append `10003-create-public-desktop-shortcuts` so Public Desktop shortcuts refresh in the same task-run path. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only, reads or deploys only `<task-folder>/app-state/app-state.zip`, and writes a restore journal plus backup root before local replay.'
             )
             return
         }
         'program' {
             Write-ClagnosHelpLines @(
                 'Command: program'
-                'Description: inspect, install/update, or uninstall one platform-specific program declared by an enabled vm-update task.'
+                'Description: inspect, install/update, or uninstall one platform-specific program declared by an active or disabled init/update task.'
                 'Usage:'
                 '  clagnos program --action list [--group <resource-group>] [--vm-name <vm-name>] [--windows|--linux]'
                 '  clagnos program --action status|install|uninstall --program <program-id> --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
                 'Examples:'
                 '  clagnos program --action list --group <resource-group> --vm-name <vm-name> --windows'
                 '  clagnos program --action install --program visual-studio-code --group <resource-group> --vm-name <vm-name> --windows'
-                'Notes: installations run the owning task synchronously. Status checks and uninstall actions come from validated task.json program metadata. Uninstall requires an explicit confirmation unless --yes is supplied.'
+                'Notes: disabled programs stay visible in the catalog. Status checks and uninstall actions come from validated task.json program metadata. Status and uninstall work while the program task is disabled; install/update requires the task to be enabled. Use task --enable/--disable or the TUI program menu to change availability. Installations run the owning task synchronously. Uninstall requires an explicit confirmation unless --yes is supplied.'
             )
             return
         }

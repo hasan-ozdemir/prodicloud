@@ -3,6 +3,20 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.401] - 2026-10-12
+
+### Changed
+- Added explicit task-catalog enable/disable actions for init, update, and program tasks through the `task` command and the VM task menu.
+- Updated the program catalog to retain disabled entries. The Manage programs list marks them `(disabled)` and exposes enable, disable, uninstall, install/update, and status actions; install/update is blocked until the task is enabled.
+- Labeled every Manage programs entry with its lifecycle type (`initial` or `add-on`) and execution target (`local` or `remote`); local-only task-catalog entries receive a separate `[local catalog]` marker.
+- Added typed confirmation and verification for catalog changes. Disabling moves the task folder under its matching disabled root; enabling restores it and sets `task.json` `enabled=true` while preserving other metadata.
+- Clarified that availability changes affect future runs across VMs using the shared repository and do not change an already-running VM.
+
+### Tests
+- Revalidated the 168-check Clagnos smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
+- Revalidated code quality, documentation contracts, Bash syntax, and sensitive-content checks.
+- Added temporary-catalog coverage for disable, enable, explicit manifest re-enable, metadata preservation, and rejected confirmation.
+
 ## [2026.10.12.400] - 2026-10-12
 
 ### Changed

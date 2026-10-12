@@ -133,6 +133,8 @@ function Resolve-ClagnosTaskCommandMode {
         @{ Name = 'restore-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'restore-app-state') }
         @{ Name = 'run-vm-init'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-init') }
         @{ Name = 'run-vm-update'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-update') }
+        @{ Name = 'enable'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'enable') }
+        @{ Name = 'disable'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'disable') }
     )
 
     $presentActions = @($actions | Where-Object { [bool]$_.Present })
@@ -141,14 +143,14 @@ function Resolve-ClagnosTaskCommandMode {
             -Detail "Task command requires one action path." `
             -Code 2 `
             -Summary "Task command usage is incomplete." `
-            -Hint "Use clagnos task --list, clagnos task --run-vm-init ..., clagnos task --run-vm-update ..., clagnos task --save-app-state ..., or clagnos task --restore-app-state ...."
+            -Hint "Use clagnos task --list, --enable/--disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
     }
     if (@($presentActions).Count -gt 1) {
         Throw-FriendlyError `
             -Detail "Task command received conflicting action options." `
             -Code 2 `
             -Summary "Only one task action can run at a time." `
-            -Hint "Use exactly one of --list, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
+            -Hint "Use exactly one of --list, --enable, --disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
     }
 
     return [string]$presentActions[0].Name
@@ -352,6 +354,31 @@ function Assert-ClagnosTaskCommandOptionScope {
         return
     }
 
+    if ([string]::Equals($Mode, 'enable', [System.StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($Mode, 'disable', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $selectors = @(
+            [bool](Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init-task'),
+            [bool](Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update-task')
+        )
+        if (@($selectors | Where-Object { $_ }).Count -ne 1) {
+            Throw-FriendlyError `
+                -Detail 'Task availability changes require exactly one --vm-init-task or --vm-update-task selector.' `
+                -Code 2 `
+                -Summary 'Task stage selection is missing or conflicting.' `
+                -Hint 'Choose the task number or name and provide exactly one stage-specific task selector.'
+        }
+        foreach ($optionName in @('list','disabled','vm-init','vm-update','run-vm-init','run-vm-update','save-app-state','restore-app-state','source','target','user','group','vm-name','subscription-id')) {
+            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+                Throw-FriendlyError `
+                    -Detail ("Task availability mode does not support --{0}." -f [string]$optionName) `
+                    -Code 2 `
+                    -Summary 'Task availability received an unsupported option.' `
+                    -Hint 'Use exactly one of --enable/--disable with --vm-init-task or --vm-update-task, plus an optional platform selector.'
+            }
+        }
+        return
+    }
+
     if ([string]::Equals($Mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($Mode, 'restore-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
         foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'run-vm-init', 'run-vm-update')) {
@@ -376,6 +403,131 @@ function Assert-ClagnosTaskCommandOptionScope {
                 -Hint "Use --run-vm-init or --run-vm-update with optional target selectors."
         }
     }
+}
+
+function Set-ClagnosTaskManifestEnabled {
+    param(
+        [string]$ManifestPath,
+        [bool]$Enabled
+    )
+
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+        throw ("Task manifest was not found: {0}" -f $ManifestPath)
+    }
+
+    $manifestText = [string](Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop)
+    $manifest = ConvertFrom-JsonCompat -InputObject $manifestText
+    if ($null -eq $manifest -or $manifest -isnot [psobject]) {
+        throw ("Task manifest could not be loaded as a JSON object: {0}" -f $ManifestPath)
+    }
+
+    $enabledProperty = $manifest.PSObject.Properties['enabled']
+    if ($null -eq $enabledProperty) {
+        $manifest | Add-Member -NotePropertyName 'enabled' -NotePropertyValue ([bool]$Enabled)
+    }
+    else {
+        $enabledProperty.Value = [bool]$Enabled
+    }
+
+    $serialized = ConvertTo-Json -InputObject $manifest -Depth 100
+    $parentPath = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($ManifestPath))
+    $tempPath = Join-Path $parentPath ('.task.json.clagnos-{0}.tmp' -f ([guid]::NewGuid().ToString('N')))
+    try {
+        [System.IO.File]::WriteAllText($tempPath, ([string]$serialized + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+        Move-Item -LiteralPath $tempPath -Destination $ManifestPath -Force -ErrorAction Stop
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $verified = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop))
+    if ($null -eq $verified -or $null -eq $verified.PSObject.Properties['enabled'] -or [bool]$verified.enabled -ne [bool]$Enabled) {
+        throw ("The task enabled state did not verify after updating '{0}'." -f $ManifestPath)
+    }
+}
+
+function Invoke-ClagnosTaskAvailabilityToggle {
+    param(
+        [string]$StageRoot,
+        [ValidateSet('windows','linux')][string]$Platform,
+        [ValidateSet('init','update')][string]$Stage,
+        [string]$TaskNumberOrName,
+        [ValidateSet('enable','disable')][string]$Action
+    )
+
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $StageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
+    $task = Resolve-ClagnosTaskSelection -TaskBlocks @($catalog.InventoryTasks) -TaskNumberOrName $TaskNumberOrName -Stage $Stage
+    $isLocal = [string]::Equals([string]$task.Source, 'local', [System.StringComparison]::OrdinalIgnoreCase)
+    $activeRoot = if ($isLocal) { Join-Path $StageRoot 'local' } else { $StageRoot }
+    $disabledRoot = Join-Path $activeRoot 'disabled'
+    $currentParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetDirectoryName([string]$task.TaskRootPath)).TrimEnd([char[]]@('\','/'))
+    $activeParent = [System.IO.Path]::GetFullPath($activeRoot).TrimEnd([char[]]@('\','/'))
+    $disabledParent = [System.IO.Path]::GetFullPath($disabledRoot).TrimEnd([char[]]@('\','/'))
+    $isInActiveLocation = [string]::Equals($currentParent, $activeParent, [System.StringComparison]::OrdinalIgnoreCase)
+    $isInDisabledLocation = [string]::Equals($currentParent, $disabledParent, [System.StringComparison]::OrdinalIgnoreCase)
+    if (-not $isInActiveLocation -and -not $isInDisabledLocation) {
+        throw ("Task '{0}' is outside its expected active/disabled folders and was left unchanged." -f [string]$task.Name)
+    }
+
+    $shouldEnable = [string]::Equals($Action, 'enable', [System.StringComparison]::OrdinalIgnoreCase)
+    if ($shouldEnable -and [bool]$task.Enabled -and $isInActiveLocation) {
+        Write-Host ("Task '{0}' is already enabled." -f [string]$task.Name) -ForegroundColor Yellow
+        return [pscustomobject]@{ Task = $task; Enabled = $true; Changed = $false }
+    }
+    if (-not $shouldEnable -and -not [bool]$task.Enabled -and $isInDisabledLocation) {
+        Write-Host ("Task '{0}' is already disabled." -f [string]$task.Name) -ForegroundColor Yellow
+        return [pscustomobject]@{ Task = $task; Enabled = $false; Changed = $false }
+    }
+
+    $confirmationToken = if ($shouldEnable) { 'ENABLE' } else { 'DISABLE' }
+    $answer = Read-Host ("This changes the shared {0} task catalog for future runs on any VM. Type {1} to confirm {2} '{3}'" -f $Platform, $confirmationToken, $Action, [string]$task.Name)
+    if (-not [string]::Equals([string]$answer, $confirmationToken, [System.StringComparison]::Ordinal)) {
+        Write-Host 'Task availability change canceled; no files were changed.' -ForegroundColor Yellow
+        return [pscustomobject]@{ Task = $task; Enabled = [bool]$task.Enabled; Changed = $false }
+    }
+
+    $taskName = [string]$task.Name
+    $targetParent = if ($shouldEnable) { $activeParent } else { $disabledParent }
+    $targetPath = Join-Path $targetParent $taskName
+    $mustMove = -not [string]::Equals($currentParent, $targetParent, [System.StringComparison]::OrdinalIgnoreCase)
+    if ($mustMove -and (Test-Path -LiteralPath $targetPath)) {
+        throw ("Task destination already exists; '{0}' was left unchanged: {1}" -f $taskName, $targetPath)
+    }
+
+    if ($shouldEnable) {
+        if ($mustMove) {
+            Move-Item -LiteralPath ([string]$task.TaskRootPath) -Destination $activeParent -ErrorAction Stop
+        }
+        try {
+            Set-ClagnosTaskManifestEnabled -ManifestPath (Join-Path $targetPath 'task.json') -Enabled $true
+        }
+        catch {
+            if ($mustMove -and (Test-Path -LiteralPath $targetPath) -and -not (Test-Path -LiteralPath ([string]$task.TaskRootPath))) {
+                Move-Item -LiteralPath $targetPath -Destination $disabledParent -ErrorAction SilentlyContinue
+            }
+            throw
+        }
+    }
+    else {
+        if (-not (Test-Path -LiteralPath $disabledParent)) {
+            New-Item -ItemType Directory -Path $disabledParent -Force | Out-Null
+        }
+        if ($mustMove) {
+            Move-Item -LiteralPath ([string]$task.TaskRootPath) -Destination $disabledParent -ErrorAction Stop
+        }
+    }
+
+    $verifiedCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $StageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
+    $verifiedTask = @($verifiedCatalog.InventoryTasks | Where-Object { [string]::Equals([string]$_.Name, $taskName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    if (@($verifiedTask).Count -ne 1 -or [bool]$verifiedTask[0].Enabled -ne $shouldEnable) {
+        throw ("Task availability verification failed after attempting to {0} '{1}'." -f $Action, $taskName)
+    }
+
+    $statusText = if ($shouldEnable) { 'enabled' } else { 'disabled' }
+    Write-Host ("Task '{0}' is now {1} for future {2} runs." -f $taskName, $statusText, $Platform) -ForegroundColor Green
+    return [pscustomobject]@{ Task = $verifiedTask[0]; Enabled = [bool]$shouldEnable; Changed = $true }
 }
 
 function Resolve-ClagnosTaskBlockForMaintenance {

@@ -16,6 +16,8 @@ function Get-ClagnosTaskOptionSpecifications {
         (Get-ClagnosTaskVmUpdateOptionSpecification),
         (Get-ClagnosTaskVmInitTaskOptionSpecification),
         (Get-ClagnosTaskVmUpdateTaskOptionSpecification),
+        (New-ClagnosCommandOptionSpecification -Name 'enable'),
+        (New-ClagnosCommandOptionSpecification -Name 'disable'),
         (Get-ClagnosTaskDisabledOptionSpecification),
         (Get-ClagnosTaskGroupOptionSpecification),
         (Get-ClagnosTaskVmNameOptionSpecification),
