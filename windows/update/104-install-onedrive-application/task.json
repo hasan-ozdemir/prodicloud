@@ -72,5 +72,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Microsoft.OneDrive"
+    },
+    "displayName": "Microsoft OneDrive",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Microsoft.OneDrive"
+    },
+    "id": "onedrive"
   }
 }

@@ -7,8 +7,8 @@ Before opening an issue, review:
 - [README.md](README.md)
 - [release-notes.md](release-notes.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- `az-vm -h`
-- `az-vm help <command>`
+- `clagnos -h`
+- `clagnos help <command>`
 
 ## Best Support Paths
 
@@ -24,7 +24,7 @@ For normal support or bug reports, include:
 - expected behavior
 - actual behavior
 - relevant help/docs section you followed
-- a sanitized `az-vm show` excerpt or lifecycle snapshot when the issue is state-related
+- a sanitized `clagnos show` excerpt or lifecycle snapshot when the issue is state-related
 - sanitized logs or error output
 - platform details such as Windows or Linux guest target
 

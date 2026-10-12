@@ -1,5 +1,5 @@
 # 'user' option binding for 'task'.
 
-function Get-AzVmTaskUserOptionSpecification {
-    return (Get-AzVmSharedUserOptionSpecification)
+function Get-ClagnosTaskUserOptionSpecification {
+    return (Get-ClagnosSharedUserOptionSpecification)
 }

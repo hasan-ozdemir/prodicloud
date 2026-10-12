@@ -1,25 +1,25 @@
 # Task command entry.
 
-function Assert-AzVmTaskAppStatePluginReadyOrThrow {
+function Assert-ClagnosTaskAppStatePluginReadyOrThrow {
     param(
         [psobject]$TaskBlock,
         [string]$Stage
     )
 
-    $pluginInfo = Get-AzVmTaskAppStatePluginInfo -TaskBlock $TaskBlock
+    $pluginInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $TaskBlock
     if ($pluginInfo.Status -eq 'missing-plugin') {
         Throw-FriendlyError `
             -Detail ("App-state plugin folder was not found for task '{0}'." -f [string]$TaskBlock.Name) `
             -Code 61 `
             -Summary "Task app-state restore input is missing." `
-            -Hint ("Save state first with 'az-vm task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber)
+            -Hint ("Save state first with 'clagnos task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber)
     }
     if ($pluginInfo.Status -eq 'missing-zip') {
         Throw-FriendlyError `
             -Detail ("app-state.zip was not found for task '{0}'." -f [string]$TaskBlock.Name) `
             -Code 61 `
             -Summary "Task app-state restore input is missing." `
-            -Hint ("Save state first with 'az-vm task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber)
+            -Hint ("Save state first with 'clagnos task --save-app-state --vm-{0}-task={1}'." -f [string]$Stage, [string]$TaskBlock.TaskNumber)
     }
     if ($pluginInfo.Status -eq 'invalid') {
         Throw-FriendlyError `
@@ -32,20 +32,20 @@ function Assert-AzVmTaskAppStatePluginReadyOrThrow {
     return $pluginInfo
 }
 
-function New-AzVmTaskAppStateFilteredTaskBlock {
+function New-ClagnosTaskAppStateFilteredTaskBlock {
     param(
         [psobject]$TaskBlock,
         [string[]]$SelectedProfiles = @()
     )
 
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('az-vm-task-app-state-filter-{0}' -f ([guid]::NewGuid().ToString('N')))
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-app-state-filter-{0}' -f ([guid]::NewGuid().ToString('N')))
     $tempTaskRoot = Join-Path $tempRoot ([string]$TaskBlock.Name)
     $tempAppStateRoot = Join-Path $tempTaskRoot 'app-state'
-    Ensure-AzVmAppStatePluginDirectory -Path $tempAppStateRoot
+    Ensure-ClagnosAppStatePluginDirectory -Path $tempAppStateRoot
 
-    $sourceZipPath = Get-AzVmTaskAppStateZipPath -TaskBlock $TaskBlock
+    $sourceZipPath = Get-ClagnosTaskAppStateZipPath -TaskBlock $TaskBlock
     $filteredZipPath = Join-Path $tempAppStateRoot 'app-state.zip'
-    [void](New-AzVmTaskAppStateFilteredZip -SourceZipPath $sourceZipPath -TaskName ([string]$TaskBlock.Name) -SelectedProfiles $SelectedProfiles -DestinationZipPath $filteredZipPath)
+    [void](New-ClagnosTaskAppStateFilteredZip -SourceZipPath $sourceZipPath -TaskName ([string]$TaskBlock.Name) -SelectedProfiles $SelectedProfiles -DestinationZipPath $filteredZipPath)
 
     $clone = [pscustomobject]@{}
     foreach ($property in @($TaskBlock.PSObject.Properties)) {
@@ -60,8 +60,8 @@ function New-AzVmTaskAppStateFilteredTaskBlock {
     }
 }
 
-# Handles Invoke-AzVmTaskCommand.
-function Invoke-AzVmTaskCommand {
+# Handles Invoke-ClagnosTaskCommand.
+function Invoke-ClagnosTaskCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -69,27 +69,27 @@ function Invoke-AzVmTaskCommand {
         [switch]$LinuxFlag
     )
 
-    $mode = Resolve-AzVmTaskCommandMode -Options $Options
-    Assert-AzVmTaskCommandOptionScope -Mode $mode -Options $Options
+    $mode = Resolve-ClagnosTaskCommandMode -Options $Options
+    Assert-ClagnosTaskCommandOptionScope -Mode $mode -Options $Options
     if ([string]::Equals($mode, 'list', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $runtime = Initialize-AzVmTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
-        $includeInit = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-init'
-        $includeUpdate = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-update'
+        $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        $includeInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init'
+        $includeUpdate = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update'
         if (-not $includeInit -and -not $includeUpdate) {
             $includeInit = $true
             $includeUpdate = $true
         }
 
-        $disabledOnly = Test-AzVmCliOptionPresent -Options $Options -Name 'disabled'
+        $disabledOnly = Test-ClagnosCliOptionPresent -Options $Options -Name 'disabled'
         $rows = @()
 
         if ($includeInit) {
-            $initCatalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$runtime.VmInitTaskDir) -Platform ([string]$runtime.Platform) -Stage 'init' -SuppressSkipMessages
-            $rows += @(Get-AzVmTaskListRows -Stage 'init' -InventoryTasks @($initCatalog.InventoryTasks) -DisabledOnly:$disabledOnly)
+            $initCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$runtime.VmInitTaskDir) -Platform ([string]$runtime.Platform) -Stage 'init' -SuppressSkipMessages
+            $rows += @(Get-ClagnosTaskListRows -Stage 'init' -InventoryTasks @($initCatalog.InventoryTasks) -DisabledOnly:$disabledOnly)
         }
         if ($includeUpdate) {
-            $updateCatalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$runtime.VmUpdateTaskDir) -Platform ([string]$runtime.Platform) -Stage 'update' -SuppressSkipMessages
-            $rows += @(Get-AzVmTaskListRows -Stage 'update' -InventoryTasks @($updateCatalog.InventoryTasks) -DisabledOnly:$disabledOnly)
+            $updateCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$runtime.VmUpdateTaskDir) -Platform ([string]$runtime.Platform) -Stage 'update' -SuppressSkipMessages
+            $rows += @(Get-ClagnosTaskListRows -Stage 'update' -InventoryTasks @($updateCatalog.InventoryTasks) -DisabledOnly:$disabledOnly)
         }
 
         $rows = @(
@@ -123,11 +123,11 @@ function Invoke-AzVmTaskCommand {
         }
     }
 
-    $runtime = Initialize-AzVmTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
     if ([string]::Equals($mode, 'run-vm-init', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($mode, 'run-vm-update', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $runSelection = Resolve-AzVmTaskRunSelection -Options $Options
-        $runResult = Invoke-AzVmTaskExecutionWithTarget `
+        $runSelection = Resolve-ClagnosTaskRunSelection -Options $Options
+        $runResult = Invoke-ClagnosTaskExecutionWithTarget `
             -Runtime $runtime `
             -Options $Options `
             -OperationName 'task' `
@@ -145,16 +145,16 @@ function Invoke-AzVmTaskCommand {
 
     $context = $runtime.Context
     $platform = [string]$runtime.Platform
-    $appStateSurface = Resolve-AzVmTaskAppStateSurface -Mode $mode -Options $Options
-    $requestedUsers = @(Get-AzVmTaskAppStateRequestedUsersFromOptions -Options $Options)
-    $taskSelection = Resolve-AzVmTaskBlockForMaintenance -Runtime $runtime -Options $Options -AutoMode:$AutoMode
+    $appStateSurface = Resolve-ClagnosTaskAppStateSurface -Mode $mode -Options $Options
+    $requestedUsers = @(Get-ClagnosTaskAppStateRequestedUsersFromOptions -Options $Options)
+    $taskSelection = Resolve-ClagnosTaskBlockForMaintenance -Runtime $runtime -Options $Options -AutoMode:$AutoMode
     $taskBlock = $taskSelection.TaskBlock
-    $taskTimeoutSeconds = Get-AzVmTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds ([int]$runtime.SshTaskTimeoutSeconds)
+    $taskTimeoutSeconds = Get-ClagnosTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds ([int]$runtime.SshTaskTimeoutSeconds)
     $appStateTimeoutSeconds = [Math]::Max([int]$taskTimeoutSeconds, 900)
 
     if ([string]::Equals([string]$appStateSurface.Surface, 'lm', [System.StringComparison]::OrdinalIgnoreCase)) {
         if ([string]::Equals($mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
-            $saveResult = Save-AzVmTaskAppStateFromLocalMachine -TaskBlock $taskBlock -RequestedUsers $requestedUsers
+            $saveResult = Save-ClagnosTaskAppStateFromLocalMachine -TaskBlock $taskBlock -RequestedUsers $requestedUsers
             Write-Host ("Task completed: save app-state for '{0}'." -f [string]$taskBlock.Name) -ForegroundColor Green
             return [pscustomobject]@{
                 Mode = 'save-app-state'
@@ -165,8 +165,8 @@ function Invoke-AzVmTaskCommand {
             }
         }
 
-        [void](Assert-AzVmTaskAppStatePluginReadyOrThrow -TaskBlock $taskBlock -Stage ([string]$taskSelection.Stage))
-        $restoreResult = Restore-AzVmTaskAppStateToLocalMachine -TaskBlock $taskBlock -RequestedUsers $requestedUsers
+        [void](Assert-ClagnosTaskAppStatePluginReadyOrThrow -TaskBlock $taskBlock -Stage ([string]$taskSelection.Stage))
+        $restoreResult = Restore-ClagnosTaskAppStateToLocalMachine -TaskBlock $taskBlock -RequestedUsers $requestedUsers
         Write-Host ("Task completed: restore app-state for '{0}'." -f [string]$taskBlock.Name) -ForegroundColor Green
         return [pscustomobject]@{
             Mode = 'restore-app-state'
@@ -177,12 +177,12 @@ function Invoke-AzVmTaskCommand {
         }
     }
 
-    $vmProfileSelection = Resolve-AzVmTaskVmAppStateSelectedProfiles -Runtime $runtime -RequestedUsers $requestedUsers
-    $target = Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'task'
+    $vmProfileSelection = Resolve-ClagnosTaskVmAppStateSelectedProfiles -Runtime $runtime -RequestedUsers $requestedUsers
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'task'
     $context.ResourceGroup = [string]$target.ResourceGroup
     $context.VmName = [string]$target.VmName
 
-    $vmRuntimeDetails = Get-AzVmVmDetails -Context $context
+    $vmRuntimeDetails = Get-ClagnosVmDetails -Context $context
     $sshHost = [string]$vmRuntimeDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace([string]$sshHost)) {
         $sshHost = [string]$vmRuntimeDetails.PublicIP
@@ -191,8 +191,8 @@ function Invoke-AzVmTaskCommand {
         throw "Task command could not resolve VM SSH host (FQDN/Public IP)."
     }
 
-    $pySsh = Ensure-AzVmPySshTools -RepoRoot (Get-AzVmRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
-    $bootstrap = Initialize-AzVmSshHostKey `
+    $pySsh = Ensure-ClagnosPySshTools -RepoRoot (Get-ClagnosRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
+    $bootstrap = Initialize-ClagnosSshHostKey `
         -PySshPythonPath ([string]$pySsh.PythonPath) `
         -PySshClientPath ([string]$pySsh.ClientPath) `
         -HostName $sshHost `
@@ -210,14 +210,14 @@ function Invoke-AzVmTaskCommand {
     $effectiveTaskBlock = $taskBlock
     try {
         if ([string]::Equals($mode, 'restore-app-state', [System.StringComparison]::OrdinalIgnoreCase) -and -not [bool]$vmProfileSelection.IsAll) {
-            [void](Assert-AzVmTaskAppStatePluginReadyOrThrow -TaskBlock $taskBlock -Stage ([string]$taskSelection.Stage))
-            $filteredTaskScope = New-AzVmTaskAppStateFilteredTaskBlock -TaskBlock $taskBlock -SelectedProfiles @($vmProfileSelection.SelectedProfiles)
+            [void](Assert-ClagnosTaskAppStatePluginReadyOrThrow -TaskBlock $taskBlock -Stage ([string]$taskSelection.Stage))
+            $filteredTaskScope = New-ClagnosTaskAppStateFilteredTaskBlock -TaskBlock $taskBlock -SelectedProfiles @($vmProfileSelection.SelectedProfiles)
             $effectiveTaskBlock = $filteredTaskScope.TaskBlock
         }
 
         if ($platform -eq 'linux') {
             try {
-                $session = Start-AzVmPersistentSshSession `
+                $session = Start-ClagnosPersistentSshSession `
                     -PySshPythonPath ([string]$pySsh.PythonPath) `
                     -PySshClientPath ([string]$pySsh.ClientPath) `
                     -HostName $sshHost `
@@ -235,9 +235,9 @@ function Invoke-AzVmTaskCommand {
         }
 
         if ([string]::Equals($mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
-            $saveResult = Save-AzVmTaskAppStateFromVm `
+            $saveResult = Save-ClagnosTaskAppStateFromVm `
                 -Platform $platform `
-                -RepoRoot (Get-AzVmRepoRoot) `
+                -RepoRoot (Get-ClagnosRepoRoot) `
                 -TaskBlock $taskBlock `
                 -Session $session `
                 -PySshPythonPath ([string]$pySsh.PythonPath) `
@@ -251,11 +251,11 @@ function Invoke-AzVmTaskCommand {
                 -ManagerUser ([string]$context.VmUser) `
                 -AssistantUser ([string]$context.VmAssistantUser)
             if (-not [bool]$vmProfileSelection.IsAll) {
-                $savedZipPath = Get-AzVmTaskAppStateZipPath -TaskBlock $taskBlock
+                $savedZipPath = Get-ClagnosTaskAppStateZipPath -TaskBlock $taskBlock
                 if (Test-Path -LiteralPath $savedZipPath) {
-                    $tempFilteredZipPath = Join-Path ([System.IO.Path]::GetTempPath()) ('az-vm-task-app-state-save-filter-{0}.zip' -f ([guid]::NewGuid().ToString('N')))
+                    $tempFilteredZipPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-app-state-save-filter-{0}.zip' -f ([guid]::NewGuid().ToString('N')))
                     try {
-                        [void](New-AzVmTaskAppStateFilteredZip -SourceZipPath $savedZipPath -TaskName ([string]$taskBlock.Name) -SelectedProfiles @($vmProfileSelection.SelectedProfiles) -DestinationZipPath $tempFilteredZipPath)
+                        [void](New-ClagnosTaskAppStateFilteredZip -SourceZipPath $savedZipPath -TaskName ([string]$taskBlock.Name) -SelectedProfiles @($vmProfileSelection.SelectedProfiles) -DestinationZipPath $tempFilteredZipPath)
                         Copy-Item -LiteralPath $tempFilteredZipPath -Destination $savedZipPath -Force
                     }
                     finally {
@@ -273,11 +273,11 @@ function Invoke-AzVmTaskCommand {
             }
         }
 
-        [void](Assert-AzVmTaskAppStatePluginReadyOrThrow -TaskBlock $effectiveTaskBlock -Stage ([string]$taskSelection.Stage))
+        [void](Assert-ClagnosTaskAppStatePluginReadyOrThrow -TaskBlock $effectiveTaskBlock -Stage ([string]$taskSelection.Stage))
 
-        $restoreResult = Invoke-AzVmTaskAppStatePostProcess `
+        $restoreResult = Invoke-ClagnosTaskAppStatePostProcess `
             -Platform $platform `
-            -RepoRoot (Get-AzVmRepoRoot) `
+            -RepoRoot (Get-ClagnosRepoRoot) `
             -TaskBlock $effectiveTaskBlock `
             -Session $session `
             -PySshPythonPath ([string]$pySsh.PythonPath) `
@@ -301,7 +301,7 @@ function Invoke-AzVmTaskCommand {
     }
     finally {
         if ($null -ne $session) {
-            Stop-AzVmPersistentSshSession -Session $session
+            Stop-ClagnosPersistentSshSession -Session $session
         }
         if ($null -ne $filteredTaskScope -and $filteredTaskScope.PSObject.Properties.Match('TempRoot').Count -gt 0) {
             Remove-Item -LiteralPath ([string]$filteredTaskScope.TempRoot) -Recurse -Force -ErrorAction SilentlyContinue

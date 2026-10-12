@@ -1,5 +1,5 @@
 # Shared 'linux' command option specification.
 
-function Get-AzVmSharedLinuxOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'linux')
+function Get-ClagnosSharedLinuxOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'linux')
 }

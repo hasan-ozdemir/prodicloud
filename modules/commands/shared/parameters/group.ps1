@@ -1,5 +1,5 @@
 # Shared 'group' command option specification.
 
-function Get-AzVmSharedGroupOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'group' -ShortNames @('g') -TakesValue)
+function Get-ClagnosSharedGroupOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'group' -ShortNames @('g') -TakesValue)
 }

@@ -1,5 +1,18 @@
 {
   "priority": 2,
   "enabled": true,
-  "timeout": 60
+  "timeout": 60,
+  "program": {
+    "category": "package",
+    "statusCheck": {
+      "kind": "appx",
+      "value": "Microsoft.DesktopAppInstaller"
+    },
+    "displayName": "Windows Package Manager",
+    "uninstall": {
+      "kind": "appx",
+      "value": "Microsoft.DesktopAppInstaller"
+    },
+    "id": "windows-package-manager"
+  }
 }

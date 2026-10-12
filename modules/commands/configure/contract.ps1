@@ -1,8 +1,8 @@
 # Contract for the 'configure' command.
 
-function Get-AzVmConfigureOptionSpecifications {
+function Get-ClagnosConfigureOptionSpecifications {
     return @(
-        (Get-AzVmConfigurePerfOptionSpecification),
-        (Get-AzVmConfigureHelpOptionSpecification)
+        (Get-ClagnosConfigurePerfOptionSpecification),
+        (Get-ClagnosConfigureHelpOptionSpecification)
     )
 }

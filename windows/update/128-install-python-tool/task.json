@@ -4,8 +4,21 @@
   "timeout": 180,
   "assets": [
     {
-      "local": "../../../modules/core/tasks/azvm-store-install-state.psm1",
-      "remote": "C:/Windows/Temp/az-vm-store-install-state.psm1"
+      "local": "../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
     }
-  ]
+  ],
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "python312"
+    },
+    "displayName": "Python",
+    "uninstall": {
+      "kind": "choco",
+      "value": "python312"
+    },
+    "id": "python"
+  }
 }

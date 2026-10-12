@@ -1,5 +1,18 @@
 {
   "priority": 127,
   "enabled": true,
-  "timeout": 180
+  "timeout": 180,
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "powershell-core"
+    },
+    "displayName": "PowerShell",
+    "uninstall": {
+      "kind": "choco",
+      "value": "powershell-core"
+    },
+    "id": "powershell"
+  }
 }

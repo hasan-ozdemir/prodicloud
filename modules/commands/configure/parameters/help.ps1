@@ -1,5 +1,5 @@
 # 'help' option binding for 'configure'.
 
-function Get-AzVmConfigureHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosConfigureHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

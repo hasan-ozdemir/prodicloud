@@ -1,5 +1,5 @@
 # 'group' option binding for 'exec'.
 
-function Get-AzVmExecGroupOptionSpecification {
-    return (Get-AzVmSharedGroupOptionSpecification)
+function Get-ClagnosExecGroupOptionSpecification {
+    return (Get-ClagnosSharedGroupOptionSpecification)
 }

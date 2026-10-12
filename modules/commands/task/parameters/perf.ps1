@@ -1,5 +1,5 @@
 # 'perf' option binding for 'task'.
 
-function Get-AzVmTaskPerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosTaskPerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

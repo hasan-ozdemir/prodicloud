@@ -1,5 +1,5 @@
 # 'group' option binding for 'delete'.
 
-function Get-AzVmDeleteGroupOptionSpecification {
-    return (Get-AzVmSharedGroupOptionSpecification)
+function Get-ClagnosDeleteGroupOptionSpecification {
+    return (Get-ClagnosSharedGroupOptionSpecification)
 }

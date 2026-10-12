@@ -52,5 +52,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "vscode"
+    },
+    "displayName": "Visual Studio Code",
+    "uninstall": {
+      "kind": "winget",
+      "value": "vscode"
+    },
+    "id": "visual-studio-code"
   }
 }

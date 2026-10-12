@@ -6,7 +6,7 @@ $managerUser = "__VM_ADMIN_USER__"
 $managerPassword = "__VM_ADMIN_PASS__"
 $assistantUser = "__ASSISTANT_USER__"
 $assistantPassword = "__ASSISTANT_PASS__"
-$helperPath = "C:\Windows\Temp\az-vm-interactive-session-helper.ps1"
+$helperPath = "C:\Windows\Temp\clagnos-interactive-session-helper.ps1"
 
 if (-not (Test-Path -LiteralPath $helperPath)) {
     throw ("Interactive session helper was not found: {0}" -f $helperPath)
@@ -197,7 +197,7 @@ function Test-PortableProfileHiveReady {
     return (Test-Path -LiteralPath $ntUserPath)
 }
 
-function Wait-AzVmCondition {
+function Wait-ClagnosCondition {
     param(
         [scriptblock]$Condition,
         [int]$TimeoutSeconds = 30,
@@ -305,7 +305,7 @@ function Ensure-UserProfileMaterialized {
     }
 
     $materializeTaskName = "{0}-materialize-{1}" -f $taskName, $UserName
-    $paths = Get-AzVmInteractivePaths -TaskName $materializeTaskName
+    $paths = Get-ClagnosInteractivePaths -TaskName $materializeTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -315,23 +315,23 @@ $taskName = "__TASK_NAME__"
 . $helperPath
 
 $profilePath = [Environment]::GetFolderPath('UserProfile')
-Ensure-AzVmDirectory -Path $profilePath
-Ensure-AzVmDirectory -Path (Join-Path $profilePath 'Desktop')
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'User profile materialized.' -Details @($profilePath)
+Ensure-ClagnosDirectory -Path $profilePath
+Ensure-ClagnosDirectory -Path (Join-Path $profilePath 'Desktop')
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'User profile materialized.' -Details @($profilePath)
 '@
 
     $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
     $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
     $workerScript = $workerScript.Replace('__TASK_NAME__', $materializeTaskName)
 
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $materializeTaskName `
         -RunAsUser $UserName `
         -RunAsPassword $UserPassword `
         -WorkerScriptText $workerScript `
         -WaitTimeoutSeconds 180
 
-    if (-not (Wait-AzVmCondition -Condition {
+    if (-not (Wait-ClagnosCondition -Condition {
         $path = Get-LocalUserProfilePath -UserName $UserName
         return (-not [string]::IsNullOrWhiteSpace([string]$path) -and (Test-PortableProfileHiveReady -ProfilePath $path))
     } -TimeoutSeconds 30)) {
@@ -470,7 +470,7 @@ function Copy-RegistryBranch {
             $defaultValue = $sourceKey.GetValue('', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
             $defaultKind = $sourceKey.GetValueKind('')
             if ($null -ne $defaultValue -or $defaultKind -ne [Microsoft.Win32.RegistryValueKind]::Unknown) {
-                Set-AzVmRegistryValue -Path $TargetPath -Name '(default)' -Value $defaultValue -Kind $defaultKind
+                Set-ClagnosRegistryValue -Path $TargetPath -Name '(default)' -Value $defaultValue -Kind $defaultKind
             }
         }
         catch {
@@ -483,7 +483,7 @@ function Copy-RegistryBranch {
                     continue
                 }
                 $valueData = $sourceKey.GetValue($valueName, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-                Set-AzVmRegistryValue -Path $TargetPath -Name $valueName -Value $valueData -Kind $valueKind
+                Set-ClagnosRegistryValue -Path $TargetPath -Name $valueName -Value $valueData -Kind $valueKind
             }
             catch {
                 Add-CopySkipEvidence -Reason 'registry-value-skip' -Label $valueName -Path ("{0}\{1}" -f $SourcePath, $valueName)
@@ -761,7 +761,7 @@ function Invoke-RobocopyBranch {
         return
     }
 
-    Ensure-AzVmDirectory -Path $TargetPath
+    Ensure-ClagnosDirectory -Path $TargetPath
     $robocopyExe = Join-Path $env:WINDIR 'System32\robocopy.exe'
     if (-not (Test-Path -LiteralPath $robocopyExe)) {
         throw "robocopy.exe was not found."
@@ -911,7 +911,7 @@ function Invoke-ProfileRelativeCopy {
         return
     }
 
-    Ensure-AzVmDirectory -Path (Split-Path -Path $targetPath -Parent)
+    Ensure-ClagnosDirectory -Path (Split-Path -Path $targetPath -Parent)
     try {
         Copy-Item -LiteralPath $sourcePath -Destination $targetPath -Force -ErrorAction Stop
         Write-Detail ("copy-user-settings-file-ok: {0}" -f $Label)
@@ -968,7 +968,7 @@ function Wait-UserSessionsAndProcessesToSettle {
         [int]$TimeoutSeconds = 8
     )
 
-    $settled = Wait-AzVmCondition -Condition {
+    $settled = Wait-ClagnosCondition -Condition {
         (@(Get-LoggedOnUserSessionIds -UserName $UserName).Count -eq 0) -and
         (-not (Test-UserProcessesRunning -UserName $UserName))
     } -TimeoutSeconds $TimeoutSeconds -PollMilliseconds 250
@@ -1152,7 +1152,7 @@ function Invoke-PortableProfileMirror {
         [string]$Label
     )
 
-    Ensure-AzVmDirectory -Path $TargetProfilePath
+    Ensure-ClagnosDirectory -Path $TargetProfilePath
     Invoke-RobocopyBranch `
         -SourcePath $SourceProfilePath `
         -TargetPath $TargetProfilePath `
@@ -1216,8 +1216,8 @@ function Invoke-PortableAssistantRegistryMirror {
         return
     }
 
-    $mainMountName = 'AzVmAssistantNtUser'
-    $classesMountName = 'AzVmAssistantUsrClass'
+    $mainMountName = 'ClagnosAssistantNtUser'
+    $classesMountName = 'ClagnosAssistantUsrClass'
     $mainRoot = $null
     $classesRoot = $null
     try {
@@ -1260,8 +1260,8 @@ function Invoke-PortableDefaultProfileRegistryMirror {
         return
     }
 
-    $mainMountName = 'AzVmDefaultNtUser'
-    $classesMountName = 'AzVmDefaultUsrClass'
+    $mainMountName = 'ClagnosDefaultNtUser'
+    $classesMountName = 'ClagnosDefaultUsrClass'
     $mainRoot = $null
     $classesRoot = $null
     try {

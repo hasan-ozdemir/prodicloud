@@ -1,7 +1,7 @@
 # SSH protocol parsing and console-noise helpers.
 
-# Handles Normalize-AzVmProtocolLine.
-function Normalize-AzVmProtocolLine {
+# Handles Normalize-ClagnosProtocolLine.
+function Normalize-ClagnosProtocolLine {
     param(
         [AllowNull()]
         [string]$Text
@@ -16,14 +16,14 @@ function Normalize-AzVmProtocolLine {
     $value = $value.TrimStart([char]0xFEFF)
     $value = $value.TrimEnd("`r", "`n")
     $trimmedLeading = $value.TrimStart()
-    if ($trimmedLeading -match '^(?<spinner>[\|/\\-]{1,16})\s+(?<marker>(?:\[stderr\]\s+)?AZ_VM_[A-Z_]+:.*)$') {
+    if ($trimmedLeading -match '^(?<spinner>[\|/\\-]{1,16})\s+(?<marker>(?:\[stderr\]\s+)?CLAGNOS_[A-Z_]+:.*)$') {
         return [string]$Matches.marker
     }
     return $value
 }
 
-# Handles Test-AzVmTransientSpinnerLine.
-function Test-AzVmTransientSpinnerLine {
+# Handles Test-ClagnosTransientSpinnerLine.
+function Test-ClagnosTransientSpinnerLine {
     param(
         [AllowNull()]
         [string]$Text
@@ -46,8 +46,8 @@ function Test-AzVmTransientSpinnerLine {
     return [regex]::IsMatch($value, '^[\|/\\-]{1,16}$')
 }
 
-# Handles Write-AzVmTransientConsoleText.
-function Write-AzVmTransientConsoleText {
+# Handles Write-ClagnosTransientConsoleText.
+function Write-ClagnosTransientConsoleText {
     param(
         [AllowNull()]
         [string]$Text
@@ -57,13 +57,13 @@ function Write-AzVmTransientConsoleText {
     [Console]::Write(("`r{0}" -f $value))
 }
 
-# Handles Clear-AzVmTransientConsoleText.
-function Clear-AzVmTransientConsoleText {
+# Handles Clear-ClagnosTransientConsoleText.
+function Clear-ClagnosTransientConsoleText {
     [Console]::WriteLine("")
 }
 
-# Handles Test-AzVmTaskOutputNoiseLine.
-function Test-AzVmTaskOutputNoiseLine {
+# Handles Test-ClagnosTaskOutputNoiseLine.
+function Test-ClagnosTaskOutputNoiseLine {
     param(
         [AllowNull()]
         [string]$Text
@@ -82,8 +82,8 @@ function Test-AzVmTaskOutputNoiseLine {
     }
 
     return (
-        $value.StartsWith("AZ_VM_TASK_BEGIN:", [System.StringComparison]::OrdinalIgnoreCase) -or
-        $value.StartsWith("AZ_VM_TASK_END:", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $value.StartsWith("CLAGNOS_TASK_BEGIN:", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $value.StartsWith("CLAGNOS_TASK_END:", [System.StringComparison]::OrdinalIgnoreCase) -or
         $value.StartsWith("TASK_STATUS:", [System.StringComparison]::OrdinalIgnoreCase) -or
         $value.StartsWith("RUN_COMMAND_SUMMARY:", [System.StringComparison]::OrdinalIgnoreCase) -or
         $value.StartsWith("TASK started:", [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -103,7 +103,7 @@ function Test-AzVmTaskOutputNoiseLine {
         ($value -match '^(?i)WARNING:\s+wsl\.exe : The Windows Subsystem for Linux is not installed\. You\s*$') -or
         ($value -match '^(?i)WARNING:\s+can install by running ''wsl\.exe --install''\.$') -or
         ($value -match '^(?i)WARNING:\s+For more information please visit https://aka\.ms/wslinstall$') -or
-        ($value -match '^(?i)WARNING:\s+At .+az-vm-task-.*\.ps1:\d+ char:\d+$') -or
+        ($value -match '^(?i)WARNING:\s+At .+clagnos-task-.*\.ps1:\d+ char:\d+$') -or
         ($value -match '^(?i)WARNING:\s+\+\s+wsl\.exe --install --no-distribution$') -or
         ($value -match '^(?i)WARNING:\s+\+\s+~+$') -or
         ($value -match '^(?i)WARNING:\s+\+\s+CategoryInfo\s+:.*NativeCommandError$') -or
@@ -115,8 +115,8 @@ function Test-AzVmTaskOutputNoiseLine {
     )
 }
 
-# Handles Convert-AzVmProtocolTaskExitCode.
-function Convert-AzVmProtocolTaskExitCode {
+# Handles Convert-ClagnosProtocolTaskExitCode.
+function Convert-ClagnosProtocolTaskExitCode {
     param(
         [AllowNull()]
         [string]$Text

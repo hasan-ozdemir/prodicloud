@@ -1,5 +1,5 @@
 # Shared 'vm-update' command option specification.
 
-function Get-AzVmSharedVmUpdateOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'vm-update')
+function Get-ClagnosSharedVmUpdateOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'vm-update')
 }

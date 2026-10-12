@@ -76,5 +76,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Google.GoogleDrive"
+    },
+    "displayName": "Google Drive",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Google.GoogleDrive"
+    },
+    "id": "google-drive"
   }
 }

@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-jaws-application"
 
 $taskConfig = [ordered]@{
-    PortableWingetPath = "C:\ProgramData\az-vm\tools\winget-x64\winget.exe"
+    PortableWingetPath = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
     PackageId = 'FreedomScientific.JAWS.2025'
     AcceptableWingetExitCodes = @(0, -1978335189, -2147024894)
     JawsExeCandidates = @(
@@ -18,10 +18,10 @@ $taskConfig = [ordered]@{
     InstallVerifyPollSeconds = 5
 }
 
-Import-Module 'C:\Windows\Temp\az-vm-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-AzVmSessionPath | Out-Null
+    Refresh-ClagnosSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {

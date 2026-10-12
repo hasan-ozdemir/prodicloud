@@ -1,7 +1,7 @@
 # Set command runtime helpers.
 
-# Handles Resolve-AzVmToggleValue.
-function Resolve-AzVmToggleValue {
+# Handles Resolve-ClagnosToggleValue.
+function Resolve-ClagnosToggleValue {
     param(
         [string]$Name,
         [string]$RawValue
@@ -27,14 +27,14 @@ function Resolve-AzVmToggleValue {
         -Hint ("Use --{0}=on|off." -f $Name)
 }
 
-# Handles Read-AzVmToggleInteractive.
-function Read-AzVmToggleInteractive {
+# Handles Read-ClagnosToggleInteractive.
+function Read-ClagnosToggleInteractive {
     param(
         [string]$PromptText,
         [string]$DefaultValue = 'off'
     )
 
-    $defaultNormalized = Resolve-AzVmToggleValue -Name 'toggle' -RawValue $DefaultValue
+    $defaultNormalized = Resolve-ClagnosToggleValue -Name 'toggle' -RawValue $DefaultValue
     if ([string]::IsNullOrWhiteSpace([string]$defaultNormalized)) {
         $defaultNormalized = 'off'
     }
@@ -44,15 +44,15 @@ function Read-AzVmToggleInteractive {
         if ([string]::IsNullOrWhiteSpace([string]$raw)) {
             return $defaultNormalized
         }
-        $candidate = Resolve-AzVmToggleValue -Name 'toggle' -RawValue $raw
+        $candidate = Resolve-ClagnosToggleValue -Name 'toggle' -RawValue $raw
         if (-not [string]::IsNullOrWhiteSpace([string]$candidate)) {
             return $candidate
         }
     }
 }
 
-# Handles Copy-AzVmOptionsMap.
-function Copy-AzVmOptionsMap {
+# Handles Copy-ClagnosOptionsMap.
+function Copy-ClagnosOptionsMap {
     param(
         [hashtable]$Source
     )

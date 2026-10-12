@@ -1,8 +1,8 @@
 # 'type' option binding for 'list'.
 
-function Get-AzVmListTypeOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'type' -TakesValue -Validate {
+function Get-ClagnosListTypeOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'type' -TakesValue -Validate {
         param([hashtable]$Options)
-        [void](Resolve-AzVmListRequestedTypes -Options $Options)
+        [void](Resolve-ClagnosListRequestedTypes -Options $Options)
     })
 }

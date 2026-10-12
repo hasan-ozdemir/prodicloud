@@ -1,9 +1,9 @@
 # Help command entry.
 
-function Invoke-AzVmHelpEntry {
+function Invoke-ClagnosHelpEntry {
     param(
         [string]$HelpTopic = ''
     )
 
-    Invoke-AzVmHelpCommand -HelpTopic $HelpTopic
+    Invoke-ClagnosHelpCommand -HelpTopic $HelpTopic
 }

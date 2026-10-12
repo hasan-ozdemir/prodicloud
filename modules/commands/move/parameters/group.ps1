@@ -1,5 +1,5 @@
 # 'group' option binding for 'move'.
 
-function Get-AzVmMoveGroupOptionSpecification {
-    return (Get-AzVmSharedGroupOptionSpecification)
+function Get-ClagnosMoveGroupOptionSpecification {
+    return (Get-ClagnosSharedGroupOptionSpecification)
 }

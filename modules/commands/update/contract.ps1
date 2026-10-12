@@ -1,17 +1,17 @@
 # Contract for the 'update' command.
 
-function Get-AzVmUpdateOptionSpecifications {
+function Get-ClagnosUpdateOptionSpecifications {
     return @(
-        (Get-AzVmUpdateAutoOptionSpecification),
-        (Get-AzVmUpdatePerfOptionSpecification),
-        (Get-AzVmUpdateWindowsOptionSpecification),
-        (Get-AzVmUpdateLinuxOptionSpecification),
-        (Get-AzVmUpdateHelpOptionSpecification),
-        (Get-AzVmUpdateStepToOptionSpecification),
-        (Get-AzVmUpdateStepFromOptionSpecification),
-        (Get-AzVmUpdateStepOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmUpdateGroupOptionSpecification),
-        (Get-AzVmUpdateVmNameOptionSpecification)
+        (Get-ClagnosUpdateAutoOptionSpecification),
+        (Get-ClagnosUpdatePerfOptionSpecification),
+        (Get-ClagnosUpdateWindowsOptionSpecification),
+        (Get-ClagnosUpdateLinuxOptionSpecification),
+        (Get-ClagnosUpdateHelpOptionSpecification),
+        (Get-ClagnosUpdateStepToOptionSpecification),
+        (Get-ClagnosUpdateStepFromOptionSpecification),
+        (Get-ClagnosUpdateStepOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosUpdateGroupOptionSpecification),
+        (Get-ClagnosUpdateVmNameOptionSpecification)
     )
 }

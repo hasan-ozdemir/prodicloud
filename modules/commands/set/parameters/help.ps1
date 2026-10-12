@@ -1,5 +1,5 @@
 # 'help' option binding for 'set'.
 
-function Get-AzVmSetHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosSetHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

@@ -1,18 +1,18 @@
 # List command entry.
 
-function Invoke-AzVmListCommand {
+function Invoke-ClagnosListCommand {
     param(
         [hashtable]$Options
     )
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $requestedTypes = @(Resolve-AzVmListRequestedTypes -Options $Options)
-    $resourceGroups = @(Get-AzVmListTargetResourceGroups -Options $Options -ConfigMap $configMap)
-    $subscriptionContext = Get-AzVmResolvedSubscriptionContext
+    $requestedTypes = @(Resolve-ClagnosListRequestedTypes -Options $Options)
+    $resourceGroups = @(Get-ClagnosListTargetResourceGroups -Options $Options -ConfigMap $configMap)
+    $subscriptionContext = Get-ClagnosResolvedSubscriptionContext
 
-    Write-Host "Managed az-vm inventory:" -ForegroundColor Cyan
+    Write-Host "Managed clagnos inventory:" -ForegroundColor Cyan
     if ($null -ne $subscriptionContext -and -not [string]::IsNullOrWhiteSpace([string]$subscriptionContext.SubscriptionId)) {
         $subscriptionDisplay = if ([string]::IsNullOrWhiteSpace([string]$subscriptionContext.SubscriptionName)) {
             [string]$subscriptionContext.SubscriptionId
@@ -28,7 +28,7 @@ function Invoke-AzVmListCommand {
     }
 
     foreach ($typeName in @($requestedTypes)) {
-        $rows = @(Get-AzVmListSectionRows -TypeName ([string]$typeName) -ResourceGroups @($resourceGroups) -ConfigMap $configMap)
+        $rows = @(Get-ClagnosListSectionRows -TypeName ([string]$typeName) -ResourceGroups @($resourceGroups) -ConfigMap $configMap)
         Write-Host ""
         Write-Host ("{0}:" -f ([string]$typeName).ToUpperInvariant()) -ForegroundColor Cyan
         if (@($rows).Count -eq 0) {

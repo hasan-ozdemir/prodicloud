@@ -47,5 +47,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "FreedomScientific.JAWS.2025"
+    },
+    "displayName": "JAWS",
+    "uninstall": {
+      "kind": "winget",
+      "value": "FreedomScientific.JAWS.2025"
+    },
+    "id": "jaws"
   }
 }

@@ -1,5 +1,5 @@
 # Shared 'help' command option specification.
 
-function Get-AzVmSharedHelpOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'help' -ShortNames @('h'))
+function Get-ClagnosSharedHelpOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'help' -ShortNames @('h'))
 }

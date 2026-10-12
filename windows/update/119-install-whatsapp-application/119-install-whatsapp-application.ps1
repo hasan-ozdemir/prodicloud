@@ -1,17 +1,17 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-whatsapp-application"
 
-Import-Module 'C:\Windows\Temp\az-vm-store-install-state.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-store-install-state.psm1' -Force -DisableNameChecking
 
 $managerUser = '__VM_ADMIN_USER__'
 $managerPassword = '__VM_ADMIN_PASS__'
-$helperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
+$helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
 
 $taskConfig = [ordered]@{
     TaskName = '119-install-whatsapp-application'
     PackageId = '9NKSQGP7F2NH'
-    LegacyRunOnceName = 'AzVmInstallWhatsApp'
-    PortableWingetPath = 'C:\ProgramData\az-vm\tools\winget-x64\winget.exe'
+    LegacyRunOnceName = 'ClagnosInstallWhatsApp'
+    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     InteractiveTaskSuffix = 'interactive-install'
     InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
@@ -175,7 +175,7 @@ function Invoke-ProcessWithTimeout {
         [string]$Label = 'process'
     )
 
-    $logRoot = Join-Path $env:TEMP 'az-vm-whatsapp'
+    $logRoot = Join-Path $env:TEMP 'clagnos-whatsapp'
     [void](New-Item -ItemType Directory -Path $logRoot -Force)
     $stamp = Get-Date -Format 'yyyyMMddHHmmss'
     $stdoutLog = Join-Path $logRoot ("{0}-{1}.stdout.log" -f $Label.Replace(' ', '-'), $stamp)
@@ -207,8 +207,8 @@ function Invoke-ProcessWithTimeout {
     }
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
@@ -216,31 +216,31 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 Write-Host "Resolved winget executable: $wingetExe"
 $existingState = Get-WhatsAppInstallState -WingetExe $wingetExe
 if ([bool]$existingState.Healthy) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State installed -Summary ('WhatsApp is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State installed -Summary ('WhatsApp is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
     Write-Host 'install-whatsapp-application-completed'
     Write-Host 'Update task completed: install-whatsapp-application'
     return
 }
 
-if (Test-AzVmRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
     Write-Host 'store-install-cleanup => task=119-install-whatsapp-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-AzVmUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-AzVmInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
+$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
+Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
 if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-AzVmInteractiveDesktopBlockMessage -ActivityDescription 'WhatsApp install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'WhatsApp install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
     throw ([string]$blockMessage.WarningMessage)
 }
 
 $workerTaskName = "{0}-{1}" -f ([string]$taskConfig.TaskName), ([string]$taskConfig.InteractiveTaskSuffix)
-$paths = Get-AzVmInteractivePaths -TaskName $workerTaskName
+$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -305,10 +305,10 @@ function Test-WhatsAppInstalled {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-WhatsAppExecutable)))
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -317,28 +317,28 @@ if (-not (Test-WhatsAppInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-WhatsAppInstalled)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'WhatsApp install could not be verified after interactive winget install.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'WhatsApp install could not be verified after interactive winget install.'
     exit 1
 }
 
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'WhatsApp is installed.'
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'WhatsApp is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
-$workerScript = $workerScript.Replace('__STORE_HELPER_PATH__', 'C:\Windows\Temp\az-vm-store-install-state.psm1')
+$workerScript = $workerScript.Replace('__STORE_HELPER_PATH__', 'C:\Windows\Temp\clagnos-store-install-state.psm1')
 $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
 $workerScript = $workerScript.Replace('__TASK_NAME__', $workerTaskName)
 $workerScript = $workerScript.Replace('__PACKAGE_ID__', [string]$taskConfig.PackageId)
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', [string]$taskConfig.PortableWingetPath)
 
 try {
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -347,12 +347,12 @@ try {
         -RunAsMode 'interactiveToken'
 }
 catch {
-    Invoke-AzVmRefreshSessionPath
+    Invoke-ClagnosRefreshSessionPath
     $catchState = Get-WhatsAppInstallState -WingetExe $wingetExe
     if ([bool]$catchState.Healthy) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State installed -Summary ('WhatsApp is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State installed -Summary ('WhatsApp is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
         Write-Host 'install-whatsapp-application-completed'
         Write-Host 'Update task completed: install-whatsapp-application'
         return
@@ -360,28 +360,28 @@ catch {
 
     $interactiveError = [string]$_.Exception.Message
     if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary 'WhatsApp install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary 'WhatsApp install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
         throw 'WhatsApp install requires an interactive Store-capable session and cannot be deferred to a later boot.'
     }
 
-    $stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ('WhatsApp interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ('WhatsApp interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
     throw
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $finalState = Get-WhatsAppInstallState -WingetExe $wingetExe
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ('WhatsApp is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ('WhatsApp is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
     throw 'WhatsApp install could not be verified.'
 }
 
-Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-$stateRecord = Write-AzVmStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State installed -Summary ('WhatsApp is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-AzVmStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
+Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+$stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State installed -Summary ('WhatsApp is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
 Write-Host 'install-whatsapp-application-completed'
 Write-Host 'Update task completed: install-whatsapp-application'
 

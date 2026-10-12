@@ -1,6 +1,6 @@
 # SSH task asset-copy helpers.
 
-function ConvertTo-AzVmPowerShellSingleQuotedLiteral {
+function ConvertTo-ClagnosPowerShellSingleQuotedLiteral {
     param(
         [AllowNull()]
         [string]$Value
@@ -13,7 +13,7 @@ function ConvertTo-AzVmPowerShellSingleQuotedLiteral {
     return ([string]$Value).Replace("'", "''")
 }
 
-function Test-AzVmWindowsRemotePath {
+function Test-ClagnosWindowsRemotePath {
     param(
         [string]$RemotePath
     )
@@ -25,7 +25,7 @@ function Test-AzVmWindowsRemotePath {
     return ([string]$RemotePath -match '^[A-Za-z]:[\\/]')
 }
 
-function Get-AzVmFileSha256 {
+function Get-ClagnosFileSha256 {
     param(
         [string]$Path
     )
@@ -50,16 +50,16 @@ function Get-AzVmFileSha256 {
     }
 }
 
-if ($null -eq $script:AzVmWindowsScpHostKeyCache) {
-    $script:AzVmWindowsScpHostKeyCache = @{}
+if ($null -eq $script:ClagnosWindowsScpHostKeyCache) {
+    $script:ClagnosWindowsScpHostKeyCache = @{}
 }
-if ($null -eq $script:AzVmWindowsScpPathCache) {
-    $script:AzVmWindowsScpPathCache = ''
+if ($null -eq $script:ClagnosWindowsScpPathCache) {
+    $script:ClagnosWindowsScpPathCache = ''
 }
 
-function Get-AzVmPscpExecutablePath {
-    if (-not [string]::IsNullOrWhiteSpace([string]$script:AzVmWindowsScpPathCache) -and (Test-Path -LiteralPath ([string]$script:AzVmWindowsScpPathCache))) {
-        return [string]$script:AzVmWindowsScpPathCache
+function Get-ClagnosPscpExecutablePath {
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosWindowsScpPathCache) -and (Test-Path -LiteralPath ([string]$script:ClagnosWindowsScpPathCache))) {
+        return [string]$script:ClagnosWindowsScpPathCache
     }
 
     $command = Get-Command pscp.exe -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -75,11 +75,11 @@ function Get-AzVmPscpExecutablePath {
         throw "Windows SCP transport could not resolve the pscp.exe path."
     }
 
-    $script:AzVmWindowsScpPathCache = [string]$resolvedPath
-    return [string]$script:AzVmWindowsScpPathCache
+    $script:ClagnosWindowsScpPathCache = [string]$resolvedPath
+    return [string]$script:ClagnosWindowsScpPathCache
 }
 
-function ConvertTo-AzVmWindowsScpRemoteSpec {
+function ConvertTo-ClagnosWindowsScpRemoteSpec {
     param(
         [string]$HostName,
         [string]$RemotePath
@@ -93,7 +93,7 @@ function ConvertTo-AzVmWindowsScpRemoteSpec {
     return ('{0}:{1}' -f [string]$HostName, [string]$normalizedRemotePath)
 }
 
-function Try-Get-AzVmWindowsScpHostKeyArguments {
+function Try-Get-ClagnosWindowsScpHostKeyArguments {
     param(
         [string]$HostName,
         [string]$Port
@@ -101,10 +101,10 @@ function Try-Get-AzVmWindowsScpHostKeyArguments {
 
     try {
         $cacheKey = ('{0}:{1}' -f [string]$HostName, [string]$Port)
-        if ($script:AzVmWindowsScpHostKeyCache.ContainsKey($cacheKey)) {
+        if ($script:ClagnosWindowsScpHostKeyCache.ContainsKey($cacheKey)) {
             return [pscustomobject]@{
                 Success = $true
-                Args = @($script:AzVmWindowsScpHostKeyCache[$cacheKey])
+                Args = @($script:ClagnosWindowsScpHostKeyCache[$cacheKey])
                 Message = ''
             }
         }
@@ -119,7 +119,7 @@ function Try-Get-AzVmWindowsScpHostKeyArguments {
             }
         }
 
-        $scanResult = Invoke-AzVmCapturedProcess -FilePath ([string]$sshKeyScan.Source) -Arguments @('-p', [string]$Port, [string]$HostName)
+        $scanResult = Invoke-ClagnosCapturedProcess -FilePath ([string]$sshKeyScan.Source) -Arguments @('-p', [string]$Port, [string]$HostName)
         if ([int]$scanResult.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace([string]$scanResult.Output)) {
             return [pscustomobject]@{
                 Success = $false
@@ -144,10 +144,10 @@ function Try-Get-AzVmWindowsScpHostKeyArguments {
                 continue
             }
 
-            $tempKeyPath = Join-Path ([System.IO.Path]::GetTempPath()) ('az-vm-scp-hostkey-' + ([guid]::NewGuid().ToString('N')) + '.pub')
+            $tempKeyPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-scp-hostkey-' + ([guid]::NewGuid().ToString('N')) + '.pub')
             try {
                 [System.IO.File]::WriteAllText($tempKeyPath, ([string]$scanLine + [Environment]::NewLine), [System.Text.Encoding]::ASCII)
-                $fingerprintResult = Invoke-AzVmCapturedProcess -FilePath ([string]$sshKeyGen.Source) -Arguments @('-l', '-f', [string]$tempKeyPath)
+                $fingerprintResult = Invoke-ClagnosCapturedProcess -FilePath ([string]$sshKeyGen.Source) -Arguments @('-l', '-f', [string]$tempKeyPath)
                 if ([int]$fingerprintResult.ExitCode -ne 0) {
                     continue
                 }
@@ -177,7 +177,7 @@ function Try-Get-AzVmWindowsScpHostKeyArguments {
         }
 
         $cachedArgs = @($hostKeyArgs.ToArray())
-        $script:AzVmWindowsScpHostKeyCache[$cacheKey] = $cachedArgs
+        $script:ClagnosWindowsScpHostKeyCache[$cacheKey] = $cachedArgs
         return [pscustomobject]@{
             Success = $true
             Args = @($cachedArgs)
@@ -193,13 +193,13 @@ function Try-Get-AzVmWindowsScpHostKeyArguments {
     }
 }
 
-function Get-AzVmWindowsScpHostKeyArguments {
+function Get-ClagnosWindowsScpHostKeyArguments {
     param(
         [string]$HostName,
         [string]$Port
     )
 
-    $resolution = Try-Get-AzVmWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+    $resolution = Try-Get-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
     if (-not [bool]$resolution.Success) {
         throw [string]$resolution.Message
     }
@@ -207,25 +207,25 @@ function Get-AzVmWindowsScpHostKeyArguments {
     return @($resolution.Args)
 }
 
-function Resolve-AzVmWindowsScpHostKeyArguments {
+function Resolve-ClagnosWindowsScpHostKeyArguments {
     param(
         [string]$HostName,
         [string]$Port
     )
 
-    $resolution = Try-Get-AzVmWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+    $resolution = Try-Get-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
     if ([bool]$resolution.Success) {
         return $resolution
     }
 
-    if (-not (Test-AzVmWindowsScpFallbackCandidate -Message $resolution.Message)) {
+    if (-not (Test-ClagnosWindowsScpFallbackCandidate -Message $resolution.Message)) {
         throw [string]$resolution.Message
     }
 
     return $resolution
 }
 
-function Test-AzVmWindowsScpFallbackCandidate {
+function Test-ClagnosWindowsScpFallbackCandidate {
     param(
         [AllowNull()]
         [string]$Message
@@ -249,18 +249,18 @@ function Test-AzVmWindowsScpFallbackCandidate {
     return $false
 }
 
-function New-AzVmWindowsScpPasswordFilePath {
+function New-ClagnosWindowsScpPasswordFilePath {
     param(
         [string]$Password
     )
 
-    $passwordFilePath = Join-Path ([System.IO.Path]::GetTempPath()) ('az-vm-pscp-password-' + ([guid]::NewGuid().ToString('N')) + '.txt')
+    $passwordFilePath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-pscp-password-' + ([guid]::NewGuid().ToString('N')) + '.txt')
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($passwordFilePath, [string]$Password, $utf8NoBom)
     return [string]$passwordFilePath
 }
 
-function Invoke-AzVmRemotePowerShellExec {
+function Invoke-ClagnosRemotePowerShellExec {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -300,7 +300,7 @@ function Invoke-AzVmRemotePowerShellExec {
             $arguments += @('--stdin-file-length', [string]$StdinFileLengthBytes)
         }
     }
-    return (Invoke-AzVmProcessWithRetry `
+    return (Invoke-ClagnosProcessWithRetry `
         -FilePath $PySshPythonPath `
         -Arguments $arguments `
         -Label $Label `
@@ -308,7 +308,7 @@ function Invoke-AzVmRemotePowerShellExec {
         -SuppressTrackedLogging:$SuppressTrackedLogging)
 }
 
-function Invoke-AzVmRemotePowerShellCommandTextExec {
+function Invoke-ClagnosRemotePowerShellCommandTextExec {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -337,7 +337,7 @@ function Invoke-AzVmRemotePowerShellCommandTextExec {
         '--command', ('powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "{0}"' -f [string]$commandScriptText)
     )
 
-    return (Invoke-AzVmProcessWithRetry `
+    return (Invoke-ClagnosProcessWithRetry `
         -FilePath $PySshPythonPath `
         -Arguments $arguments `
         -Label $Label `
@@ -345,7 +345,7 @@ function Invoke-AzVmRemotePowerShellCommandTextExec {
         -SuppressTrackedLogging:$SuppressTrackedLogging)
 }
 
-function Get-AzVmWindowsRemoteFileMetadata {
+function Get-ClagnosWindowsRemoteFileMetadata {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -357,7 +357,7 @@ function Get-AzVmWindowsRemoteFileMetadata {
         [int]$ConnectTimeoutSeconds = 30
     )
 
-    $escapedRemotePath = ConvertTo-AzVmPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
+    $escapedRemotePath = ConvertTo-ClagnosPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
     $metadataScript = @(
         "`$path = '$escapedRemotePath'"
         "if (-not (Test-Path -LiteralPath `$path)) {"
@@ -387,7 +387,7 @@ function Get-AzVmWindowsRemoteFileMetadata {
         "exit 0"
     ) -join "`n"
 
-    $result = Invoke-AzVmRemotePowerShellExec `
+    $result = Invoke-ClagnosRemotePowerShellExec `
         -PySshPythonPath $PySshPythonPath `
         -PySshClientPath $PySshClientPath `
         -HostName $HostName `
@@ -416,7 +416,7 @@ function Get-AzVmWindowsRemoteFileMetadata {
     }
 }
 
-function Copy-AzVmAssetToWindowsViaExec {
+function Copy-ClagnosAssetToWindowsViaExec {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -431,13 +431,13 @@ function Copy-AzVmAssetToWindowsViaExec {
 
     $resolvedLocalPath = (Resolve-Path -LiteralPath $LocalPath).Path
     $fileInfo = Get-Item -LiteralPath $resolvedLocalPath -ErrorAction Stop
-    $fileHash = Get-AzVmFileSha256 -Path $resolvedLocalPath
-    $escapedRemotePath = ConvertTo-AzVmPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
+    $fileHash = Get-ClagnosFileSha256 -Path $resolvedLocalPath
+    $escapedRemotePath = ConvertTo-ClagnosPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
     $stagingRemotePath = ('{0}.upload-{1}' -f [string]$RemotePath, ([guid]::NewGuid().ToString('N')))
-    $escapedStagingRemotePath = ConvertTo-AzVmPowerShellSingleQuotedLiteral -Value ([string]$stagingRemotePath)
+    $escapedStagingRemotePath = ConvertTo-ClagnosPowerShellSingleQuotedLiteral -Value ([string]$stagingRemotePath)
     $remoteMetadata = $null
     try {
-        $remoteMetadata = Get-AzVmWindowsRemoteFileMetadata `
+        $remoteMetadata = Get-ClagnosWindowsRemoteFileMetadata `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -463,13 +463,13 @@ function Copy-AzVmAssetToWindowsViaExec {
         }
     }
 
-    $remoteSpec = ConvertTo-AzVmWindowsScpRemoteSpec -HostName $HostName -RemotePath $stagingRemotePath
+    $remoteSpec = ConvertTo-ClagnosWindowsScpRemoteSpec -HostName $HostName -RemotePath $stagingRemotePath
     Write-Host ("Task asset copy started: {0} -> {1} (mode=windows-scp, bytes={2})" -f [System.IO.Path]::GetFileName($resolvedLocalPath), [string]$RemotePath, [int64]$fileInfo.Length)
     $transferWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $passwordFilePath = ''
     try {
-        $pscpPath = Get-AzVmPscpExecutablePath
-        $hostKeyResolution = Resolve-AzVmWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+        $pscpPath = Get-ClagnosPscpExecutablePath
+        $hostKeyResolution = Resolve-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
         if (-not [bool]$hostKeyResolution.Success) {
             Write-Host ("Task asset copy fallback: pyssh windows copy -> {0} ({1})" -f [string]$RemotePath, [string]$hostKeyResolution.Message)
             $copyArgs = @(
@@ -483,11 +483,11 @@ function Copy-AzVmAssetToWindowsViaExec {
                 "--local", [string]$resolvedLocalPath,
                 "--remote", [string]$stagingRemotePath
             )
-            Invoke-AzVmProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
+            Invoke-ClagnosProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
         }
         else {
             $hostKeyArgs = @($hostKeyResolution.Args)
-            $passwordFilePath = New-AzVmWindowsScpPasswordFilePath -Password $Password
+            $passwordFilePath = New-ClagnosWindowsScpPasswordFilePath -Password $Password
             $copyArgs = @(
                 '-batch',
                 '-scp',
@@ -499,7 +499,7 @@ function Copy-AzVmAssetToWindowsViaExec {
                 [string]$remoteSpec
             )
 
-            Invoke-AzVmProcessWithRetry -FilePath $pscpPath -Arguments $copyArgs -Label ("pscp copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
+            Invoke-ClagnosProcessWithRetry -FilePath $pscpPath -Arguments $copyArgs -Label ("pscp copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
         }
 
         $finalizeScript = @(
@@ -512,7 +512,7 @@ function Copy-AzVmAssetToWindowsViaExec {
             'if(Test-Path -LiteralPath $d){Remove-Item -LiteralPath $d -Force -EA SilentlyContinue}'
             'Move-Item -LiteralPath $s -Destination $d -Force'
         ) -join ';'
-        Invoke-AzVmRemotePowerShellCommandTextExec `
+        Invoke-ClagnosRemotePowerShellCommandTextExec `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -533,7 +533,7 @@ function Copy-AzVmAssetToWindowsViaExec {
         }
     }
 
-    $verifiedMetadata = Get-AzVmWindowsRemoteFileMetadata `
+    $verifiedMetadata = Get-ClagnosWindowsRemoteFileMetadata `
         -PySshPythonPath $PySshPythonPath `
         -PySshClientPath $PySshClientPath `
         -HostName $HostName `
@@ -560,8 +560,8 @@ function Copy-AzVmAssetToWindowsViaExec {
     }
 }
 
-# Handles Copy-AzVmAssetToVm.
-function Copy-AzVmAssetToVm {
+# Handles Copy-ClagnosAssetToVm.
+function Copy-ClagnosAssetToVm {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -583,8 +583,8 @@ function Copy-AzVmAssetToVm {
     if ($ConnectTimeoutSeconds -lt 5) { $ConnectTimeoutSeconds = 5 }
     if ($ConnectTimeoutSeconds -gt 300) { $ConnectTimeoutSeconds = 300 }
 
-    if (Test-AzVmWindowsRemotePath -RemotePath $RemotePath) {
-        return (Copy-AzVmAssetToWindowsViaExec `
+    if (Test-ClagnosWindowsRemotePath -RemotePath $RemotePath) {
+        return (Copy-ClagnosAssetToWindowsViaExec `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -608,11 +608,11 @@ function Copy-AzVmAssetToVm {
         "--remote", [string]$RemotePath
     )
 
-    Invoke-AzVmProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
+    Invoke-ClagnosProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
 }
 
-# Handles Copy-AzVmAssetFromVm.
-function Copy-AzVmAssetFromVm {
+# Handles Copy-ClagnosAssetFromVm.
+function Copy-ClagnosAssetFromVm {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -642,16 +642,16 @@ function Copy-AzVmAssetFromVm {
         Remove-Item -LiteralPath $LocalPath -Force -ErrorAction SilentlyContinue
     }
 
-    if (Test-AzVmWindowsRemotePath -RemotePath $RemotePath) {
-        $pscpPath = Get-AzVmPscpExecutablePath
-        $remoteSpec = ConvertTo-AzVmWindowsScpRemoteSpec -HostName $HostName -RemotePath $RemotePath
-        $hostKeyResolution = Resolve-AzVmWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+    if (Test-ClagnosWindowsRemotePath -RemotePath $RemotePath) {
+        $pscpPath = Get-ClagnosPscpExecutablePath
+        $remoteSpec = ConvertTo-ClagnosWindowsScpRemoteSpec -HostName $HostName -RemotePath $RemotePath
+        $hostKeyResolution = Resolve-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
         if (-not [bool]$hostKeyResolution.Success) {
             Write-Host ("Task asset fetch fallback: pyssh windows fetch <- {0} ({1})" -f [string]$RemotePath, [string]$hostKeyResolution.Message)
         }
         else {
             $hostKeyArgs = @($hostKeyResolution.Args)
-            $passwordFilePath = New-AzVmWindowsScpPasswordFilePath -Password $Password
+            $passwordFilePath = New-ClagnosWindowsScpPasswordFilePath -Password $Password
             try {
                 $fetchArgs = @(
                     '-batch',
@@ -664,7 +664,7 @@ function Copy-AzVmAssetFromVm {
                     [string]$LocalPath
                 )
 
-                Invoke-AzVmProcessWithRetry -FilePath $pscpPath -Arguments $fetchArgs -Label ("pscp fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
+                Invoke-ClagnosProcessWithRetry -FilePath $pscpPath -Arguments $fetchArgs -Label ("pscp fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
             }
             finally {
                 if (-not [string]::IsNullOrWhiteSpace([string]$passwordFilePath)) {
@@ -690,5 +690,5 @@ function Copy-AzVmAssetFromVm {
         "--local", [string]$LocalPath
     )
 
-    Invoke-AzVmProcessWithRetry -FilePath $PySshPythonPath -Arguments $fetchArgs -Label ("pyssh fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 | Out-Null
+    Invoke-ClagnosProcessWithRetry -FilePath $PySshPythonPath -Arguments $fetchArgs -Label ("pyssh fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 | Out-Null
 }

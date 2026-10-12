@@ -1,5 +1,5 @@
 # 'group' option binding for 'task'.
 
-function Get-AzVmTaskGroupOptionSpecification {
-    return (Get-AzVmSharedGroupOptionSpecification)
+function Get-ClagnosTaskGroupOptionSpecification {
+    return (Get-ClagnosSharedGroupOptionSpecification)
 }

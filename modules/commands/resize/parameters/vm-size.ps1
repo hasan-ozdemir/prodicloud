@@ -1,5 +1,5 @@
 # 'vm-size' option binding for 'resize'.
 
-function Get-AzVmResizeVmSizeOptionSpecification {
-    return (Get-AzVmSharedVmSizeOptionSpecification)
+function Get-ClagnosResizeVmSizeOptionSpecification {
+    return (Get-ClagnosSharedVmSizeOptionSpecification)
 }

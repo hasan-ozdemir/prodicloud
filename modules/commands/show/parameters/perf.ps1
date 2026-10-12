@@ -1,5 +1,5 @@
 # 'perf' option binding for 'show'.
 
-function Get-AzVmShowPerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosShowPerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

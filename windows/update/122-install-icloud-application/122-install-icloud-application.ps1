@@ -5,15 +5,15 @@ $taskConfig = [ordered]@{
     TaskName = '122-install-icloud-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    HelperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
-    StoreHelperPath = 'C:\Windows\Temp\az-vm-store-install-state.psm1'
-    PortableWingetPath = 'C:\ProgramData\az-vm\tools\winget-x64\winget.exe'
+    HelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+    StoreHelperPath = 'C:\Windows\Temp\clagnos-store-install-state.psm1'
+    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     PackageId = '9PKTQ5699M62'
     PackageSource = 'msstore'
     DisplayNameFragments = @('icloud', 'appleinc.icloud')
     ExecutableName = 'iCloudHome.exe'
     InteractiveTaskSuffix = 'interactive-install'
-    LegacyRunOnceName = 'AzVmInstallICloud'
+    LegacyRunOnceName = 'ClagnosInstallICloud'
     InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
     StoreSessionErrorRegex = '(?i)0x80070520|logon session|microsoft store|msstore'
@@ -234,12 +234,12 @@ function Get-ICloudInstallState {
     }
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $existingState = Get-ICloudInstallState
 if ([bool]$existingState.Healthy) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('iCloud is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('iCloud is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     if ([string]::Equals([string]$existingState.LaunchKind, 'executable', [System.StringComparison]::OrdinalIgnoreCase)) {
         Write-Host ("icloud-home-exe => {0}" -f [string]$existingState.LaunchTarget)
     }
@@ -248,29 +248,29 @@ if ([bool]$existingState.Healthy) {
     return
 }
 
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
 
 Write-Host "Resolved winget executable: $wingetExe"
-if (Test-AzVmRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
     Write-Host 'store-install-cleanup => task=122-install-icloud-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-AzVmUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-AzVmInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
+$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
+Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
 if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-AzVmInteractiveDesktopBlockMessage -ActivityDescription 'iCloud install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'iCloud install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw ([string]$blockMessage.WarningMessage)
 }
 
 $workerTaskName = "{0}-{1}" -f $taskName, ([string]$taskConfig.InteractiveTaskSuffix)
-$paths = Get-AzVmInteractivePaths -TaskName $workerTaskName
+$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -383,10 +383,10 @@ function Test-ICloudInstalled {
     return (Test-ICloudAppId -AppId ([string](Resolve-ICloudAppId)))
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -395,17 +395,17 @@ if (-not (Test-ICloudInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-ICloudInstalled)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'iCloud install could not be verified after interactive winget install.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'iCloud install could not be verified after interactive winget install.'
     exit 1
 }
 
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'iCloud is installed.'
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'iCloud is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
@@ -417,7 +417,7 @@ $workerScript = $workerScript.Replace('__PACKAGE_SOURCE__', [string]$taskConfig.
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', [string]$taskConfig.PortableWingetPath)
 
 try {
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -426,12 +426,12 @@ try {
         -RunAsMode 'interactiveToken'
 }
 catch {
-    Invoke-AzVmRefreshSessionPath
+    Invoke-ClagnosRefreshSessionPath
     $catchState = Get-ICloudInstallState
     if ([bool]$catchState.Healthy) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('iCloud is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('iCloud is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         if ([string]::Equals([string]$catchState.LaunchKind, 'executable', [System.StringComparison]::OrdinalIgnoreCase)) {
             Write-Host ("icloud-home-exe => {0}" -f [string]$catchState.LaunchTarget)
         }
@@ -442,28 +442,28 @@ catch {
 
     $interactiveError = [string]$_.Exception.Message
     if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary 'iCloud install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'iCloud install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         throw 'iCloud install requires an interactive Store-capable session and cannot be deferred to a later boot.'
     }
 
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('iCloud interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('iCloud interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $finalState = Get-ICloudInstallState
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('iCloud is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('iCloud is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw 'iCloud install could not be verified.'
 }
 
-Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-$stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('iCloud is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+$stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('iCloud is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
 if ([string]::Equals([string]$finalState.LaunchKind, 'executable', [System.StringComparison]::OrdinalIgnoreCase)) {
     Write-Host ("icloud-home-exe => {0}" -f [string]$finalState.LaunchTarget)
 }

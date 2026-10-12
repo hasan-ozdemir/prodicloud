@@ -1,6 +1,6 @@
-# Contributing to az-vm
+# Contributing to clagnos
 
-`az-vm` is maintained as a pragmatic, operator-first Azure VM toolkit. Contributions are welcome, but this repository follows a contact-first model so large changes do not drift away from the current runtime, documentation, and release contract.
+`clagnos` is maintained as a pragmatic, operator-first Azure VM toolkit. Contributions are welcome, but this repository follows a contact-first model so large changes do not drift away from the current runtime, documentation, and release contract.
 
 ## Before You Start
 
@@ -37,7 +37,7 @@ Run the non-live checks locally before opening a pull request:
 ```powershell
 .\tests\code-quality-check.ps1
 .\tests\documentation-contract-check.ps1
-.\tests\az-vm-smoke-tests.ps1
+.\tests\clagnos-smoke-tests.ps1
 .\tests\powershell-compatibility-check.ps1
 ```
 

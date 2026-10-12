@@ -1,5 +1,5 @@
 # 'perf' option binding for 'list'.
 
-function Get-AzVmListPerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosListPerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

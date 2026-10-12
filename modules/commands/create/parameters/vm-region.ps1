@@ -1,5 +1,5 @@
 # 'vm-region' option binding for 'create'.
 
-function Get-AzVmCreateVmRegionOptionSpecification {
-    return (Get-AzVmSharedVmRegionOptionSpecification)
+function Get-ClagnosCreateVmRegionOptionSpecification {
+    return (Get-ClagnosSharedVmRegionOptionSpecification)
 }

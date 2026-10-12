@@ -22,7 +22,7 @@ $taskConfig = [ordered]@{
     )
 }
 
-function Ensure-AzVmDirectory {
+function Ensure-ClagnosDirectory {
     param([string]$Path)
 
     if ([string]::IsNullOrWhiteSpace([string]$Path)) {
@@ -35,7 +35,7 @@ function Ensure-AzVmDirectory {
 }
 
 function Ensure-CreateProfileType {
-    if ('AzVmUserProfileNative' -as [type]) {
+    if ('ClagnosUserProfileNative' -as [type]) {
         return
     }
 
@@ -44,7 +44,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-public struct AzVmProfileInfo
+public struct ClagnosProfileInfo
 {
     public int dwSize;
     public int dwFlags;
@@ -61,7 +61,7 @@ public struct AzVmProfileInfo
     public IntPtr hProfile;
 }
 
-public static class AzVmUserProfileNative
+public static class ClagnosUserProfileNative
 {
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool LogonUser(
@@ -82,7 +82,7 @@ public static class AzVmUserProfileNative
     [DllImport("userenv.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool LoadUserProfile(
         IntPtr hToken,
-        ref AzVmProfileInfo lpProfileInfo);
+        ref ClagnosProfileInfo lpProfileInfo);
 
     [DllImport("userenv.dll", SetLastError = true)]
     public static extern bool UnloadUserProfile(
@@ -301,7 +301,7 @@ function Copy-ProfileHiveArtifactsIfMissing {
         return
     }
 
-    Ensure-AzVmDirectory -Path $TargetProfilePath
+    Ensure-ClagnosDirectory -Path $TargetProfilePath
 
     $targetNtUserPath = Join-Path $TargetProfilePath 'NTUSER.DAT'
     if (-not (Test-Path -LiteralPath $targetNtUserPath) -and -not [string]::IsNullOrWhiteSpace([string]$Sid)) {
@@ -332,7 +332,7 @@ function Copy-ProfileHiveArtifactsIfMissing {
     }
 
     $targetUsrClassRoot = Join-Path $TargetProfilePath 'AppData\Local\Microsoft\Windows'
-    Ensure-AzVmDirectory -Path $targetUsrClassRoot
+    Ensure-ClagnosDirectory -Path $targetUsrClassRoot
     $targetUsrClassPath = Join-Path $targetUsrClassRoot 'UsrClass.dat'
     if (-not (Test-Path -LiteralPath $targetUsrClassPath) -and -not [string]::IsNullOrWhiteSpace([string]$Sid)) {
         $loadedClassesHivePath = "Registry::HKEY_USERS\${Sid}_Classes"
@@ -430,7 +430,7 @@ function Repair-TemporaryProfileMappingIfNeeded {
     return [string]$bakProfilePath
 }
 
-function Get-AzVmInteractivePaths {
+function Get-ClagnosInteractivePaths {
     param([string]$TaskName)
 
     $taskNameText = [string]$TaskName
@@ -443,29 +443,29 @@ function Get-AzVmInteractivePaths {
         throw 'Interactive task name became empty after sanitization.'
     }
 
-    $rootPath = Join-Path 'C:\ProgramData\az-vm\interactive' $safeTaskName
+    $rootPath = Join-Path 'C:\ProgramData\clagnos\interactive' $safeTaskName
     return [pscustomobject]@{
         RootPath = $rootPath
         WorkerPath = Join-Path $rootPath 'worker.ps1'
         ResultPath = Join-Path $rootPath 'result.json'
-        ScheduledTaskName = ('AzVmInteractive-' + $safeTaskName)
+        ScheduledTaskName = ('ClagnosInteractive-' + $safeTaskName)
         TaskName = $safeTaskName
     }
 }
 
-function Write-AzVmJsonFile {
+function Write-ClagnosJsonFile {
     param(
         [string]$Path,
         [object]$Value
     )
 
     $parentPath = Split-Path -Path $Path -Parent
-    Ensure-AzVmDirectory -Path $parentPath
+    Ensure-ClagnosDirectory -Path $parentPath
     $jsonText = [string]($Value | ConvertTo-Json -Depth 8)
     [System.IO.File]::WriteAllText($Path, $jsonText, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-function Read-AzVmJsonFile {
+function Read-ClagnosJsonFile {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -480,7 +480,7 @@ function Read-AzVmJsonFile {
     return (ConvertFrom-Json -InputObject $text)
 }
 
-function Get-AzVmPowerShellExePath {
+function Get-ClagnosPowerShellExePath {
     $cmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
     if ($cmd -and -not [string]::IsNullOrWhiteSpace([string]$cmd.Source)) {
         return [string]$cmd.Source
@@ -494,7 +494,7 @@ function Get-AzVmPowerShellExePath {
     throw 'powershell.exe was not found.'
 }
 
-function Get-AzVmLocalPrincipalName {
+function Get-ClagnosLocalPrincipalName {
     param([string]$UserName)
 
     if ([string]::IsNullOrWhiteSpace([string]$UserName)) {
@@ -504,7 +504,7 @@ function Get-AzVmLocalPrincipalName {
     return ("{0}\{1}" -f [string]$env:COMPUTERNAME, [string]$UserName)
 }
 
-function Remove-AzVmInteractiveScheduledTask {
+function Remove-ClagnosInteractiveScheduledTask {
     param([string]$TaskName)
 
     if ([string]::IsNullOrWhiteSpace([string]$TaskName)) {
@@ -524,7 +524,7 @@ function Remove-AzVmInteractiveScheduledTask {
     }
 }
 
-function Register-AzVmInteractiveScheduledTask {
+function Register-ClagnosInteractiveScheduledTask {
     param(
         [string]$TaskName,
         [string]$RunAsUser,
@@ -532,14 +532,14 @@ function Register-AzVmInteractiveScheduledTask {
         [string]$WorkerPath
     )
 
-    Remove-AzVmInteractiveScheduledTask -TaskName $TaskName
+    Remove-ClagnosInteractiveScheduledTask -TaskName $TaskName
 
     $service = New-Object -ComObject 'Schedule.Service'
     $service.Connect()
     $root = $service.GetFolder('\')
     $definition = $service.NewTask(0)
 
-    $definition.RegistrationInfo.Description = ("az-vm interactive materialization for {0}" -f [string]$TaskName)
+    $definition.RegistrationInfo.Description = ("clagnos interactive materialization for {0}" -f [string]$TaskName)
     $definition.Settings.Enabled = $true
     $definition.Settings.Hidden = $true
     $definition.Settings.StartWhenAvailable = $true
@@ -549,13 +549,13 @@ function Register-AzVmInteractiveScheduledTask {
     $definition.Settings.ExecutionTimeLimit = 'PT1H'
     $definition.Settings.MultipleInstances = 0
 
-    $principalName = Get-AzVmLocalPrincipalName -UserName $RunAsUser
+    $principalName = Get-ClagnosLocalPrincipalName -UserName $RunAsUser
     $definition.Principal.UserId = $principalName
     $definition.Principal.LogonType = 1
     $definition.Principal.RunLevel = 1
 
     $action = $definition.Actions.Create(0)
-    $action.Path = Get-AzVmPowerShellExePath
+    $action.Path = Get-ClagnosPowerShellExePath
     $action.Arguments = ('-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f [string]$WorkerPath)
     $action.WorkingDirectory = (Split-Path -Path $WorkerPath -Parent)
 
@@ -569,7 +569,7 @@ function Register-AzVmInteractiveScheduledTask {
     $null = $root.RegisterTaskDefinition($TaskName, $definition, 6, $principalName, [string]$RunAsPassword, 1, $null)
 }
 
-function Start-AzVmInteractiveScheduledTask {
+function Start-ClagnosInteractiveScheduledTask {
     param([string]$TaskName)
 
     $service = New-Object -ComObject 'Schedule.Service'
@@ -583,7 +583,7 @@ function Start-AzVmInteractiveScheduledTask {
     $null = $task.Run($null)
 }
 
-function Get-AzVmInteractiveScheduledTaskSnapshot {
+function Get-ClagnosInteractiveScheduledTaskSnapshot {
     param([string]$TaskName)
 
     if ([string]::IsNullOrWhiteSpace([string]$TaskName)) {
@@ -611,7 +611,7 @@ function Get-AzVmInteractiveScheduledTaskSnapshot {
     }
 }
 
-function Get-AzVmInteractiveWorkerProcesses {
+function Get-ClagnosInteractiveWorkerProcesses {
     param([string]$WorkerPath)
 
     if ([string]::IsNullOrWhiteSpace([string]$WorkerPath)) {
@@ -628,10 +628,10 @@ function Get-AzVmInteractiveWorkerProcesses {
     )
 }
 
-function Stop-AzVmInteractiveWorkerProcesses {
+function Stop-ClagnosInteractiveWorkerProcesses {
     param([string]$WorkerPath)
 
-    foreach ($process in @(Get-AzVmInteractiveWorkerProcesses -WorkerPath $WorkerPath)) {
+    foreach ($process in @(Get-ClagnosInteractiveWorkerProcesses -WorkerPath $WorkerPath)) {
         try {
             Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction Stop
         }
@@ -640,7 +640,7 @@ function Stop-AzVmInteractiveWorkerProcesses {
     }
 }
 
-function Invoke-AzVmInteractiveProfileMaterialization {
+function Invoke-ClagnosInteractiveProfileMaterialization {
     param(
         [string]$TaskName,
         [string]$RunAsUser,
@@ -648,9 +648,9 @@ function Invoke-AzVmInteractiveProfileMaterialization {
         [int]$WaitTimeoutSeconds = 180
     )
 
-    $paths = Get-AzVmInteractivePaths -TaskName $TaskName
-    Ensure-AzVmDirectory -Path $paths.RootPath
-    Stop-AzVmInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
+    $paths = Get-ClagnosInteractivePaths -TaskName $TaskName
+    Ensure-ClagnosDirectory -Path $paths.RootPath
+    Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
     Remove-Item -LiteralPath $paths.ResultPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $paths.WorkerPath -Force -ErrorAction SilentlyContinue
 
@@ -697,15 +697,15 @@ catch {
     [System.IO.File]::WriteAllText($paths.WorkerPath, [string]$workerScript, (New-Object System.Text.UTF8Encoding($false)))
 
     try {
-        Register-AzVmInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -RunAsPassword $RunAsPassword -WorkerPath $paths.WorkerPath
-        Start-AzVmInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+        Register-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -RunAsPassword $RunAsPassword -WorkerPath $paths.WorkerPath
+        Start-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
 
         $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(30, [int]$WaitTimeoutSeconds))
         while ([DateTime]::UtcNow -lt $deadline) {
             if (Test-Path -LiteralPath $paths.ResultPath) {
                 $fileInfo = Get-Item -LiteralPath $paths.ResultPath -ErrorAction SilentlyContinue
                 if ($null -ne $fileInfo -and [int64]$fileInfo.Length -gt 0) {
-                    $result = Read-AzVmJsonFile -Path $paths.ResultPath
+                    $result = Read-ClagnosJsonFile -Path $paths.ResultPath
                     if ($result.PSObject.Properties.Match('Success').Count -gt 0 -and [bool]$result.Success) {
                         return $result
                     }
@@ -718,7 +718,7 @@ catch {
             Start-Sleep -Seconds 2
         }
 
-        $snapshot = Get-AzVmInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
+        $snapshot = Get-ClagnosInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
         if ($null -eq $snapshot) {
             throw ("Interactive worker timed out without a result file: {0}" -f [string]$paths.ResultPath)
         }
@@ -727,12 +727,12 @@ catch {
     }
     finally {
         try {
-            Remove-AzVmInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+            Remove-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
         }
         catch {
         }
 
-        Stop-AzVmInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
+        Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
         Remove-Item -LiteralPath $paths.WorkerPath -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $paths.ResultPath -Force -ErrorAction SilentlyContinue
     }
@@ -745,9 +745,9 @@ function Ensure-StandardProfileDirectories {
         throw 'Profile path is empty.'
     }
 
-    Ensure-AzVmDirectory -Path $ProfilePath
+    Ensure-ClagnosDirectory -Path $ProfilePath
     foreach ($relativePath in @($taskConfig.StandardProfileDirectories)) {
-        Ensure-AzVmDirectory -Path (Join-Path $ProfilePath ([string]$relativePath))
+        Ensure-ClagnosDirectory -Path (Join-Path $ProfilePath ([string]$relativePath))
     }
 }
 
@@ -767,7 +767,7 @@ function Invoke-CreateProfileForLocalUser {
     Ensure-CreateProfileType
 
     $profilePathBuilder = New-Object System.Text.StringBuilder 260
-    $createProfileResult = [AzVmUserProfileNative]::CreateProfile(
+    $createProfileResult = [ClagnosUserProfileNative]::CreateProfile(
         [string]$Sid,
         [string]$UserName,
         $profilePathBuilder,
@@ -795,18 +795,18 @@ function Invoke-LoadUserProfileForLocalUser {
     Ensure-CreateProfileType
 
     $tokenHandle = [IntPtr]::Zero
-    $profileInfo = New-Object AzVmProfileInfo
-    $profileInfo.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type][AzVmProfileInfo])
+    $profileInfo = New-Object ClagnosProfileInfo
+    $profileInfo.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type][ClagnosProfileInfo])
     $profileInfo.dwFlags = 1
     $profileInfo.lpUserName = [string]$UserName
 
-    if (-not [AzVmUserProfileNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)) {
+    if (-not [ClagnosUserProfileNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)) {
         $logonError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
         throw ("LogonUser failed for '{0}' with Win32 error {1}." -f [string]$UserName, [int]$logonError)
     }
 
     try {
-        if (-not [AzVmUserProfileNative]::LoadUserProfile($tokenHandle, [ref]$profileInfo)) {
+        if (-not [ClagnosUserProfileNative]::LoadUserProfile($tokenHandle, [ref]$profileInfo)) {
             $loadError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
             throw ("LoadUserProfile failed for '{0}' with Win32 error {1}." -f [string]$UserName, [int]$loadError)
         }
@@ -816,12 +816,12 @@ function Invoke-LoadUserProfileForLocalUser {
     finally {
         try {
             if ($profileInfo.hProfile -ne [IntPtr]::Zero) {
-                [void][AzVmUserProfileNative]::UnloadUserProfile($tokenHandle, $profileInfo.hProfile)
+                [void][ClagnosUserProfileNative]::UnloadUserProfile($tokenHandle, $profileInfo.hProfile)
             }
         }
         finally {
             if ($tokenHandle -ne [IntPtr]::Zero) {
-                [void][AzVmUserProfileNative]::CloseHandle($tokenHandle)
+                [void][ClagnosUserProfileNative]::CloseHandle($tokenHandle)
             }
         }
     }
@@ -857,7 +857,7 @@ function Ensure-LocalUserProfileMaterialized {
     $managedPassword = Get-ManagedLocalUserPassword -UserName $userName
     if (-not [string]::IsNullOrWhiteSpace([string]$managedPassword)) {
         try {
-            $null = Invoke-AzVmInteractiveProfileMaterialization -TaskName ("configure-all-users-materialize-{0}" -f [string]$userName) -RunAsUser $userName -RunAsPassword $managedPassword -WaitTimeoutSeconds ([int]$taskConfig.InteractiveMaterializationWaitSeconds)
+            $null = Invoke-ClagnosInteractiveProfileMaterialization -TaskName ("configure-all-users-materialize-{0}" -f [string]$userName) -RunAsUser $userName -RunAsPassword $managedPassword -WaitTimeoutSeconds ([int]$taskConfig.InteractiveMaterializationWaitSeconds)
         }
         catch {
             Write-Host ("profile-materialization-fallback: {0} => {1}" -f [string]$userName, [string]$_.Exception.Message)

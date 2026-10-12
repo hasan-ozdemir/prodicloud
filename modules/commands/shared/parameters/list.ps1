@@ -1,5 +1,5 @@
 # Shared 'list' command option specification.
 
-function Get-AzVmSharedListOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'list')
+function Get-ClagnosSharedListOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'list')
 }

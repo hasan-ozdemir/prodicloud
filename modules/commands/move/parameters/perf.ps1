@@ -1,5 +1,5 @@
 # 'perf' option binding for 'move'.
 
-function Get-AzVmMovePerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosMovePerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

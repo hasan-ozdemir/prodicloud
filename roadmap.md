@@ -1,7 +1,7 @@
 # Roadmap
 
 ## Direction
-Keep `az-vm` as a pragmatic Azure VM operator toolkit with one clear mental model, strong validation before mutation, deterministic guest task execution, and documentation that is detailed enough for both operators and maintainers to work from the repository alone.
+Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental model, strong validation before mutation, deterministic guest task execution, and documentation that is detailed enough for both operators and maintainers to work from the repository alone.
 
 ## Working Style
 - Prefer business value over feature count.

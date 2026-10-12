@@ -1,5 +1,5 @@
 # Shared 'restore-app-state' command option specification.
 
-function Get-AzVmSharedRestoreAppStateOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'restore-app-state')
+function Get-ClagnosSharedRestoreAppStateOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'restore-app-state')
 }

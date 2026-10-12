@@ -1,5 +1,5 @@
 # Shared 'vm-size' command option specification.
 
-function Get-AzVmSharedVmSizeOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'vm-size' -TakesValue)
+function Get-ClagnosSharedVmSizeOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'vm-size' -TakesValue)
 }

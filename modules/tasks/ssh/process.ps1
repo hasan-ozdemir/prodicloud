@@ -1,6 +1,6 @@
 # SSH process execution helpers.
 
-function Invoke-AzVmCapturedProcess {
+function Invoke-ClagnosCapturedProcess {
     param(
         [string]$FilePath,
         [string[]]$Arguments
@@ -8,7 +8,7 @@ function Invoke-AzVmCapturedProcess {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = [string]$FilePath
-    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-AzVmProcessArgument -Value ([string]$_) }) -join ' ')
+    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     $psi.RedirectStandardOutput = $true
@@ -55,7 +55,7 @@ function Invoke-AzVmCapturedProcess {
     }
 }
 
-function Invoke-AzVmStreamingCapturedProcess {
+function Invoke-ClagnosStreamingCapturedProcess {
     param(
         [string]$FilePath,
         [string[]]$Arguments
@@ -63,7 +63,7 @@ function Invoke-AzVmStreamingCapturedProcess {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = [string]$FilePath
-    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-AzVmProcessArgument -Value ([string]$_) }) -join ' ')
+    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     $psi.RedirectStandardOutput = $true
@@ -122,11 +122,11 @@ function Invoke-AzVmStreamingCapturedProcess {
             }
 
             $lineText = [string]$line
-            $normalizedLine = Normalize-AzVmProtocolLine -Text $lineText
+            $normalizedLine = Normalize-ClagnosProtocolLine -Text $lineText
             if ($null -eq $normalizedLine) {
                 $normalizedLine = ""
             }
-            if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
+            if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
                 if ($isStdoutTask) {
                     $stdoutTask = $stdoutReader.ReadLineAsync()
                 }
@@ -159,9 +159,9 @@ function Invoke-AzVmStreamingCapturedProcess {
         if ($proc.HasExited -and -not $stdoutClosed) {
             $stdoutTail = [string]$stdoutReader.ReadToEnd()
             foreach ($tailLine in @($stdoutTail -split "`r?`n")) {
-                $normalizedTailLine = Normalize-AzVmProtocolLine -Text ([string]$tailLine)
+                $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$tailLine)
                 if ([string]::IsNullOrWhiteSpace([string]$normalizedTailLine)) { continue }
-                if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
                 [void]$outputLines.Add([string]$normalizedTailLine)
                 Write-Host ([string]$normalizedTailLine)
             }
@@ -169,9 +169,9 @@ function Invoke-AzVmStreamingCapturedProcess {
         if ($proc.HasExited -and -not $stderrClosed) {
             $stderrTail = [string]$stderrReader.ReadToEnd()
             foreach ($tailLine in @($stderrTail -split "`r?`n")) {
-                $normalizedTailLine = Normalize-AzVmProtocolLine -Text ([string]$tailLine)
+                $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$tailLine)
                 if ([string]::IsNullOrWhiteSpace([string]$normalizedTailLine)) { continue }
-                if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
                 [void]$outputLines.Add([string]$normalizedTailLine)
                 Write-Warning ([string]$normalizedTailLine)
             }
@@ -189,8 +189,8 @@ function Invoke-AzVmStreamingCapturedProcess {
     }
 }
 
-# Handles Invoke-AzVmProcessWithRetry.
-function Invoke-AzVmProcessWithRetry {
+# Handles Invoke-ClagnosProcessWithRetry.
+function Invoke-ClagnosProcessWithRetry {
     param(
         [string]$FilePath,
         [string[]]$Arguments,
@@ -216,19 +216,19 @@ function Invoke-AzVmProcessWithRetry {
         $effectiveArguments = if ($SkipPythonBytecodeFlag) { @($Arguments) } else { @('-B') + @($Arguments) }
         if ($SuppressTrackedLogging) {
             $processResult = if ($RelayOutput) {
-                Invoke-AzVmStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
             }
             else {
-                Invoke-AzVmCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
             }
         }
         else {
             $processResult = Invoke-TrackedAction -Label $attemptLabel -Action {
                 if ($RelayOutput) {
-                    Invoke-AzVmStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                    Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
                 }
                 else {
-                    Invoke-AzVmCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                    Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
                 }
             }
         }
@@ -252,8 +252,8 @@ function Invoke-AzVmProcessWithRetry {
     throw ("{0} failed after {1} attempt(s). Exit={2}. Output={3}" -f $Label, $MaxAttempts, $lastExit, $lastOutput)
 }
 
-# Handles Convert-AzVmProcessArgument.
-function Convert-AzVmProcessArgument {
+# Handles Convert-ClagnosProcessArgument.
+function Convert-ClagnosProcessArgument {
     param(
         [string]$Value
     )

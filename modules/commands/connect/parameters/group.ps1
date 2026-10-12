@@ -1,5 +1,5 @@
 # 'group' option binding for 'connect'.
 
-function Get-AzVmConnectGroupOptionSpecification {
-    return (Get-AzVmSharedGroupOptionSpecification)
+function Get-ClagnosConnectGroupOptionSpecification {
+    return (Get-ClagnosSharedGroupOptionSpecification)
 }

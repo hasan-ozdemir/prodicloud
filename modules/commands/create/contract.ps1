@@ -1,18 +1,18 @@
 # Contract for the 'create' command.
 
-function Get-AzVmCreateOptionSpecifications {
+function Get-ClagnosCreateOptionSpecifications {
     return @(
-        (Get-AzVmCreateAutoOptionSpecification),
-        (Get-AzVmCreatePerfOptionSpecification),
-        (Get-AzVmCreateWindowsOptionSpecification),
-        (Get-AzVmCreateLinuxOptionSpecification),
-        (Get-AzVmCreateHelpOptionSpecification),
-        (Get-AzVmCreateStepToOptionSpecification),
-        (Get-AzVmCreateStepFromOptionSpecification),
-        (Get-AzVmCreateStepOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmCreateVmNameOptionSpecification),
-        (Get-AzVmCreateVmRegionOptionSpecification),
-        (Get-AzVmCreateVmSizeOptionSpecification)
+        (Get-ClagnosCreateAutoOptionSpecification),
+        (Get-ClagnosCreatePerfOptionSpecification),
+        (Get-ClagnosCreateWindowsOptionSpecification),
+        (Get-ClagnosCreateLinuxOptionSpecification),
+        (Get-ClagnosCreateHelpOptionSpecification),
+        (Get-ClagnosCreateStepToOptionSpecification),
+        (Get-ClagnosCreateStepFromOptionSpecification),
+        (Get-ClagnosCreateStepOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosCreateVmNameOptionSpecification),
+        (Get-ClagnosCreateVmRegionOptionSpecification),
+        (Get-ClagnosCreateVmSizeOptionSpecification)
     )
 }

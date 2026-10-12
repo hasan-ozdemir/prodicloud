@@ -1,7 +1,7 @@
 # Persistent SSH task runner.
 
-# Handles Invoke-AzVmPersistentSshTask.
-function Invoke-AzVmPersistentSshTask {
+# Handles Invoke-ClagnosPersistentSshTask.
+function Invoke-ClagnosPersistentSshTask {
     param(
         [psobject]$Session,
         [string]$TaskName,
@@ -31,7 +31,7 @@ function Invoke-AzVmPersistentSshTask {
         script = [string]$TaskScript
     } | ConvertTo-Json -Compress -Depth 20
 
-    Write-AzVmPersistentSshProtocolLine -Session $Session -Line ([string]$payload)
+    Write-ClagnosPersistentSshProtocolLine -Session $Session -Line ([string]$payload)
 
     $proc = $Session.Process
     $stdoutReader = $Session.StdoutReader
@@ -52,8 +52,8 @@ function Invoke-AzVmPersistentSshTask {
         $Session.PendingStderrTask = $stderrReader.ReadLineAsync()
     }
     $outputLines = New-Object 'System.Collections.Generic.List[string]'
-    $endMarkerRegex = '^AZ_VM_TASK_END:(?<task>.+?):(?<code>-?\d+)$'
-    $beginMarkerRegex = '^AZ_VM_TASK_BEGIN:(?<task>.+)$'
+    $endMarkerRegex = '^CLAGNOS_TASK_END:(?<task>.+?):(?<code>-?\d+)$'
+    $beginMarkerRegex = '^CLAGNOS_TASK_BEGIN:(?<task>.+)$'
     $taskWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $exitCode = $null
 
@@ -67,15 +67,15 @@ function Invoke-AzVmPersistentSshTask {
             $Session.PendingStdoutTask = $stdoutReader.ReadLineAsync()
             if ($null -ne $line) {
                 $lineText = [string]$line
-                $normalizedLine = Normalize-AzVmProtocolLine -Text $lineText
+                $normalizedLine = Normalize-ClagnosProtocolLine -Text $lineText
                 if ($null -eq $normalizedLine) { $normalizedLine = "" }
-                if (($normalizedLine -as [string]) -like "AZ_VM_SESSION_ERROR:*") {
+                if (($normalizedLine -as [string]) -like "CLAGNOS_SESSION_ERROR:*") {
                     throw ("Persistent SSH session reported protocol error for task '{0}': {1}" -f $TaskName, [string]$normalizedLine)
                 }
                 if ($normalizedLine -match $endMarkerRegex) {
                     $markerTask = [string]$Matches.task
                     if ([string]::Equals($markerTask, [string]$TaskName, [System.StringComparison]::OrdinalIgnoreCase)) {
-                        $exitCode = Convert-AzVmProtocolTaskExitCode -Text ([string]$Matches.code)
+                        $exitCode = Convert-ClagnosProtocolTaskExitCode -Text ([string]$Matches.code)
                         break
                     }
                     continue
@@ -83,11 +83,11 @@ function Invoke-AzVmPersistentSshTask {
                 if ($normalizedLine -match $beginMarkerRegex) {
                     continue
                 }
-                if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
+                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
                     continue
                 }
-                if (Test-AzVmTransientSpinnerLine -Text ([string]$normalizedLine)) {
-                    Write-AzVmTransientConsoleText -Text ([string]$normalizedLine)
+                if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedLine)) {
+                    Write-ClagnosTransientConsoleText -Text ([string]$normalizedLine)
                     $Session.TransientConsoleActive = $true
                     continue
                 }
@@ -95,7 +95,7 @@ function Invoke-AzVmPersistentSshTask {
                     continue
                 }
                 if ($Session.TransientConsoleActive) {
-                    Clear-AzVmTransientConsoleText
+                    Clear-ClagnosTransientConsoleText
                     $Session.TransientConsoleActive = $false
                 }
                 [void]$outputLines.Add([string]$normalizedLine)
@@ -107,13 +107,13 @@ function Invoke-AzVmPersistentSshTask {
             $Session.PendingStderrTask = $stderrReader.ReadLineAsync()
             if ($null -ne $line) {
                 $lineText = [string]$line
-                $normalizedLine = Normalize-AzVmProtocolLine -Text $lineText
+                $normalizedLine = Normalize-ClagnosProtocolLine -Text $lineText
                 if ($null -eq $normalizedLine) { $normalizedLine = "" }
-                if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
+                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
                     continue
                 }
-                if (Test-AzVmTransientSpinnerLine -Text ([string]$normalizedLine)) {
-                    Write-AzVmTransientConsoleText -Text ([string]$normalizedLine)
+                if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedLine)) {
+                    Write-ClagnosTransientConsoleText -Text ([string]$normalizedLine)
                     $Session.TransientConsoleActive = $true
                     continue
                 }
@@ -121,7 +121,7 @@ function Invoke-AzVmPersistentSshTask {
                     continue
                 }
                 if ($Session.TransientConsoleActive) {
-                    Clear-AzVmTransientConsoleText
+                    Clear-ClagnosTransientConsoleText
                     $Session.TransientConsoleActive = $false
                 }
                 [void]$outputLines.Add([string]$normalizedLine)
@@ -136,21 +136,21 @@ function Invoke-AzVmPersistentSshTask {
             try { $stderrTail = [string]$stderrReader.ReadToEnd() } catch { }
             if (-not [string]::IsNullOrWhiteSpace($stdoutTail)) {
                 foreach ($line in ($stdoutTail -split "`r?`n")) {
-                    $normalizedTailLine = Normalize-AzVmProtocolLine -Text ([string]$line)
+                    $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$line)
                     if ([string]::IsNullOrWhiteSpace($normalizedTailLine)) { continue }
-                    if (($normalizedTailLine -as [string]) -like "AZ_VM_SESSION_ERROR:*") {
+                    if (($normalizedTailLine -as [string]) -like "CLAGNOS_SESSION_ERROR:*") {
                         throw ("Persistent SSH session reported protocol error for task '{0}': {1}" -f $TaskName, [string]$normalizedTailLine)
                     }
                     if ($normalizedTailLine -match $beginMarkerRegex) { continue }
                     if ($normalizedTailLine -match $endMarkerRegex) { continue }
-                    if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
-                    if (Test-AzVmTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
-                        Write-AzVmTransientConsoleText -Text ([string]$normalizedTailLine)
+                    if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                    if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
+                        Write-ClagnosTransientConsoleText -Text ([string]$normalizedTailLine)
                         $Session.TransientConsoleActive = $true
                         continue
                     }
                     if ($Session.TransientConsoleActive) {
-                        Clear-AzVmTransientConsoleText
+                        Clear-ClagnosTransientConsoleText
                         $Session.TransientConsoleActive = $false
                     }
                     [void]$outputLines.Add([string]$normalizedTailLine)
@@ -159,16 +159,16 @@ function Invoke-AzVmPersistentSshTask {
             }
             if (-not [string]::IsNullOrWhiteSpace($stderrTail)) {
                 foreach ($line in ($stderrTail -split "`r?`n")) {
-                    $normalizedTailLine = Normalize-AzVmProtocolLine -Text ([string]$line)
+                    $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$line)
                     if ([string]::IsNullOrWhiteSpace($normalizedTailLine)) { continue }
-                    if (Test-AzVmTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
-                    if (Test-AzVmTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
-                        Write-AzVmTransientConsoleText -Text ([string]$normalizedTailLine)
+                    if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                    if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
+                        Write-ClagnosTransientConsoleText -Text ([string]$normalizedTailLine)
                         $Session.TransientConsoleActive = $true
                         continue
                     }
                     if ($Session.TransientConsoleActive) {
-                        Clear-AzVmTransientConsoleText
+                        Clear-ClagnosTransientConsoleText
                         $Session.TransientConsoleActive = $false
                     }
                     [void]$outputLines.Add([string]$normalizedTailLine)
@@ -184,7 +184,7 @@ function Invoke-AzVmPersistentSshTask {
 
     if ($taskWatch.IsRunning) { $taskWatch.Stop() }
     if ($Session.TransientConsoleActive) {
-        Clear-AzVmTransientConsoleText
+        Clear-ClagnosTransientConsoleText
         $Session.TransientConsoleActive = $false
     }
     return [pscustomobject]@{

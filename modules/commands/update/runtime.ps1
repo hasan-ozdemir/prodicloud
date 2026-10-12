@@ -1,6 +1,6 @@
 # Update command runtime helpers.
 
-function Assert-AzVmUpdateAutoOptions {
+function Assert-ClagnosUpdateAutoOptions {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -8,12 +8,12 @@ function Assert-AzVmUpdateAutoOptions {
         [hashtable]$ConfigMap
     )
 
-    if (-not (Get-AzVmCliOptionBool -Options $Options -Name 'auto' -DefaultValue $false)) {
+    if (-not (Get-ClagnosCliOptionBool -Options $Options -Name 'auto' -DefaultValue $false)) {
         return
     }
 
-    $validationConfig = if ($ConfigMap) { Resolve-AzVmSupportedDotEnvConfig -ConfigMap $ConfigMap } else { @{} }
-    $effectiveGroup = [string](Get-AzVmCliOptionText -Options $Options -Name 'group')
+    $validationConfig = if ($ConfigMap) { Resolve-ClagnosSupportedDotEnvConfig -ConfigMap $ConfigMap } else { @{} }
+    $effectiveGroup = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
     if ([string]::IsNullOrWhiteSpace([string]$effectiveGroup)) {
         $effectiveGroup = [string](Get-ConfigValue -Config $validationConfig -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
     }
@@ -27,7 +27,7 @@ function Assert-AzVmUpdateAutoOptions {
     }
 }
 
-function Get-AzVmManagedTargetOsType {
+function Get-ClagnosManagedTargetOsType {
     param(
         [string]$ResourceGroup,
         [string]$VmName
@@ -46,7 +46,7 @@ function Get-AzVmManagedTargetOsType {
     return ''
 }
 
-function New-AzVmUpdateCommandRuntime {
+function New-ClagnosUpdateCommandRuntime {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -54,29 +54,29 @@ function New-AzVmUpdateCommandRuntime {
         [switch]$AutoMode
     )
 
-    $actionPlan = Resolve-AzVmActionPlan -CommandName 'update' -Options $Options
-    $envFilePath = Join-Path (Get-AzVmRepoRoot) '.env'
+    $actionPlan = Resolve-ClagnosActionPlan -CommandName 'update' -Options $Options
+    $envFilePath = Join-Path (Get-ClagnosRepoRoot) '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    Assert-AzVmUpdateAutoOptions -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMap $configMap
-    $cliSubscriptionId = [string](Get-AzVmCliOptionText -Options $Options -Name 'subscription-id')
+    Assert-ClagnosUpdateAutoOptions -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMap $configMap
+    $cliSubscriptionId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id')
 
     if (-not $AutoMode -and [string]::IsNullOrWhiteSpace([string]$cliSubscriptionId)) {
-        $currentSubscription = Get-AzVmResolvedSubscriptionContext
-        $selectedSubscription = Select-AzVmSubscriptionInteractive -DefaultSubscriptionId ([string]$currentSubscription.SubscriptionId)
-        Set-AzVmResolvedSubscriptionContext `
+        $currentSubscription = Get-ClagnosResolvedSubscriptionContext
+        $selectedSubscription = Select-ClagnosSubscriptionInteractive -DefaultSubscriptionId ([string]$currentSubscription.SubscriptionId)
+        Set-ClagnosResolvedSubscriptionContext `
             -SubscriptionId ([string]$selectedSubscription.id) `
             -SubscriptionName ([string]$selectedSubscription.name) `
             -TenantId ([string]$selectedSubscription.tenantId) `
             -ResolutionSource 'interactive'
-        Set-AzVmConfigValueSource -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Source 'interactive value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Source 'interactive value'
     }
 
     $defaultResourceGroup = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
-    $vmNameOverride = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-name')
+    $vmNameOverride = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
     $vmName = if (-not [string]::IsNullOrWhiteSpace([string]$vmNameOverride)) { $vmNameOverride.Trim() } else { [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_NAME' -DefaultValue '') }
-    $targetResourceGroup = Resolve-AzVmTargetResourceGroup -Options $Options -AutoMode:$AutoMode -DefaultResourceGroup $defaultResourceGroup -VmName $vmName -OperationName 'update'
-    $resolvedVmName = [string](Resolve-AzVmTargetVmName -ResourceGroup $targetResourceGroup -DefaultVmName $vmName -AutoMode:$AutoMode -OperationName 'update')
-    if (-not (Test-AzVmAzResourceExists -AzArgs @('vm', 'show', '-g', $targetResourceGroup, '-n', $resolvedVmName))) {
+    $targetResourceGroup = Resolve-ClagnosTargetResourceGroup -Options $Options -AutoMode:$AutoMode -DefaultResourceGroup $defaultResourceGroup -VmName $vmName -OperationName 'update'
+    $resolvedVmName = [string](Resolve-ClagnosTargetVmName -ResourceGroup $targetResourceGroup -DefaultVmName $vmName -AutoMode:$AutoMode -OperationName 'update')
+    if (-not (Test-ClagnosAzResourceExists -AzArgs @('vm', 'show', '-g', $targetResourceGroup, '-n', $resolvedVmName))) {
         Throw-FriendlyError `
             -Detail ("VM '{0}' was not found in managed resource group '{1}'." -f $resolvedVmName, $targetResourceGroup) `
             -Code 66 `
@@ -84,12 +84,12 @@ function New-AzVmUpdateCommandRuntime {
             -Hint "Run create to provision a fresh managed VM, or choose an existing managed VM target."
     }
 
-    $targetLocation = Get-AzVmResourceGroupLocation -ResourceGroup $targetResourceGroup
-    $targetOsType = Get-AzVmManagedTargetOsType -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
-    $networkDescriptor = Get-AzVmVmNetworkDescriptor -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
+    $targetLocation = Get-ClagnosResourceGroupLocation -ResourceGroup $targetResourceGroup
+    $targetOsType = Get-ClagnosManagedTargetOsType -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
+    $networkDescriptor = Get-ClagnosVmNetworkDescriptor -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
 
     $updateOverrides = @{
-        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-AzVmResolvedSubscriptionContext).SubscriptionId)
+        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-ClagnosResolvedSubscriptionContext).SubscriptionId)
         SELECTED_RESOURCE_GROUP = $targetResourceGroup
         SELECTED_VM_NAME = $resolvedVmName
         SELECTED_AZURE_REGION = $targetLocation
@@ -105,7 +105,7 @@ function New-AzVmUpdateCommandRuntime {
     }
 
     foreach ($overrideKey in @($updateOverrides.Keys)) {
-        Set-AzVmConfigValueSource -Key ([string]$overrideKey) -Source 'azure value'
+        Set-ClagnosConfigValueSource -Key ([string]$overrideKey) -Source 'azure value'
     }
 
     return [pscustomobject]@{

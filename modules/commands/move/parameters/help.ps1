@@ -1,5 +1,5 @@
 # 'help' option binding for 'move'.
 
-function Get-AzVmMoveHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosMoveHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

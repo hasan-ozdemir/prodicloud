@@ -5,9 +5,9 @@ $taskConfig = [ordered]@{
     TaskName = '134-install-docker-desktop-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    InteractiveHelperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
+    InteractiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
     InteractiveLaunchTaskSuffix = 'interactive-launch'
-    PortableWingetPath = 'C:\ProgramData\az-vm\tools\winget-x64\winget.exe'
+    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     DockerDesktopPackageId = 'Docker.DockerDesktop'
     DockerDesktopExecutablePath = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
     DockerServiceName = 'com.docker.service'
@@ -29,7 +29,7 @@ $taskConfig = [ordered]@{
     DockerLocalUsers = @('__VM_ADMIN_USER__', '__ASSISTANT_USER__')
 }
 
-Import-Module 'C:\Windows\Temp\az-vm-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 $interactiveHelperPath = [string]$taskConfig.InteractiveHelperPath
 if (-not (Test-Path -LiteralPath $interactiveHelperPath)) {
@@ -39,7 +39,7 @@ if (-not (Test-Path -LiteralPath $interactiveHelperPath)) {
 . $interactiveHelperPath
 
 function Refresh-SessionPath {
-    Refresh-AzVmSessionPath | Out-Null
+    Refresh-ClagnosSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
@@ -93,7 +93,7 @@ function Get-StaleInstallerProcesses {
         $commandLine = [string]$_.CommandLine
         $matchesKnownInstaller = ($name -match $nameRegex)
         $matchesDockerInstall = ($commandLine -match 'Docker\.DockerDesktop|Docker Desktop Installer|DockerDesktopInstaller')
-        $matchesPortableWinget = ($commandLine -match 'ProgramData\\az-vm\\tools\\winget-x64')
+        $matchesPortableWinget = ($commandLine -match 'ProgramData\\clagnos\\tools\\winget-x64')
         $matchesInstallState = ($commandLine -match 'WinGet\\defaultState')
         if (-not ($matchesKnownInstaller -or $matchesDockerInstall -or $matchesPortableWinget -or $matchesInstallState)) {
             return $false
@@ -450,15 +450,15 @@ function Ensure-DockerDesktopInteractiveLaunch {
     Stop-NonInteractiveDockerDesktopProcesses -ExpectedUserName ([string]$taskConfig.ManagerUser)
     Stop-DockerServiceForInteractiveLaunch
 
-    $interactiveDesktopStatus = Wait-AzVmUserInteractiveDesktopReady -UserName ([string]$taskConfig.ManagerUser) -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-    Write-AzVmInteractiveDesktopStatusLine -Status $interactiveDesktopStatus -Label 'docker-interactive-desktop-state'
+    $interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName ([string]$taskConfig.ManagerUser) -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
+    Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus -Label 'docker-interactive-desktop-state'
     if (-not [bool]$interactiveDesktopStatus.Ready) {
-        $blockMessage = New-AzVmInteractiveDesktopBlockMessage -ActivityDescription 'Docker Desktop launch' -ExpectedUserName ([string]$taskConfig.ManagerUser) -Status $interactiveDesktopStatus
+        $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Docker Desktop launch' -ExpectedUserName ([string]$taskConfig.ManagerUser) -Status $interactiveDesktopStatus
         throw ([string]$blockMessage.WarningMessage)
     }
 
     $workerTaskName = "{0}-{1}" -f ([string]$taskConfig.TaskName), ([string]$taskConfig.InteractiveLaunchTaskSuffix)
-    $paths = Get-AzVmInteractivePaths -TaskName $workerTaskName
+    $paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -492,14 +492,14 @@ if (-not (Test-DockerDesktopRunning)) {
 $deadline = [DateTime]::UtcNow.AddSeconds(45)
 while ([DateTime]::UtcNow -lt $deadline) {
     if (Test-DockerDesktopRunning) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Docker Desktop launched in the interactive desktop session.'
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Docker Desktop launched in the interactive desktop session.'
         exit 0
     }
 
     Start-Sleep -Seconds 2
 }
 
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Docker Desktop did not appear in the interactive desktop session.'
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Docker Desktop did not appear in the interactive desktop session.'
 exit 1
 '@
 
@@ -509,7 +509,7 @@ exit 1
     $workerScript = $workerScript.Replace('__DOCKER_DESKTOP_EXE__', [string]$DockerDesktopExe)
     $workerScript = $workerScript.Replace('__EXPECTED_USER__', ('{0}\{1}' -f $env:COMPUTERNAME, ([string]$taskConfig.ManagerUser)))
 
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser ([string]$taskConfig.ManagerUser) `
         -RunAsPassword ([string]$taskConfig.ManagerPassword) `
@@ -715,7 +715,7 @@ function Test-DockerDesktopInteractiveProcessRunning {
         try { $sessionId = [int]$process.SessionId } catch { $sessionId = 0 }
         $userName = ''
         try { $userName = [string]$process.UserName } catch { $userName = '' }
-        if ($sessionId -gt 0 -and (Test-AzVmUserNameMatch -ObservedUserName $userName -ExpectedUserName $ExpectedUserName)) {
+        if ($sessionId -gt 0 -and (Test-ClagnosUserNameMatch -ObservedUserName $userName -ExpectedUserName $ExpectedUserName)) {
             return $true
         }
     }
@@ -733,7 +733,7 @@ function Stop-NonInteractiveDockerDesktopProcesses {
         try { $sessionId = [int]$process.SessionId } catch { $sessionId = 0 }
         $userName = ''
         try { $userName = [string]$process.UserName } catch { $userName = '' }
-        if ($sessionId -gt 0 -and (Test-AzVmUserNameMatch -ObservedUserName $userName -ExpectedUserName $ExpectedUserName)) {
+        if ($sessionId -gt 0 -and (Test-ClagnosUserNameMatch -ObservedUserName $userName -ExpectedUserName $ExpectedUserName)) {
             continue
         }
 
@@ -824,20 +824,20 @@ function Remove-DockerDesktopDeferredStart {
         return $false
     }
 
-    $runOnceEntry = Get-ItemProperty -Path $runOncePath -Name 'AzVmStartDockerDesktop' -ErrorAction SilentlyContinue
+    $runOnceEntry = Get-ItemProperty -Path $runOncePath -Name 'ClagnosStartDockerDesktop' -ErrorAction SilentlyContinue
     $existingValue = ''
-    if ($null -ne $runOnceEntry -and $runOnceEntry.PSObject.Properties.Match('AzVmStartDockerDesktop').Count -gt 0) {
-        $existingValue = [string]$runOnceEntry.AzVmStartDockerDesktop
+    if ($null -ne $runOnceEntry -and $runOnceEntry.PSObject.Properties.Match('ClagnosStartDockerDesktop').Count -gt 0) {
+        $existingValue = [string]$runOnceEntry.ClagnosStartDockerDesktop
     }
     if ([string]::IsNullOrWhiteSpace([string]$existingValue)) {
         return $false
     }
 
-    Remove-ItemProperty -Path $runOncePath -Name 'AzVmStartDockerDesktop' -ErrorAction SilentlyContinue
-    $remainingEntry = Get-ItemProperty -Path $runOncePath -Name 'AzVmStartDockerDesktop' -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $runOncePath -Name 'ClagnosStartDockerDesktop' -ErrorAction SilentlyContinue
+    $remainingEntry = Get-ItemProperty -Path $runOncePath -Name 'ClagnosStartDockerDesktop' -ErrorAction SilentlyContinue
     $remainingValue = ''
-    if ($null -ne $remainingEntry -and $remainingEntry.PSObject.Properties.Match('AzVmStartDockerDesktop').Count -gt 0) {
-        $remainingValue = [string]$remainingEntry.AzVmStartDockerDesktop
+    if ($null -ne $remainingEntry -and $remainingEntry.PSObject.Properties.Match('ClagnosStartDockerDesktop').Count -gt 0) {
+        $remainingValue = [string]$remainingEntry.ClagnosStartDockerDesktop
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$remainingValue)) {
         throw 'Docker Desktop stale RunOnce entry cleanup failed.'

@@ -1,7 +1,7 @@
 # Set command entry.
 
-# Handles Invoke-AzVmSetCommand.
-function Invoke-AzVmSetCommand {
+# Handles Invoke-ClagnosSetCommand.
+function Invoke-ClagnosSetCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -9,23 +9,23 @@ function Invoke-AzVmSetCommand {
         [switch]$LinuxFlag
     )
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $target = Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'set'
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'set'
     $resourceGroup = [string]$target.ResourceGroup
     $vmName = [string]$target.VmName
 
-    $hasHibernation = Test-AzVmCliOptionPresent -Options $Options -Name 'hibernation'
-    $hasNested = Test-AzVmCliOptionPresent -Options $Options -Name 'nested-virtualization'
+    $hasHibernation = Test-ClagnosCliOptionPresent -Options $Options -Name 'hibernation'
+    $hasNested = Test-ClagnosCliOptionPresent -Options $Options -Name 'nested-virtualization'
     $hibernationTarget = ''
     $nestedTarget = ''
 
     if ($hasHibernation) {
-        $hibernationTarget = Resolve-AzVmToggleValue -Name 'hibernation' -RawValue ([string](Get-AzVmCliOptionText -Options $Options -Name 'hibernation'))
+        $hibernationTarget = Resolve-ClagnosToggleValue -Name 'hibernation' -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'hibernation'))
     }
     if ($hasNested) {
-        $nestedTarget = Resolve-AzVmToggleValue -Name 'nested-virtualization' -RawValue ([string](Get-AzVmCliOptionText -Options $Options -Name 'nested-virtualization'))
+        $nestedTarget = Resolve-ClagnosToggleValue -Name 'nested-virtualization' -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'nested-virtualization'))
     }
 
     if ($AutoMode -and -not $hasHibernation -and -not $hasNested) {
@@ -38,8 +38,8 @@ function Invoke-AzVmSetCommand {
 
     if (-not $hasHibernation -and -not $hasNested) {
         Write-Host "Set command interactive mode: select feature values." -ForegroundColor Cyan
-        $hibernationTarget = Read-AzVmToggleInteractive -PromptText "Set hibernation"
-        $nestedTarget = Read-AzVmToggleInteractive -PromptText "Set nested virtualization"
+        $hibernationTarget = Read-ClagnosToggleInteractive -PromptText "Set hibernation"
+        $nestedTarget = Read-ClagnosToggleInteractive -PromptText "Set nested virtualization"
         $hasHibernation = $true
         $hasNested = $true
     }
@@ -51,7 +51,7 @@ function Invoke-AzVmSetCommand {
                 -Summary "Set command cannot continue in auto mode." `
                 -Hint "Use --hibernation=on|off."
         }
-        $hibernationTarget = Read-AzVmToggleInteractive -PromptText "Set hibernation"
+        $hibernationTarget = Read-ClagnosToggleInteractive -PromptText "Set hibernation"
     }
     elseif ($hasNested -and [string]::IsNullOrWhiteSpace([string]$nestedTarget)) {
         if ($AutoMode) {
@@ -61,7 +61,7 @@ function Invoke-AzVmSetCommand {
                 -Summary "Set command cannot continue in auto mode." `
                 -Hint "Use --nested-virtualization=on|off."
         }
-        $nestedTarget = Read-AzVmToggleInteractive -PromptText "Set nested virtualization"
+        $nestedTarget = Read-ClagnosToggleInteractive -PromptText "Set nested virtualization"
     }
 
     if (-not $hasHibernation -and -not $hasNested) {
@@ -103,10 +103,10 @@ function Invoke-AzVmSetCommand {
             $nestedBool = if ([string]::Equals($nestedTarget, 'on', [System.StringComparison]::OrdinalIgnoreCase)) { 'true' } else { 'false' }
             if ($nestedBool -eq 'true') {
                 Write-Host 'Nested virtualization will be enabled.' -ForegroundColor DarkCyan
-                $lifecycleSnapshot = Get-AzVmVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
+                $lifecycleSnapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
                 if ([string]$lifecycleSnapshot.NormalizedState -ne 'started') {
                     Throw-FriendlyError `
-                        -Detail ("Nested virtualization validation requires the target VM '{0}' in resource group '{1}' to be running. Current state: {2}" -f $vmName, $resourceGroup, (Format-AzVmVmLifecycleSummaryText -Snapshot $lifecycleSnapshot)) `
+                        -Detail ("Nested virtualization validation requires the target VM '{0}' in resource group '{1}' to be running. Current state: {2}" -f $vmName, $resourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $lifecycleSnapshot)) `
                         -Code 62 `
                         -Summary "Nested virtualization validation requires a running VM." `
                         -Hint "Start the VM first, then rerun set --nested-virtualization=on."
@@ -122,7 +122,7 @@ function Invoke-AzVmSetCommand {
                     $vmOsType = az vm show -g $resourceGroup -n $vmName --query "storageProfile.osDisk.osType" -o tsv --only-show-errors 2>$null
                     if ([string]$vmOsType -match '(?i)linux') { 'linux' } else { 'windows' }
                 }
-                $nestedValidation = Get-AzVmNestedVirtualizationGuestValidation -ResourceGroup $resourceGroup -VmName $vmName -OsType $vmOsTypeNormalized
+                $nestedValidation = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup $resourceGroup -VmName $vmName -OsType $vmOsTypeNormalized
                 if (-not [bool]$nestedValidation.Enabled) {
                     $nestedEvidenceText = if (@($nestedValidation.Evidence).Count -gt 0) { (@($nestedValidation.Evidence) -join '; ') } else { [string]$nestedValidation.ErrorMessage }
                     Throw-FriendlyError `
@@ -147,14 +147,14 @@ function Invoke-AzVmSetCommand {
         if ($persistMap.Count -gt 0) {
             $persistMap['SELECTED_RESOURCE_GROUP'] = $resourceGroup
             $persistMap['SELECTED_VM_NAME'] = $vmName
-            $envChanges = @(Save-AzVmConfigToDotEnv -EnvFilePath $envFilePath -ConfigBefore $configBefore -PersistMap $persistMap)
+            $envChanges = @(Save-ClagnosConfigToDotEnv -EnvFilePath $envFilePath -ConfigBefore $configBefore -PersistMap $persistMap)
         }
     }
 
     if (@($envChanges).Count -gt 0) {
         Write-Host "Saved .env changes after set:" -ForegroundColor Green
         foreach ($change in @($envChanges)) {
-            Write-Host ("- {0} = {1}" -f [string]$change.Key, (ConvertTo-AzVmDisplayValue -Value $change.NewValue))
+            Write-Host ("- {0} = {1}" -f [string]$change.Key, (ConvertTo-ClagnosDisplayValue -Value $change.NewValue))
         }
     }
 

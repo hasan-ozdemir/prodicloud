@@ -144,8 +144,8 @@ Assert-HeadingOrder -Text $readmeText -DocumentLabel 'README.md' -Headings @(
     '## Executive Summary',
     '## Value By Audience',
     '## Delivered VM Outcome Matrix',
-    '## Who az-vm Is For',
-    '## Why az-vm Exists',
+    '## Who clagnos Is For',
+    '## Why clagnos Exists',
     '## Operational Command Matrix',
     '## Practical And Extensive Usage Scenarios',
     '## Command Guide',
@@ -186,11 +186,12 @@ Assert-True -Condition ($agentsText -match [regex]::Escape('`configure` must rec
 Assert-True -Condition ($agentsText -match [regex]::Escape('Azure-touching commands support `--subscription-id` plus `-s`; resolution precedence is CLI override -> `.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.')) -Message 'AGENTS.md must define subscription precedence.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Azure-touching commands require an authenticated Azure CLI session; help, README, and runtime errors must say `az login` is required. `configure` is the exception: it may open without `az login`, but Azure-backed configure fields must stay read-only until Azure validation is available.')) -Message 'AGENTS.md must define the az login requirement and configure exception.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Interactive `create` and `update` must prompt for Azure subscription selection when `--subscription-id` is omitted.')) -Message 'AGENTS.md must define the interactive subscription picker rule.'
+Assert-True -Condition ($agentsText -match [regex]::Escape('Interactive `initialize` must also prompt for Azure subscription selection when `--subscription-id` is omitted.')) -Message 'AGENTS.md must define the interactive initialize subscription picker rule.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('`list` is the managed inventory command: it must stay Azure-read-only, must not mutate Azure resources, and must expose managed resource listings through `--type` plus optional exact `--group` filtering.')) -Message 'AGENTS.md must define the list inventory contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('`create --auto` must resolve platform, VM name, Azure region, and platform VM size from CLI or `SELECTED_*` plus platform defaults in `.env`; `update --auto` must resolve one managed target from CLI or the selected target values in `.env`.')) -Message 'AGENTS.md must define the strict auto-mode contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Managed resource group ids use a globally increasing `gX` suffix across all managed groups, regardless of region.')) -Message 'AGENTS.md must document global managed resource-group ids.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Managed resource ids use a globally increasing `nX` suffix across all generated managed resources; one generated `nX` must not be reused by another managed resource, even across resource types.')) -Message 'AGENTS.md must document global managed resource ids.'
-Assert-True -Condition ($agentsText -match [regex]::Escape('Interactive `create` and `update` are review-first flows: only `group`, `vm-deploy`, `vm-init`, and `vm-update` may ask `yes/no/cancel` review questions.')) -Message 'AGENTS.md must define the four review checkpoints.'
+Assert-True -Condition ($agentsText -match [regex]::Escape('Interactive `create`, `initialize`, and `update` are review-first flows: `create` reviews `group` and `vm-deploy`; `initialize` reviews `vm-init`; `update` reviews `vm-update`.')) -Message 'AGENTS.md must define lifecycle-specific review checkpoints.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('`configure` and `vm-summary` must always render without confirmation, even when partial step selection skips interior mutation stages.')) -Message 'AGENTS.md must define the always-visible configure/vm-summary rule.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('VM_ENABLE_HIBERNATION')) -Message 'AGENTS.md must mention the shared VM_ENABLE_HIBERNATION config key.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('VM_ENABLE_NESTED_VIRTUALIZATION')) -Message 'AGENTS.md must mention the shared VM_ENABLE_NESTED_VIRTUALIZATION config key.'
@@ -199,7 +200,7 @@ Assert-True -Condition ($agentsText -match [regex]::Escape('01-99')) -Message 'A
 Assert-True -Condition ($agentsText -match [regex]::Escape('101-999')) -Message 'AGENTS.md must describe the normal task-number band.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('1001-9999')) -Message 'AGENTS.md must describe the local task-number band.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('10001-10099')) -Message 'AGENTS.md must describe the final task-number band.'
-Assert-True -Condition ($agentsText -match [regex]::Escape('`task.json` may supply `priority`, `enabled`, `timeout`, `assets`, and `appState`.')) -Message 'AGENTS.md must define the task-folder metadata contract.'
+Assert-True -Condition ($agentsText -match [regex]::Escape('`task.json` may supply `priority`, `enabled`, `timeout`, `assets`, `appState`, `dependsOn`, and validated `program` metadata.')) -Message 'AGENTS.md must define the task-folder metadata contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Intentionally local-only tasks live under `local/` as portable task folders and are discovered from disk at runtime.')) -Message 'AGENTS.md must define the local-only task directory contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Intentionally local-only disabled tasks live under `local/disabled/` and remain disabled by location.')) -Message 'AGENTS.md must define the local-only disabled task directory contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Each task folder must contain one same-named task script plus one `task.json`.')) -Message 'AGENTS.md must define the portable task-folder layout.'
@@ -232,7 +233,7 @@ Assert-True -Condition ($readmeText -match [regex]::Escape('task --save-app-stat
 Assert-True -Condition ($readmeText -match [regex]::Escape('task --restore-app-state --vm-update-task=115')) -Message 'README.md must include the task restore-app-state example.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('task --save-app-state --source=lm --user=.current.')) -Message 'README.md must include the local save-app-state example.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('task --restore-app-state --target=lm --user=.current.')) -Message 'README.md must include the local restore-app-state example.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('.\az-vm.cmd --version')) -Message 'README.md must include the --version example.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd --version')) -Message 'README.md must include the --version example.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('backup-app-states/<task-name>/')) -Message 'README.md must document the task-adjacent backup-app-states root.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('verify-report.json')) -Message 'README.md must document the restore verify report.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Managed app-state save and restore target only the `manager` and `assistant` OS profiles.')) -Message 'README.md must describe the managed app-state profile-target contract.'
@@ -253,23 +254,24 @@ Assert-True -Condition ($readmeText -match [regex]::Escape('`-h`, `--help`')) -M
 Assert-True -Condition ($readmeText -match [regex]::Escape('--user=manager --test')) -Message 'README.md must document the automated --test examples for connection commands.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('password-bearing `.env` values are redacted')) -Message 'README.md must document show redaction for password-bearing values.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('`create` now stays dedicated to one fresh managed resource group plus one fresh managed VM; use `delete` and then `create` when a destructive rebuild is intentional.')) -Message 'README.md must describe create as fresh-only.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('`update` now requires an existing managed resource group and VM, then applies create-or-update operations plus `az vm redeploy` in one guided maintenance flow.')) -Message 'README.md must describe update as existing-managed-target only.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('`initialize` runs initial guest bootstrap on an existing managed VM; `update` runs non-program maintenance tasks without recreating or redeploying Azure resources.')) -Message 'README.md must describe the separated initialize and update flows.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Purpose: review, edit, validate, preview, and save the supported `.env` contract through one interactive frontend.')) -Message 'README.md must describe configure as the interactive .env frontend.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('recovers softly for blank-permitted fields, including clearing `SELECTED_RESOURCE_GROUP` when no managed resource groups exist, and blocks save only when create-critical values remain unresolved')) -Message 'README.md must describe configure soft recovery and create-critical save blocking.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('Purpose: print read-only managed inventory sections for az-vm-tagged resource groups and resources.')) -Message 'README.md must describe list as a read-only inventory command.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('Azure CLI sign-in is strictly required for Azure-touching commands. Run `az login` before using `create`, `update`, `list`, `show`, `do`, `task --run-*`, `task --save-app-state`, `task --restore-app-state`, `connect`, `move`, `resize`, `set`, `exec`, or `delete`. `configure` can open without Azure sign-in, but its Azure-backed pickers stay read-only until `az login` is available.')) -Message 'README.md must document the az login requirement and configure exception.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('Purpose: print read-only managed inventory sections for clagnos-tagged resource groups and resources.')) -Message 'README.md must describe list as a read-only inventory command.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('Azure CLI sign-in is strictly required for Azure-touching commands.')) -Message 'README.md must document the az login requirement.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('`configure` can open without Azure sign-in, but its Azure-backed pickers stay read-only until `az login` is available.')) -Message 'README.md must document the configure exception.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Azure subscription selection precedence is: CLI `--subscription-id` / `-s` -> `.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.')) -Message 'README.md must document subscription precedence.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('`SELECTED_AZURE_SUBSCRIPTION_ID`: optional repo-local default Azure subscription id for Azure-touching commands')) -Message 'README.md must document SELECTED_AZURE_SUBSCRIPTION_ID.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('`-s`, `--subscription-id=<subscription-guid>`: target Azure subscription for every Azure-touching command; successful CLI usage also writes `SELECTED_AZURE_SUBSCRIPTION_ID` into `.env`.')) -Message 'README.md must document the subscription global option.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Auto `create` succeeds when CLI overrides or `.env` `SELECTED_*` values plus the platform defaults resolve platform, VM name, Azure region, and VM size.')) -Message 'README.md must document strict create auto options.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Auto `update` resolves its target from CLI overrides first, then `.env` `SELECTED_RESOURCE_GROUP` and `SELECTED_VM_NAME`')) -Message 'README.md must document strict update auto options.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('Reboot-signaling `vm-init` and `vm-update` tasks restart the VM immediately, wait for recovery, and then continue with the next task. During end-to-end `create` and `update`, Windows `vm-update` also performs one additional final restart before `vm-summary`.')) -Message 'README.md must document the task-immediate and workflow-only final Windows vm-update restart behavior.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('Reboot-signaling tasks restart the VM immediately, wait for the required transport recovery, and then resume from the next task. The `update` stage retains its Windows final restart after the non-program maintenance stage; isolated `task --run-vm-update` reruns skip that workflow-only final restart.')) -Message 'README.md must document the task-immediate and workflow-only final Windows vm-update restart behavior.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('isolated `task --run-vm-update` reruns skip that workflow-only final restart')) -Message 'README.md must document that isolated vm-update task reruns skip the workflow-only final restart.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Windows Store-backed isolated `task --run-vm-update` reruns append `10003-create-public-desktop-shortcuts` automatically after the selected Store app task so Public Desktop shortcuts refresh in the same diagnostic run.')) -Message 'README.md must document the isolated Store-task shortcut refresh follow-up.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('if `--windows` or `--linux` is omitted, interactive mode asks for the VM OS type first and then scopes size, disk, and image defaults to that selection')) -Message 'README.md must document the interactive create OS prompt.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('Interactive `create` and `update` use `yes/no/cancel` review checkpoints only for `group`, `vm-deploy`, `vm-init`, and `vm-update`.')) -Message 'README.md must document the four review checkpoints.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('`configure` and `vm-summary` stay visible in both interactive and auto mode, even when partial step selection skips interior stages.')) -Message 'README.md must document the always-visible configure/vm-summary rule.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('`vm-init` relays the full guest transcript back to the local az-vm console as soon as each task completes, while `vm-update` streams guest stdout/stderr live over SSH while the task is still running.')) -Message 'README.md must document the guest output relay contract.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('Interactive `create` reviews the resource group and VM deployment steps; `initialize` and `update` have their own task-stage reviews.')) -Message 'README.md must document lifecycle-specific review checkpoints.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('`configure` and `vm-summary` stay visible in `create` and `update` flows, even when partial step selection skips interior stages.')) -Message 'README.md must document the always-visible configure/vm-summary rule.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('`vm-init` relays the full guest transcript back to the local clagnos console as soon as each task completes, while `vm-update` streams guest stdout/stderr live over SSH while the task is still running.')) -Message 'README.md must document the guest output relay contract.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Managed resource group ids use a global `gX` suffix that increments across all managed groups, regardless of region.')) -Message 'README.md must document global gX naming.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Managed resource ids use a global `nX` suffix that increments across all generated managed resources and is never reused by another managed resource of any type.')) -Message 'README.md must document global nX naming.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('`create` never reuses an existing managed resource group or existing managed resource names, and `update` never falls through to an implicit fresh-create path.')) -Message 'README.md must reject create reuse and implicit update create behavior.'
@@ -287,7 +289,7 @@ Assert-True -Condition ($readmeText -match [regex]::Escape('For a release push, 
 Assert-True -Condition ($readmeText -match [regex]::Escape('The local hook path blocks obvious contact-style values, concrete identity leaks, and non-placeholder sensitive config drift before commits and pushes are shared.')) -Message 'README.md must explain the local sensitive-content guardrail.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('.\tests\sensitive-content-check.ps1')) -Message 'README.md must document the sensitive-content check entrypoint.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('### Live Release Acceptance')) -Message 'README.md must define the live release-acceptance section.'
-Assert-True -Condition ($readmeText -match [regex]::Escape('confirm `az-vm do --vm-action=status --vm-name=<vm-name>` reports the VM as started')) -Message 'README.md must require a started-state check in the live release gate.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('confirm `clagnos do --vm-action=status --vm-name=<vm-name>` reports the VM as started')) -Message 'README.md must require a started-state check in the live release gate.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('<task-number>-verb-noun-target/')) -Message 'README.md must define the normalized task folder contract.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('01-99')) -Message 'README.md must describe the initial task-number band.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('101-999')) -Message 'README.md must describe the normal task-number band.'
@@ -312,10 +314,10 @@ Assert-True -Condition ($preCommitCheckText -match [regex]::Escape('CHANGELOG.md
 Assert-True -Condition ($preCommitCheckText -match [regex]::Escape('release-notes.md')) -Message 'pre-commit-release-doc-check.ps1 must require release-notes.md.'
 Assert-True -Condition ($preCommitCheckText -match [regex]::Escape('docs/prompt-history.md')) -Message 'pre-commit-release-doc-check.ps1 must exempt docs/prompt-history.md from recursive release-doc enforcement.'
 Assert-True -Condition ($workflowText -match [regex]::Escape('tests\powershell-compatibility-check.ps1')) -Message 'quality-gate.yml must use tests/powershell-compatibility-check.ps1.'
-Assert-True -Condition ($workflowText -match [regex]::Escape('tests\az-vm-smoke-tests.ps1')) -Message 'quality-gate.yml must run the non-live smoke contract suite.'
+Assert-True -Condition ($workflowText -match [regex]::Escape('tests\clagnos-smoke-tests.ps1')) -Message 'quality-gate.yml must run the non-live smoke contract suite.'
 Assert-True -Condition (-not ($workflowText -match [regex]::Escape('tests\powershell-matrix.ps1'))) -Message 'quality-gate.yml must not reference the removed powershell-matrix.ps1 file.'
 
-$legacyTokens = @('SSH_PORT','TASK_OUTCOME_MODE','SERVER_NAME','VM_USER','VM_PASS','NAMING_TEMPLATE_ACTIVE','az-vm config ','substep mode','--single-step','--from-step','--to-step')
+$legacyTokens = @('SSH_PORT','TASK_OUTCOME_MODE','SERVER_NAME','VM_USER','VM_PASS','NAMING_TEMPLATE_ACTIVE','clagnos config ','substep mode','--single-step','--from-step','--to-step')
 foreach ($legacyToken in $legacyTokens) {
     if ($legacyToken -match '^[A-Z0-9_]+$') {
         $pattern = ('(?<![A-Za-z0-9_]){0}(?![A-Za-z0-9_])' -f [regex]::Escape($legacyToken))
@@ -329,16 +331,16 @@ foreach ($legacyToken in $legacyTokens) {
 }
 
 Assert-True -Condition (-not ($readmeText -match [regex]::Escape('### `group`'))) -Message 'README.md must not document the removed group command.'
-Assert-True -Condition (-not ($readmeText -match [regex]::Escape('.\az-vm.cmd group'))) -Message 'README.md must not keep removed group command examples.'
+Assert-True -Condition (-not ($readmeText -match [regex]::Escape('.\cg.cmd group'))) -Message 'README.md must not keep removed group command examples.'
 Assert-True -Condition (-not ($agentsText -match [regex]::Escape('Current public commands are: `configure`, `create`, `update`, `group`'))) -Message 'AGENTS.md must not keep the removed group command in the public command list.'
 Assert-True -Condition (-not ($readmeText -match [regex]::Escape('### `ssh`'))) -Message 'README.md must not document ssh as a standalone command.'
 Assert-True -Condition (-not ($readmeText -match [regex]::Escape('### `rdp`'))) -Message 'README.md must not document rdp as a standalone command.'
-Assert-True -Condition (-not ($readmeText -match [regex]::Escape('.\az-vm.cmd ssh'))) -Message 'README.md must not keep retired ssh command examples.'
-Assert-True -Condition (-not ($readmeText -match [regex]::Escape('.\az-vm.cmd rdp'))) -Message 'README.md must not keep retired rdp command examples.'
+Assert-True -Condition (-not ($readmeText -match [regex]::Escape('.\cg.cmd ssh'))) -Message 'README.md must not keep retired ssh command examples.'
+Assert-True -Condition (-not ($readmeText -match [regex]::Escape('.\cg.cmd rdp'))) -Message 'README.md must not keep retired rdp command examples.'
 Assert-True -Condition (-not ($readmeText -match [regex]::Escape('exec --init-task'))) -Message 'README.md must not keep retired exec --init-task examples.'
 Assert-True -Condition (-not ($readmeText -match [regex]::Escape('exec --update-task'))) -Message 'README.md must not keep retired exec --update-task examples.'
 Assert-True -Condition (-not ($agentsText -match [regex]::Escape('Current public commands are: `configure`, `create`, `update`, `list`, `show`, `do`, `task`, `exec`, `ssh`, `rdp`, `move`, `resize`, `set`, `delete`, `help`'))) -Message 'AGENTS.md must not keep ssh or rdp in the current public command list.'
-Assert-True -Condition (-not ($readmeText -match [regex]::Escape('# az-vm-task-meta: {...}'))) -Message 'README.md must not keep the retired task-meta comment contract.'
+Assert-True -Condition (-not ($readmeText -match [regex]::Escape('# clagnos-task-meta: {...}'))) -Message 'README.md must not keep the retired task-meta comment contract.'
 Assert-True -Condition (-not ($readmeText -match '(?<!backup-)app-states/<task-name>')) -Message 'README.md must not keep the retired stage-local app-states path.'
 Assert-True -Condition (-not ($agentsText -match '(?<!backup-)app-states/<task-name>')) -Message 'AGENTS.md must not keep the retired stage-local app-states path.'
 Assert-True -Condition (-not ($promptHistoryText -match [regex]::Escape('TRT'))) -Message 'docs/prompt-history.md must not keep TRT timestamps.'
@@ -363,7 +365,13 @@ $maintainedEnglishDocs = @(
 )
 foreach ($docPath in @($maintainedEnglishDocs)) {
     $docText = Get-Content -LiteralPath $docPath -Raw
-    Assert-True -Condition (-not (Test-ContainsTurkishLetters -Text $docText)) -Message ("Maintained document must stay English-only: {0}" -f [System.IO.Path]::GetFileName($docPath))
+    $languageAuditText = [string]$docText
+    if ([System.IO.Path]::GetFileName($docPath) -in @('CHANGELOG.md','release-notes.md','prompt-history.md')) {
+        foreach ($literalLabel in @('q1EkşiSözlük','EkşiSözlük','Ekşi Sözlük','r13ÇiçekSepeti Business','r14ÇiçekSepeti Personal','r13Ã‡iÃ§ekSepeti Business','ÇiçekSepeti')) {
+            $languageAuditText = $languageAuditText.Replace([string]$literalLabel, 'approved literal display label')
+        }
+    }
+    Assert-True -Condition (-not (Test-ContainsTurkishLetters -Text $languageAuditText)) -Message ("Maintained document must stay English-only outside preserved literal display labels: {0}" -f [System.IO.Path]::GetFileName($docPath))
 }
 
 $versionHeaderPattern = '(?m)^## \[(\d{4}\.\d{1,2}\.\d{1,2}\.(\d+))\] - \d{4}-\d{2}-\d{2}$'

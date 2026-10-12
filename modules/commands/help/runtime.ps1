@@ -1,14 +1,14 @@
 # Help command runtime helper.
 
-function Invoke-AzVmHelpCommand {
+function Invoke-ClagnosHelpCommand {
     param(
         [string]$HelpTopic = ''
     )
 
     if ([string]::Equals([string]$HelpTopic, '__overview__', [System.StringComparison]::OrdinalIgnoreCase)) {
-        Show-AzVmCommandHelp -Overview
+        Show-ClagnosCommandHelp -Overview
     }
     else {
-        Show-AzVmCommandHelp -Topic $HelpTopic
+        Show-ClagnosCommandHelp -Topic $HelpTopic
     }
 }

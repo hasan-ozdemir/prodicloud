@@ -60,5 +60,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "windscribe"
+    },
+    "displayName": "Windscribe",
+    "uninstall": {
+      "kind": "winget",
+      "value": "windscribe"
+    },
+    "id": "windscribe"
   }
 }

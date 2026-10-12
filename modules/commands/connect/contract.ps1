@@ -1,15 +1,15 @@
 # Contract for the 'connect' command.
 
-function Get-AzVmConnectOptionSpecifications {
+function Get-ClagnosConnectOptionSpecifications {
     return @(
-        (Get-AzVmConnectPerfOptionSpecification),
-        (Get-AzVmConnectHelpOptionSpecification),
-        (Get-AzVmConnectSubscriptionIdOptionSpecification),
-        (Get-AzVmConnectGroupOptionSpecification),
-        (Get-AzVmConnectVmNameOptionSpecification),
-        (Get-AzVmConnectUserOptionSpecification),
-        (Get-AzVmConnectTestOptionSpecification),
-        (Get-AzVmConnectSshOptionSpecification),
-        (Get-AzVmConnectRdpOptionSpecification)
+        (Get-ClagnosConnectPerfOptionSpecification),
+        (Get-ClagnosConnectHelpOptionSpecification),
+        (Get-ClagnosConnectSubscriptionIdOptionSpecification),
+        (Get-ClagnosConnectGroupOptionSpecification),
+        (Get-ClagnosConnectVmNameOptionSpecification),
+        (Get-ClagnosConnectUserOptionSpecification),
+        (Get-ClagnosConnectTestOptionSpecification),
+        (Get-ClagnosConnectSshOptionSpecification),
+        (Get-ClagnosConnectRdpOptionSpecification)
     )
 }

@@ -40,5 +40,18 @@
   },
   "dependsOn": [
     "111-install-node-tool"
-  ]
+  ],
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "npm",
+      "value": "@openai/codex"
+    },
+    "displayName": "OpenAI Codex CLI",
+    "uninstall": {
+      "kind": "npm",
+      "value": "@openai/codex"
+    },
+    "id": "openai-codex-cli"
+  }
 }

@@ -577,7 +577,7 @@ function Normalize-AppStateZipPayload {
 
     $taskAppStateSpec = Get-AppStateNormalizationTaskAppStateSpec -ZipPath $ZipPath
     $taskUsesCanonicalManagerPayload = Test-AppStateNormalizationTaskUsesCanonicalManagerPayload -AppStateSpec $taskAppStateSpec
-    $scratchRoot = Join-Path ([System.Environment]::GetEnvironmentVariable('SystemDrive')) ('azvmn-' + [guid]::NewGuid().ToString('N'))
+    $scratchRoot = Join-Path ([System.Environment]::GetEnvironmentVariable('SystemDrive')) ('clagnosn-' + [guid]::NewGuid().ToString('N'))
     $expectedTaskName = [System.IO.Path]::GetFileName((Split-Path -Path (Split-Path -Path $ZipPath -Parent) -Parent))
     $result = [ordered]@{
         ZipPath = [string]$ZipPath

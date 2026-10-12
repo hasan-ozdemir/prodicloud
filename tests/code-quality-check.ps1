@@ -171,7 +171,7 @@ Invoke-AuditStep -Name "Python cache artifact hygiene (tools/pyssh)" -Action {
 }
 
 Invoke-AuditStep -Name "CLI help smoke" -Action {
-    $scriptPath = Join-Path $RepoRoot "az-vm.ps1"
+    $scriptPath = Join-Path $RepoRoot "clagnos.ps1"
     $ps = Get-Command powershell.exe -ErrorAction SilentlyContinue
     if (-not $ps) {
         $ps = Get-Command pwsh -ErrorAction SilentlyContinue

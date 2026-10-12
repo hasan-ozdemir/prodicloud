@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.399 - 2026-10-12
+
+### Summary
+Clagnos now opens through `cg.cmd` into an interactive, nested operator menu while keeping the direct PowerShell command surface available. The repo-wide rebrand updates application paths and public wording, and the menu exposes the managed virtual-computer lifecycle and its Azure and guest operations.
+
+### Highlights
+- Separated fresh infrastructure creation (`create`), existing VM bootstrap (`initialize`), and ongoing non-program maintenance (`update`).
+- Added task-catalog-backed program inventory, status, install/update, and uninstall flows.
+- Added component inventory and CRUD for managed groups, VMs, disks, networks, interfaces, IPs, security groups, and rules, with dependency-aware deletion plans.
+- Kept old managed resource groups visible until an operator accepts the management-tag migration.
+- Added smoke coverage for the command/menu surface and clarified lifecycle contracts throughout operator documentation.
+
+### Validation
+- The Clagnos smoke suite passed all 167 checks under Windows PowerShell 5.1 and PowerShell 7+.
+- Documentation, code quality, Bash syntax, and sensitive-content checks passed. No live Azure operations were run.
+
 ## Release 2026.3.23.397 - 2026-03-23
 
 ### Summary
@@ -18,9 +34,9 @@ This documentation update closes the production publish loop by recording the fi
 This release fixes the next blocker found during the restarted live `update` acceptance run after the Public Desktop cleanup fix. The rerun progressed through `136-configure-language-settings`, requested a reboot as expected, and then failed because the shared `az vm restart` wrapper still used the default 300-second Azure CLI timeout. Task-triggered restarts now run under an explicit longer Azure CLI timeout, while the existing running-state, provisioning, and SSH recovery checks stay intact.
 
 ### Highlights
-- Wrapped the shared task restart helper in `Invoke-AzVmWithAzCliTimeoutSeconds -TimeoutSeconds 900` so slower Azure restart operations triggered by heavyweight Windows tasks no longer fail at the default 300-second CLI boundary.
+- Wrapped the shared task restart helper in `Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds 900` so slower Azure restart operations triggered by heavyweight Windows tasks no longer fail at the default 300-second CLI boundary.
 - Kept the downstream restart recovery contract unchanged: the helper still waits for `VM running`, repairs provisioning state when needed, and verifies SSH reachability when the caller requires SSH before continuing.
-- Revalidated the change locally in `tests\az-vm-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed after the restart-timeout hardening.
+- Revalidated the change locally in `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed after the restart-timeout hardening.
 
 ## Release 2026.3.22.394 - 2026-03-22
 
@@ -30,7 +46,7 @@ This release fixes the next zero-warning blocker found during the live acceptanc
 ### Highlights
 - Added a bounded retry path for locked Public Desktop `.lnk` files inside `10003-create-public-desktop-shortcuts` instead of failing on the first transient “used by another process” collision.
 - Added a semantic retain path that keeps an already-correct managed shortcut in place when it remains locked, avoiding redundant replacement work and warning-only transcript noise during steady-state updates.
-- Revalidated the change locally in `tests\az-vm-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed after the Public Desktop cleanup hardening.
+- Revalidated the change locally in `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed after the Public Desktop cleanup hardening.
 
 ## Release 2026.3.22.393 - 2026-03-22
 
@@ -40,7 +56,7 @@ This release fixes the next zero-warning blocker found in the restarted live Win
 ### Highlights
 - Changed `124-install-openai-codex-tool`, `125-install-github-copilot-tool`, and `126-install-google-gemini-tool` so each task runs `npm install -g` through a local merged-output capture guarded by `ErrorActionPreference='Continue'`.
 - Filtered only the known benign `npm notice` and `npm warn deprecated` lines before replaying task output, preventing one-shot SSH task execution from inflating the live transcript with warning-only npm chatter.
-- Revalidated the change locally in `tests\az-vm-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed after the npm-task hardening.
+- Revalidated the change locally in `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed after the npm-task hardening.
 
 ## Release 2026.3.22.392 - 2026-03-22
 
@@ -60,12 +76,12 @@ This release fixes the next zero-warning blocker found during the restarted Wind
 ### Highlights
 - Changed `121-install-wsl-feature` so its native WSL bootstrap command runs with a temporary local `ErrorActionPreference='Continue'` guard, preventing benign first-run stderr from aborting the task before its exit code and output filters are evaluated.
 - Extended the shared SSH task-output warning filter to discard the exact split WSL bootstrap lines seen in the live transcript, including the relayed `wsl.exe : ...`, call-site, and `NativeCommandError` metadata fragments.
-- Revalidated the fix locally in `tests\az-vm-smoke-tests.ps1` and live in isolation on the active managed Windows VM, where `task --run-vm-update 121 --windows --perf` completed with `warning=0`, `signal-warning=0`, and `error=0`.
+- Revalidated the fix locally in `tests\clagnos-smoke-tests.ps1` and live in isolation on the active managed Windows VM, where `task --run-vm-update 121 --windows --perf` completed with `warning=0`, `signal-warning=0`, and `error=0`.
 
 ## Release 2026.3.22.390 - 2026-03-22
 
 ### Summary
-This release fixes the next live blocker discovered after the zero-warning cleanup work. During a fresh Windows create run, `vm-update` reached `114-install-teams-application` and then died while copying `az-vm-store-install-state.psm1` over pyssh because Paramiko could not read the SSH protocol banner. The VM was still healthy, but the asset-copy path lived outside the task retry loop, so one transient SSH drop aborted the whole publish flow. The SSH runner now retries task asset preparation through the same bounded task recovery path used for transport failures.
+This release fixes the next live blocker discovered after the zero-warning cleanup work. During a fresh Windows create run, `vm-update` reached `114-install-teams-application` and then died while copying `clagnos-store-install-state.psm1` over pyssh because Paramiko could not read the SSH protocol banner. The VM was still healthy, but the asset-copy path lived outside the task retry loop, so one transient SSH drop aborted the whole publish flow. The SSH runner now retries task asset preparation through the same bounded task recovery path used for transport failures.
 
 ### Highlights
 - Moved Windows and Linux task asset uploads inside the bounded task retry loop so transient pre-task copy failures no longer bypass task retry policy.
@@ -81,7 +97,7 @@ This release hardens the zero-warning live publish path after the `10005-copy-us
 - Filtered known benign WSL bootstrap lines directly inside `121-install-wsl-feature` after merging native stdout/stderr so the task no longer replays the `wsl.exe --install` guidance as transcript warnings.
 - Added stderr-prefix normalization plus benign WSL/npm warning patterns to the SSH task-output protocol filter so remote task relays stay warning-clean.
 - Changed the npm global install commands in `124`, `125`, and `126` to use `--loglevel error`, removing `npm notice` and `npm warn deprecated` chatter from live `vm-update` runs.
-- Revalidated the changed paths locally in `tests\az-vm-smoke-tests.ps1` and by isolated live reruns of `121`, `124`, `125`, `126`, and `10005` on the active managed VM; each isolated rerun finished with zero warnings and zero errors.
+- Revalidated the changed paths locally in `tests\clagnos-smoke-tests.ps1` and by isolated live reruns of `121`, `124`, `125`, `126`, and `10005` on the active managed VM; each isolated rerun finished with zero warnings and zero errors.
 
 ## Release 2026.3.22.388 - 2026-03-22
 
@@ -130,7 +146,7 @@ This release hardens the second Windows run-command follow-up before the live pr
 
 ### Highlights
 - Changed the Windows Azure Run Command wrapper to write the decoded guest task body to a temporary `.payload.ps1` file and invoke the nested worker with `-TaskScriptPath`, eliminating the earlier quote-fragile inline Base64 assignment path.
-- Changed the nested Windows guest worker to execute the payload file content directly and relay merged `*>&1` task output back into the Azure Run Command transcript before `AZ_VM_NESTED_RESULT:success|error` is emitted.
+- Changed the nested Windows guest worker to execute the payload file content directly and relay merged `*>&1` task output back into the Azure Run Command transcript before `CLAGNOS_NESTED_RESULT:success|error` is emitted.
 - Extended the smoke contract to generate the wrapper script at test time and assert the new payload handoff fragments while explicitly proving the old uninterpolated Base64 assignment fragment is gone.
 
 ## Release 2026.3.22.383 - 2026-03-22
@@ -139,7 +155,7 @@ This release hardens the second Windows run-command follow-up before the live pr
 This release closes the follow-up false negative that still remained after the first Windows run-command timeout hardening. Successful Windows guest tasks no longer fall through as `task-result` warnings just because the nested hidden `powershell.exe` returned an ambiguous exit code; the nested worker now emits an explicit success/error marker and the outer Azure Run Command wrapper classifies task outcome from that structured marker.
 
 ### Highlights
-- Added explicit `AZ_VM_NESTED_RESULT:success|error` markers to the nested Windows guest task worker used by Azure Run Command.
+- Added explicit `CLAGNOS_NESTED_RESULT:success|error` markers to the nested Windows guest task worker used by Azure Run Command.
 - Changed the outer Windows run-command wrapper to trust the nested result marker first, keep the task timeout enforcement, and only treat missing markers as a failure condition.
 - Extended smoke coverage for the new nested result markers and the missing-marker failure path.
 
@@ -159,7 +175,7 @@ This release hardens the Windows live publish path after the March 22 fresh-crea
 This release closes the create-path regression that the March 22 live publish exposed: when `VM_ENABLE_HIBERNATION=true` targeted a VM size that Azure already reported as unsupported, the old flow still created the VM and only failed afterwards during post-deploy feature enablement. The Step 1 precheck now validates known hibernation and nested-virtualization compatibility before Azure mutation, so create/update stops cleanly with a config error instead of leaving behind a partially published managed VM.
 
 ### Highlights
-- Added `Assert-AzVmFeaturePreconditions` to the shared feature-support runtime and wired it into `Invoke-AzVmPrecheckStep`, so Step 1 now validates `VM_ENABLE_HIBERNATION` and `VM_ENABLE_NESTED_VIRTUALIZATION` against the selected region, VM size, and security type before resource-group, network, or VM deployment work begins.
+- Added `Assert-ClagnosFeaturePreconditions` to the shared feature-support runtime and wired it into `Invoke-ClagnosPrecheckStep`, so Step 1 now validates `VM_ENABLE_HIBERNATION` and `VM_ENABLE_NESTED_VIRTUALIZATION` against the selected region, VM size, and security type before resource-group, network, or VM deployment work begins.
 - Hardened the failure mode for known unsupported feature combinations: hibernation now fails fast when Azure does not advertise `HibernationSupported=true`, and nested virtualization now fails fast when the requested VM size is known unsupported or when the VM is configured with `VM_SECURITY_TYPE=TrustedLaunch`.
 - Extended the maintained smoke suite with direct fail-fast coverage for unsupported hibernation, Trusted Launch plus nested virtualization, and the new precheck call order.
 
@@ -220,7 +236,7 @@ This release repairs the fresh Windows live path that had just started failing a
 - Kept `pscp.exe` with trusted host-key discovery as the primary Windows asset-copy transport.
 - Added a bounded fallback from Windows SCP to pyssh copy/fetch when local host-key fingerprint discovery cannot be resolved for a Windows path.
 - Fixed the fallback cleanup path so pyssh-only transfers no longer try to remove an empty SCP password-file path.
-- Revalidated `tests\az-vm-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and a live isolated `task --run-vm-update 01` run; all passed, and the live task completed successfully through the new fallback path.
+- Revalidated `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and a live isolated `task --run-vm-update 01` run; all passed, and the live task completed successfully through the new fallback path.
 
 ## Release 2026.3.19.373 - 2026-03-19
 
@@ -231,7 +247,7 @@ This release repairs the failing `quality-gate` run on `main` without changing t
 - Fixed the startup-profile decode path used by `10002-configure-startup-settings` and the Windows summary readback so approved startup-profile arrays enumerate correctly in Windows PowerShell 5.1.
 - Fixed the startup-profile smoke assertions so the maintained non-live contract now matches the shared PowerShell 5.1-safe JSON-array handling.
 - Sanitized the tracked release/changelog/history wording so the sensitive-content audit passes again while preserving the operator-visible validation record.
-- Revalidated `tests\sensitive-content-check.ps1`, `tests\az-vm-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\code-quality-check.ps1` locally; all now pass cleanly.
+- Revalidated `tests\sensitive-content-check.ps1`, `tests\clagnos-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\code-quality-check.ps1` locally; all now pass cleanly.
 
 ## Release 2026.3.19.372 - 2026-03-19
 
@@ -252,10 +268,10 @@ This release captures the latest selective Windows maintenance commits that were
 
 ### Highlights
 - Raised the approved Windows init and update task timeout budgets and kept the tracked manifest contract in sync with the live-tuned values.
-- Added `az-vm exec --file <script-file>` so operators can run one local script remotely through the same SSH one-shot path without quoting multi-line command text manually.
+- Added `clagnos exec --file <script-file>` so operators can run one local script remotely through the same SSH one-shot path without quoting multi-line command text manually.
 - Hardened the Docker Desktop task to clear stale uninstall registration and to tolerate guest images where native `Start-Service` succeeds but `net start` is not the right follow-up signal for every prerequisite service.
 - Refined `136-configure-language-settings` and `10005-copy-user-settings` so already-satisfied queued language installs recover faster and non-portable profile artifacts are skipped explicitly during user-settings copy.
-- Revalidated the maintained non-live gate with `tests\az-vm-smoke-tests.ps1`; the suite passed with `Passed: 156, Failed: 0`.
+- Revalidated the maintained non-live gate with `tests\clagnos-smoke-tests.ps1`; the suite passed with `Passed: 156, Failed: 0`.
 
 ## Release 2026.3.19.364 - 2026-03-19
 
@@ -285,7 +301,7 @@ This release fixes the remaining Turkish naming drift in the Windows Public Desk
 This release closes the last CI-only drift that was still blocking the remote quality gate. The managed public DNS label helper now honors an explicitly provided empty managed public IP list, which keeps the smoke and compatibility tests fully local in GitHub Actions instead of attempting live Azure inventory reads.
 
 ### Highlights
-- Updated `Resolve-AzVmPublicDnsLabel` so explicit empty managed public IP overrides stay local and deterministic.
+- Updated `Resolve-ClagnosPublicDnsLabel` so explicit empty managed public IP overrides stay local and deterministic.
 - Removed the concrete managed VM name from the latest changelog note so the sensitive-content audit stays green.
 - Revalidated the affected non-live gates locally before re-publishing `main`.
 
@@ -329,7 +345,7 @@ This release fixes the live create-resume path for interrupted fresh Windows bui
 - Updated the create runtime so partial `create` windows that begin at `vm-init`, `vm-update`, or `vm-summary` now resolve and lock the existing managed VM target instead of generating a fresh `gX` resource group.
 - Updated the main pipeline so `create` can keep its create-mode workflow and banner while using existing-target step-1 semantics for those resume-only step windows.
 - Added a smoke regression that proves `create --step-from vm-init` reuses the actual managed resource group, location, and network/disk names from Azure.
-- Revalidated `tests\az-vm-smoke-tests.ps1`; the maintained smoke suite passes fully with the new resume contract.
+- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passes fully with the new resume contract.
 
 ## Release 2026.3.18.357 - 2026-03-18
 
@@ -340,7 +356,7 @@ This release fixes the latest failing `quality-gate` workflow on `main`. The run
 - Updated `106-install-7zip-tool` back to the tracked 90-second timeout expected by the compatibility matrix.
 - Updated `121-install-wsl-feature` to add `Test-WslBootstrapSatisfied`, which treats the WSL and VirtualMachinePlatform feature-enabled state as a valid bootstrap completion condition when the live `wsl` runtime is still settling after install.
 - Updated `135-install-ollama-tool` so its installer process filter no longer matches unrelated app names and its `ollama --version` output is normalized through a warning-filtered helper.
-- Revalidated `tests\az-vm-smoke-tests.ps1` and `tests\powershell-compatibility-check.ps1` locally; both now pass, including the Windows PowerShell 5.1 compatibility target that had been failing in CI.
+- Revalidated `tests\clagnos-smoke-tests.ps1` and `tests\powershell-compatibility-check.ps1` locally; both now pass, including the Windows PowerShell 5.1 compatibility target that had been failing in CI.
 
 ## Release 2026.3.18.356 - 2026-03-18
 
@@ -352,7 +368,7 @@ This release closes the last tracked Windows `vm-update` `--force` gap and finis
 - Added a bounded `winget install Microsoft.AzureCLI` fallback in `130-install-azure-cli-tool` for the observed live case where the Chocolatey path does not materialize a resolvable `az` command cleanly enough.
 - Updated `134-install-docker-desktop-application` so its bounded winget source repair uses `winget source reset` without `--force`.
 - Revalidated `130-install-azure-cli-tool` live in isolation on the active managed Windows VM by uninstalling Azure CLI to clean state, rerunning the task, and confirming a fresh `cmd /c az version` succeeds with the final task summary at `warning=0`, `signal-warning=0`, and `error=0`.
-- Revalidated `tests\az-vm-smoke-tests.ps1` and `tests\code-quality-check.ps1`; both now pass for this no-force contract update.
+- Revalidated `tests\clagnos-smoke-tests.ps1` and `tests\code-quality-check.ps1`; both now pass for this no-force contract update.
 
 ## Release 2026.3.18.355 - 2026-03-18
 
@@ -362,7 +378,7 @@ This release is a focused Windows shortcut-contract hardening pass. The Public D
 ### Highlights
 - Updated `10003-create-public-desktop-shortcuts` so it now resolves `devenv.exe` through `vswhere.exe` and the canonical Community install paths instead of trusting one hard-coded path only.
 - Updated the same task so it now resolves `jfw.exe` through the Freedom Scientific registry roots before falling back to canonical JAWS install paths.
-- Revalidated the non-live shortcut contract in `tests\az-vm-smoke-tests.ps1`; the `10003` coverage assertions passed with the new resolvers, while the suite still reports one unrelated pre-existing failure in `130-install-azure-cli-tool.ps1` about `--force`.
+- Revalidated the non-live shortcut contract in `tests\clagnos-smoke-tests.ps1`; the `10003` coverage assertions passed with the new resolvers, while the suite still reports one unrelated pre-existing failure in `130-install-azure-cli-tool.ps1` about `--force`.
 
 ## Release 2026.3.18.354 - 2026-03-18
 
@@ -445,7 +461,7 @@ This release refactors the active Windows task catalog around two themes: a cons
 This release makes the managed Windows Public Desktop shortcut surface truly dual-user. `10003-create-shortcuts-public-desktop` now repairs Microsoft Store AppsFolder registrations for both `manager` and `assistant` before it normalizes shortcuts, and the same task now preserves user-relative shortcut commands instead of freezing user-scoped CLI or app paths to whichever profile generated the shortcut set.
 
 ### Highlights
-- Added a reusable AppX registration repair helper to `tools/scripts/az-vm-interactive-session-helper.ps1`, so the repo can validate or repair `shell:AppsFolder` visibility for a selected managed user through the existing scheduled-task automation path instead of trusting only the current SSH session inventory.
+- Added a reusable AppX registration repair helper to `tools/scripts/clagnos-interactive-session-helper.ps1`, so the repo can validate or repair `shell:AppsFolder` visibility for a selected managed user through the existing scheduled-task automation path instead of trusting only the current SSH session inventory.
 - Changed `10003-create-shortcuts-public-desktop` so it now copies that helper as a tracked task asset, runs manager-and-assistant AppsFolder repair for Teams, Be My Eyes, Codex App, WhatsApp Business, and iCloud, and uses a `120` second task timeout to cover that extra dual-user validation work.
 - Fixed the Public Desktop shortcut generation path so user-scoped shortcuts such as `k1Codex CLI`, `k2Gemini CLI`, `k3Github Copilot CLI`, `t4Ollama App`, and `v5VS Code` now keep `%UserProfile%` or `%LocalAppData%` in their managed contract instead of persisting one concrete `C:\Users\<name>\...` path into a shared desktop shortcut.
 - Revalidated live on the active managed Windows VM through isolated reruns of `10003`, then confirmed from the repaired VM state that the dual-user Store AppID repairs complete successfully for both managed users and that the critical user-scoped Public Desktop shortcuts now keep the intended user-relative launch contract.
@@ -554,7 +570,7 @@ This release hardens the new interactive `configure` editor so stale Azure-backe
 ## Release 2026.3.17.338 - 2026-03-17
 
 ### Summary
-This release turns `az-vm configure` into the interactive `.env` frontend you requested. The command now walks the full supported dotenv contract in sections, uses pickers for every finite or discoverable multi-option setting, validates edits before they can be saved, and shows a next-create preview before writing `.env`. The old live-target sync behavior has been moved out of `configure` and into `show`, which can now focus one VM with `--vm-name` and print a read-only target-derived configuration section.
+This release turns `clagnos configure` into the interactive `.env` frontend you requested. The command now walks the full supported dotenv contract in sections, uses pickers for every finite or discoverable multi-option setting, validates edits before they can be saved, and shows a next-create preview before writing `.env`. The old live-target sync behavior has been moved out of `configure` and into `show`, which can now focus one VM with `--vm-name` and print a read-only target-derived configuration section.
 
 ### Highlights
 - Replaced the old Azure target-sync behavior of `configure` with an interactive-only `.env` editor that stages all edits in memory until final confirmation.
@@ -566,7 +582,7 @@ This release turns `az-vm configure` into the interactive `.env` frontend you re
 ## Release 2026.3.17.337 - 2026-03-17
 
 ### Summary
-This release cleans up the remaining operator-facing metadata wording that was still leaking into Windows create/update logs and hardens the PowerShell Core install task that interrupted the latest live `az-vm create` attempt. Feature validation and language readback lines now use plainer, more direct wording, while `101-install-powershell-core` now gets enough time to finish on a fresh VM and can short-circuit a healthy existing install by checking the real `pwsh.exe` path directly.
+This release cleans up the remaining operator-facing metadata wording that was still leaking into Windows create/update logs and hardens the PowerShell Core install task that interrupted the latest live `clagnos create` attempt. Feature validation and language readback lines now use plainer, more direct wording, while `101-install-powershell-core` now gets enough time to finish on a fresh VM and can short-circuit a healthy existing install by checking the real `pwsh.exe` path directly.
 
 ### Highlights
 - Replaced the old `metadata-unavailable` language readback text in `132-configure-language-settings` and `10006-capture-snapshot-health` with clearer operator-facing wording.
@@ -600,10 +616,10 @@ This release finishes the current Windows task-repair pass driven by the last tw
 ## Release 2026.3.16.333 - 2026-03-16
 
 ### Summary
-This release finishes the current operator-surface and workflow-wrap pass. `az-vm` now exposes a commandless `--version` fast path, treats the Windows `vm-update` step as a fully wrapped restart-aware stage, relays guest task output back into the local console and transcript, and presents clearer top-level step and feature-enablement messaging during create and update runs. The same release also documents the post-push GitHub Actions quality gate as part of release completion.
+This release finishes the current operator-surface and workflow-wrap pass. `clagnos` now exposes a commandless `--version` fast path, treats the Windows `vm-update` step as a fully wrapped restart-aware stage, relays guest task output back into the local console and transcript, and presents clearer top-level step and feature-enablement messaging during create and update runs. The same release also documents the post-push GitHub Actions quality gate as part of release completion.
 
 ### Highlights
-- Added `az-vm --version`, which prints exactly `az-vm version <current-release>` without the normal banner or command workflow.
+- Added `clagnos --version`, which prints exactly `clagnos version <current-release>` without the normal banner or command workflow.
 - Wrapped Windows `vm-update` with one planned restart at the start of Step 6 plus one automatic restart before `vm-summary` when any update task requests reboot.
 - Streamed guest task output back to the operator: `vm-update` now relays stdout/stderr live over SSH, and `vm-init` now replays the full guest transcript immediately after each task completes.
 - Refined create/update and feature-enablement messaging so step start/end lines and nested-virtualization validation messages read as clear current operations instead of future-tense or ambiguous status prose.
@@ -638,7 +654,7 @@ This release tightens the managed shortcut-launcher invocation shape for over-li
 ### Highlights
 - Updated the shared launcher helper so every managed launcher-backed Public Desktop shortcut now uses `cmd.exe /c call "<launcher-path>"`.
 - Kept the direct path untouched for shorter entries, so direct-safe shortcuts still point straight to `chrome.exe` or `msedge.exe` without any launcher indirection.
-- Revalidated the change live on the active managed Windows VM: `q2Spotify` now reads back as `cmd.exe /c call "C:\ProgramData\az-vm\shortcut-launchers\public-desktop\q2spotify.cmd"`, while `z1Google Account Setup` still reads back as a direct `chrome.exe` shortcut.
+- Revalidated the change live on the active managed Windows VM: `q2Spotify` now reads back as `cmd.exe /c call "C:\ProgramData\clagnos\shortcut-launchers\public-desktop\q2spotify.cmd"`, while `z1Google Account Setup` still reads back as a direct `chrome.exe` shortcut.
 
 ## Release 2026.3.16.329 - 2026-03-16
 
@@ -760,17 +776,17 @@ This release hardens the Windows SSH task transport for environments where the O
 ## Release 2026.3.15.318 - 2026-03-15
 
 ### Summary
-This release unifies task-scoped app-state restore behavior across vm-init, vm-update, and the direct `task --restore-app-state` surface. Vm-init now runs one task at a time over Azure Run Command so it can invoke the same shared post-task app-state restore helper after each init task when a matching plugin zip exists, while direct vm-init restore uses that same shared helper through a run-command transport instead of depending on SSH readiness. The same pass also adds a small unconditional banner to the CLI entrypoint so every `az-vm` invocation starts with version and feature context before command parsing begins.
+This release unifies task-scoped app-state restore behavior across vm-init, vm-update, and the direct `task --restore-app-state` surface. Vm-init now runs one task at a time over Azure Run Command so it can invoke the same shared post-task app-state restore helper after each init task when a matching plugin zip exists, while direct vm-init restore uses that same shared helper through a run-command transport instead of depending on SSH readiness. The same pass also adds a small unconditional banner to the CLI entrypoint so every `clagnos` invocation starts with version and feature context before command parsing begins.
 
 ### Highlights
 - Reworked the vm-init runner from one combined Run Command batch into one-task-at-a-time execution so init-stage post-task app-state replay can use the same shared helper contract as vm-update.
 - Expanded the shared app-state restore helper with a run-command transport and routed `task --restore-app-state --vm-init-task ...` through it, giving init restore and init post-task replay the same plugin resolver and replay core that update restore already uses over SSH.
-- Added an unconditional `AZ-VM CLI V<version>` welcome banner with a two-line feature summary that prints before valid, invalid, parameterized, and parameterless invocations alike.
+- Added an unconditional `CLAGNOS CLI V<version>` welcome banner with a two-line feature summary that prints before valid, invalid, parameterized, and parameterless invocations alike.
 
 ## Release 2026.3.15.317 - 2026-03-15
 
 ### Summary
-This release adds one more explicit lifecycle repair path to `az-vm do`: `--vm-action=redeploy`. Operators can now request a direct Azure host redeploy from the same lifecycle command that already handles status, power-state changes, reapply, and hibernation flows, while the runtime waits for provisioning recovery and then restores the original started/stopped lifecycle state when Azure reports it deterministically.
+This release adds one more explicit lifecycle repair path to `clagnos do`: `--vm-action=redeploy`. Operators can now request a direct Azure host redeploy from the same lifecycle command that already handles status, power-state changes, reapply, and hibernation flows, while the runtime waits for provisioning recovery and then restores the original started/stopped lifecycle state when Azure reports it deterministically.
 
 ### Highlights
 - Added `do --vm-action=redeploy` to the public lifecycle contract, help surface, README command matrix, and smoke validation.
@@ -780,12 +796,12 @@ This release adds one more explicit lifecycle repair path to `az-vm do`: `--vm-a
 ## Release 2026.3.15.316 - 2026-03-15
 
 ### Summary
-This release cuts the persisted configuration contract over to a selected-only model. `.env` now stores active targeting, operator identity, company metadata, subscription choice, and region choice exclusively through `SELECTED_*` keys, while the shared runtime still materializes the same internal canonical fields for orchestration. The same pass makes unattended `az-vm create --auto` runnable from `.env` alone when the selected values and platform defaults are complete, and it removes the older persisted output-key contract from configure/create/update/move/set writeback.
+This release cuts the persisted configuration contract over to a selected-only model. `.env` now stores active targeting, operator identity, company metadata, subscription choice, and region choice exclusively through `SELECTED_*` keys, while the shared runtime still materializes the same internal canonical fields for orchestration. The same pass makes unattended `clagnos create --auto` runnable from `.env` alone when the selected values and platform defaults are complete, and it removes the older persisted output-key contract from configure/create/update/move/set writeback.
 
 ### Highlights
 - Added `SELECTED_RESOURCE_GROUP` as the persisted existing-target selector so unattended update, configure, delete, set, move, task, exec, and connection flows can resolve the active managed VM target from `.env` without reviving the old output-key contract.
 - Reworked `.env.example`, README, AGENTS, help output, smoke coverage, and documentation contracts so the committed configuration model is now `SELECTED_*` plus the shared and platform-specific VM defaults.
-- Updated the create runtime so `az-vm create --auto` can resolve platform, VM name, Azure region, and VM size from `.env` `SELECTED_VM_OS`, `SELECTED_VM_NAME`, `SELECTED_AZURE_REGION`, and the matching `WIN_*` or `LIN_*` defaults without requiring explicit CLI `--vm-name`, `--vm-region`, `--vm-size`, or platform flags.
+- Updated the create runtime so `clagnos create --auto` can resolve platform, VM name, Azure region, and VM size from `.env` `SELECTED_VM_OS`, `SELECTED_VM_NAME`, `SELECTED_AZURE_REGION`, and the matching `WIN_*` or `LIN_*` defaults without requiring explicit CLI `--vm-name`, `--vm-region`, `--vm-size`, or platform flags.
 - Updated the runtime persistence path so configure/create/update/move/set flows now remove the retired persisted keys after writing the selected contract, keeping `.env` aligned with the current committed model instead of accumulating both generations side by side.
 
 ## Release 2026.3.15.315 - 2026-03-15
@@ -802,7 +818,7 @@ This release narrows the managed app-state system from a broad machine snapshot 
 ## Release 2026.3.15.314 - 2026-03-15
 
 ### Summary
-This release completes the CLI surface cutover that separates task execution, direct shell execution, and user-facing connection flows cleanly. `az-vm task` now owns isolated `vm-init` and `vm-update` task runs, `az-vm exec` is now only the SSH shell/remote-command surface, and the old standalone `ssh` and `rdp` commands are replaced by one explicit `az-vm connect --ssh|--rdp` contract. The same pass also standardizes target selectors on `--group` / `-g`, `--vm-name` / `-v`, and `--subscription-id` / `-s`, and tightens parser/help/docs alignment so value-taking options consistently accept both `--option=value` and `--option value`.
+This release completes the CLI surface cutover that separates task execution, direct shell execution, and user-facing connection flows cleanly. `clagnos task` now owns isolated `vm-init` and `vm-update` task runs, `clagnos exec` is now only the SSH shell/remote-command surface, and the old standalone `ssh` and `rdp` commands are replaced by one explicit `clagnos connect --ssh|--rdp` contract. The same pass also standardizes target selectors on `--group` / `-g`, `--vm-name` / `-v`, and `--subscription-id` / `-s`, and tightens parser/help/docs alignment so value-taking options consistently accept both `--option=value` and `--option value`.
 
 ### Highlights
 - Added `task --run-vm-init` and `task --run-vm-update`, moving isolated task execution out of `exec` and into the command that already owns task inventory and task app-state maintenance.
@@ -814,7 +830,7 @@ This release completes the CLI surface cutover that separates task execution, di
 ## Release 2026.3.15.313 - 2026-03-15
 
 ### Summary
-This release opens a new live-maintenance surface for task-owned app-state payloads and aligns the surrounding Windows operator contract with it. `az-vm task` can now save and restore per-task app-state zips over SSH, task `115-install-npm-packages-global` now captures richer per-user CLI state including full `.codex` trees, the default VM name can now derive from the local-part of `employee_email_address`, and the Windows public desktop surface now takes its business web root from `company_web_address` while using refreshed iCloud and Codex CLI shortcut contracts. The same pass also hardens Windows app-state capture internals and adds a Chrome-specific pre-restore close hook so app-state replay can reduce file-in-use conflicts instead of trying to restore over running Chrome windows.
+This release opens a new live-maintenance surface for task-owned app-state payloads and aligns the surrounding Windows operator contract with it. `clagnos task` can now save and restore per-task app-state zips over SSH, task `115-install-npm-packages-global` now captures richer per-user CLI state including full `.codex` trees, the default VM name can now derive from the local-part of `employee_email_address`, and the Windows public desktop surface now takes its business web root from `company_web_address` while using refreshed iCloud and Codex CLI shortcut contracts. The same pass also hardens Windows app-state capture internals and adds a Chrome-specific pre-restore close hook so app-state replay can reduce file-in-use conflicts instead of trying to restore over running Chrome windows.
 
 ### Highlights
 - Added live `task --save-app-state` and `task --restore-app-state` flows that target one init or update task at a time and read or write the existing per-task `app-state.zip` payload under the stage-local `app-states/` tree.
@@ -831,7 +847,7 @@ This release tightens the Windows desktop-finish path around three operational e
 - Added a shared managed shortcut launcher helper so Public Desktop shortcut creation and late health validation now use the same short-launcher contract.
 - Merged the local screen-reader install, settings, shortcut, autostart, and verify-repair flow into one local task, with one matching app-state plugin name.
 - Moved `retro-log-audit.ps1` to `tools/scripts/` and removed it from the default non-live gate so it stays available for targeted maintenance runs without being auto-triggered.
-- Cleaned the current untracked `az-vm-log-*.txt` files from the repo root while keeping `.gitignore` coverage in place.
+- Cleaned the current untracked `clagnos-log-*.txt` files from the repo root while keeping `.gitignore` coverage in place.
 
 ## Release 2026.3.14.311 - 2026-03-14
 
@@ -840,7 +856,7 @@ This release closes the retro-log hardening pass without reintroducing any next-
 
 ### Highlights
 - Added a shared Store install-state helper module so the touched Windows Store-backed tasks now share one centralized contract for PATH refresh, `winget` discovery, stale RunOnce cleanup, and launch-ready state persistence.
-- Added a deterministic retro-log audit helper so the historical `az-vm-log-*.txt` corpus can be rescanned for the noisy or degraded patterns that drove this hardening pass.
+- Added a deterministic retro-log audit helper so the historical `clagnos-log-*.txt` corpus can be rescanned for the noisy or degraded patterns that drove this hardening pass.
 - Updated the touched Store-backed install tasks so they now fail or degrade explicitly when an interactive Store-capable session is missing, instead of scheduling any next-boot or next-sign-in continuation work.
 - Updated Teams startup so the managed startup surface now prefers the packaged `AppsFolder` launch contract, matching the healthy Store shortcut model.
 - Fixed Python verification, copy-settings skip accounting, local screen-reader autostart self-heal, and benign transcript noise filtering in the SSH task pipeline.
@@ -864,7 +880,7 @@ This release replaces the old Windows app-state replay surface with a more exten
 ## Release 2026.3.13.308 - 2026-03-13
 
 ### Summary
-This release turns the top of the README into a much stronger public value story. The repo now presents `az-vm` more clearly as a Windows-first, near-zero-touch remote workstation delivery path while still describing Linux accurately as a lighter but fully extensible platform under the same operator model.
+This release turns the top of the README into a much stronger public value story. The repo now presents `clagnos` more clearly as a Windows-first, near-zero-touch remote workstation delivery path while still describing Linux accurately as a lighter but fully extensible platform under the same operator model.
 
 ### Highlights
 - Rewrote the opening README funnel so the first sections emphasize the prepared remote-computer outcome: installed applications, curated startup behavior, desktop shortcuts, UX tuning, advanced settings, and task-driven customization.
@@ -950,11 +966,11 @@ This release closes the Azure subscription-selection gap across the command surf
 ## Release 2026.3.13.299 - 2026-03-13
 
 ### Summary
-This release finishes the `configure` and public inventory command-surface refresh. `configure` now acts as the managed target selector and `.env` synchronization command for existing az-vm-managed VMs, interactive `create` now asks for the VM OS first when no platform flag is supplied, and the old `group` command has been replaced by the new read-only `list` command.
+This release finishes the `configure` and public inventory command-surface refresh. `configure` now acts as the managed target selector and `.env` synchronization command for existing clagnos-managed VMs, interactive `create` now asks for the VM OS first when no platform flag is supplied, and the old `group` command has been replaced by the new read-only `list` command.
 
 ### Highlights
-- `az-vm configure` now accepts `--group` and `--vm-name`, selects only az-vm-managed targets, reads actual Azure VM, disk, and network state, validates optional platform flags against the real VM OS type, and writes only target-derived `.env` values.
-- `az-vm list` now exposes managed inventory sections through `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule` with optional exact `--group` filtering, replacing the removed public `group` command.
+- `clagnos configure` now accepts `--group` and `--vm-name`, selects only clagnos-managed targets, reads actual Azure VM, disk, and network state, validates optional platform flags against the real VM OS type, and writes only target-derived `.env` values.
+- `clagnos list` now exposes managed inventory sections through `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule` with optional exact `--group` filtering, replacing the removed public `group` command.
 - Interactive `create` no longer silently inherits `.env VM_OS_TYPE` when platform flags are missing; it now prompts for the VM OS first and scopes image, size, and disk defaults from that explicit choice.
 - Help, README, AGENTS, and smoke/documentation/code-quality checks were all updated together so the repo no longer documents or tests the removed `group` command surface.
 
@@ -976,7 +992,7 @@ This release finishes the runtime side of the fresh-create, existing-update, and
 This release finishes the help/docs/tests side of the in-progress command-surface refresh. The maintained documentation now describes `create` as a fresh-only flow, `update` as an existing-managed-target flow, the review-first interactive UX, globally unique managed `gX`/`nX` naming, and the strict auto-mode requirements without carrying the earlier reuse-oriented wording.
 
 ### Highlights
-- Updated `modules/core/cli/azvm-help.ps1` and `README.md` so `create --auto` now documents the required explicit platform plus `--vm-name`, `--vm-region`, and `--vm-size`, while `update --auto` documents the required explicit platform plus `--group` and `--vm-name`.
+- Updated `modules/core/cli/clagnos-help.ps1` and `README.md` so `create --auto` now documents the required explicit platform plus `--vm-name`, `--vm-region`, and `--vm-size`, while `update --auto` documents the required explicit platform plus `--group` and `--vm-name`.
 - Documented the review-first UX more precisely: only `group`, `vm-deploy`, `vm-init`, and `vm-update` use `yes/no/cancel`, while `configure` and `vm-summary` always render even when a partial step window skips interior stages.
 - Updated the naming guidance so managed resource groups use globally increasing `gX` ids and managed resources use globally increasing `nX` ids that are never reused across resource types.
 - Refreshed the smoke/documentation contracts to match the current in-progress implementation, including the current autologon health snapshot output rather than a future `DefaultPasswordPresent` health-field expectation.
@@ -987,7 +1003,7 @@ This release finishes the help/docs/tests side of the in-progress command-surfac
 This release fixes the remaining GitHub Actions quality-gate blocker after publication by making the smoke suite fully non-live again. The slow `smoke-contracts` job was not a runner deadlock; it was accidentally executing real Azure-dependent code paths because several test doubles were declared in the wrong scope.
 
 ### Highlights
-- Updated `tests/az-vm-smoke-tests.ps1` so the create, update, resize, reapply, and hibernate-stop smoke doubles now override the runtime functions in the active test scope instead of falling through to `.env` and Azure CLI backed implementations on GitHub-hosted runners.
+- Updated `tests/clagnos-smoke-tests.ps1` so the create, update, resize, reapply, and hibernate-stop smoke doubles now override the runtime functions in the active test scope instead of falling through to `.env` and Azure CLI backed implementations on GitHub-hosted runners.
 - Restored the smoke suite to the expected short non-live execution profile, eliminating CI waits caused by unintended `az login` prompts and unexpected Azure calls inside the smoke contract job.
 - Revalidated the full local non-live gate before the follow-up push: smoke, documentation contract, PowerShell compatibility, code quality, bash syntax, and pre-commit release-doc checks all pass.
 
@@ -1009,8 +1025,8 @@ This release closes the last live Windows publish blockers from the recreate-and
 ### Highlights
 - Raised the tracked timeout budgets for `104-install-node-system` and `111-install-edge-browser`, and added short bounded post-install verification so the tasks still require a real healthy install but no longer time out during first-run package setup.
 - Hardened `10005-copy-settings-user.ps1` so `AppData\Local\Microsoft\Windows\WebCacheLock.dat` is excluded from the local profile copy path and the robocopy fallback now tolerates the same live lock signature across the observed return codes.
-- Revalidated the live Windows path on `rg-examplevm-sec1-g1/examplevm` with isolated reruns of tasks `104`, `111`, and `10005`, then a full `az-vm update --auto --windows --perf` pass that finished `success=45, failed=0, warning=0, error=0, reboot=0`.
-- Completed the release-closeout checks with `az-vm show --group=rg-examplevm-sec1-g1`, `az-vm do --vm-action=status`, `az-vm ssh --test`, and `az-vm rdp --test`, all passing against the live VM after the clean full update.
+- Revalidated the live Windows path on `rg-examplevm-sec1-g1/examplevm` with isolated reruns of tasks `104`, `111`, and `10005`, then a full `clagnos update --auto --windows --perf` pass that finished `success=45, failed=0, warning=0, error=0, reboot=0`.
+- Completed the release-closeout checks with `clagnos show --group=rg-examplevm-sec1-g1`, `clagnos do --vm-action=status`, `clagnos ssh --test`, and `clagnos rdp --test`, all passing against the live VM after the clean full update.
 
 ## Release 2026.3.12.293 - 2026-03-12
 
@@ -1032,7 +1048,7 @@ This release synchronizes the publish-facing repository contract with the curren
 ### Highlights
 - Updated the GitHub issue templates, pull-request template, README, contributing guide, and support guide so live Azure acceptance and release-readiness claims now follow the same documented reporting contract everywhere.
 - Added an explicit `documentation-contract` job to `.github/workflows/quality-gate.yml`, bringing the existing documentation contract check into the GitHub Actions gate alongside the rest of the non-live validation suite.
-- Hardened `Invoke-AzVmVmCreateStep` so transient non-zero `az vm create` results now trigger a short bounded VM-presence probe instead of immediately failing when Azure may still complete the deployment moments later.
+- Hardened `Invoke-ClagnosVmCreateStep` so transient non-zero `az vm create` results now trigger a short bounded VM-presence probe instead of immediately failing when Azure may still complete the deployment moments later.
 - Revalidated the non-live publish gate with code-quality, documentation-contract, PowerShell compatibility, smoke, and bash-syntax checks before recording this release point.
 
 ## Release 2026.3.12.290 - 2026-03-12
@@ -1079,13 +1095,13 @@ This release renames the tracked Windows Public Desktop shortcut set into the ap
 - Restored `q1SourTimes`, `s15{TitleCase(company_name)} Web`, and `s16{TitleCase(company_name)} Blog` as tracked managed shortcuts while keeping `q2Spotify` and `q3Netflix` intact.
 - Refactored Chrome shortcut profile routing so business/personal intent is carried by shortcut metadata instead of old label text, and both `company_name` and the email local-part are normalized to lowercase before being emitted into `--profile-directory`.
 - Hardened `10002-create-shortcuts-public-desktop` so installer-created overlaps such as Google Chrome, Microsoft Edge, AnyDesk, and Visual Studio 2022 are removed by semantic duplicate matching, while unrelated unmanaged Public Desktop shortcuts remain untouched.
-- Moved `az-vm-interactive-session-helper.ps1` into `tools/scripts/` and updated runtime helper-asset resolution to load it from the new repo path while keeping the guest-side helper copy target unchanged.
+- Moved `clagnos-interactive-session-helper.ps1` into `tools/scripts/` and updated runtime helper-asset resolution to load it from the new repo path while keeping the guest-side helper copy target unchanged.
 - Updated the tracked health snapshot, `.env.example`, README, AGENTS contract, and smoke assertions so the new label set, lowercase Chrome profile rule, restored shortcuts, and duplicate-normalization behavior are enforced together.
 
 ## Release 2026.3.12.284 - 2026-03-12
 
 ### Summary
-This release adds `az-vm do --vm-action=reapply` as a repo-managed VM repair action, keeps it available when Azure provisioning is not currently succeeded, and aligns the interactive selector, help output, README examples, and smoke coverage with the new lifecycle-action contract.
+This release adds `clagnos do --vm-action=reapply` as a repo-managed VM repair action, keeps it available when Azure provisioning is not currently succeeded, and aligns the interactive selector, help output, README examples, and smoke coverage with the new lifecycle-action contract.
 
 ### Highlights
 - Added `do --vm-action=reapply`, which resolves the managed VM target, runs `az vm reapply`, and then prints a refreshed lifecycle status report.
@@ -1113,19 +1129,19 @@ This release closes the live Windows publish-gate blockers uncovered during end-
 - Fixed the provisioning-ready wait so post-deploy feature verification now reads `az vm get-instance-view` from `instanceView.statuses` and the top-level `provisioningState`, eliminating the false empty-state retry loop observed on real existing VMs.
 - Hardened Windows task `10005-copy-settings-user` so required profile roots are copied explicitly, compatibility-alias/reparse-point paths are skipped deterministically, missing HKCU source branches no longer abort assistant hive seeding, and best-effort profile artifacts can be skipped safely on ACL or in-use failures.
 - Added a written live release-acceptance gate to `README.md`, `AGENTS.md`, and the documentation contract checks, requiring a real create/update/status/show/connection verification cycle whenever live release-readiness is claimed.
-- Changed the startup banner in `Invoke-AzVmMain` so `script description:` now stays on one line with the rest of its explanatory text.
-- Revalidated the change set with `tests/az-vm-smoke-tests.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/documentation-contract-check.ps1`, then completed a live `az-vm update --auto --windows` acceptance run with `vm-update` finishing `success=41, failed=0, warning=0, error=0, reboot=0`.
+- Changed the startup banner in `Invoke-ClagnosMain` so `script description:` now stays on one line with the rest of its explanatory text.
+- Revalidated the change set with `tests/clagnos-smoke-tests.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/documentation-contract-check.ps1`, then completed a live `clagnos update --auto --windows` acceptance run with `vm-update` finishing `success=41, failed=0, warning=0, error=0, reboot=0`.
 
 ## Release 2026.3.11.281 - 2026-03-11
 
 ### Summary
-This release finishes the modular-runtime cutover by removing the transitional root loaders entirely. `az-vm.ps1` now loads one ordered manifest and then dot-sources the refactored leaf files directly, so the active runtime path is fully modernized with no legacy root-wrapper layer left in `modules/`.
+This release finishes the modular-runtime cutover by removing the transitional root loaders entirely. `clagnos.ps1` now loads one ordered manifest and then dot-sources the refactored leaf files directly, so the active runtime path is fully modernized with no legacy root-wrapper layer left in `modules/`.
 
 ### Highlights
-- Added `modules/azvm-runtime-manifest.ps1` as the single ordered source of truth for runtime leaf-file loading.
+- Added `modules/clagnos-runtime-manifest.ps1` as the single ordered source of truth for runtime leaf-file loading.
 - Removed the old root wrapper files from `modules/core/`, `modules/config/`, `modules/tasks/`, `modules/ui/`, and `modules/commands/`, so current execution no longer flows through compatibility-loader scripts.
-- Updated the smoke suite to assert that the deleted root loader paths do not exist and that `az-vm.ps1` and the manifest do not reference them.
-- Revalidated the cutover with `tests/code-quality-check.ps1`, `tests/az-vm-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`.
+- Updated the smoke suite to assert that the deleted root loader paths do not exist and that `clagnos.ps1` and the manifest do not reference them.
+- Revalidated the cutover with `tests/code-quality-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`.
 
 ## Release 2026.3.11.280 - 2026-03-11
 
@@ -1137,17 +1153,17 @@ This release is a behavior-preserving modularization of the `modules/` runtime: 
 - Split `modules/commands/` by public command so each supported command now has its own `entry.ps1`, `contract.ps1`, `runtime.ps1`, and `parameters/` directory, with reusable shared parameter logic staying under `modules/commands/shared/parameters/`.
 - Moved create/update orchestration internals into dedicated `context`, `steps`, `features`, `pipeline`, and shared-runtime helpers, and limited `modules/ui/` to prompts, selection flows, show rendering, and connection-facing helpers.
 - Split task transport internals into `modules/tasks/run-command/` and `modules/tasks/ssh/`, while isolating shared system, config, naming, runtime, and task-discovery helpers under `modules/core/` and `modules/config/`.
-- Revalidated the refactor with the full non-live gate: `tests/code-quality-check.ps1`, `tests/az-vm-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`.
+- Revalidated the refactor with the full non-live gate: `tests/code-quality-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`.
 
 ## Release 2026.3.11.279 - 2026-03-11
 
 ### Summary
-This release hardens the live publish-gate surface by adding non-interactive SSH/RDP validation, turning hibernation and nested virtualization into verified post-deploy outcomes, redacting password-bearing values from `az-vm show`, and making the Windows interactive/update tasks more resilient under real guest conditions.
+This release hardens the live publish-gate surface by adding non-interactive SSH/RDP validation, turning hibernation and nested virtualization into verified post-deploy outcomes, redacting password-bearing values from `clagnos show`, and making the Windows interactive/update tasks more resilient under real guest conditions.
 
 ### Highlights
-- Added `az-vm ssh --test` and `az-vm rdp --test` so the repo can prove connection readiness without launching `ssh.exe` or `mstsc.exe`.
+- Added `clagnos ssh --test` and `clagnos rdp --test` so the repo can prove connection readiness without launching `ssh.exe` or `mstsc.exe`.
 - Changed post-deploy feature reconciliation so `VM_ENABLE_HIBERNATION=true` and `VM_ENABLE_NESTED_VIRTUALIZATION=true` now require successful verification instead of best-effort warnings; nested virtualization is validated from inside the running guest.
-- Updated `az-vm show` to redact password-bearing config values and to print nested-virtualization state, validation source, and evidence when available.
+- Updated `clagnos show` to redact password-bearing config values and to print nested-virtualization state, validation source, and evidence when available.
 - Improved the Windows interactive desktop helper plus the Be My Eyes and iCloud tasks so they can use an existing interactive desktop when present and register deferred `RunOnce` installs when Store-backed flows cannot complete headlessly.
 - Hardened Windows UX/profile-copy, Ollama, Docker Desktop, and AnyDesk tasks to reduce avoidable noise, stale-installer waits, and non-fatal native exit-code regressions during real update runs.
 
@@ -1248,7 +1264,7 @@ This release hardens the Windows late-stage update flow around the requested pub
 This release introduces the new shared task-band model across Windows and Linux, adds the read-only `task --list` inventory command, renames the tracked task files/catalogs to the new numbering scheme, moves the Windows health snapshot task to `10099`, and standardizes fallback task defaults across tracked and local discovery.
 
 ### Highlights
-- Added `az-vm task --list` with `--vm-init`, `--vm-update`, and `--disabled`, using the same tracked/local discovery pipeline as real orchestration.
+- Added `clagnos task --list` with `--vm-init`, `--vm-update`, and `--disabled`, using the same tracked/local discovery pipeline as real orchestration.
 - Renamed tracked Windows and Linux task files so the repo now uses the shared task-number bands `01-99`, `101-999`, `1001-9999`, and `10001-10099`.
 - Updated tracked catalogs with explicit `taskType` metadata and band-aligned priorities while keeping the existing timeout values unchanged.
 - Updated local-task ordering so runtime now resolves priority from script metadata first, then filename number, then deterministic `1001+` auto-detection.
@@ -1362,7 +1378,7 @@ This release focuses on the developer-facing contract and documentation set. It 
 ## Release 2026.3.10.259 - 2026-03-10
 
 ### Summary
-This release turns `az-vm` into a documented, process-hardened, operator-facing Azure VM toolkit with one orchestrator, explicit task catalogs, stronger documentation boundaries, formal local/CI quality gates, explicit hook enable/disable controls, a new state-aware VM power-action command, a corrected direct resize contract, a fully `--vm-name`-based move/set surface, faster isolated `exec` task runs, connection commands that now require a running VM, hardened Ollama and Docker Desktop installer recovery, a far more reliable Windows interactive UX and user-settings propagation path, an expanded public desktop/app-install contract that now includes the Store-backed Codex desktop app plus a statically curated and live-validated guest auto-start set, and a hardened snapshot-based regional move path validated live from `austriaeast` to `swedencentral`.
+This release turns `clagnos` into a documented, process-hardened, operator-facing Azure VM toolkit with one orchestrator, explicit task catalogs, stronger documentation boundaries, formal local/CI quality gates, explicit hook enable/disable controls, a new state-aware VM power-action command, a corrected direct resize contract, a fully `--vm-name`-based move/set surface, faster isolated `exec` task runs, connection commands that now require a running VM, hardened Ollama and Docker Desktop installer recovery, a far more reliable Windows interactive UX and user-settings propagation path, an expanded public desktop/app-install contract that now includes the Store-backed Codex desktop app plus a statically curated and live-validated guest auto-start set, and a hardened snapshot-based regional move path validated live from `austriaeast` to `swedencentral`.
 
 ### Highlights
 - Unified command surface for configure, create, update, inspect, connect, power-action, move, resize, set, and delete workflows.
@@ -1375,7 +1391,7 @@ This release turns `az-vm` into a documented, process-hardened, operator-facing 
 - Direct `exec` task runs now accept `--vm-name` and skip the broader Step-1 resource inventory path so isolated task execution reaches pyssh more quickly.
 - Windows Chrome-based public desktop shortcuts now take their default `--profile-directory` from `.env` `company_name`, so shared web shortcuts can target a stable company profile such as `orgprofile` instead of deriving the profile name from `VM_NAME`.
 - Snapshot-based regional move now deallocates the source VM before snapshotting, validates that the source group is safe for automatic purge, creates target public IPs with explicit zonal intent to avoid Azure CLI warning noise, attaches copied OS disks without invalid admin-credential flags, and keeps post-cutover task validation strict before old-source cleanup.
-- `README.md` and `az-vm help move` now document the move cutover sequence and include an observed live timing reference: the `austriaeast -> swedencentral` move of a `Standard_D4as_v5` VM with a `127 GB` OS disk took about `25-30 minutes`, with cross-region snapshot copy as the dominant phase.
+- `README.md` and `clagnos help move` now document the move cutover sequence and include an observed live timing reference: the `austriaeast -> swedencentral` move of a `Standard_D4as_v5` VM with a `127 GB` OS disk took about `25-30 minutes`, with cross-region snapshot copy as the dominant phase.
 - `ssh` and `rdp` now refuse politely unless the target VM is already running, with a direct hint to start it through `do`.
 - External `ssh` and `rdp` connection commands for managed VMs.
 - Windows update task `18-install-ollama-system` now short-circuits healthy existing installs, detaches `ollama serve` from the SSH transcript, clears stale installer locks before `winget`, and bounds installer wait time with explicit timeout diagnostics.
@@ -1427,7 +1443,7 @@ This release turns `az-vm` into a documented, process-hardened, operator-facing 
 - Isolated live validation now also covers the repaired Windows UX/user-settings late-stage chain: task `04` succeeds after the registry-write fix, task `28` completes without hive-unload or default-profile copy hangs, and task `29` confirms the post-copy machine state on `rg-examplevm-ate1-g1/examplevm`.
 - Isolated live validation now also covers full Windows `vm-init` and `vm-update` sweeps plus a focused Ollama rerun that confirms HTTP readiness on port `11434`.
 - Isolated live validation now also covers tasks `30` through `37` plus rerun-confirmed `27` and `29`, proving the new package installs, app-backed Public Desktop shortcuts, one private local-only accessibility hotkey assignment, and Unicode-safe `q1Eksisozluk` readback on `rg-examplevm-ate1-g1/examplevm`.
-- Persistent SSH task parsing now strips spinner prefixes from `AZ_VM_*` protocol markers so long-running Windows installers cannot hide task-completion signals.
+- Persistent SSH task parsing now strips spinner prefixes from `CLAGNOS_*` protocol markers so long-running Windows installers cannot hide task-completion signals.
 - A fresh `create --auto --windows --perf --step-from=vm-update` rerun now completes successfully on `rg-examplevm-ate1-g1/examplevm` with `Standard_D4as_v5`, and the rebuilt VM answers on RDP port `3389`.
 
 ### Documentation and Process Improvements
@@ -1443,7 +1459,7 @@ This release turns `az-vm` into a documented, process-hardened, operator-facing 
 - Removed the retired `docs/reconstruction/` folder after folding its remaining value into the maintained documentation set.
 - Renamed the `tests/` scripts to clearer, self-explanatory dash-separated file names.
 - Renamed the documentation contract gate to `documentation-contract-check` for clearer test intent.
-- Renamed the `az-vm` smoke suite to `az-vm-smoke-tests` so the file name reflects its actual repo-specific purpose.
+- Renamed the `clagnos` smoke suite to `clagnos-smoke-tests` so the file name reflects its actual repo-specific purpose.
 - Split code-quality, bash-syntax, and PowerShell-compatibility checks into separate scripts instead of using skip-style audit switches.
 - Moved the manual history replay utility to `tools/scripts/git-history-replay.ps1` and corrected it so it resolves the quality script that actually exists in each historical worktree.
 - Removed runtime auto-sync writes for task catalogs and moved catalog handling to manual-only editing.

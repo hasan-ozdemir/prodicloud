@@ -1,7 +1,7 @@
 # Resize command runtime helpers.
 
-# Handles Invoke-AzVmResizeCommand.
-function Get-AzVmPlatformNameFromOsType {
+# Handles Invoke-ClagnosResizeCommand.
+function Get-ClagnosPlatformNameFromOsType {
     param(
         [string]$OsType
     )
@@ -19,38 +19,38 @@ function Get-AzVmPlatformNameFromOsType {
     }
 }
 
-# Handles Test-AzVmResizeDirectRequest.
-function Test-AzVmResizeDirectRequest {
+# Handles Test-ClagnosResizeDirectRequest.
+function Test-ClagnosResizeDirectRequest {
     param(
         [hashtable]$Options
     )
 
     foreach ($requiredName in @('group','vm-name')) {
-        if (-not (Test-AzVmCliOptionPresent -Options $Options -Name $requiredName)) {
+        if (-not (Test-ClagnosCliOptionPresent -Options $Options -Name $requiredName)) {
             return $false
         }
     }
 
-    $hasVmSize = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-size'
-    $hasDiskSize = Test-AzVmCliOptionPresent -Options $Options -Name 'disk-size'
-    $hasExpand = Get-AzVmCliOptionBool -Options $Options -Name 'expand' -DefaultValue $false
-    $hasShrink = Get-AzVmCliOptionBool -Options $Options -Name 'shrink' -DefaultValue $false
+    $hasVmSize = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-size'
+    $hasDiskSize = Test-ClagnosCliOptionPresent -Options $Options -Name 'disk-size'
+    $hasExpand = Get-ClagnosCliOptionBool -Options $Options -Name 'expand' -DefaultValue $false
+    $hasShrink = Get-ClagnosCliOptionBool -Options $Options -Name 'shrink' -DefaultValue $false
 
     if ($hasVmSize) {
-        $vmSizeValue = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-size')
+        $vmSizeValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-size')
         return (-not [string]::IsNullOrWhiteSpace([string]$vmSizeValue))
     }
 
     if ($hasDiskSize -and ($hasExpand -xor $hasShrink)) {
-        $diskSizeValue = [string](Get-AzVmCliOptionText -Options $Options -Name 'disk-size')
+        $diskSizeValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'disk-size')
         return (-not [string]::IsNullOrWhiteSpace([string]$diskSizeValue))
     }
 
     return $false
 }
 
-# Handles Resolve-AzVmResizeTargetSize.
-function Resolve-AzVmResizeTargetSize {
+# Handles Resolve-ClagnosResizeTargetSize.
+function Resolve-ClagnosResizeTargetSize {
     param(
         [hashtable]$Options,
         [string]$CurrentRegion,
@@ -58,7 +58,7 @@ function Resolve-AzVmResizeTargetSize {
         [hashtable]$ConfigMap
     )
 
-    $targetSize = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-size')
+    $targetSize = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-size')
     if (-not [string]::IsNullOrWhiteSpace([string]$targetSize)) {
         return $targetSize.Trim()
     }
@@ -66,7 +66,7 @@ function Resolve-AzVmResizeTargetSize {
     $priceHours = Get-PriceHoursFromConfig -Config $ConfigMap -DefaultHours 730
     while ($true) {
         $sizePick = Select-VmSkuInteractive -Location $CurrentRegion -DefaultVmSize $CurrentSize -PriceHours $priceHours
-        if ([string]::Equals([string]$sizePick, (Get-AzVmSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
+        if ([string]::Equals([string]$sizePick, (Get-ClagnosSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
             Write-Host "Resize command keeps the current region fixed. Select another VM size in the same region." -ForegroundColor Yellow
             continue
         }
@@ -78,8 +78,8 @@ function Resolve-AzVmResizeTargetSize {
     }
 }
 
-# Handles Assert-AzVmResizePlatformExpectation.
-function Assert-AzVmResizePlatformExpectation {
+# Handles Assert-ClagnosResizePlatformExpectation.
+function Assert-ClagnosResizePlatformExpectation {
     param(
         [string]$ActualPlatform,
         [switch]$WindowsFlag,
@@ -117,15 +117,15 @@ function Assert-AzVmResizePlatformExpectation {
     }
 }
 
-function Resolve-AzVmResizeOperationRequest {
+function Resolve-ClagnosResizeOperationRequest {
     param(
         [hashtable]$Options
     )
 
-    $hasVmSize = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-size'
-    $hasDiskSize = Test-AzVmCliOptionPresent -Options $Options -Name 'disk-size'
-    $hasExpand = Get-AzVmCliOptionBool -Options $Options -Name 'expand' -DefaultValue $false
-    $hasShrink = Get-AzVmCliOptionBool -Options $Options -Name 'shrink' -DefaultValue $false
+    $hasVmSize = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-size'
+    $hasDiskSize = Test-ClagnosCliOptionPresent -Options $Options -Name 'disk-size'
+    $hasExpand = Get-ClagnosCliOptionBool -Options $Options -Name 'expand' -DefaultValue $false
+    $hasShrink = Get-ClagnosCliOptionBool -Options $Options -Name 'shrink' -DefaultValue $false
 
     if ($hasExpand -and $hasShrink) {
         Throw-FriendlyError `
@@ -160,7 +160,7 @@ function Resolve-AzVmResizeOperationRequest {
     }
 
     if ($hasDiskSize) {
-        $diskRequest = Resolve-AzVmResizeTargetDiskSize -Options $Options
+        $diskRequest = Resolve-ClagnosResizeTargetDiskSize -Options $Options
         return [pscustomobject]@{
             Kind = 'disk'
             Intent = if ($hasExpand) { 'expand' } else { 'shrink' }
@@ -181,12 +181,12 @@ function Resolve-AzVmResizeOperationRequest {
     }
 }
 
-function Resolve-AzVmResizeTargetDiskSize {
+function Resolve-ClagnosResizeTargetDiskSize {
     param(
         [hashtable]$Options
     )
 
-    $rawText = [string](Get-AzVmCliOptionText -Options $Options -Name 'disk-size')
+    $rawText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'disk-size')
     if ([string]::IsNullOrWhiteSpace([string]$rawText)) {
         Throw-FriendlyError `
             -Detail "Option '--disk-size' requires a value." `
@@ -222,7 +222,7 @@ function Resolve-AzVmResizeTargetDiskSize {
     }
 }
 
-function Get-AzVmResizeOsDiskContext {
+function Get-ClagnosResizeOsDiskContext {
     param(
         [psobject]$VmObject,
         [string]$ResourceGroup,
@@ -270,7 +270,7 @@ function Get-AzVmResizeOsDiskContext {
     }
 }
 
-function Show-AzVmResizeShrinkAlternatives {
+function Show-ClagnosResizeShrinkAlternatives {
     Write-Host "Supported alternatives for a smaller OS disk:" -ForegroundColor Cyan
     Write-Host "1. Create a new VM with the desired smaller OS disk size and migrate the workload."
     Write-Host "2. Move large data, caches, package stores, and build artifacts off the OS disk before rebuild."

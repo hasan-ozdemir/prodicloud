@@ -1,14 +1,14 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-edge-application"
 
-Import-Module 'C:\Windows\Temp\az-vm-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-AzVmSessionPath | Out-Null
+    Refresh-ClagnosSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
-    $portableCandidate = "C:\ProgramData\az-vm\tools\winget-x64\winget.exe"
+    $portableCandidate = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
     if (Test-Path -LiteralPath $portableCandidate) {
         return [string]$portableCandidate
     }

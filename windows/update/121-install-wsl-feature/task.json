@@ -25,5 +25,18 @@
         ]
       }
     ]
+  },
+  "program": {
+    "category": "feature",
+    "statusCheck": {
+      "kind": "appx",
+      "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
+    },
+    "displayName": "Windows Subsystem for Linux",
+    "uninstall": {
+      "kind": "appx",
+      "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
+    },
+    "id": "windows-subsystem-linux"
   }
 }

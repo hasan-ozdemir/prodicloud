@@ -23,5 +23,18 @@
     "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Microsoft.AzureCLI"
+    },
+    "displayName": "Azure CLI",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Microsoft.AzureCLI"
+    },
+    "id": "azure-cli"
   }
 }

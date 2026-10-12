@@ -1,5 +1,5 @@
 # 'expand' option binding for 'resize'.
 
-function Get-AzVmResizeExpandOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'expand')
+function Get-ClagnosResizeExpandOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'expand')
 }

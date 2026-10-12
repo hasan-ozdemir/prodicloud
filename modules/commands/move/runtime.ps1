@@ -1,7 +1,7 @@
 # Move command shared runtime helpers.
 
-# Handles Get-AzVmMoveExpectedSourceResourceTypeCounts.
-function Get-AzVmMoveExpectedSourceResourceTypeCounts {
+# Handles Get-ClagnosMoveExpectedSourceResourceTypeCounts.
+function Get-ClagnosMoveExpectedSourceResourceTypeCounts {
     return [ordered]@{
         'Microsoft.Compute/disks' = 1
         'Microsoft.Compute/virtualMachines' = 1
@@ -12,17 +12,17 @@ function Get-AzVmMoveExpectedSourceResourceTypeCounts {
     }
 }
 
-# Handles Test-AzVmMoveResourceSetIsPurgeSafe.
-function Test-AzVmMoveResourceSetIsPurgeSafe {
+# Handles Test-ClagnosMoveResourceSetIsPurgeSafe.
+function Test-ClagnosMoveResourceSetIsPurgeSafe {
     param(
         [object[]]$Resources,
         [string]$VmName,
         [string]$OsDiskName
     )
 
-    $expectedCounts = Get-AzVmMoveExpectedSourceResourceTypeCounts
+    $expectedCounts = Get-ClagnosMoveExpectedSourceResourceTypeCounts
     $resourceRows = @($Resources | Where-Object { $null -ne $_ })
-    $actualCounts = Get-AzVmResourceTypeCountMap -Resources $resourceRows
+    $actualCounts = Get-ClagnosResourceTypeCountMap -Resources $resourceRows
     $unexpectedTypes = @($actualCounts.Keys | Where-Object { $expectedCounts.Keys -notcontains [string]$_ } | Sort-Object)
     $countMismatches = @()
 
@@ -59,8 +59,8 @@ function Test-AzVmMoveResourceSetIsPurgeSafe {
     }
 }
 
-# Handles Get-AzVmMoveSourceGroupResources.
-function Get-AzVmMoveSourceGroupResources {
+# Handles Get-ClagnosMoveSourceGroupResources.
+function Get-ClagnosMoveSourceGroupResources {
     param(
         [string]$ResourceGroup
     )
@@ -70,17 +70,17 @@ function Get-AzVmMoveSourceGroupResources {
     return @(ConvertFrom-JsonArrayCompat -InputObject $resourcesJson)
 }
 
-# Handles Assert-AzVmMoveSourceGroupPurgeSafe.
-function Assert-AzVmMoveSourceGroupPurgeSafe {
+# Handles Assert-ClagnosMoveSourceGroupPurgeSafe.
+function Assert-ClagnosMoveSourceGroupPurgeSafe {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
         [string]$OsDiskName
     )
 
-    Assert-AzVmManagedResourceGroup -ResourceGroup $ResourceGroup -OperationName 'move'
-    $resources = @(Get-AzVmMoveSourceGroupResources -ResourceGroup $ResourceGroup)
-    $result = Test-AzVmMoveResourceSetIsPurgeSafe -Resources $resources -VmName $VmName -OsDiskName $OsDiskName
+    Assert-ClagnosManagedResourceGroup -ResourceGroup $ResourceGroup -OperationName 'move'
+    $resources = @(Get-ClagnosMoveSourceGroupResources -ResourceGroup $ResourceGroup)
+    $result = Test-ClagnosMoveResourceSetIsPurgeSafe -Resources $resources -VmName $VmName -OsDiskName $OsDiskName
     if ([bool]$result.IsSafe) {
         return $result
     }
@@ -106,8 +106,8 @@ function Assert-AzVmMoveSourceGroupPurgeSafe {
         -Hint "Inspect the extra resources in the source group and clean them up manually, or remove only the old group yourself after the move."
 }
 
-# Handles Wait-AzVmSnapshotCopyReady.
-function Wait-AzVmSnapshotCopyReady {
+# Handles Wait-ClagnosSnapshotCopyReady.
+function Wait-ClagnosSnapshotCopyReady {
     param(
         [string]$ResourceGroup,
         [string]$SnapshotName,
@@ -163,8 +163,8 @@ function Wait-AzVmSnapshotCopyReady {
     throw "Target snapshot copy did not complete in expected time."
 }
 
-# Handles Test-AzVmTcpPortReachable.
-function Test-AzVmTcpPortReachable {
+# Handles Test-ClagnosTcpPortReachable.
+function Test-ClagnosTcpPortReachable {
     param(
         [string]$HostName,
         [int]$Port,
@@ -200,8 +200,8 @@ function Test-AzVmTcpPortReachable {
     }
 }
 
-# Handles Wait-AzVmTcpPortReachable.
-function Wait-AzVmTcpPortReachable {
+# Handles Wait-ClagnosTcpPortReachable.
+function Wait-ClagnosTcpPortReachable {
     param(
         [string]$HostName,
         [int]$Port,
@@ -216,7 +216,7 @@ function Wait-AzVmTcpPortReachable {
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
         Write-Host ("Connectivity check ({0}) {1}:{2} attempt {3}/{4}" -f $Label, $HostName, $Port, $attempt, $MaxAttempts)
-        if (Test-AzVmTcpPortReachable -HostName $HostName -Port $Port -TimeoutSeconds $TimeoutSeconds) {
+        if (Test-ClagnosTcpPortReachable -HostName $HostName -Port $Port -TimeoutSeconds $TimeoutSeconds) {
             return $true
         }
         Start-Sleep -Seconds $DelaySeconds
@@ -225,8 +225,8 @@ function Wait-AzVmTcpPortReachable {
     return $false
 }
 
-# Handles Assert-AzVmMoveTargetParity.
-function Assert-AzVmMoveTargetParity {
+# Handles Assert-ClagnosMoveTargetParity.
+function Assert-ClagnosMoveTargetParity {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -298,8 +298,8 @@ function Assert-AzVmMoveTargetParity {
     }
 }
 
-# Handles Invoke-AzVmMoveTargetHealthCheck.
-function Invoke-AzVmMoveTargetHealthCheck {
+# Handles Invoke-ClagnosMoveTargetHealthCheck.
+function Invoke-ClagnosMoveTargetHealthCheck {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -314,7 +314,7 @@ function Invoke-AzVmMoveTargetHealthCheck {
         [string]$RdpPort
     )
 
-    $parity = Assert-AzVmMoveTargetParity `
+    $parity = Assert-ClagnosMoveTargetParity `
         -ResourceGroup $ResourceGroup `
         -VmName $VmName `
         -ExpectedRegion $ExpectedRegion `
@@ -324,11 +324,11 @@ function Invoke-AzVmMoveTargetHealthCheck {
         -ExpectedDiskSupportsHibernation:$ExpectedDiskSupportsHibernation `
         -ExpectedVmHibernationEnabled:$ExpectedVmHibernationEnabled
 
-    $taskRuntime = Initialize-AzVmTaskExecutionRuntimeContext `
+    $taskRuntime = Initialize-ClagnosTaskExecutionRuntimeContext `
         -AutoMode:$true `
         -WindowsFlag:([string]::Equals([string]$Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase)) `
         -LinuxFlag:([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase))
-    $execResult = Invoke-AzVmTaskExecutionWithTarget `
+    $execResult = Invoke-ClagnosTaskExecutionWithTarget `
         -Runtime $taskRuntime `
         -Options @{ group = $ResourceGroup; 'vm-name' = $VmName } `
         -OperationName 'move' `
@@ -343,7 +343,7 @@ function Invoke-AzVmMoveTargetHealthCheck {
         AzLocation = $ExpectedRegion
         SshPort = $SshPort
     }
-    $targetVmDetails = Get-AzVmVmDetails -Context $vmDetailContext
+    $targetVmDetails = Get-ClagnosVmDetails -Context $vmDetailContext
     $hostName = [string]$targetVmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace([string]$hostName)) {
         $hostName = [string]$targetVmDetails.PublicIP
@@ -359,7 +359,7 @@ function Invoke-AzVmMoveTargetHealthCheck {
         throw ("Target VM {0} port could not be resolved from configuration." -f $probeLabel)
     }
 
-    $reachable = Wait-AzVmTcpPortReachable -HostName $hostName -Port $probePort -MaxAttempts 18 -DelaySeconds 10 -TimeoutSeconds 5 -Label $probeLabel
+    $reachable = Wait-ClagnosTcpPortReachable -HostName $hostName -Port $probePort -MaxAttempts 18 -DelaySeconds 10 -TimeoutSeconds 5 -Label $probeLabel
     if (-not $reachable) {
         throw ("Target VM {0} port {1} did not become reachable on host '{2}'." -f $probeLabel, $probePort, $hostName)
     }
@@ -373,8 +373,8 @@ function Invoke-AzVmMoveTargetHealthCheck {
     }
 }
 
-# Handles Invoke-AzVmChangeCommand.
-function Invoke-AzVmChangeCommand {
+# Handles Invoke-ClagnosChangeCommand.
+function Invoke-ClagnosChangeCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -384,29 +384,29 @@ function Invoke-AzVmChangeCommand {
     )
 
     $runtimeConfigOverrides = @{}
-    $groupOptionValue = [string](Get-AzVmCliOptionText -Options $Options -Name 'group')
+    $groupOptionValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
     if (-not [string]::IsNullOrWhiteSpace([string]$groupOptionValue)) {
         $runtimeConfigOverrides['SELECTED_RESOURCE_GROUP'] = $groupOptionValue.Trim()
-        Set-AzVmConfigValueSource -Key 'SELECTED_RESOURCE_GROUP' -Source 'cli value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_RESOURCE_GROUP' -Source 'cli value'
     }
-    $vmOptionValue = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-name')
+    $vmOptionValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
     if (-not [string]::IsNullOrWhiteSpace([string]$vmOptionValue)) {
         $runtimeConfigOverrides['SELECTED_VM_NAME'] = $vmOptionValue.Trim()
-        Set-AzVmConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'cli value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'cli value'
     }
 
-    $runtime = Initialize-AzVmCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMapOverrides $runtimeConfigOverrides
+    $runtime = Initialize-ClagnosCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMapOverrides $runtimeConfigOverrides
     $context = $runtime.Context
     $platform = [string]$runtime.Platform
     $envFilePath = [string]$runtime.EnvFilePath
     $effectiveConfigMap = $runtime.EffectiveConfigMap
-    $vmSizeConfigKey = Get-AzVmPlatformVmConfigKey -Platform $platform -BaseKey "VM_SIZE"
+    $vmSizeConfigKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey "VM_SIZE"
     $resourceGroup = [string]$context.ResourceGroup
     $vmName = [string]$context.VmName
     $groupWasProvided = -not [string]::IsNullOrWhiteSpace([string]$groupOptionValue)
     $vmWasProvided = -not [string]::IsNullOrWhiteSpace([string]$vmOptionValue)
 
-    $resourceGroup = Resolve-AzVmTargetResourceGroup `
+    $resourceGroup = Resolve-ClagnosTargetResourceGroup `
         -Options $Options `
         -AutoMode:$AutoMode `
         -DefaultResourceGroup $resourceGroup `
@@ -418,12 +418,12 @@ function Invoke-AzVmChangeCommand {
         $vmName = [string]$vmOptionValue
     }
     else {
-        $vmName = Resolve-AzVmTargetVmName -ResourceGroup $resourceGroup -DefaultVmName $vmName -AutoMode:$AutoMode -OperationName $OperationLabel
+        $vmName = Resolve-ClagnosTargetVmName -ResourceGroup $resourceGroup -DefaultVmName $vmName -AutoMode:$AutoMode -OperationName $OperationLabel
     }
     $context.VmName = $vmName
 
-    $hasRegionOption = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-region'
-    $hasSizeOption = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-size'
+    $hasRegionOption = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-region'
+    $hasSizeOption = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-size'
     $targetRegion = ''
     $targetSize = ''
 
@@ -436,11 +436,11 @@ function Invoke-AzVmChangeCommand {
                 -Hint "Use --vm-region=<region> and/or --vm-size=<sku>."
         }
 
-        $selectedResourceGroup = Select-AzVmResourceGroupInteractive -DefaultResourceGroup $resourceGroup -VmName ([string]$context.VmName)
-        $selectedVmName = Select-AzVmVmInteractive -ResourceGroup $selectedResourceGroup -DefaultVmName $vmName
+        $selectedResourceGroup = Select-ClagnosResourceGroupInteractive -DefaultResourceGroup $resourceGroup -VmName ([string]$context.VmName)
+        $selectedVmName = Select-ClagnosVmInteractive -ResourceGroup $selectedResourceGroup -DefaultVmName $vmName
 
         if (-not [string]::Equals($selectedResourceGroup, $resourceGroup, [System.StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals($selectedVmName, $vmName, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $runtime = Initialize-AzVmCommandRuntimeContext `
+            $runtime = Initialize-ClagnosCommandRuntimeContext `
                 -AutoMode:$AutoMode `
                 -WindowsFlag:$WindowsFlag `
                 -LinuxFlag:$LinuxFlag `
@@ -462,7 +462,7 @@ function Invoke-AzVmChangeCommand {
             -Detail ("VM '{0}' was not found in resource group '{1}'." -f $vmName, $resourceGroup) `
             -Code 62 `
             -Summary ("{0} command cannot continue because VM does not exist." -f $OperationLabel) `
-            -Hint "Run 'az-vm create' first, or check active naming values in .env."
+            -Hint "Run 'clagnos create' first, or check active naming values in .env."
     }
 
     $vmObject = ConvertFrom-JsonCompat -InputObject $vmJson
@@ -472,13 +472,13 @@ function Invoke-AzVmChangeCommand {
     $sourceVmName = [string]$vmName
     $sourceLifecycleSnapshot = $null
     if ([string]::Equals([string]$OperationLabel, 'move', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $sourceLifecycleSnapshot = Get-AzVmVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
+        $sourceLifecycleSnapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
     }
     if ([string]::IsNullOrWhiteSpace($currentRegion)) { $currentRegion = [string]$context.AzLocation }
     if ([string]::IsNullOrWhiteSpace($currentSize)) { $currentSize = [string]$context.VmSize }
 
     if ($hasRegionOption) {
-        $targetRegion = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-region')
+        $targetRegion = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-region')
         if ([string]::IsNullOrWhiteSpace($targetRegion)) {
             if ($AutoMode) {
                 Throw-FriendlyError `
@@ -492,7 +492,7 @@ function Invoke-AzVmChangeCommand {
     }
 
     if ($hasSizeOption) {
-        $targetSize = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-size')
+        $targetSize = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-size')
         if ([string]::IsNullOrWhiteSpace($targetSize)) {
             if ($AutoMode) {
                 Throw-FriendlyError `
@@ -509,7 +509,7 @@ function Invoke-AzVmChangeCommand {
             $priceHours = Get-PriceHoursFromConfig -Config $effectiveConfigMap -DefaultHours 730
             while ($true) {
                 $sizePick = Select-VmSkuInteractive -Location $pickerLocation -DefaultVmSize $currentSize -PriceHours $priceHours
-                if ([string]::Equals([string]$sizePick, (Get-AzVmSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
+                if ([string]::Equals([string]$sizePick, (Get-ClagnosSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
                     $pickerLocation = Select-AzLocationInteractive -DefaultLocation $pickerLocation
                     if (-not $hasRegionOption) {
                         $targetRegion = $pickerLocation
@@ -528,7 +528,7 @@ function Invoke-AzVmChangeCommand {
         $priceHours = Get-PriceHoursFromConfig -Config $effectiveConfigMap -DefaultHours 730
         while ($true) {
             $sizePick = Select-VmSkuInteractive -Location $targetRegion -DefaultVmSize $currentSize -PriceHours $priceHours
-            if ([string]::Equals([string]$sizePick, (Get-AzVmSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
+            if ([string]::Equals([string]$sizePick, (Get-ClagnosSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
                 $targetRegion = Select-AzLocationInteractive -DefaultLocation $targetRegion
                 continue
             }
@@ -592,7 +592,7 @@ function Invoke-AzVmChangeCommand {
         if ([string]::IsNullOrWhiteSpace([string]$sourceOsDiskName)) {
             $sourceOsDiskName = [string]($sourceOsDiskId -split '/')[-1]
         }
-        Assert-AzVmMoveSourceGroupPurgeSafe -ResourceGroup $resourceGroup -VmName $vmName -OsDiskName $sourceOsDiskName | Out-Null
+        Assert-ClagnosMoveSourceGroupPurgeSafe -ResourceGroup $resourceGroup -VmName $vmName -OsDiskName $sourceOsDiskName | Out-Null
 
         $sourceDiskJson = az disk show --ids $sourceOsDiskId -o json --only-show-errors
         Assert-LastExitCode "az disk show (source os disk)"
@@ -614,14 +614,14 @@ function Invoke-AzVmChangeCommand {
         if ([string]::IsNullOrWhiteSpace([string]$sourceDiskSku)) { $sourceDiskSku = "StandardSSD_LRS" }
         if ([string]::IsNullOrWhiteSpace([string]$sourceOsType)) { $sourceOsType = "Windows" }
 
-        $targetRegionCode = Get-AzVmRegionCode -Location $targetRegion
+        $targetRegionCode = Get-ClagnosRegionCode -Location $targetRegion
         $nameTokens = @{
             SELECTED_VM_NAME = [string]$context.VmName
             REGION_CODE = [string]$targetRegionCode
         }
 
         $targetResourceGroupTemplate = [string](Get-ConfigValue -Config $effectiveConfigMap -Key "RESOURCE_GROUP_TEMPLATE" -DefaultValue "rg-{SELECTED_VM_NAME}-{REGION_CODE}-g{N}")
-        $targetResourceGroup = Resolve-AzVmResourceGroupNameFromTemplate `
+        $targetResourceGroup = Resolve-ClagnosResourceGroupNameFromTemplate `
             -Template $targetResourceGroupTemplate `
             -VmName ([string]$context.VmName) `
             -RegionCode $targetRegionCode `
@@ -634,16 +634,16 @@ function Invoke-AzVmChangeCommand {
         $targetNsgRuleTemplate = [string](Get-ConfigValue -Config $effectiveConfigMap -Key "NSG_RULE_NAME_TEMPLATE" -DefaultValue "nsg-rule-{SELECTED_VM_NAME}-{REGION_CODE}-n{N}")
         $targetIpTemplate = [string](Get-ConfigValue -Config $effectiveConfigMap -Key "PUBLIC_IP_NAME_TEMPLATE" -DefaultValue "ip-{SELECTED_VM_NAME}-{REGION_CODE}-n{N}")
         $targetNicTemplate = [string](Get-ConfigValue -Config $effectiveConfigMap -Key "NIC_NAME_TEMPLATE" -DefaultValue "nic-{SELECTED_VM_NAME}-{REGION_CODE}-n{N}")
-        $targetResourceIndexAllocator = New-AzVmManagedResourceIndexAllocator
+        $targetResourceIndexAllocator = New-ClagnosManagedResourceIndexAllocator
 
         $targetVmName = [string]$context.VmName
-        $targetDiskName = Resolve-AzVmNameFromTemplate -Template $targetDiskTemplate -ResourceType 'disk' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-disk'
-        $targetVnetName = Resolve-AzVmNameFromTemplate -Template $targetVnetTemplate -ResourceType 'net' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-vnet'
-        $targetSubnetName = Resolve-AzVmNameFromTemplate -Template $targetSubnetTemplate -ResourceType 'subnet' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-subnet'
-        $targetNsgName = Resolve-AzVmNameFromTemplate -Template $targetNsgTemplate -ResourceType 'nsg' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-nsg'
-        $targetNsgRuleName = Resolve-AzVmNameFromTemplate -Template $targetNsgRuleTemplate -ResourceType 'nsgrule' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-nsg-rule'
-        $targetIpName = Resolve-AzVmNameFromTemplate -Template $targetIpTemplate -ResourceType 'ip' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-ip'
-        $targetNicName = Resolve-AzVmNameFromTemplate -Template $targetNicTemplate -ResourceType 'nic' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-nic'
+        $targetDiskName = Resolve-ClagnosNameFromTemplate -Template $targetDiskTemplate -ResourceType 'disk' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-disk'
+        $targetVnetName = Resolve-ClagnosNameFromTemplate -Template $targetVnetTemplate -ResourceType 'net' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-vnet'
+        $targetSubnetName = Resolve-ClagnosNameFromTemplate -Template $targetSubnetTemplate -ResourceType 'subnet' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-subnet'
+        $targetNsgName = Resolve-ClagnosNameFromTemplate -Template $targetNsgTemplate -ResourceType 'nsg' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-nsg'
+        $targetNsgRuleName = Resolve-ClagnosNameFromTemplate -Template $targetNsgRuleTemplate -ResourceType 'nsgrule' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-nsg-rule'
+        $targetIpName = Resolve-ClagnosNameFromTemplate -Template $targetIpTemplate -ResourceType 'ip' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-ip'
+        $targetNicName = Resolve-ClagnosNameFromTemplate -Template $targetNicTemplate -ResourceType 'nic' -VmName ([string]$context.VmName) -RegionCode $targetRegionCode -ResourceGroup $targetResourceGroup -UseNextIndex -IndexAllocator $targetResourceIndexAllocator -LogicalName 'move-target-nic'
 
         Write-Host ("Target naming resolved: rg={0}, vm={1}, disk={2}" -f $targetResourceGroup, $targetVmName, $targetDiskName)
 
@@ -691,7 +691,7 @@ function Invoke-AzVmChangeCommand {
                     az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
                     Assert-LastExitCode "az vm deallocate (source)"
                 } | Out-Null
-                $sourceDeallocated = Wait-AzVmVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 24 -DelaySeconds 10
+                $sourceDeallocated = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 24 -DelaySeconds 10
                 if (-not $sourceDeallocated) {
                     throw "Source VM did not reach deallocated state before snapshot creation."
                 }
@@ -707,7 +707,7 @@ function Invoke-AzVmChangeCommand {
                 } | Out-Null
                 $targetGroupCreatedInRun = $true
             }
-            Set-AzVmManagedTagOnResourceGroup -ResourceGroup $targetResourceGroup
+            Set-ClagnosManagedTagOnResourceGroup -ResourceGroup $targetResourceGroup
 
             $stamp = Get-Date -Format "yyMMddHHmmss"
             $sourceSnapshotName = ("snap-src-{0}-{1}" -f [string]$context.VmName, $stamp)
@@ -729,7 +729,7 @@ function Invoke-AzVmChangeCommand {
             } | Out-Null
             $targetSnapshotCreated = $true
 
-            Wait-AzVmSnapshotCopyReady -ResourceGroup $targetResourceGroup -SnapshotName $targetSnapshotName -MaxAttempts 540 -DelaySeconds 20 -NoProgressAttemptLimit 45 | Out-Null
+            Wait-ClagnosSnapshotCopyReady -ResourceGroup $targetResourceGroup -SnapshotName $targetSnapshotName -MaxAttempts 540 -DelaySeconds 20 -NoProgressAttemptLimit 45 | Out-Null
 
             $targetSnapshotId = az snapshot show -g $targetResourceGroup -n $targetSnapshotName --query "id" -o tsv --only-show-errors
             Assert-LastExitCode "az snapshot show (target id)"
@@ -743,12 +743,12 @@ function Invoke-AzVmChangeCommand {
                 NSG = $targetNsgName
                 NsgRule = $targetNsgRuleName
                 IP = $targetIpName
-                PublicDnsLabel = (Resolve-AzVmPublicDnsLabel -PublicIpName ([string]$targetIpName) -VmName ([string]$targetVmName))
+                PublicDnsLabel = (Resolve-ClagnosPublicDnsLabel -PublicIpName ([string]$targetIpName) -VmName ([string]$targetVmName))
                 NIC = $targetNicName
                 TcpPorts = @($context.TcpPorts)
                 VmName = $targetVmName
             }
-            Invoke-AzVmNetworkStep -Context $targetContext -ExecutionMode "update"
+            Invoke-ClagnosNetworkStep -Context $targetContext -ExecutionMode "update"
             $targetNetworkAttempted = $true
 
             Invoke-TrackedAction -Label ("az disk create -g {0} -n {1}" -f $targetResourceGroup, $targetDiskName) -Action {
@@ -780,7 +780,7 @@ function Invoke-AzVmChangeCommand {
                     az vm deallocate -g $targetResourceGroup -n $targetVmName -o none --only-show-errors
                     Assert-LastExitCode "az vm deallocate (target)"
                 } | Out-Null
-                $targetDeallocated = Wait-AzVmVmPowerState -ResourceGroup $targetResourceGroup -VmName $targetVmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
+                $targetDeallocated = Wait-ClagnosVmPowerState -ResourceGroup $targetResourceGroup -VmName $targetVmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
                 if (-not $targetDeallocated) { throw "Target VM did not reach deallocated state before resize." }
             }
 
@@ -803,7 +803,7 @@ function Invoke-AzVmChangeCommand {
                 az vm start -g $targetResourceGroup -n $targetVmName -o none --only-show-errors
                 Assert-LastExitCode "az vm start (target)"
             } | Out-Null
-            $targetRunning = Wait-AzVmVmRunningState -ResourceGroup $targetResourceGroup -VmName $targetVmName -MaxAttempts 6 -DelaySeconds 10
+            $targetRunning = Wait-ClagnosVmRunningState -ResourceGroup $targetResourceGroup -VmName $targetVmName -MaxAttempts 6 -DelaySeconds 10
             if (-not $targetRunning) { throw "Target VM did not reach running state after migration." }
 
             if ($targetSnapshotCreated -and -not [string]::IsNullOrWhiteSpace([string]$targetSnapshotName)) { az snapshot delete -g $targetResourceGroup -n $targetSnapshotName --only-show-errors 2>$null }
@@ -840,7 +840,7 @@ function Invoke-AzVmChangeCommand {
                         az vm start -g $sourceResourceGroup -n $sourceVmName -o none --only-show-errors
                         Assert-LastExitCode "az vm start (source recovery)"
                     } | Out-Null
-                    $sourceRecovered = Wait-AzVmVmRunningState -ResourceGroup $sourceResourceGroup -VmName $sourceVmName -MaxAttempts 6 -DelaySeconds 10
+                    $sourceRecovered = Wait-ClagnosVmRunningState -ResourceGroup $sourceResourceGroup -VmName $sourceVmName -MaxAttempts 6 -DelaySeconds 10
                     if ($sourceRecovered) {
                         $sourceRecoveryNote = " Source VM was restarted after rollback."
                     }
@@ -875,7 +875,7 @@ function Invoke-AzVmChangeCommand {
             az vm deallocate -g $activeResourceGroup -n $activeVmName -o none --only-show-errors
             Assert-LastExitCode "az vm deallocate"
         } | Out-Null
-        $deallocated = Wait-AzVmVmPowerState -ResourceGroup $activeResourceGroup -VmName $activeVmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
+        $deallocated = Wait-ClagnosVmPowerState -ResourceGroup $activeResourceGroup -VmName $activeVmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
         if (-not $deallocated) {
             Throw-FriendlyError `
                 -Detail ("VM '{0}' did not reach deallocated state in expected time." -f $activeVmName) `
@@ -899,7 +899,7 @@ function Invoke-AzVmChangeCommand {
         Assert-LastExitCode "az vm start"
     } | Out-Null
 
-    $running = Wait-AzVmVmRunningState -ResourceGroup $activeResourceGroup -VmName $activeVmName -MaxAttempts 3 -DelaySeconds 10
+    $running = Wait-ClagnosVmRunningState -ResourceGroup $activeResourceGroup -VmName $activeVmName -MaxAttempts 3 -DelaySeconds 10
     if (-not $running) {
         Throw-FriendlyError `
             -Detail ("VM did not return to running state after {0} operation." -f $OperationLabel) `
@@ -910,7 +910,7 @@ function Invoke-AzVmChangeCommand {
 
     if ($regionMoveApplied) {
         try {
-            $healthCheck = Invoke-AzVmMoveTargetHealthCheck `
+            $healthCheck = Invoke-ClagnosMoveTargetHealthCheck `
                 -ResourceGroup $activeResourceGroup `
                 -VmName $activeVmName `
                 -Platform $platform `
@@ -938,20 +938,20 @@ function Invoke-AzVmChangeCommand {
         Set-DotEnvValue -Path $envFilePath -Key 'SELECTED_AZURE_REGION' -Value $targetRegion
         Set-DotEnvValue -Path $envFilePath -Key 'SELECTED_RESOURCE_GROUP' -Value $activeResourceGroup
         Set-DotEnvValue -Path $envFilePath -Key 'SELECTED_VM_NAME' -Value ([string]$context.VmName)
-        Remove-AzVmUnsupportedDotEnvKeys -Path $envFilePath
+        Remove-ClagnosUnsupportedDotEnvKeys -Path $envFilePath
 
         $script:ConfigOverrides['SELECTED_AZURE_REGION'] = $targetRegion
         $script:ConfigOverrides['SELECTED_RESOURCE_GROUP'] = $activeResourceGroup
         $script:ConfigOverrides['SELECTED_VM_NAME'] = [string]$context.VmName
-        Set-AzVmConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source 'azure value'
-        Set-AzVmConfigValueSource -Key 'SELECTED_RESOURCE_GROUP' -Source 'azure value'
-        Set-AzVmConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'azure value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source 'azure value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_RESOURCE_GROUP' -Source 'azure value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'azure value'
     }
 
     if ($sizeChangedAfterRegion) {
         Set-DotEnvValue -Path $envFilePath -Key $vmSizeConfigKey -Value $targetSize
         $script:ConfigOverrides[$vmSizeConfigKey] = $targetSize
-        Set-AzVmConfigValueSource -Key $vmSizeConfigKey -Source 'cli value'
+        Set-ClagnosConfigValueSource -Key $vmSizeConfigKey -Source 'cli value'
     }
 
     if ($regionMoveApplied) {

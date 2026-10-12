@@ -79,7 +79,7 @@ jobs:
       - name: Run non-live smoke contracts
         shell: powershell
         run: |
-          .\tests\az-vm-smoke-tests.ps1 -RepoRoot $PWD.Path
+          .\tests\clagnos-smoke-tests.ps1 -RepoRoot $PWD.Path
 
   workflow-lint:
     runs-on: ubuntu-latest

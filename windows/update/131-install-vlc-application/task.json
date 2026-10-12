@@ -38,5 +38,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "VideoLAN.VLC"
+    },
+    "displayName": "VLC media player",
+    "uninstall": {
+      "kind": "winget",
+      "value": "VideoLAN.VLC"
+    },
+    "id": "vlc"
   }
 }

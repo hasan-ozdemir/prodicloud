@@ -1,5 +1,5 @@
 # Shared 'hibernation' command option specification.
 
-function Get-AzVmSharedHibernationOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'hibernation' -TakesValue)
+function Get-ClagnosSharedHibernationOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'hibernation' -TakesValue)
 }

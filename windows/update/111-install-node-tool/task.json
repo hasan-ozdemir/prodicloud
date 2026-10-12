@@ -1,5 +1,18 @@
 {
   "priority": 111,
   "enabled": true,
-  "timeout": 150
+  "timeout": 150,
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "nodejs-lts"
+    },
+    "displayName": "Node.js LTS",
+    "uninstall": {
+      "kind": "choco",
+      "value": "nodejs-lts"
+    },
+    "id": "nodejs"
+  }
 }

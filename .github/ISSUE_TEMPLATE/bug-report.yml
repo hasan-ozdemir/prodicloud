@@ -13,7 +13,7 @@ body:
     attributes:
       label: Summary
       description: One-sentence description of the problem.
-      placeholder: az-vm do -h does not render command help
+      placeholder: clagnos do -h does not render command help
     validations:
       required: true
   - type: textarea
@@ -22,7 +22,7 @@ body:
       label: Command or workflow
       description: The exact command, help path, or workflow you ran.
       placeholder: |
-        .\az-vm.cmd do --vm-action=status --vm-name=<vm-name>
+        .\cg.cmd do --vm-action=status --vm-name=<vm-name>
     validations:
       required: true
   - type: textarea

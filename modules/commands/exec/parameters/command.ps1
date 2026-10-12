@@ -1,5 +1,5 @@
 # 'command' option binding for 'exec'.
 
-function Get-AzVmExecCommandContentOptionSpecification {
-    return (Get-AzVmSharedCommandOptionSpecification)
+function Get-ClagnosExecCommandContentOptionSpecification {
+    return (Get-ClagnosSharedCommandOptionSpecification)
 }

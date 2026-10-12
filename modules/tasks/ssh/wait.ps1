@@ -1,7 +1,7 @@
 # SSH task VM wait helpers.
 
-# Handles Wait-AzVmVmPowerState.
-function Wait-AzVmVmPowerState {
+# Handles Wait-ClagnosVmPowerState.
+function Wait-ClagnosVmPowerState {
     param(
         [string]$ResourceGroup,
         [string]$VmName,

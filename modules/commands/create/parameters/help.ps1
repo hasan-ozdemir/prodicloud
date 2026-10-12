@@ -1,5 +1,5 @@
 # 'help' option binding for 'create'.
 
-function Get-AzVmCreateHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosCreateHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

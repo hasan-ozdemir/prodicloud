@@ -1,12 +1,12 @@
 # Contract for the 'move' command.
 
-function Get-AzVmMoveOptionSpecifications {
+function Get-ClagnosMoveOptionSpecifications {
     return @(
-        (Get-AzVmMovePerfOptionSpecification),
-        (Get-AzVmMoveHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmMoveGroupOptionSpecification),
-        (Get-AzVmMoveVmNameOptionSpecification),
-        (Get-AzVmMoveVmRegionOptionSpecification)
+        (Get-ClagnosMovePerfOptionSpecification),
+        (Get-ClagnosMoveHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosMoveGroupOptionSpecification),
+        (Get-ClagnosMoveVmNameOptionSpecification),
+        (Get-ClagnosMoveVmRegionOptionSpecification)
     )
 }

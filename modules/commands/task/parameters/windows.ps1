@@ -1,5 +1,5 @@
 # 'windows' option binding for 'task'.
 
-function Get-AzVmTaskWindowsOptionSpecification {
-    return (Get-AzVmSharedWindowsOptionSpecification)
+function Get-ClagnosTaskWindowsOptionSpecification {
+    return (Get-ClagnosSharedWindowsOptionSpecification)
 }

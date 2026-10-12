@@ -14,10 +14,10 @@ $taskConfig = [ordered]@{
     )
 }
 
-Import-Module 'C:\Windows\Temp\az-vm-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-AzVmSessionPath | Out-Null
+    Refresh-ClagnosSessionPath | Out-Null
 }
 
 function Test-PlaceholderValue {
@@ -66,12 +66,12 @@ function Resolve-AutologonExe {
     return ''
 }
 
-if (-not ([System.Management.Automation.PSTypeName]'AzVmWin32LogonNative').Type) {
+if (-not ([System.Management.Automation.PSTypeName]'ClagnosWin32LogonNative').Type) {
     Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
-public static class AzVmWin32LogonNative {
+public static class ClagnosWin32LogonNative {
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern bool LogonUser(
         string lpszUsername,
@@ -95,9 +95,9 @@ function Assert-LocalCredentialValid {
     )
 
     $tokenHandle = [IntPtr]::Zero
-    $logonOk = [AzVmWin32LogonNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)
+    $logonOk = [ClagnosWin32LogonNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)
     if ($tokenHandle -ne [IntPtr]::Zero) {
-        [void][AzVmWin32LogonNative]::CloseHandle($tokenHandle)
+        [void][ClagnosWin32LogonNative]::CloseHandle($tokenHandle)
     }
 
     if (-not $logonOk) {

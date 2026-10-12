@@ -1,5 +1,5 @@
 # 'help' option binding for 'exec'.
 
-function Get-AzVmExecHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosExecHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

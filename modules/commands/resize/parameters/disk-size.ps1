@@ -1,5 +1,5 @@
 # 'disk-size' option binding for 'resize'.
 
-function Get-AzVmResizeDiskSizeOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'disk-size' -TakesValue)
+function Get-ClagnosResizeDiskSizeOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'disk-size' -TakesValue)
 }

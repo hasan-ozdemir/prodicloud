@@ -1,5 +1,5 @@
 # Shared 'command' command option specification.
 
-function Get-AzVmSharedCommandOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'command' -ShortNames @('c') -TakesValue)
+function Get-ClagnosSharedCommandOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'command' -ShortNames @('c') -TakesValue)
 }

@@ -1,5 +1,5 @@
 # Shared 'windows' command option specification.
 
-function Get-AzVmSharedWindowsOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'windows')
+function Get-ClagnosSharedWindowsOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'windows')
 }

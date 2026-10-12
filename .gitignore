@@ -5,8 +5,8 @@
 # Ignore logs and transcripts
 *.log
 *.tmp
-az-vm-log-*.txt
-az-vm-win-e2e-*.log
+clagnos-log-*.txt
+clagnos-win-e2e-*.log
 _tmp_test.txt
 
 # Ignore temp runtime artifacts

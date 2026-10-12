@@ -1,6 +1,6 @@
 # Delete command runtime helpers.
 
-function Get-AzVmDeleteCommandRuntime {
+function Get-ClagnosDeleteCommandRuntime {
     param(
         [hashtable]$Options
     )

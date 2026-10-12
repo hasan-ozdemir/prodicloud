@@ -1,17 +1,17 @@
 # Contract for the 'resize' command.
 
-function Get-AzVmResizeOptionSpecifications {
+function Get-ClagnosResizeOptionSpecifications {
     return @(
-        (Get-AzVmResizePerfOptionSpecification),
-        (Get-AzVmResizeHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmResizeGroupOptionSpecification),
-        (Get-AzVmResizeVmNameOptionSpecification),
-        (Get-AzVmResizeVmSizeOptionSpecification),
-        (Get-AzVmResizeDiskSizeOptionSpecification),
-        (Get-AzVmResizeExpandOptionSpecification),
-        (Get-AzVmResizeShrinkOptionSpecification),
-        (Get-AzVmResizeWindowsOptionSpecification),
-        (Get-AzVmResizeLinuxOptionSpecification)
+        (Get-ClagnosResizePerfOptionSpecification),
+        (Get-ClagnosResizeHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosResizeGroupOptionSpecification),
+        (Get-ClagnosResizeVmNameOptionSpecification),
+        (Get-ClagnosResizeVmSizeOptionSpecification),
+        (Get-ClagnosResizeDiskSizeOptionSpecification),
+        (Get-ClagnosResizeExpandOptionSpecification),
+        (Get-ClagnosResizeShrinkOptionSpecification),
+        (Get-ClagnosResizeWindowsOptionSpecification),
+        (Get-ClagnosResizeLinuxOptionSpecification)
     )
 }

@@ -17,5 +17,18 @@
     "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "gh"
+    },
+    "displayName": "GitHub CLI",
+    "uninstall": {
+      "kind": "choco",
+      "value": "gh"
+    },
+    "id": "github-cli"
   }
 }

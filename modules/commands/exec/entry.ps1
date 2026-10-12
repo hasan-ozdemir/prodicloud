@@ -1,38 +1,38 @@
 # Exec command entry.
 
-# Handles Invoke-AzVmExecCommand.
-function Invoke-AzVmExecCommand {
+# Handles Invoke-ClagnosExecCommand.
+function Invoke-ClagnosExecCommand {
     param(
         [hashtable]$Options
     )
 
-    $runtime = Initialize-AzVmExecCommandRuntimeContext
-    $commandSource = Resolve-AzVmExecCommandTextFromOptions -Options $Options -RepoRoot ([string]$runtime.RepoRoot)
+    $runtime = Initialize-ClagnosExecCommandRuntimeContext
+    $commandSource = Resolve-ClagnosExecCommandTextFromOptions -Options $Options -RepoRoot ([string]$runtime.RepoRoot)
     $commandText = [string]$commandSource.CommandText
     $scriptFilePath = [string]$commandSource.ScriptFilePath
-    $quietRequested = (Test-AzVmCliOptionPresent -Options $Options -Name 'quiet')
+    $quietRequested = (Test-ClagnosCliOptionPresent -Options $Options -Name 'quiet')
     if ($quietRequested -and [string]::IsNullOrWhiteSpace([string]$commandText)) {
         Throw-FriendlyError `
             -Detail "exec --quiet requires --command, -c, or --file." `
             -Code 61 `
             -Summary "Quiet exec requires one remote command." `
-            -Hint 'Use az-vm exec --quiet --command "<remote-command>" or az-vm exec --quiet --file <script-file>.'
+            -Hint 'Use clagnos exec --quiet --command "<remote-command>" or clagnos exec --quiet --file <script-file>.'
     }
     if ($quietRequested) {
-        $script:AzVmQuietOutput = $true
+        $script:ClagnosQuietOutput = $true
     }
 
-    $target = Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $runtime.ConfigMap -OperationName 'exec'
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.ConfigMap -OperationName 'exec'
     $selectedResourceGroup = [string]$target.ResourceGroup
     $selectedVmName = [string]$target.VmName
     $vmDetailContext = [ordered]@{
         ResourceGroup = $selectedResourceGroup
         VmName = $selectedVmName
         AzLocation = ''
-        SshPort = [string](Get-ConfigValue -Config $runtime.ConfigMap -Key 'VM_SSH_PORT' -DefaultValue (Get-AzVmDefaultSshPortText))
+        SshPort = [string](Get-ConfigValue -Config $runtime.ConfigMap -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))
     }
 
-    $vmRuntimeDetails = Get-AzVmVmDetails -Context $vmDetailContext
+    $vmRuntimeDetails = Get-ClagnosVmDetails -Context $vmDetailContext
     $sshHost = [string]$vmRuntimeDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($sshHost)) {
         $sshHost = [string]$vmRuntimeDetails.PublicIP
@@ -65,8 +65,8 @@ function Invoke-AzVmExecCommand {
     $replPlatform = if ([string]::Equals($osType, 'Linux', [System.StringComparison]::OrdinalIgnoreCase)) { 'linux' } else { 'windows' }
     $shell = if ($replPlatform -eq 'linux') { 'bash' } else { 'powershell' }
 
-    $pySsh = Ensure-AzVmPySshTools -RepoRoot (Get-AzVmRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
-    $bootstrap = Initialize-AzVmSshHostKey `
+    $pySsh = Ensure-ClagnosPySshTools -RepoRoot (Get-ClagnosRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
+    $bootstrap = Initialize-ClagnosSshHostKey `
         -PySshPythonPath ([string]$pySsh.PythonPath) `
         -PySshClientPath ([string]$pySsh.ClientPath) `
         -HostName $sshHost `
@@ -88,7 +88,7 @@ function Invoke-AzVmExecCommand {
         if (-not $quietRequested -and -not [string]::IsNullOrWhiteSpace([string]$scriptFilePath)) {
             Write-Host ("Exec remote command source file: {0}" -f [string]$scriptFilePath) -ForegroundColor DarkCyan
         }
-        $remoteCommandText = ConvertTo-AzVmExecRemoteCommandText -CommandText $commandText -Platform $replPlatform -Quiet:$quietRequested
+        $remoteCommandText = ConvertTo-ClagnosExecRemoteCommandText -CommandText $commandText -Platform $replPlatform -Quiet:$quietRequested
 
         $execArgs = @(
             [string]$pySsh.ClientPath,
@@ -106,7 +106,7 @@ function Invoke-AzVmExecCommand {
 
         if ($null -ne $commandWatch -and $commandWatch.IsRunning) {
             $commandWatch.Stop()
-            Write-AzVmPerfTiming -Category "exec" -Label "remote command" -Seconds $commandWatch.Elapsed.TotalSeconds
+            Write-ClagnosPerfTiming -Category "exec" -Label "remote command" -Seconds $commandWatch.Elapsed.TotalSeconds
         }
 
         if ($commandExitCode -ne 0) {
@@ -149,7 +149,7 @@ function Invoke-AzVmExecCommand {
 
     if ($null -ne $shellWatch -and $shellWatch.IsRunning) {
         $shellWatch.Stop()
-        Write-AzVmPerfTiming -Category "exec" -Label "interactive shell session" -Seconds $shellWatch.Elapsed.TotalSeconds
+        Write-ClagnosPerfTiming -Category "exec" -Label "interactive shell session" -Seconds $shellWatch.Elapsed.TotalSeconds
     }
 
     if ($shellExitCode -ne 0) {

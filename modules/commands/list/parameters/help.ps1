@@ -1,5 +1,5 @@
 # 'help' option binding for 'list'.
 
-function Get-AzVmListHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosListHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

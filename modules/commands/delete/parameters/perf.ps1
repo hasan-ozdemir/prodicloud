@@ -1,5 +1,5 @@
 # 'perf' option binding for 'delete'.
 
-function Get-AzVmDeletePerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosDeletePerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

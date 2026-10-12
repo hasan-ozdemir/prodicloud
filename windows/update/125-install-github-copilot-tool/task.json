@@ -35,5 +35,18 @@
   },
   "dependsOn": [
     "111-install-node-tool"
-  ]
+  ],
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "npm",
+      "value": "@github/copilot"
+    },
+    "displayName": "GitHub Copilot CLI",
+    "uninstall": {
+      "kind": "npm",
+      "value": "@github/copilot"
+    },
+    "id": "github-copilot-cli"
+  }
 }

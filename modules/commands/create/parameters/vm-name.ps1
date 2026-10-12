@@ -1,5 +1,5 @@
 # 'vm-name' option binding for 'create'.
 
-function Get-AzVmCreateVmNameOptionSpecification {
-    return (Get-AzVmSharedVmNameOptionSpecification)
+function Get-ClagnosCreateVmNameOptionSpecification {
+    return (Get-ClagnosSharedVmNameOptionSpecification)
 }

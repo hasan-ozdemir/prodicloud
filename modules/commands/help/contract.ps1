@@ -1,7 +1,7 @@
 # Contract for the 'help' command.
 
-function Get-AzVmHelpOptionSpecifications {
+function Get-ClagnosHelpOptionSpecifications {
     return @(
-        (Get-AzVmHelpHelpOptionSpecification)
+        (Get-ClagnosHelpHelpOptionSpecification)
     )
 }

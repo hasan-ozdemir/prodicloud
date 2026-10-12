@@ -1,19 +1,19 @@
 # Connect command entry.
 
-function Invoke-AzVmConnectCommand {
+function Invoke-ClagnosConnectCommand {
     param(
         [hashtable]$Options
     )
 
-    $mode = Resolve-AzVmConnectMode -Options $Options
+    $mode = Resolve-ClagnosConnectMode -Options $Options
     if ([string]::Equals($mode, 'ssh', [System.StringComparison]::OrdinalIgnoreCase)) {
-        if (Test-AzVmCliOptionPresent -Options $Options -Name 'test') {
-            Invoke-AzVmSshConnectivityTest -Options $Options
+        if (Test-ClagnosCliOptionPresent -Options $Options -Name 'test') {
+            Invoke-ClagnosSshConnectivityTest -Options $Options
             return
         }
 
-        $runtime = Initialize-AzVmConnectionCommandContext -Options $Options -OperationName 'connect-ssh'
-        $sshExePath = Resolve-AzVmLocalExecutablePath -Candidates @('ssh.exe', (Join-Path $env:SystemRoot 'System32\OpenSSH\ssh.exe')) -FriendlyName 'Windows OpenSSH'
+        $runtime = Initialize-ClagnosConnectionCommandContext -Options $Options -OperationName 'connect-ssh'
+        $sshExePath = Resolve-ClagnosLocalExecutablePath -Candidates @('ssh.exe', (Join-Path $env:SystemRoot 'System32\OpenSSH\ssh.exe')) -FriendlyName 'Windows OpenSSH'
         $targetText = ("{0}@{1}" -f [string]$runtime.SelectedUserName, [string]$runtime.ConnectionHost)
         $sshArgs = @('-p', [string]$runtime.VmSshPort, $targetText)
 
@@ -24,22 +24,22 @@ function Invoke-AzVmConnectCommand {
         return
     }
 
-    if (Test-AzVmCliOptionPresent -Options $Options -Name 'test') {
-        Invoke-AzVmRdpConnectivityTest -Options $Options
+    if (Test-ClagnosCliOptionPresent -Options $Options -Name 'test') {
+        Invoke-ClagnosRdpConnectivityTest -Options $Options
         return
     }
 
-    $runtime = Initialize-AzVmConnectionCommandContext -Options $Options -OperationName 'connect-rdp'
+    $runtime = Initialize-ClagnosConnectionCommandContext -Options $Options -OperationName 'connect-rdp'
     if (-not [string]::Equals(([string]$runtime.OsType).Trim(), 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) {
         Throw-FriendlyError `
             -Detail ("VM '{0}' reports osType '{1}', so RDP launch is not supported." -f [string]$runtime.VmName, [string]$runtime.OsType) `
             -Code 66 `
             -Summary "Connect --rdp is only available for Windows VMs." `
-            -Hint "Use az-vm connect --ssh for Linux VMs, or target a Windows VM."
+            -Hint "Use clagnos connect --ssh for Linux VMs, or target a Windows VM."
     }
 
-    $cmdKeyPath = Resolve-AzVmLocalExecutablePath -Candidates @((Join-Path $env:SystemRoot 'System32\cmdkey.exe'), 'cmdkey.exe') -FriendlyName 'Windows Credential Manager'
-    $mstscPath = Resolve-AzVmLocalExecutablePath -Candidates @((Join-Path $env:SystemRoot 'System32\mstsc.exe'), 'mstsc.exe') -FriendlyName 'Remote Desktop Connection'
+    $cmdKeyPath = Resolve-ClagnosLocalExecutablePath -Candidates @((Join-Path $env:SystemRoot 'System32\cmdkey.exe'), 'cmdkey.exe') -FriendlyName 'Windows Credential Manager'
+    $mstscPath = Resolve-ClagnosLocalExecutablePath -Candidates @((Join-Path $env:SystemRoot 'System32\mstsc.exe'), 'mstsc.exe') -FriendlyName 'Remote Desktop Connection'
     $credentialTarget = ("TERMSRV/{0}" -f [string]$runtime.ConnectionHost)
     $rdpUserName = (".\{0}" -f [string]$runtime.SelectedUserName)
     $cmdKeyArgs = @("/generic:$credentialTarget", "/user:$rdpUserName", "/pass:$([string]$runtime.SelectedPassword)")

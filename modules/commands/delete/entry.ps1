@@ -1,7 +1,7 @@
 # Delete command entry.
 
-# Handles Invoke-AzVmDeleteCommand.
-function Invoke-AzVmDeleteCommand {
+# Handles Invoke-ClagnosDeleteCommand.
+function Invoke-ClagnosDeleteCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -9,7 +9,7 @@ function Invoke-AzVmDeleteCommand {
         [switch]$LinuxFlag
     )
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $vmName = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_NAME' -DefaultValue '')
@@ -17,7 +17,7 @@ function Invoke-AzVmDeleteCommand {
     $defaultVmName = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_NAME' -DefaultValue '')
     $defaultVmDiskName = [string](Get-ConfigValue -Config $configMap -Key 'VM_DISK_NAME' -DefaultValue '')
 
-    $targetRaw = [string](Get-AzVmCliOptionText -Options $Options -Name 'target')
+    $targetRaw = [string](Get-ClagnosCliOptionText -Options $Options -Name 'target')
     $target = $targetRaw.Trim().ToLowerInvariant()
     if ($target -notin @('group','network','vm','disk')) {
         Throw-FriendlyError `
@@ -27,7 +27,7 @@ function Invoke-AzVmDeleteCommand {
             -Hint "Use --target=group|network|vm|disk."
     }
 
-    $groupOption = [string](Get-AzVmCliOptionText -Options $Options -Name 'group')
+    $groupOption = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
     $resourceGroup = ''
     if (-not [string]::IsNullOrWhiteSpace([string]$groupOption)) {
         $resourceGroup = $groupOption.Trim()
@@ -43,7 +43,7 @@ function Invoke-AzVmDeleteCommand {
         $resourceGroup = $defaultResourceGroup.Trim()
     }
     else {
-        $resourceGroup = Select-AzVmResourceGroupInteractive -DefaultResourceGroup $defaultResourceGroup -VmName $vmName
+        $resourceGroup = Select-ClagnosResourceGroupInteractive -DefaultResourceGroup $defaultResourceGroup -VmName $vmName
     }
 
     $groupExists = az group exists -n $resourceGroup --only-show-errors
@@ -55,34 +55,19 @@ function Invoke-AzVmDeleteCommand {
             -Summary "Delete command cannot continue because resource group was not found." `
             -Hint "Select an existing resource group."
     }
-    Assert-AzVmManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'delete'
+    Assert-ClagnosManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'delete'
 
-    $forceYes = Get-AzVmCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+    $forceYes = Get-ClagnosCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+    $componentDeleteOptions = @{} + $Options
+    if ($AutoMode -or $forceYes) { $componentDeleteOptions['yes'] = $true }
 
     if ($target -eq 'group') {
-        $approved = ($forceYes -or $AutoMode)
-        if (-not $approved) {
-            $approved = Confirm-YesNo -PromptText ("Delete resource group '{0}' and all resources?" -f $resourceGroup) -DefaultYes $false
-        }
-        if (-not $approved) {
-            Write-Host "Delete command canceled by user." -ForegroundColor Yellow
-            return
-        }
-
-        Invoke-TrackedAction -Label ("az group delete -n {0} --yes --no-wait" -f $resourceGroup) -Action {
-            az group delete -n $resourceGroup --yes --no-wait --only-show-errors
-            Assert-LastExitCode "az group delete"
-        } | Out-Null
-        Invoke-TrackedAction -Label ("az group wait -n {0} --deleted" -f $resourceGroup) -Action {
-            az group wait -n $resourceGroup --deleted --only-show-errors
-            Assert-LastExitCode "az group wait --deleted"
-        } | Out-Null
-
-        Write-Host ("Delete completed: resource group '{0}' was purged." -f $resourceGroup) -ForegroundColor Green
+        $groupRow = Select-ClagnosComponentRow -Rows @(Get-ClagnosComponentRowsForGroup -Type 'group' -ResourceGroup $resourceGroup) -Name $resourceGroup -Type 'resource group'
+        Invoke-ClagnosComponentDelete -Type 'group' -SelectedRow $groupRow -ResourceGroup $resourceGroup -Options $componentDeleteOptions
         return
     }
 
-    $vmNames = @(Get-AzVmVmNamesForResourceGroup -ResourceGroup $resourceGroup)
+    $vmNames = @(Get-ClagnosVmNamesForResourceGroup -ResourceGroup $resourceGroup)
     if ($vmNames.Count -eq 0) {
         Throw-FriendlyError `
             -Detail ("No VM found in resource group '{0}' for target '{1}'." -f $resourceGroup, $target) `
@@ -114,11 +99,26 @@ function Invoke-AzVmDeleteCommand {
         }
     }
     else {
-        $selectedVmName = Select-AzVmVmInteractive -ResourceGroup $resourceGroup -DefaultVmName $defaultVmName
+        $selectedVmName = Select-ClagnosVmInteractive -ResourceGroup $resourceGroup -DefaultVmName $defaultVmName
     }
 
-    $descriptor = Get-AzVmVmNetworkDescriptor -ResourceGroup $resourceGroup -VmName $selectedVmName
-    $vmExists = Test-AzVmAzResourceExists -AzArgs @("vm", "show", "-g", $resourceGroup, "-n", $selectedVmName)
+    $descriptor = Get-ClagnosVmNetworkDescriptor -ResourceGroup $resourceGroup -VmName $selectedVmName
+    $vmExists = Test-ClagnosAzResourceExists -AzArgs @("vm", "show", "-g", $resourceGroup, "-n", $selectedVmName)
+
+    $componentType = switch ($target) {
+        'vm' { 'vm' }
+        'disk' { 'disk' }
+        default { 'vnet' }
+    }
+    $componentRows = @(Get-ClagnosComponentRowsForGroup -Type $componentType -ResourceGroup $resourceGroup)
+    $componentName = switch ($target) {
+        'vm' { $selectedVmName }
+        'disk' { [string]$descriptor.OsDiskName }
+        default { [string]$descriptor.VnetName }
+    }
+    $componentRow = Select-ClagnosComponentRow -Rows $componentRows -Name $componentName -Type $componentType
+    Invoke-ClagnosComponentDelete -Type $componentType -SelectedRow $componentRow -ResourceGroup $resourceGroup -Options $componentDeleteOptions
+    return
 
     $confirmPrompt = switch ($target) {
         'vm' { "Delete VM '$selectedVmName' from resource group '$resourceGroup'?" }
@@ -167,7 +167,7 @@ function Invoke-AzVmDeleteCommand {
                 -Hint "Set VM_DISK_NAME in .env or ensure VM metadata is available."
         }
 
-        $diskExists = Test-AzVmAzResourceExists -AzArgs @("disk", "show", "-g", $resourceGroup, "-n", $diskName)
+        $diskExists = Test-ClagnosAzResourceExists -AzArgs @("disk", "show", "-g", $resourceGroup, "-n", $diskName)
         if ($diskExists) {
             Invoke-TrackedAction -Label ("az disk delete -g {0} -n {1} --yes" -f $resourceGroup, $diskName) -Action {
                 az disk delete -g $resourceGroup -n $diskName --yes -o none --only-show-errors
@@ -183,7 +183,7 @@ function Invoke-AzVmDeleteCommand {
 
     $nicName = [string]$descriptor.NicName
     if (-not [string]::IsNullOrWhiteSpace([string]$nicName)) {
-        $nicExists = Test-AzVmAzResourceExists -AzArgs @("network", "nic", "show", "-g", $resourceGroup, "-n", $nicName)
+        $nicExists = Test-ClagnosAzResourceExists -AzArgs @("network", "nic", "show", "-g", $resourceGroup, "-n", $nicName)
         if ($nicExists) {
             Invoke-TrackedAction -Label ("az network nic delete -g {0} -n {1}" -f $resourceGroup, $nicName) -Action {
                 az network nic delete -g $resourceGroup -n $nicName --only-show-errors
@@ -194,7 +194,7 @@ function Invoke-AzVmDeleteCommand {
 
     $publicIpName = [string]$descriptor.PublicIpName
     if (-not [string]::IsNullOrWhiteSpace([string]$publicIpName)) {
-        $ipExists = Test-AzVmAzResourceExists -AzArgs @("network", "public-ip", "show", "-g", $resourceGroup, "-n", $publicIpName)
+        $ipExists = Test-ClagnosAzResourceExists -AzArgs @("network", "public-ip", "show", "-g", $resourceGroup, "-n", $publicIpName)
         if ($ipExists) {
             Invoke-TrackedAction -Label ("az network public-ip delete -g {0} -n {1}" -f $resourceGroup, $publicIpName) -Action {
                 az network public-ip delete -g $resourceGroup -n $publicIpName --only-show-errors
@@ -205,7 +205,7 @@ function Invoke-AzVmDeleteCommand {
 
     $nsgName = [string]$descriptor.NsgName
     if (-not [string]::IsNullOrWhiteSpace([string]$nsgName)) {
-        $nsgExists = Test-AzVmAzResourceExists -AzArgs @("network", "nsg", "show", "-g", $resourceGroup, "-n", $nsgName)
+        $nsgExists = Test-ClagnosAzResourceExists -AzArgs @("network", "nsg", "show", "-g", $resourceGroup, "-n", $nsgName)
         if ($nsgExists) {
             Invoke-TrackedAction -Label ("az network nsg delete -g {0} -n {1}" -f $resourceGroup, $nsgName) -Action {
                 az network nsg delete -g $resourceGroup -n $nsgName --only-show-errors
@@ -216,7 +216,7 @@ function Invoke-AzVmDeleteCommand {
 
     $vnetName = [string]$descriptor.VnetName
     if (-not [string]::IsNullOrWhiteSpace([string]$vnetName)) {
-        $vnetExists = Test-AzVmAzResourceExists -AzArgs @("network", "vnet", "show", "-g", $resourceGroup, "-n", $vnetName)
+        $vnetExists = Test-ClagnosAzResourceExists -AzArgs @("network", "vnet", "show", "-g", $resourceGroup, "-n", $vnetName)
         if ($vnetExists) {
             Invoke-TrackedAction -Label ("az network vnet delete -g {0} -n {1}" -f $resourceGroup, $vnetName) -Action {
                 az network vnet delete -g $resourceGroup -n $vnetName --only-show-errors

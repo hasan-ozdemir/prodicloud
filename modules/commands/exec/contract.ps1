@@ -1,14 +1,14 @@
 # Contract for the 'exec' command.
 
-function Get-AzVmExecOptionSpecifications {
+function Get-ClagnosExecOptionSpecifications {
     return @(
-        (Get-AzVmExecPerfOptionSpecification),
-        (Get-AzVmExecHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmExecGroupOptionSpecification),
-        (Get-AzVmExecVmNameOptionSpecification),
-        (Get-AzVmExecFileOptionSpecification),
-        (Get-AzVmExecCommandContentOptionSpecification),
-        (Get-AzVmExecQuietOptionSpecification)
+        (Get-ClagnosExecPerfOptionSpecification),
+        (Get-ClagnosExecHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosExecGroupOptionSpecification),
+        (Get-ClagnosExecVmNameOptionSpecification),
+        (Get-ClagnosExecFileOptionSpecification),
+        (Get-ClagnosExecCommandContentOptionSpecification),
+        (Get-ClagnosExecQuietOptionSpecification)
     )
 }

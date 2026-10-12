@@ -1,6 +1,6 @@
 # Show command runtime helpers.
 
-function Get-AzVmShowCommandRuntime {
+function Get-ClagnosShowCommandRuntime {
     param(
         [hashtable]$Options
     )
@@ -10,20 +10,20 @@ function Get-AzVmShowCommandRuntime {
     }
 }
 
-function Resolve-AzVmShowFocusedTarget {
+function Resolve-ClagnosShowFocusedTarget {
     param(
         [hashtable]$Options,
         [hashtable]$ConfigMap,
         [object[]]$SelectedGroupDumps
     )
 
-    $groupOption = [string](Get-AzVmCliOptionText -Options $Options -Name 'group')
-    $vmNameOption = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-name')
+    $groupOption = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
+    $vmNameOption = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
     $requestedGroup = if ([string]::IsNullOrWhiteSpace([string]$groupOption)) { '' } else { $groupOption.Trim() }
     $requestedVmName = if ([string]::IsNullOrWhiteSpace([string]$vmNameOption)) { '' } else { $vmNameOption.Trim() }
 
     if (-not [string]::IsNullOrWhiteSpace([string]$requestedGroup) -or -not [string]::IsNullOrWhiteSpace([string]$requestedVmName)) {
-        return (Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $ConfigMap -OperationName 'show' -AutoSelectSingleVm)
+        return (Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $ConfigMap -OperationName 'show' -AutoSelectSingleVm)
     }
 
     $vmRows = @()
@@ -46,7 +46,7 @@ function Resolve-AzVmShowFocusedTarget {
     return $null
 }
 
-function Get-AzVmShowTargetDerivedConfiguration {
+function Get-ClagnosShowTargetDerivedConfiguration {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -57,7 +57,7 @@ function Get-AzVmShowTargetDerivedConfiguration {
         return $null
     }
 
-    $targetState = Get-AzVmConfigureTargetState -ResourceGroup $ResourceGroup -VmName $VmName -ConfigBefore $ConfigMap
+    $targetState = Get-ClagnosConfigureTargetState -ResourceGroup $ResourceGroup -VmName $VmName -ConfigBefore $ConfigMap
     return [ordered]@{
         ResourceGroup = [string]$ResourceGroup
         VmName = [string]$VmName

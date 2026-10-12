@@ -24,5 +24,18 @@
     "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Rclone.Rclone"
+    },
+    "displayName": "Rclone",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Rclone.Rclone"
+    },
+    "id": "rclone"
   }
 }

@@ -1,12 +1,12 @@
 # Contract for the 'do' command.
 
-function Get-AzVmDoOptionSpecifications {
+function Get-ClagnosDoOptionSpecifications {
     return @(
-        (Get-AzVmDoPerfOptionSpecification),
-        (Get-AzVmDoHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmDoGroupOptionSpecification),
-        (Get-AzVmDoVmNameOptionSpecification),
-        (Get-AzVmDoVmActionOptionSpecification)
+        (Get-ClagnosDoPerfOptionSpecification),
+        (Get-ClagnosDoHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosDoGroupOptionSpecification),
+        (Get-ClagnosDoVmNameOptionSpecification),
+        (Get-ClagnosDoVmActionOptionSpecification)
     )
 }

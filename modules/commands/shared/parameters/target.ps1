@@ -1,5 +1,5 @@
 # Shared 'target' command option specification.
 
-function Get-AzVmSharedTargetOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'target' -TakesValue)
+function Get-ClagnosSharedTargetOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'target' -TakesValue)
 }

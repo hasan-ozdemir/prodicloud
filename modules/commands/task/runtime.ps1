@@ -1,7 +1,7 @@
 # Task command runtime helpers.
 
-# Handles Get-AzVmTaskListRows.
-function Get-AzVmTaskListRows {
+# Handles Get-ClagnosTaskListRows.
+function Get-ClagnosTaskListRows {
     param(
         [string]$Stage,
         [object[]]$InventoryTasks,
@@ -45,8 +45,8 @@ function Get-AzVmTaskListRows {
     return @($rows)
 }
 
-# Handles Resolve-AzVmTaskSelection.
-function Resolve-AzVmTaskSelection {
+# Handles Resolve-ClagnosTaskSelection.
+function Resolve-ClagnosTaskSelection {
     param(
         [object[]]$TaskBlocks,
         [string]$TaskNumberOrName,
@@ -118,21 +118,21 @@ function Resolve-AzVmTaskSelection {
             -Detail ("Task '{0}' was not found in {1} catalog." -f $selectedToken, $Stage) `
             -Code 60 `
             -Summary "Task selection is invalid." `
-            -Hint ("List valid {0} task numbers with 'az-vm task --list --vm-{0}'." -f $Stage)
+            -Hint ("List valid {0} task numbers with 'clagnos task --list --vm-{0}'." -f $Stage)
     }
 
     return $selectedTask[0]
 }
 
-function Resolve-AzVmTaskCommandMode {
+function Resolve-ClagnosTaskCommandMode {
     param([hashtable]$Options)
 
     $actions = @(
-        @{ Name = 'list'; Present = (Test-AzVmCliOptionPresent -Options $Options -Name 'list') }
-        @{ Name = 'save-app-state'; Present = (Test-AzVmCliOptionPresent -Options $Options -Name 'save-app-state') }
-        @{ Name = 'restore-app-state'; Present = (Test-AzVmCliOptionPresent -Options $Options -Name 'restore-app-state') }
-        @{ Name = 'run-vm-init'; Present = (Test-AzVmCliOptionPresent -Options $Options -Name 'run-vm-init') }
-        @{ Name = 'run-vm-update'; Present = (Test-AzVmCliOptionPresent -Options $Options -Name 'run-vm-update') }
+        @{ Name = 'list'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'list') }
+        @{ Name = 'save-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'save-app-state') }
+        @{ Name = 'restore-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'restore-app-state') }
+        @{ Name = 'run-vm-init'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-init') }
+        @{ Name = 'run-vm-update'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-update') }
     )
 
     $presentActions = @($actions | Where-Object { [bool]$_.Present })
@@ -141,7 +141,7 @@ function Resolve-AzVmTaskCommandMode {
             -Detail "Task command requires one action path." `
             -Code 2 `
             -Summary "Task command usage is incomplete." `
-            -Hint "Use az-vm task --list, az-vm task --run-vm-init ..., az-vm task --run-vm-update ..., az-vm task --save-app-state ..., or az-vm task --restore-app-state ...."
+            -Hint "Use clagnos task --list, clagnos task --run-vm-init ..., clagnos task --run-vm-update ..., clagnos task --save-app-state ..., or clagnos task --restore-app-state ...."
     }
     if (@($presentActions).Count -gt 1) {
         Throw-FriendlyError `
@@ -154,16 +154,16 @@ function Resolve-AzVmTaskCommandMode {
     return [string]$presentActions[0].Name
 }
 
-function Resolve-AzVmTaskStageSelection {
+function Resolve-ClagnosTaskStageSelection {
     param(
         [hashtable]$Options,
         [switch]$AutoMode
     )
 
-    $hasVmInit = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-init'
-    $hasVmUpdate = Test-AzVmCliOptionPresent -Options $Options -Name 'vm-update'
-    $hasInitTask = (Test-AzVmCliOptionPresent -Options $Options -Name 'vm-init-task')
-    $hasUpdateTask = (Test-AzVmCliOptionPresent -Options $Options -Name 'vm-update-task')
+    $hasVmInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init'
+    $hasVmUpdate = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update'
+    $hasInitTask = (Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init-task')
+    $hasUpdateTask = (Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update-task')
 
     if (($hasVmInit -and $hasVmUpdate) -or ($hasInitTask -and $hasUpdateTask)) {
         Throw-FriendlyError `
@@ -182,11 +182,11 @@ function Resolve-AzVmTaskStageSelection {
     }
 
     if ($hasInitTask) {
-        $requested = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-init-task')
+        $requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-init-task')
         return [pscustomobject]@{ Stage = 'init'; Requested = $requested }
     }
     if ($hasUpdateTask) {
-        $requested = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-update-task')
+        $requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-update-task')
         return [pscustomobject]@{ Stage = 'update'; Requested = $requested }
     }
 
@@ -197,14 +197,14 @@ function Resolve-AzVmTaskStageSelection {
         -Hint "Use --vm-init-task=<task-number|task-name> or --vm-update-task=<task-number|task-name>."
 }
 
-function Resolve-AzVmTaskAppStateSurface {
+function Resolve-ClagnosTaskAppStateSurface {
     param(
         [string]$Mode,
         [hashtable]$Options
     )
 
     if ([string]::Equals([string]$Mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
-        if (Test-AzVmCliOptionPresent -Options $Options -Name 'target') {
+        if (Test-ClagnosCliOptionPresent -Options $Options -Name 'target') {
             Throw-FriendlyError `
                 -Detail "Task save-app-state does not support --target." `
                 -Code 2 `
@@ -212,14 +212,14 @@ function Resolve-AzVmTaskAppStateSurface {
                 -Hint "Use --source=vm or --source=lm with --save-app-state."
         }
 
-        $surface = [string](Get-AzVmCliOptionText -Options $Options -Name 'source')
+        $surface = [string](Get-ClagnosCliOptionText -Options $Options -Name 'source')
         if ([string]::IsNullOrWhiteSpace([string]$surface)) {
             $surface = 'vm'
         }
         $surface = $surface.Trim().ToLowerInvariant()
         if ($surface -notin @('vm', 'lm')) {
             Throw-FriendlyError `
-                -Detail ("Unsupported --source value '{0}'." -f [string](Get-AzVmCliOptionText -Options $Options -Name 'source')) `
+                -Detail ("Unsupported --source value '{0}'." -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'source')) `
                 -Code 2 `
                 -Summary "Task save-app-state surface selection is invalid." `
                 -Hint "Use --source=vm or --source=lm."
@@ -231,7 +231,7 @@ function Resolve-AzVmTaskAppStateSurface {
         }
     }
 
-    if (Test-AzVmCliOptionPresent -Options $Options -Name 'source') {
+    if (Test-ClagnosCliOptionPresent -Options $Options -Name 'source') {
         Throw-FriendlyError `
             -Detail "Task restore-app-state does not support --source." `
             -Code 2 `
@@ -239,14 +239,14 @@ function Resolve-AzVmTaskAppStateSurface {
             -Hint "Use --target=vm or --target=lm with --restore-app-state."
     }
 
-    $surface = [string](Get-AzVmCliOptionText -Options $Options -Name 'target')
+    $surface = [string](Get-ClagnosCliOptionText -Options $Options -Name 'target')
     if ([string]::IsNullOrWhiteSpace([string]$surface)) {
         $surface = 'vm'
     }
     $surface = $surface.Trim().ToLowerInvariant()
     if ($surface -notin @('vm', 'lm')) {
         Throw-FriendlyError `
-            -Detail ("Unsupported --target value '{0}'." -f [string](Get-AzVmCliOptionText -Options $Options -Name 'target')) `
+            -Detail ("Unsupported --target value '{0}'." -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'target')) `
             -Code 2 `
             -Summary "Task restore-app-state surface selection is invalid." `
             -Hint "Use --target=vm or --target=lm."
@@ -258,19 +258,19 @@ function Resolve-AzVmTaskAppStateSurface {
     }
 }
 
-function Get-AzVmTaskAppStateRequestedUsersFromOptions {
+function Get-ClagnosTaskAppStateRequestedUsersFromOptions {
     param([hashtable]$Options)
 
-    return @(Resolve-AzVmTaskAppStateRequestedUsers -UserOptionValue ([string](Get-AzVmCliOptionText -Options $Options -Name 'user')))
+    return @(Resolve-ClagnosTaskAppStateRequestedUsers -UserOptionValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'user')))
 }
 
-function Resolve-AzVmTaskVmAppStateSelectedProfiles {
+function Resolve-ClagnosTaskVmAppStateSelectedProfiles {
     param(
         [pscustomobject]$Runtime,
         [string[]]$RequestedUsers = @()
     )
 
-    $tokens = @(Resolve-AzVmTaskAppStateRequestedUsers -UserOptionValue (@($RequestedUsers) -join ','))
+    $tokens = @(Resolve-ClagnosTaskAppStateRequestedUsers -UserOptionValue (@($RequestedUsers) -join ','))
     if (@($tokens).Count -eq 1 -and [string]::Equals([string]$tokens[0], '.all.', [System.StringComparison]::OrdinalIgnoreCase)) {
         return [pscustomobject]@{
             IsAll = $true
@@ -332,7 +332,7 @@ function Resolve-AzVmTaskVmAppStateSelectedProfiles {
     }
 }
 
-function Assert-AzVmTaskCommandOptionScope {
+function Assert-ClagnosTaskCommandOptionScope {
     param(
         [string]$Mode,
         [hashtable]$Options
@@ -340,7 +340,7 @@ function Assert-AzVmTaskCommandOptionScope {
 
     if ([string]::Equals($Mode, 'list', [System.StringComparison]::OrdinalIgnoreCase)) {
         foreach ($optionName in @('group', 'vm-name', 'subscription-id', 'vm-init-task', 'vm-update-task', 'run-vm-init', 'run-vm-update', 'source', 'target', 'user')) {
-            if (Test-AzVmCliOptionPresent -Options $Options -Name $optionName) {
+            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task list mode does not support --{0}." -f [string]$optionName) `
                     -Code 2 `
@@ -355,7 +355,7 @@ function Assert-AzVmTaskCommandOptionScope {
     if ([string]::Equals($Mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($Mode, 'restore-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
         foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'run-vm-init', 'run-vm-update')) {
-            if (Test-AzVmCliOptionPresent -Options $Options -Name $optionName) {
+            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task app-state maintenance does not support --{0}." -f [string]$optionName) `
                     -Code 2 `
@@ -368,7 +368,7 @@ function Assert-AzVmTaskCommandOptionScope {
     }
 
     foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'vm-init-task', 'vm-update-task', 'save-app-state', 'restore-app-state', 'source', 'target', 'user')) {
-        if (Test-AzVmCliOptionPresent -Options $Options -Name $optionName) {
+        if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
             Throw-FriendlyError `
                 -Detail ("Task run mode does not support --{0}." -f [string]$optionName) `
                 -Code 2 `
@@ -378,37 +378,37 @@ function Assert-AzVmTaskCommandOptionScope {
     }
 }
 
-function Resolve-AzVmTaskBlockForMaintenance {
+function Resolve-ClagnosTaskBlockForMaintenance {
     param(
         [pscustomobject]$Runtime,
         [hashtable]$Options,
         [switch]$AutoMode
     )
 
-    $selection = Resolve-AzVmTaskStageSelection -Options $Options -AutoMode:$AutoMode
+    $selection = Resolve-ClagnosTaskStageSelection -Options $Options -AutoMode:$AutoMode
     $stage = [string]$selection.Stage
     $requested = [string]$selection.Requested
 
     if ($stage -eq 'init') {
-        $catalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
-        $tasks = Resolve-AzVmRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-        $selectedTask = Resolve-AzVmTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'init' -AutoMode:$AutoMode
+        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
+        $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+        $selectedTask = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'init' -AutoMode:$AutoMode
         return [pscustomobject]@{ Stage = 'init'; TaskBlock = $selectedTask }
     }
 
-    $catalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
-    $tasks = Resolve-AzVmRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-    $selectedTask = Resolve-AzVmTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'update' -AutoMode:$AutoMode
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
+    $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+    $selectedTask = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'update' -AutoMode:$AutoMode
     return [pscustomobject]@{ Stage = 'update'; TaskBlock = $selectedTask }
 }
 
-function Resolve-AzVmTaskRunSelection {
+function Resolve-ClagnosTaskRunSelection {
     param(
         [hashtable]$Options
     )
 
-    $hasRunInit = Test-AzVmCliOptionPresent -Options $Options -Name 'run-vm-init'
-    $hasRunUpdate = Test-AzVmCliOptionPresent -Options $Options -Name 'run-vm-update'
+    $hasRunInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-init'
+    $hasRunUpdate = Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-update'
 
     if ($hasRunInit -and $hasRunUpdate) {
         Throw-FriendlyError `
@@ -421,13 +421,13 @@ function Resolve-AzVmTaskRunSelection {
     if ($hasRunInit) {
         return [pscustomobject]@{
             Stage = 'init'
-            Requested = [string](Get-AzVmCliOptionText -Options $Options -Name 'run-vm-init')
+            Requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'run-vm-init')
         }
     }
     if ($hasRunUpdate) {
         return [pscustomobject]@{
             Stage = 'update'
-            Requested = [string](Get-AzVmCliOptionText -Options $Options -Name 'run-vm-update')
+            Requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'run-vm-update')
         }
     }
 
@@ -438,7 +438,7 @@ function Resolve-AzVmTaskRunSelection {
         -Hint "Use --run-vm-init <task-number|task-name> or --run-vm-update <task-number|task-name>."
 }
 
-function Resolve-AzVmTaskBlockForStage {
+function Resolve-ClagnosTaskBlockForStage {
     param(
         [pscustomobject]$Runtime,
         [string]$Stage,
@@ -447,17 +447,17 @@ function Resolve-AzVmTaskBlockForStage {
     )
 
     if ([string]::Equals([string]$Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $catalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
-        $tasks = Resolve-AzVmRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-        return (Resolve-AzVmTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'init' -AutoMode:$AutoMode)
+        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
+        $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+        return (Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'init' -AutoMode:$AutoMode)
     }
 
-    $catalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
-    $tasks = Resolve-AzVmRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-    return (Resolve-AzVmTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode)
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
+    $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+    return (Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode)
 }
 
-function Test-AzVmStoreBackedShortcutRefreshTask {
+function Test-ClagnosStoreBackedShortcutRefreshTask {
     param(
         [AllowNull()]
         [psobject]$TaskBlock
@@ -481,7 +481,7 @@ function Test-AzVmStoreBackedShortcutRefreshTask {
     ))
 }
 
-function Resolve-AzVmTaskExecutionPlanForStage {
+function Resolve-ClagnosTaskExecutionPlanForStage {
     param(
         [pscustomobject]$Runtime,
         [string]$Stage,
@@ -490,21 +490,21 @@ function Resolve-AzVmTaskExecutionPlanForStage {
     )
 
     if ([string]::Equals([string]$Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $selectedTaskBlock = Resolve-AzVmTaskBlockForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
+        $selectedTaskBlock = Resolve-ClagnosTaskBlockForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
         return [pscustomobject]@{
             SelectedTaskBlock = $selectedTaskBlock
             ExecutionTaskBlocks = @($selectedTaskBlock)
         }
     }
 
-    $catalog = Get-AzVmTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
-    $tasks = @(Resolve-AzVmRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context)
-    $selectedTaskBlock = Resolve-AzVmTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
+    $tasks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context)
+    $selectedTaskBlock = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode
     $executionTaskBlocks = New-Object 'System.Collections.Generic.List[object]'
     $executionTaskBlocks.Add($selectedTaskBlock) | Out-Null
 
     if ([string]::Equals([string]$Runtime.Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase) -and
-        (Test-AzVmStoreBackedShortcutRefreshTask -TaskBlock $selectedTaskBlock)) {
+        (Test-ClagnosStoreBackedShortcutRefreshTask -TaskBlock $selectedTaskBlock)) {
         $shortcutRefreshTask = $tasks |
             Where-Object { [string]::Equals([string]$_.Name, '10003-create-public-desktop-shortcuts', [System.StringComparison]::OrdinalIgnoreCase) } |
             Select-Object -First 1
@@ -520,7 +520,7 @@ function Resolve-AzVmTaskExecutionPlanForStage {
     }
 }
 
-function Invoke-AzVmTaskExecutionWithTarget {
+function Invoke-ClagnosTaskExecutionWithTarget {
     param(
         [pscustomobject]$Runtime,
         [hashtable]$Options,
@@ -537,21 +537,21 @@ function Invoke-AzVmTaskExecutionWithTarget {
         $effectiveTaskOutcomeMode = [string]$TaskOutcomeModeOverride
     }
 
-    $target = Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName $OperationName
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName $OperationName
     $Runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $Runtime.Context.VmName = [string]$target.VmName
-    $executionPlan = Resolve-AzVmTaskExecutionPlanForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
+    $executionPlan = Resolve-ClagnosTaskExecutionPlanForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
     $taskBlock = $executionPlan.SelectedTaskBlock
     $executionTaskBlocks = @($executionPlan.ExecutionTaskBlocks)
 
     if ([string]::Equals([string]$Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
         $combinedShell = if ([string]::Equals([string]$Runtime.Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) { 'bash' } else { 'powershell' }
-        $vmRuntimeDetails = Get-AzVmVmDetails -Context $Runtime.Context
+        $vmRuntimeDetails = Get-ClagnosVmDetails -Context $Runtime.Context
         $sshHost = [string]$vmRuntimeDetails.VmFqdn
         if ([string]::IsNullOrWhiteSpace([string]$sshHost)) {
             $sshHost = [string]$vmRuntimeDetails.PublicIP
         }
-        $runCommandResult = Invoke-VmRunCommandBlocks -ResourceGroup ([string]$Runtime.Context.ResourceGroup) -VmName ([string]$Runtime.Context.VmName) -CommandId ([string]$Runtime.PlatformDefaults.RunCommandId) -TaskBlocks @($executionTaskBlocks) -CombinedShell $combinedShell -TaskOutcomeMode $effectiveTaskOutcomeMode -PerfTaskCategory "task-run" -Platform ([string]$Runtime.Platform) -RepoRoot (Get-AzVmRepoRoot) -ManagerUser ([string]$Runtime.Context.VmUser) -AssistantUser ([string]$Runtime.Context.VmAssistantUser) -SshHost $sshHost -SshUser ([string]$Runtime.Context.VmUser) -SshPassword ([string]$Runtime.Context.VmPass) -SshPort ([string]$Runtime.Context.SshPort) -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
+        $runCommandResult = Invoke-VmRunCommandBlocks -ResourceGroup ([string]$Runtime.Context.ResourceGroup) -VmName ([string]$Runtime.Context.VmName) -CommandId ([string]$Runtime.PlatformDefaults.RunCommandId) -TaskBlocks @($executionTaskBlocks) -CombinedShell $combinedShell -TaskOutcomeMode $effectiveTaskOutcomeMode -PerfTaskCategory "task-run" -Platform ([string]$Runtime.Platform) -RepoRoot (Get-ClagnosRepoRoot) -ManagerUser ([string]$Runtime.Context.VmUser) -AssistantUser ([string]$Runtime.Context.VmAssistantUser) -SshHost $sshHost -SshUser ([string]$Runtime.Context.VmUser) -SshPassword ([string]$Runtime.Context.VmPass) -SshPort ([string]$Runtime.Context.SshPort) -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
         return [pscustomobject]@{
             Stage = 'init'
             Task = $taskBlock
@@ -561,7 +561,7 @@ function Invoke-AzVmTaskExecutionWithTarget {
         }
     }
 
-    $vmRuntimeDetails = Get-AzVmVmDetails -Context $Runtime.Context
+    $vmRuntimeDetails = Get-ClagnosVmDetails -Context $Runtime.Context
     $sshHost = [string]$vmRuntimeDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($sshHost)) {
         $sshHost = [string]$vmRuntimeDetails.PublicIP
@@ -570,9 +570,9 @@ function Invoke-AzVmTaskExecutionWithTarget {
         throw "Task execution could not resolve VM SSH host (FQDN/Public IP)."
     }
 
-    $sshTaskResult = Invoke-AzVmSshTaskBlocks `
+    $sshTaskResult = Invoke-ClagnosSshTaskBlocks `
         -Platform ([string]$Runtime.Platform) `
-        -RepoRoot (Get-AzVmRepoRoot) `
+        -RepoRoot (Get-ClagnosRepoRoot) `
         -SshHost $sshHost `
         -SshUser ([string]$Runtime.Context.VmUser) `
         -SshPassword ([string]$Runtime.Context.VmPass) `

@@ -1,5 +1,5 @@
 # Shared 'step-to' command option specification.
 
-function Get-AzVmSharedStepToOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'step-to' -TakesValue)
+function Get-ClagnosSharedStepToOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'step-to' -TakesValue)
 }

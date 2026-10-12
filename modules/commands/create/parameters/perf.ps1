@@ -1,5 +1,5 @@
 # 'perf' option binding for 'create'.
 
-function Get-AzVmCreatePerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosCreatePerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

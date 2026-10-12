@@ -42,9 +42,9 @@ $unresolvedCompanyWebAddressToken = ('__' + 'SELECTED_COMPANY_WEB_ADDRESS' + '__
 $unresolvedCompanyEmailAddressToken = ('__' + 'SELECTED_COMPANY_EMAIL_ADDRESS' + '__')
 $unresolvedEmployeeEmailAddressToken = ('__' + 'SELECTED_EMPLOYEE_EMAIL_ADDRESS' + '__')
 $unresolvedEmployeeFullNameToken = ('__' + 'SELECTED_EMPLOYEE_FULL_NAME' + '__')
-$storeHelperPath = 'C:\Windows\Temp\az-vm-store-install-state.psm1'
-$launcherHelperPath = 'C:\Windows\Temp\az-vm-shortcut-launcher.psm1'
-$interactiveHelperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
+$storeHelperPath = 'C:\Windows\Temp\clagnos-store-install-state.psm1'
+$launcherHelperPath = 'C:\Windows\Temp\clagnos-shortcut-launcher.psm1'
+$interactiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
 # Use the direct .lnk target+arguments form until the combined invocation exceeds
 # the practical shortcut-length ceiling; only then emit a managed launcher script.
 $managedShortcutInvocationThreshold = 259
@@ -301,10 +301,10 @@ function Get-EdgeArgsPrefix {
     return ('--new-window --start-maximized --user-data-dir="{0}" --profile-directory="{1}"' -f $publicEdgeUserDataDir, $profileDirectory)
 }
 
-Import-Module 'C:\Windows\Temp\az-vm-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-AzVmSessionPath | Out-Null
+    Refresh-ClagnosSessionPath | Out-Null
 }
 
 function Resolve-CommandPath {
@@ -837,7 +837,7 @@ function Ensure-ManagedUserStoreAppRegistration {
         [string[]]$PackageNameHints = @()
     )
 
-    if (-not (Get-Command Invoke-AzVmUserAppxRegistrationRepair -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command Invoke-ClagnosUserAppxRegistrationRepair -ErrorAction SilentlyContinue)) {
         return
     }
 
@@ -883,7 +883,7 @@ function Ensure-ManagedUserStoreAppRegistration {
                 [pscustomobject]@{ WaitTimeoutSeconds = 90; HeartbeatSeconds = 15 }
             )) {
                 try {
-                    $result = Invoke-AzVmUserAppxRegistrationRepair `
+                    $result = Invoke-ClagnosUserAppxRegistrationRepair `
                         -TaskName $registrationTaskName `
                         -RunAsUser ([string]$registrationTarget.UserName) `
                         -RunAsPassword ([string]$registrationTarget.Password) `
@@ -1071,6 +1071,39 @@ function Set-ShortcutRunAsAdministratorFlag {
     [System.IO.File]::WriteAllBytes($ShortcutPath, $bytes)
 }
 
+function Add-ShortcutUserReadAccess {
+    param([string]$ShortcutPath)
+
+    if ([string]::IsNullOrWhiteSpace([string]$ShortcutPath) -or -not (Test-Path -LiteralPath $ShortcutPath)) {
+        return
+    }
+
+    try {
+        $acl = Get-Acl -LiteralPath $ShortcutPath
+        $readExecuteRights = [System.Security.AccessControl.FileSystemRights]::ReadAndExecute
+        $everyoneSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-1-0')
+
+        # Preserve explicit ACL intent while ensuring all user profiles can read/execute shortcut artifacts.
+        $acl.PurgeAccessRules($everyoneSid)
+        $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            $everyoneSid,
+            $readExecuteRights,
+            [System.Security.AccessControl.AccessControlType]::Allow
+        )
+        $acl.AddAccessRule($accessRule)
+        Set-Acl -LiteralPath $ShortcutPath -AclObject $acl | Out-Null
+    }
+    catch {
+        Write-Host ("public-shortcut-acl-skip: {0} => {1}" -f $ShortcutPath, $_.Exception.Message)
+    }
+}
+
+function Set-PublicShortcutReadPermissions {
+    param([string]$ShortcutPath)
+
+    Add-ShortcutUserReadAccess -ShortcutPath $ShortcutPath
+}
+
 function Get-ShortcutRunAsAdministratorFlag {
     param([string]$ShortcutPath)
 
@@ -1254,7 +1287,7 @@ function ConvertTo-ManagedShortcutLauncherSpec {
         return $null
     }
 
-    if (-not (Get-Command Test-AzVmShortcutNeedsManagedLauncher -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command Test-ClagnosShortcutNeedsManagedLauncher -ErrorAction SilentlyContinue)) {
         return $Spec
     }
 
@@ -1262,15 +1295,15 @@ function ConvertTo-ManagedShortcutLauncherSpec {
     $effectiveArguments = Get-ShortcutEffectiveArguments -Spec $Spec
     $effectiveWorkingDirectory = Get-ShortcutEffectiveWorkingDirectory -Spec $Spec
 
-    if (-not (Test-AzVmShortcutNeedsManagedLauncher -TargetPath $effectiveTargetPath -Arguments $effectiveArguments -Threshold $managedShortcutInvocationThreshold)) {
+    if (-not (Test-ClagnosShortcutNeedsManagedLauncher -TargetPath $effectiveTargetPath -Arguments $effectiveArguments -Threshold $managedShortcutInvocationThreshold)) {
         return $Spec
     }
 
-    $launcherPath = Get-AzVmShortcutLauncherFilePath -ShortcutName ([string]$Spec.Name) -Subdirectory 'public-desktop'
+    $launcherPath = Get-ClagnosShortcutLauncherFilePath -ShortcutName ([string]$Spec.Name) -Subdirectory 'public-desktop'
     $wrappedSpec = [pscustomobject]@{
         Name = [string]$Spec.Name
         TargetPath = [string]$cmdExe
-        Arguments = (Get-AzVmShortcutLauncherInvocationArguments -LauncherPath $launcherPath)
+        Arguments = (Get-ClagnosShortcutLauncherInvocationArguments -LauncherPath $launcherPath)
         WorkingDirectory = [string](Split-Path -Path $launcherPath -Parent)
         EffectiveTargetPath = [string]$effectiveTargetPath
         EffectiveArguments = [string]$effectiveArguments
@@ -1322,7 +1355,7 @@ function New-ShortcutFromSpec {
             throw ("Managed launcher path is empty for '{0}'." -f $name)
         }
 
-        Write-AzVmShortcutLauncherFile `
+        Write-ClagnosShortcutLauncherFile `
             -LauncherPath $launcherPath `
             -TargetPath (Get-ShortcutEffectiveTargetPath -Spec $Spec) `
             -Arguments (Get-ShortcutEffectiveArguments -Spec $Spec) `
@@ -1366,6 +1399,8 @@ function New-ShortcutFromSpec {
     if ([bool]$Spec.RunAsAdmin) {
         Set-ShortcutRunAsAdministratorFlag -ShortcutPath $writtenShortcutPath -Enabled $true
     }
+
+    Set-PublicShortcutReadPermissions -ShortcutPath $writtenShortcutPath
 
     $writtenDetails = Get-ShortcutDetails -ShortcutPath $writtenShortcutPath
     if (-not (Test-ShortcutValueMatch -ExpectedValue $targetPath -ActualValue ([string]$writtenDetails.TargetPath))) {
@@ -1548,11 +1583,11 @@ function New-StoreAppShortcutSpec {
 function Read-StoreTaskStateRecord {
     param([string]$TaskName)
 
-    if ([string]::IsNullOrWhiteSpace([string]$TaskName) -or -not (Get-Command Read-AzVmStoreInstallState -ErrorAction SilentlyContinue)) {
+    if ([string]::IsNullOrWhiteSpace([string]$TaskName) -or -not (Get-Command Read-ClagnosStoreInstallState -ErrorAction SilentlyContinue)) {
         return $null
     }
 
-    return (Read-AzVmStoreInstallState -TaskName $TaskName)
+    return (Read-ClagnosStoreInstallState -TaskName $TaskName)
 }
 
 function Add-StoreManagedShortcutSpec {
@@ -1622,8 +1657,8 @@ function Get-NormalizedShortcutNameKey {
         return ""
     }
 
-    if (Get-Command Get-AzVmShortcutNormalizedKey -ErrorAction SilentlyContinue) {
-        return (Get-AzVmShortcutNormalizedKey -Value $Value)
+    if (Get-Command Get-ClagnosShortcutNormalizedKey -ErrorAction SilentlyContinue) {
+        return (Get-ClagnosShortcutNormalizedKey -Value $Value)
     }
 
     return ([regex]::Replace($Value.Trim().ToLowerInvariant(), '[^a-z0-9]+', ''))
@@ -1676,8 +1711,8 @@ function Test-ShortcutDetailsMatchManagedSpec {
     }
 
     $existingNameKey = Get-NormalizedShortcutNameKey -Value $ShortcutBaseName
-    $actualInvocation = if (Get-Command Get-AzVmShortcutResolvedInvocation -ErrorAction SilentlyContinue) {
-        Get-AzVmShortcutResolvedInvocation -TargetPath ([string]$Details.TargetPath) -Arguments ([string]$Details.Arguments) -WorkingDirectory ([string]$Details.WorkingDirectory)
+    $actualInvocation = if (Get-Command Get-ClagnosShortcutResolvedInvocation -ErrorAction SilentlyContinue) {
+        Get-ClagnosShortcutResolvedInvocation -TargetPath ([string]$Details.TargetPath) -Arguments ([string]$Details.Arguments) -WorkingDirectory ([string]$Details.WorkingDirectory)
     }
     else {
         [pscustomobject]@{
@@ -2436,7 +2471,7 @@ $managedUserDesktopRoots = @(
     "C:\Users\Default\Desktop"
 )
 $stagingRoot = ''
-$publicDesktopLauncherRoot = if (Get-Command Get-AzVmShortcutLauncherRoot -ErrorAction SilentlyContinue) { Get-AzVmShortcutLauncherRoot -Subdirectory 'public-desktop' } else { '' }
+$publicDesktopLauncherRoot = if (Get-Command Get-ClagnosShortcutLauncherRoot -ErrorAction SilentlyContinue) { Get-ClagnosShortcutLauncherRoot -Subdirectory 'public-desktop' } else { '' }
 $publicDesktopAlreadyNormalized = Test-PublicDesktopAlreadyNormalized -PublicDesktopPath $publicDesktop -Specs $shortcutSpecs -OwnedShortcutNames $ownedManagedShortcutNames
 
 try {
@@ -2444,7 +2479,7 @@ try {
         Write-Host "public-desktop-normalized: no changes required"
     }
     else {
-        $stagingRoot = Join-Path $env:TEMP ("az-vm-public-desktop-" + [guid]::NewGuid().ToString("N"))
+        $stagingRoot = Join-Path $env:TEMP ("clagnos-public-desktop-" + [guid]::NewGuid().ToString("N"))
         Ensure-Directory -Path $stagingRoot
         if (-not [string]::IsNullOrWhiteSpace([string]$publicDesktopLauncherRoot) -and (Test-Path -LiteralPath $publicDesktopLauncherRoot)) {
             Remove-Item -LiteralPath $publicDesktopLauncherRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -2527,6 +2562,15 @@ try {
         if (@($inactiveManagedShortcuts).Count -gt 0) {
             throw ("Inactive managed shortcuts remain on the public desktop: {0}" -f ((@($inactiveManagedShortcuts | Select-Object -ExpandProperty Name)) -join ', '))
         }
+    }
+
+    foreach ($spec in $shortcutSpecs) {
+        if ($null -eq $spec) {
+            continue
+        }
+
+        $managedShortcutPath = Join-Path $publicDesktop ([string]$spec.Name + '.lnk')
+        Set-PublicShortcutReadPermissions -ShortcutPath $managedShortcutPath
     }
 
     foreach ($managedUserDesktopRoot in @($managedUserDesktopRoots)) {

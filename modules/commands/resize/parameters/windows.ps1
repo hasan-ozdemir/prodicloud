@@ -1,5 +1,5 @@
 # 'windows' option binding for 'resize'.
 
-function Get-AzVmResizeWindowsOptionSpecification {
-    return (Get-AzVmSharedWindowsOptionSpecification)
+function Get-ClagnosResizeWindowsOptionSpecification {
+    return (Get-ClagnosSharedWindowsOptionSpecification)
 }

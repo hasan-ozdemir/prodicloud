@@ -5,9 +5,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-$logFiles = @(Get-ChildItem -LiteralPath $RepoRoot -File -Filter 'az-vm-log-*.txt' -ErrorAction Stop | Sort-Object LastWriteTime)
+$logFiles = @(Get-ChildItem -LiteralPath $RepoRoot -File -Filter 'clagnos-log-*.txt' -ErrorAction Stop | Sort-Object LastWriteTime)
 if (@($logFiles).Count -lt 1) {
-    Write-Host 'retro-log-audit: no az-vm-log-*.txt files were found.'
+    Write-Host 'retro-log-audit: no clagnos-log-*.txt files were found.'
     exit 0
 }
 

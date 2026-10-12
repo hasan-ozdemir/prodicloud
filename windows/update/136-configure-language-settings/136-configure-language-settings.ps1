@@ -6,7 +6,7 @@ $managerUser = '__VM_ADMIN_USER__'
 $managerPassword = '__VM_ADMIN_PASS__'
 $assistantUser = '__ASSISTANT_USER__'
 $assistantPassword = '__ASSISTANT_PASS__'
-$helperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
+$helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
 
 $primaryLanguage = 'en-US'
 $secondaryLanguage = 'tr-TR'
@@ -250,10 +250,10 @@ function Invoke-LanguageInteractiveAutomation {
         [int]$WaitTimeoutSeconds = 180
     )
 
-    $paths = Get-AzVmInteractivePaths -TaskName $InteractiveTaskName
-    Ensure-AzVmDirectory -Path $paths.RootPath
+    $paths = Get-ClagnosInteractivePaths -TaskName $InteractiveTaskName
+    Ensure-ClagnosDirectory -Path $paths.RootPath
 
-    $staleProcessIds = @(Stop-AzVmInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
+    $staleProcessIds = @(Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
     if (@($staleProcessIds).Count -gt 0) {
         Write-Host ("Stopped stale interactive worker process(es) for '{0}': {1}" -f [string]$paths.TaskName, ((@($staleProcessIds) | ForEach-Object { [string]$_ }) -join ', ')) -ForegroundColor DarkCyan
     }
@@ -264,8 +264,8 @@ function Invoke-LanguageInteractiveAutomation {
 
     try {
         Write-Host ("Interactive task '{0}' will run for {1} using service-account." -f [string]$paths.TaskName, [string]$RunAsUser) -ForegroundColor DarkCyan
-        Register-AzVmInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -WorkerPath $paths.WorkerPath -RunAsPassword $RunAsPassword -RunAsMode 'password'
-        Start-AzVmInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+        Register-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -WorkerPath $paths.WorkerPath -RunAsPassword $RunAsPassword -RunAsMode 'password'
+        Start-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
         Write-Host ("Running interactive task '{0}'..." -f [string]$paths.TaskName) -ForegroundColor Cyan
 
         $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(30, [int]$WaitTimeoutSeconds))
@@ -276,7 +276,7 @@ function Invoke-LanguageInteractiveAutomation {
             if (Test-Path -LiteralPath $paths.ResultPath) {
                 $fileInfo = Get-Item -LiteralPath $paths.ResultPath -ErrorAction SilentlyContinue
                 if ($null -ne $fileInfo -and [int64]$fileInfo.Length -gt 0) {
-                    return (Read-AzVmJsonFile -Path $paths.ResultPath)
+                    return (Read-ClagnosJsonFile -Path $paths.ResultPath)
                 }
             }
 
@@ -303,12 +303,12 @@ function Invoke-LanguageInteractiveAutomation {
 
             if ([DateTime]::UtcNow -ge $nextHeartbeatUtc) {
                 $elapsedSeconds = [Math]::Round(([DateTime]::UtcNow - $startTime).TotalSeconds, 0)
-                $snapshot = Get-AzVmInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
+                $snapshot = Get-ClagnosInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
                 if ($null -eq $snapshot) {
                     Write-Host ("Waiting for interactive task '{0}'... elapsed={1}s; state=not-found" -f [string]$paths.TaskName, [int]$elapsedSeconds) -ForegroundColor DarkCyan
                 }
                 else {
-                    $stateLabel = Get-AzVmInteractiveScheduledTaskStateLabel -State ([int]$snapshot.State)
+                    $stateLabel = Get-ClagnosInteractiveScheduledTaskStateLabel -State ([int]$snapshot.State)
                     Write-Host ("Waiting for interactive task '{0}'... elapsed={1}s; state={2}; last-task-result={3}" -f [string]$paths.TaskName, [int]$elapsedSeconds, [string]$stateLabel, [int]$snapshot.LastTaskResult) -ForegroundColor DarkCyan
                 }
 
@@ -318,7 +318,7 @@ function Invoke-LanguageInteractiveAutomation {
             Start-Sleep -Seconds 2
         }
 
-        $snapshot = Get-AzVmInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
+        $snapshot = Get-ClagnosInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
         if ($null -ne $snapshot -and [int]$snapshot.State -eq 4 -and [int]$snapshot.LastTaskResult -eq 267009) {
             $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $LanguageTag
             $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
@@ -360,12 +360,12 @@ function Invoke-LanguageInteractiveAutomation {
     }
     finally {
         try {
-            Remove-AzVmInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+            Remove-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
         }
         catch {
             Write-Host ("interactive-task-cleanup-info: {0}" -f $_.Exception.Message) -ForegroundColor DarkCyan
         }
-        $stoppedProcessIds = @(Stop-AzVmInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
+        $stoppedProcessIds = @(Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
         if (@($stoppedProcessIds).Count -gt 0) {
             Write-Host ("Stopped lingering interactive worker process(es) for '{0}': {1}" -f [string]$paths.TaskName, ((@($stoppedProcessIds) | ForEach-Object { [string]$_ }) -join ', ')) -ForegroundColor DarkCyan
         }
@@ -384,7 +384,7 @@ function Install-LanguageComponents {
     Write-StateStart ("Installing language components for {0}..." -f [string]$DisplayName)
 
     $interactiveTaskName = ('{0}-install-{1}' -f $taskName, (($LanguageTag -replace '[^a-zA-Z0-9]+', '-').Trim('-')))
-    $paths = Get-AzVmInteractivePaths -TaskName $interactiveTaskName
+    $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -502,7 +502,7 @@ try {
         $rebootRequired = $true
     }
 
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language components installed.' -Details @(
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language components installed.' -Details @(
         ("reboot-required={0}" -f [bool]$rebootRequired),
         ("language-capabilities={0}" -f [string]$capabilitySummary)
     )
@@ -513,7 +513,7 @@ catch {
     $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
     $acceptPartialInstall = ($exceptionMessage -match '(?i)partially installed|0x80073CF1|2147009295') -and (Test-LanguageCapabilityStateSatisfied -StateMap $capabilityState)
     if ($acceptPartialInstall) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language components were queued successfully and require restart.' -Details @(
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language components were queued successfully and require restart.' -Details @(
             'reboot-required=true',
             ("language-capabilities={0}" -f [string]$capabilitySummary),
             'language-install-partial=true'
@@ -521,7 +521,7 @@ catch {
         return
     }
 
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language components failed.' -Details @(
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language components failed.' -Details @(
         [string]$exceptionMessage,
         ("language-capabilities={0}" -f [string]$capabilitySummary)
     )
@@ -730,7 +730,7 @@ function Invoke-UserLanguageConfiguration {
     }
 
     $interactiveTaskName = ('{0}-{1}' -f $taskName, [string]$UserName)
-    $paths = Get-AzVmInteractivePaths -TaskName $interactiveTaskName
+    $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -770,10 +770,10 @@ try {
         ("language-list={0}" -f [string]$languageSummary),
         ("culture={0}" -f [string]$cultureName)
     )
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language settings applied.' -Details $details
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language settings applied.' -Details $details
 }
 catch {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language settings failed.' -Details @([string]$_.Exception.Message)
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language settings failed.' -Details @([string]$_.Exception.Message)
     throw
 }
 '@
@@ -784,7 +784,7 @@ catch {
     $workerScript = $workerScript.Replace('__PRIMARY_LANGUAGE__', $primaryLanguage)
     $workerScript = $workerScript.Replace('__SECONDARY_LANGUAGE__', $secondaryLanguage)
 
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $interactiveTaskName `
         -RunAsUser $UserName `
         -RunAsPassword $UserPassword `

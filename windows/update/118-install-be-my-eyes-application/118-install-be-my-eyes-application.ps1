@@ -5,12 +5,12 @@ $taskConfig = [ordered]@{
     TaskName = '118-install-be-my-eyes-application-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    HelperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
-    StoreHelperPath = 'C:\Windows\Temp\az-vm-store-install-state.psm1'
-    PortableWingetPath = 'C:\ProgramData\az-vm\tools\winget-x64\winget.exe'
+    HelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+    StoreHelperPath = 'C:\Windows\Temp\clagnos-store-install-state.psm1'
+    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     StoreProductId = '9MSW46LTDWGF'
     InteractiveTaskSuffix = 'interactive-install'
-    LegacyRunOnceName = 'AzVmInstallBeMyEyes'
+    LegacyRunOnceName = 'ClagnosInstallBeMyEyes'
     InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
     StoreSessionErrorRegex = '(?i)0x80070520|logon session|microsoft store|msstore'
@@ -98,29 +98,29 @@ function Get-BeMyEyesInstallState {
     }
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $existingState = Get-BeMyEyesInstallState
 if ([bool]$existingState.Healthy) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     Write-Host 'install-be-my-eyes-application-completed'
     Write-Host 'Update task completed: install-be-my-eyes-application'
     return
 }
 
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
 
-if (Test-AzVmRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
     Write-Host 'store-install-cleanup => task=118-install-be-my-eyes-application-application; removed-stale-run-once=True'
 }
 
 $workerTaskName = "{0}-{1}" -f $taskName, ([string]$taskConfig.InteractiveTaskSuffix)
-$paths = Get-AzVmInteractivePaths -TaskName $workerTaskName
+$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -163,10 +163,10 @@ function Test-BeMyEyesInstalled {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-BeMyEyesAppId)))
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -175,17 +175,17 @@ if (-not (Test-BeMyEyesInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-BeMyEyesInstalled)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Be My Eyes install could not be verified after interactive winget install.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Be My Eyes install could not be verified after interactive winget install.'
     exit 1
 }
 
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Be My Eyes is installed.'
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Be My Eyes is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
@@ -195,18 +195,18 @@ $workerScript = $workerScript.Replace('__TASK_NAME__', $workerTaskName)
 $workerScript = $workerScript.Replace('__STORE_PRODUCT_ID__', $storeProductId)
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', [string]$taskConfig.PortableWingetPath)
 
-$interactiveDesktopStatus = Wait-AzVmUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-AzVmInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
+$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
+Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
 if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-AzVmInteractiveDesktopBlockMessage -ActivityDescription 'Be My Eyes install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Be My Eyes install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw ([string]$blockMessage.WarningMessage)
 }
 
 try {
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -215,12 +215,12 @@ try {
         -RunAsMode 'interactiveToken'
 }
 catch {
-    Invoke-AzVmRefreshSessionPath
+    Invoke-ClagnosRefreshSessionPath
     $catchState = Get-BeMyEyesInstallState
     if ([bool]$catchState.Healthy) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         Write-Host 'install-be-my-eyes-application-completed'
         Write-Host 'Update task completed: install-be-my-eyes-application'
         return
@@ -228,28 +228,28 @@ catch {
 
     $interactiveError = [string]$_.Exception.Message
     if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary 'Be My Eyes install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'Be My Eyes install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         throw 'Be My Eyes install requires an interactive Store-capable session and cannot be deferred to a later boot.'
     }
 
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes interactive install failed: {0}' -f $interactiveError) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes interactive install failed: {0}' -f $interactiveError) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $finalState = Get-BeMyEyesInstallState
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes is present but not yet launch-ready via a stable AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes is present but not yet launch-ready via a stable AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw 'Be My Eyes install could not be verified.'
 }
 
-Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-$stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+$stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
 Write-Host 'install-be-my-eyes-application-completed'
 Write-Host 'Update task completed: install-be-my-eyes-application'
 

@@ -1,5 +1,5 @@
 # 'user' option binding for 'connect'.
 
-function Get-AzVmConnectUserOptionSpecification {
-    return (Get-AzVmSharedUserOptionSpecification)
+function Get-ClagnosConnectUserOptionSpecification {
+    return (Get-ClagnosSharedUserOptionSpecification)
 }

@@ -1,5 +1,5 @@
 # Shared 'perf' command option specification.
 
-function Get-AzVmSharedPerfOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'perf')
+function Get-ClagnosSharedPerfOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'perf')
 }

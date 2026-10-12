@@ -1,5 +1,5 @@
 # 'help' option binding for 'do'.
 
-function Get-AzVmDoHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosDoHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

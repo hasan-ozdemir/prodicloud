@@ -1,7 +1,7 @@
 # Run-command script preparation helpers.
 
-# Handles Resolve-AzVmRunCommandScriptText.
-function Resolve-AzVmRunCommandScriptText {
+# Handles Resolve-ClagnosRunCommandScriptText.
+function Resolve-ClagnosRunCommandScriptText {
     param(
         [string]$ScriptText
     )
@@ -21,8 +21,8 @@ function Resolve-AzVmRunCommandScriptText {
     return $ScriptText
 }
 
-# Handles Get-AzVmRunCommandScriptArgs.
-function Get-AzVmRunCommandScriptArgs {
+# Handles Get-ClagnosRunCommandScriptArgs.
+function Get-ClagnosRunCommandScriptArgs {
     param(
         [string]$ScriptText,
         [string]$CommandId
@@ -36,7 +36,7 @@ function Get-AzVmRunCommandScriptArgs {
         return @($ScriptText)
     }
 
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'az-vm-run-command'
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'clagnos-run-command'
     if (-not (Test-Path -LiteralPath $tempRoot)) {
         [void](New-Item -ItemType Directory -Path $tempRoot -Force)
     }

@@ -1,5 +1,5 @@
 # Shared 'disabled' command option specification.
 
-function Get-AzVmSharedDisabledOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'disabled')
+function Get-ClagnosSharedDisabledOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'disabled')
 }

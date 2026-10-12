@@ -1,5 +1,5 @@
 # Shared 'test' command option specification.
 
-function Get-AzVmSharedTestOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'test')
+function Get-ClagnosSharedTestOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'test')
 }

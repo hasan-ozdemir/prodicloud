@@ -1,5 +1,5 @@
 # 'save-app-state' option binding for 'task'.
 
-function Get-AzVmTaskSaveAppStateOptionSpecification {
-    return (Get-AzVmSharedSaveAppStateOptionSpecification)
+function Get-ClagnosTaskSaveAppStateOptionSpecification {
+    return (Get-ClagnosSharedSaveAppStateOptionSpecification)
 }

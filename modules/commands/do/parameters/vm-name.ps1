@@ -1,5 +1,5 @@
 # 'vm-name' option binding for 'do'.
 
-function Get-AzVmDoVmNameOptionSpecification {
-    return (Get-AzVmSharedVmNameOptionSpecification)
+function Get-ClagnosDoVmNameOptionSpecification {
+    return (Get-ClagnosSharedVmNameOptionSpecification)
 }

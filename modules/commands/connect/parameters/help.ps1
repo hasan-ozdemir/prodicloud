@@ -1,5 +1,5 @@
 # 'help' option binding for 'connect'.
 
-function Get-AzVmConnectHelpOptionSpecification {
-    return (Get-AzVmSharedHelpOptionSpecification)
+function Get-ClagnosConnectHelpOptionSpecification {
+    return (Get-ClagnosSharedHelpOptionSpecification)
 }

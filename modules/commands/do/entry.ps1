@@ -1,28 +1,28 @@
 # Do command entry.
 
-# Handles Invoke-AzVmDoCommand.
-function Invoke-AzVmDoCommand {
+# Handles Invoke-ClagnosDoCommand.
+function Invoke-ClagnosDoCommand {
     param(
         [hashtable]$Options
     )
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $target = Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'do'
-    $action = Resolve-AzVmDoActionName -RawValue ([string](Get-AzVmCliOptionText -Options $Options -Name 'vm-action')) -AllowEmpty
-    $snapshot = Get-AzVmVmLifecycleSnapshot -ResourceGroup ([string]$target.ResourceGroup) -VmName ([string]$target.VmName)
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'do'
+    $action = Resolve-ClagnosDoActionName -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-action')) -AllowEmpty
+    $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup ([string]$target.ResourceGroup) -VmName ([string]$target.VmName)
 
     if ([string]::IsNullOrWhiteSpace([string]$action)) {
-        $action = Read-AzVmDoActionInteractive -Snapshot $snapshot
+        $action = Read-ClagnosDoActionInteractive -Snapshot $snapshot
     }
 
     if ($action -eq 'status') {
-        Write-AzVmDoStatusReport -Snapshot $snapshot
+        Write-ClagnosDoStatusReport -Snapshot $snapshot
         return
     }
 
-    Assert-AzVmDoActionAllowed -ActionName $action -Snapshot $snapshot
+    Assert-ClagnosDoActionAllowed -ActionName $action -Snapshot $snapshot
 
     $resourceGroup = [string]$target.ResourceGroup
     $vmName = [string]$target.VmName
@@ -35,7 +35,7 @@ function Invoke-AzVmDoCommand {
         'start' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now started." -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -45,7 +45,7 @@ function Invoke-AzVmDoCommand {
         'restart' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now restarted." -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -55,7 +55,7 @@ function Invoke-AzVmDoCommand {
         'stop' {
             $desiredState = 'stopped'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now stopped." -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -65,7 +65,7 @@ function Invoke-AzVmDoCommand {
         'deallocate' {
             $desiredState = 'deallocated'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now deallocated." -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -75,7 +75,7 @@ function Invoke-AzVmDoCommand {
         'hibernate-deallocate' {
             $desiredState = 'hibernated'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now hibernated and deallocated." -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -84,8 +84,8 @@ function Invoke-AzVmDoCommand {
         }
         'hibernate-stop' {
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' accepted guest hibernate-stop and is no longer running." -f $vmName, $resourceGroup)
-            $hibernateStopInvocation = Invoke-AzVmDoGuestHibernateStopCommand -ResourceGroup $resourceGroup -VmName $vmName
-            $finalSnapshot = Wait-AzVmDoHibernateStopCompletion -Runtime $hibernateStopInvocation.Runtime -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 24 -DelaySeconds 10
+            $hibernateStopInvocation = Invoke-ClagnosDoGuestHibernateStopCommand -ResourceGroup $resourceGroup -VmName $vmName
+            $finalSnapshot = Wait-ClagnosDoHibernateStopCompletion -Runtime $hibernateStopInvocation.Runtime -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 24 -DelaySeconds 10
             if ($null -eq $finalSnapshot) {
                 $launchOutput = if ($null -eq $hibernateStopInvocation -or $null -eq $hibernateStopInvocation.LaunchResult) { '' } else { [string]$hibernateStopInvocation.LaunchResult.Output }
                 $launchExitCode = if ($null -eq $hibernateStopInvocation -or $null -eq $hibernateStopInvocation.LaunchResult) { -1 } else { [int]$hibernateStopInvocation.LaunchResult.ExitCode }
@@ -98,24 +98,24 @@ function Invoke-AzVmDoCommand {
         }
         'reapply' {
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was reapplied. Current status:" -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
                 -AzArguments @('vm','reapply','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm reapply'
-            $finalSnapshot = Get-AzVmVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
+            $finalSnapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
         }
         'redeploy' {
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was redeployed. Current status:" -f $vmName, $resourceGroup)
-            Invoke-AzVmDoAzureAction `
+            Invoke-ClagnosDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
                 -AzArguments @('vm','redeploy','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm redeploy'
 
-            $provisioningWaitResult = Wait-AzVmProvisioningSucceeded -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 30 -DelaySeconds 10
+            $provisioningWaitResult = Wait-ClagnosProvisioningSucceeded -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 30 -DelaySeconds 10
             if (-not [bool]$provisioningWaitResult.Ready) {
                 Throw-FriendlyError `
                     -Detail ("VM '{0}' in resource group '{1}' did not return to provisioning succeeded after Azure redeploy." -f $vmName, $resourceGroup) `
@@ -126,7 +126,7 @@ function Invoke-AzVmDoCommand {
 
             $finalSnapshot = $provisioningWaitResult.Snapshot
             if ([string]$initialNormalizedState -in @('started','stopped')) {
-                $stateAfterRedeploy = Wait-AzVmDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $initialNormalizedState -MaxAttempts 24 -DelaySeconds 10
+                $stateAfterRedeploy = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $initialNormalizedState -MaxAttempts 24 -DelaySeconds 10
                 if ($null -eq $stateAfterRedeploy) {
                     Throw-FriendlyError `
                         -Detail ("VM '{0}' in resource group '{1}' did not return to '{2}' after Azure redeploy." -f $vmName, $resourceGroup, $initialNormalizedState) `
@@ -144,7 +144,7 @@ function Invoke-AzVmDoCommand {
     }
 
     if ($null -eq $finalSnapshot) {
-        $finalSnapshot = Wait-AzVmDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $desiredState -MaxAttempts 24 -DelaySeconds 10
+        $finalSnapshot = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $desiredState -MaxAttempts 24 -DelaySeconds 10
     }
     if ($null -eq $finalSnapshot) {
         Throw-FriendlyError `
@@ -155,5 +155,5 @@ function Invoke-AzVmDoCommand {
     }
 
     Write-Host $completionMessage -ForegroundColor Green
-    Write-AzVmDoStatusReport -Snapshot $finalSnapshot
+    Write-ClagnosDoStatusReport -Snapshot $finalSnapshot
 }

@@ -1,7 +1,7 @@
 # Run-command VM wait helpers.
 
-# Handles Wait-AzVmVmRunningState.
-function Wait-AzVmVmRunningState {
+# Handles Wait-ClagnosVmRunningState.
+function Wait-ClagnosVmRunningState {
     param(
         [string]$ResourceGroup,
         [string]$VmName,

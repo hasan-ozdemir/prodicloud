@@ -1,5 +1,5 @@
 # 'auto' option binding for 'create'.
 
-function Get-AzVmCreateAutoOptionSpecification {
-    return (Get-AzVmSharedAutoOptionSpecification)
+function Get-ClagnosCreateAutoOptionSpecification {
+    return (Get-ClagnosSharedAutoOptionSpecification)
 }

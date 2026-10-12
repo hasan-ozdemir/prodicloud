@@ -5,12 +5,12 @@ $taskConfig = [ordered]@{
     TaskName = '114-install-teams-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    HelperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
-    StoreHelperPath = 'C:\Windows\Temp\az-vm-store-install-state.psm1'
-    PortableWingetPath = 'C:\ProgramData\az-vm\tools\winget-x64\winget.exe'
+    HelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+    StoreHelperPath = 'C:\Windows\Temp\clagnos-store-install-state.psm1'
+    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     StorePackageName = 'Microsoft Teams'
     StoreSource = 'msstore'
-    LegacyRunOnceName = 'AzVmInstallTeams'
+    LegacyRunOnceName = 'ClagnosInstallTeams'
     InteractiveTaskSuffix = 'interactive-install'
     InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
@@ -167,8 +167,8 @@ function Get-TeamsInstallState {
     }
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
@@ -176,32 +176,32 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 Write-Host "Resolved winget executable: $wingetExe"
 $existingState = Get-TeamsInstallState -WingetExe $wingetExe
 if ([bool]$existingState.Healthy) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Microsoft Teams is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Microsoft Teams is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     Write-Host 'Existing Microsoft Teams installation is already healthy. Skipping winget install.'
     Write-Host 'install-teams-application-completed'
     Write-Host 'Update task completed: install-teams-application'
     return
 }
 
-if (Test-AzVmRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
     Write-Host 'store-install-cleanup => task=114-install-teams-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-AzVmUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-AzVmInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
+$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
+Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
 if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-AzVmInteractiveDesktopBlockMessage -ActivityDescription 'Microsoft Teams install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Microsoft Teams install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
+    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw ([string]$blockMessage.WarningMessage)
 }
 
 $workerTaskName = "{0}-{1}" -f $taskName, ([string]$taskConfig.InteractiveTaskSuffix)
-$paths = Get-AzVmInteractivePaths -TaskName $workerTaskName
+$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -249,10 +249,10 @@ function Test-TeamsInstalled {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-TeamsExecutable)))
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -262,17 +262,17 @@ if (-not (Test-TeamsInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-TeamsInstalled)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Microsoft Teams install could not be verified after interactive winget install.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Microsoft Teams install could not be verified after interactive winget install.'
     exit 1
 }
 
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Microsoft Teams is installed.'
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Microsoft Teams is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
@@ -283,7 +283,7 @@ $workerScript = $workerScript.Replace('__STORE_PACKAGE_NAME__', [string]$taskCon
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', [string]$taskConfig.PortableWingetPath)
 
 try {
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -292,12 +292,12 @@ try {
         -RunAsMode 'interactiveToken'
 }
 catch {
-    Invoke-AzVmRefreshSessionPath
+    Invoke-ClagnosRefreshSessionPath
     $catchState = Get-TeamsInstallState -WingetExe $wingetExe
     if ([bool]$catchState.Healthy) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Microsoft Teams is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Microsoft Teams is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         Write-Host 'install-teams-application-completed'
         Write-Host 'Update task completed: install-teams-application'
         return
@@ -305,27 +305,27 @@ catch {
 
     $interactiveError = [string]$_.Exception.Message
     if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary 'Microsoft Teams install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'Microsoft Teams install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         throw 'Microsoft Teams install requires an interactive Store-capable session and cannot be deferred to a later boot.'
     }
 
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('Microsoft Teams interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Microsoft Teams interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $finalState = Get-TeamsInstallState -WingetExe $wingetExe
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('Microsoft Teams is present but not yet launch-ready via a stable target ({0}).' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Microsoft Teams is present but not yet launch-ready via a stable target ({0}).' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw 'Microsoft Teams install could not be verified.'
 }
 
-Remove-AzVmRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-$stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Microsoft Teams is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+$stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Microsoft Teams is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId ([string]$taskConfig.StorePackageName) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
 Write-Host 'install-teams-application-completed'
 Write-Host 'Update task completed: install-teams-application'

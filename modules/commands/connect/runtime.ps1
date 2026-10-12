@@ -1,12 +1,12 @@
 # Connect command runtime helpers.
 
-function Resolve-AzVmConnectMode {
+function Resolve-ClagnosConnectMode {
     param(
         [hashtable]$Options
     )
 
-    $sshRequested = Test-AzVmCliOptionPresent -Options $Options -Name 'ssh'
-    $rdpRequested = Test-AzVmCliOptionPresent -Options $Options -Name 'rdp'
+    $sshRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'ssh'
+    $rdpRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'rdp'
 
     if ($sshRequested -and $rdpRequested) {
         Throw-FriendlyError `
@@ -27,5 +27,5 @@ function Resolve-AzVmConnectMode {
         -Detail "Connect command requires one transport selector." `
         -Code 66 `
         -Summary "Connect mode is missing." `
-        -Hint "Use az-vm connect --ssh ... or az-vm connect --rdp ...."
+        -Hint "Use clagnos connect --ssh ... or clagnos connect --rdp ...."
 }

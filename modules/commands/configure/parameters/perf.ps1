@@ -1,5 +1,5 @@
 # 'perf' option binding for 'configure'.
 
-function Get-AzVmConfigurePerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosConfigurePerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

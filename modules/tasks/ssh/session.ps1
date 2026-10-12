@@ -1,7 +1,7 @@
 # SSH session lifecycle helpers.
 
-# Handles Initialize-AzVmSshHostKey.
-function Initialize-AzVmSshHostKey {
+# Handles Initialize-ClagnosSshHostKey.
+function Initialize-ClagnosSshHostKey {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -18,7 +18,7 @@ function Initialize-AzVmSshHostKey {
         throw "Python executable for pyssh was not found."
     }
 
-    $result = Invoke-AzVmProcessWithRetry `
+    $result = Invoke-ClagnosProcessWithRetry `
         -FilePath $PySshPythonPath `
         -Arguments @(
             $PySshClientPath,
@@ -45,8 +45,8 @@ function Initialize-AzVmSshHostKey {
     }
 }
 
-# Handles Start-AzVmPersistentSshSession.
-function Start-AzVmPersistentSshSession {
+# Handles Start-ClagnosPersistentSshSession.
+function Start-ClagnosPersistentSshSession {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -81,7 +81,7 @@ function Start-AzVmPersistentSshSession {
         "--task-timeout", [string]$DefaultTaskTimeoutSeconds,
         "--shell", [string]$Shell
     )
-    $argText = ($argList | ForEach-Object { Convert-AzVmProcessArgument -Value ([string]$_) }) -join ' '
+    $argText = ($argList | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' '
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = [string]$PySshPythonPath
@@ -126,8 +126,8 @@ function Start-AzVmPersistentSshSession {
     }
 }
 
-# Handles Write-AzVmPersistentSshProtocolLine.
-function Write-AzVmPersistentSshProtocolLine {
+# Handles Write-ClagnosPersistentSshProtocolLine.
+function Write-ClagnosPersistentSshProtocolLine {
     param(
         [psobject]$Session,
         [string]$Line
@@ -147,8 +147,8 @@ function Write-AzVmPersistentSshProtocolLine {
     $stream.Flush()
 }
 
-# Handles Stop-AzVmPersistentSshSession.
-function Stop-AzVmPersistentSshSession {
+# Handles Stop-ClagnosPersistentSshSession.
+function Stop-ClagnosPersistentSshSession {
     param(
         [psobject]$Session
     )
@@ -158,7 +158,7 @@ function Stop-AzVmPersistentSshSession {
     }
 
     if ($Session.PSObject.Properties.Match('TransientConsoleActive').Count -gt 0 -and [bool]$Session.TransientConsoleActive) {
-        Clear-AzVmTransientConsoleText
+        Clear-ClagnosTransientConsoleText
         $Session.TransientConsoleActive = $false
     }
 
@@ -168,7 +168,7 @@ function Stop-AzVmPersistentSshSession {
             if (-not $proc.HasExited) {
                 try {
                     $closePayload = @{ action = "close" } | ConvertTo-Json -Compress
-                    Write-AzVmPersistentSshProtocolLine -Session $Session -Line ([string]$closePayload)
+                    Write-ClagnosPersistentSshProtocolLine -Session $Session -Line ([string]$closePayload)
                     $proc.StandardInput.Close()
                 }
                 catch { }
@@ -185,8 +185,8 @@ function Stop-AzVmPersistentSshSession {
     }
 }
 
-# Handles Test-AzVmPersistentSshSessionUsable.
-function Test-AzVmPersistentSshSessionUsable {
+# Handles Test-ClagnosPersistentSshSessionUsable.
+function Test-ClagnosPersistentSshSessionUsable {
     param(
         [psobject]$Session
     )
@@ -203,8 +203,8 @@ function Test-AzVmPersistentSshSessionUsable {
     }
 }
 
-# Handles Invoke-AzVmOneShotSshTask.
-function Invoke-AzVmOneShotSshTask {
+# Handles Invoke-ClagnosOneShotSshTask.
+function Invoke-ClagnosOneShotSshTask {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -240,19 +240,19 @@ function Invoke-AzVmOneShotSshTask {
     }
 
     $extension = if ($Shell -eq 'bash') { 'sh' } else { 'ps1' }
-    $localTempPath = Join-Path ([System.IO.Path]::GetTempPath()) ('az-vm-task-{0}-{1}.{2}' -f $safeTaskName, ([guid]::NewGuid().ToString('N')), $extension)
+    $localTempPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-{0}-{1}.{2}' -f $safeTaskName, ([guid]::NewGuid().ToString('N')), $extension)
     $remoteScriptPath = if ($Shell -eq 'bash') {
-        '/tmp/az-vm-task-{0}.sh' -f ([guid]::NewGuid().ToString('N'))
+        '/tmp/clagnos-task-{0}.sh' -f ([guid]::NewGuid().ToString('N'))
     }
     else {
-        'C:/Windows/Temp/az-vm-task-{0}.ps1' -f ([guid]::NewGuid().ToString('N'))
+        'C:/Windows/Temp/clagnos-task-{0}.ps1' -f ([guid]::NewGuid().ToString('N'))
     }
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($localTempPath, $scriptPayload, $utf8NoBom)
 
     try {
-        Copy-AzVmAssetToVm `
+        Copy-ClagnosAssetToVm `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -270,7 +270,7 @@ function Invoke-AzVmOneShotSshTask {
             'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f [string]$remoteScriptPath
         }
 
-        $result = Invoke-AzVmProcessWithRetry `
+        $result = Invoke-ClagnosProcessWithRetry `
             -FilePath $PySshPythonPath `
             -Arguments @(
                 $PySshClientPath,
@@ -309,7 +309,7 @@ function Invoke-AzVmOneShotSshTask {
                     'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath ''{0}'' -Force -ErrorAction SilentlyContinue"' -f [string]$remoteScriptPath
                 }
 
-                Invoke-AzVmProcessWithRetry `
+                Invoke-ClagnosProcessWithRetry `
                     -FilePath $PySshPythonPath `
                     -Arguments @(
                         $PySshClientPath,
@@ -330,8 +330,8 @@ function Invoke-AzVmOneShotSshTask {
     }
 }
 
-# Handles Invoke-AzVmSshTaskScript.
-function Invoke-AzVmSshTaskScript {
+# Handles Invoke-ClagnosSshTaskScript.
+function Invoke-ClagnosSshTaskScript {
     param(
         [psobject]$Session,
         [string]$PySshPythonPath,
@@ -348,11 +348,11 @@ function Invoke-AzVmSshTaskScript {
         [switch]$SkipRemoteCleanup
     )
 
-    if (Test-AzVmPersistentSshSessionUsable -Session $Session) {
-        return (Invoke-AzVmPersistentSshTask -Session $Session -TaskName $TaskName -TaskScript $TaskScript -TimeoutSeconds $TimeoutSeconds)
+    if (Test-ClagnosPersistentSshSessionUsable -Session $Session) {
+        return (Invoke-ClagnosPersistentSshTask -Session $Session -TaskName $TaskName -TaskScript $TaskScript -TimeoutSeconds $TimeoutSeconds)
     }
 
-    return (Invoke-AzVmOneShotSshTask `
+    return (Invoke-ClagnosOneShotSshTask `
         -PySshPythonPath $PySshPythonPath `
         -PySshClientPath $PySshClientPath `
         -HostName $HostName `
@@ -366,8 +366,8 @@ function Invoke-AzVmSshTaskScript {
         -SkipRemoteCleanup:$SkipRemoteCleanup)
 }
 
-# Handles Test-AzVmSshTransportRecoverySignal.
-function Test-AzVmSshTransportRecoverySignal {
+# Handles Test-ClagnosSshTransportRecoverySignal.
+function Test-ClagnosSshTransportRecoverySignal {
     param(
         [AllowNull()]
         [string]$Text
@@ -383,8 +383,8 @@ function Test-AzVmSshTransportRecoverySignal {
         'Thread failed to start',
         'System.Management.Automation.RemoteException',
         'EOF during negotiation',
-        'AZ_VM_SESSION_TASK_ERROR:',
-        'AZ_VM_SESSION_ERROR:'
+        'CLAGNOS_SESSION_TASK_ERROR:',
+        'CLAGNOS_SESSION_ERROR:'
     )) {
         if ($value.IndexOf($pattern, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             return $true

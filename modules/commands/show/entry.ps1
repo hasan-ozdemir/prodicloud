@@ -1,7 +1,7 @@
 # Show command entry.
 
-# Handles Invoke-AzVmShowCommand.
-function Invoke-AzVmShowCommand {
+# Handles Invoke-ClagnosShowCommand.
+function Invoke-ClagnosShowCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -9,17 +9,17 @@ function Invoke-AzVmShowCommand {
         [switch]$LinuxFlag
     )
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $accountSnapshot = Get-AzVmAzAccountSnapshot
+    $accountSnapshot = Get-ClagnosAzAccountSnapshot
 
-    $targetGroupValue = [string](Get-AzVmCliOptionText -Options $Options -Name 'group')
+    $targetGroupValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
     $targetGroup = ''
     if (-not [string]::IsNullOrWhiteSpace([string]$targetGroupValue)) {
         $targetGroup = $targetGroupValue.Trim()
     }
-    $targetVmName = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-name')
+    $targetVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
     if ([string]::IsNullOrWhiteSpace([string]$targetVmName)) {
         $targetVmName = ''
     }
@@ -29,7 +29,7 @@ function Invoke-AzVmShowCommand {
 
     $allGroupRows = @()
     try {
-        $allGroupRows = @(Get-AzVmManagedResourceGroupRows)
+        $allGroupRows = @(Get-ClagnosManagedResourceGroupRows)
     }
     catch {
         Throw-FriendlyError `
@@ -47,7 +47,7 @@ function Invoke-AzVmShowCommand {
 
     $selectedGroups = @()
     if (-not [string]::IsNullOrWhiteSpace([string]$targetGroup)) {
-        Assert-AzVmManagedResourceGroup -ResourceGroup $targetGroup -OperationName 'show'
+        Assert-ClagnosManagedResourceGroup -ResourceGroup $targetGroup -OperationName 'show'
         $selectedGroups = @($targetGroup)
     }
     else {
@@ -72,13 +72,13 @@ function Invoke-AzVmShowCommand {
 
     $groupDumps = @()
     foreach ($resourceGroup in @($selectedGroups)) {
-        $groupDumps += (Get-AzVmResourceGroupInventoryDump -ResourceGroup ([string]$resourceGroup))
+        $groupDumps += (Get-ClagnosResourceGroupInventoryDump -ResourceGroup ([string]$resourceGroup))
     }
 
-    $focusedTarget = Resolve-AzVmShowFocusedTarget -Options $Options -ConfigMap $configMap -SelectedGroupDumps $groupDumps
+    $focusedTarget = Resolve-ClagnosShowFocusedTarget -Options $Options -ConfigMap $configMap -SelectedGroupDumps $groupDumps
     $targetDerivedConfiguration = $null
     if ($null -ne $focusedTarget) {
-        $targetDerivedConfiguration = Get-AzVmShowTargetDerivedConfiguration -ResourceGroup ([string]$focusedTarget.ResourceGroup) -VmName ([string]$focusedTarget.VmName) -ConfigMap $configMap
+        $targetDerivedConfiguration = Get-ClagnosShowTargetDerivedConfiguration -ResourceGroup ([string]$focusedTarget.ResourceGroup) -VmName ([string]$focusedTarget.VmName) -ConfigMap $configMap
     }
 
     $totalVmCount = 0
@@ -129,5 +129,5 @@ function Invoke-AzVmShowCommand {
         ResourceGroups = @($groupDumps)
     }
 
-    Write-AzVmShowReport -Dump $dump
+    Write-ClagnosShowReport -Dump $dump
 }

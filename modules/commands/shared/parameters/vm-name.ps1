@@ -1,5 +1,5 @@
 # Shared 'vm-name' command option specification.
 
-function Get-AzVmSharedVmNameOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'vm-name' -ShortNames @('v') -TakesValue)
+function Get-ClagnosSharedVmNameOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'vm-name' -ShortNames @('v') -TakesValue)
 }

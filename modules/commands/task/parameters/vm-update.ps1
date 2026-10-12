@@ -1,5 +1,5 @@
 # 'vm-update' option binding for 'task'.
 
-function Get-AzVmTaskVmUpdateOptionSpecification {
-    return (Get-AzVmSharedVmUpdateOptionSpecification)
+function Get-ClagnosTaskVmUpdateOptionSpecification {
+    return (Get-ClagnosSharedVmUpdateOptionSpecification)
 }

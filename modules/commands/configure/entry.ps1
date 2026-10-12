@@ -1,7 +1,7 @@
 # Configure command entry.
 
-# Handles Invoke-AzVmConfigureCommand.
-function Invoke-AzVmConfigureCommand {
+# Handles Invoke-ClagnosConfigureCommand.
+function Invoke-ClagnosConfigureCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -9,7 +9,7 @@ function Invoke-AzVmConfigureCommand {
         [switch]$LinuxFlag
     )
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
-    Invoke-AzVmConfigureInteractiveEditor -RepoRoot $repoRoot -EnvFilePath $envFilePath -Perf:$PerfMode
+    Invoke-ClagnosConfigureInteractiveEditor -RepoRoot $repoRoot -EnvFilePath $envFilePath -Perf:$PerfMode
 }

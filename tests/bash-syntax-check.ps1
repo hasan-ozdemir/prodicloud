@@ -20,10 +20,32 @@ function Test-LinuxShellSyntax {
     $failed = @()
     $isWindowsHost = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
 
-    if ($isWindowsHost) {
+    $bash = Get-Command bash -ErrorAction SilentlyContinue
+    if ($isWindowsHost -and (-not $bash -or $bash.Source -match '\\Windows\\System32\\bash\.exe$')) {
+        $programFiles = [string]$env:ProgramFiles
+        $gitBashCandidates = @(
+            (Join-Path $programFiles 'Git\bin\bash.exe'),
+            (Join-Path ([string]${env:ProgramFiles(x86)}) 'Git\bin\bash.exe')
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) -and (Test-Path -LiteralPath $_) }
+        if (@($gitBashCandidates).Count -gt 0) {
+            $gitBashPath = [string]($gitBashCandidates | Select-Object -First 1)
+            $bash = [pscustomobject]@{ Source = $gitBashPath }
+        }
+    }
+
+    if ($bash -and ($bash.Source -notmatch '\\Windows\\System32\\bash\.exe$')) {
+        $bashPath = [string]$bash.Source
+        Get-ChildItem -Path $linuxRoot -Recurse -File -Filter *.sh | ForEach-Object {
+            & "$bashPath" -n $_.FullName
+            if ($LASTEXITCODE -ne 0) {
+                $failed += $_.FullName
+            }
+        }
+    }
+    elseif ($isWindowsHost) {
         $wsl = Get-Command wsl -ErrorAction SilentlyContinue
         if (-not $wsl) {
-            throw "WSL is required to validate Linux shell syntax on Windows."
+            throw "Bash or WSL is required to validate Linux shell syntax on Windows."
         }
 
         Get-ChildItem -Path $linuxRoot -Recurse -File -Filter *.sh | ForEach-Object {
@@ -36,13 +58,12 @@ function Test-LinuxShellSyntax {
         }
     }
     else {
-        $bash = Get-Command bash -ErrorAction SilentlyContinue
         if (-not $bash) {
             throw "bash command was not found."
         }
 
         Get-ChildItem -Path $linuxRoot -Recurse -File -Filter *.sh | ForEach-Object {
-            & $bash.Source -n $_.FullName
+            & ([string]$bash.Source) -n $_.FullName
             if ($LASTEXITCODE -ne 0) {
                 $failed += $_.FullName
             }

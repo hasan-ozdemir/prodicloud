@@ -4,12 +4,12 @@
   "timeout": 120,
   "assets": [
     {
-      "local": "../../../modules/core/tasks/azvm-store-install-state.psm1",
-      "remote": "C:/Windows/Temp/az-vm-store-install-state.psm1"
+      "local": "../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
     },
     {
-      "local": "../../../tools/scripts/az-vm-interactive-session-helper.ps1",
-      "remote": "C:/Windows/Temp/az-vm-interactive-session-helper.ps1"
+      "local": "../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
     }
   ],
   "appState": {
@@ -74,5 +74,18 @@
     "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "appx",
+      "value": "MSTeams"
+    },
+    "displayName": "Microsoft Teams",
+    "uninstall": {
+      "kind": "appx",
+      "value": "MSTeams"
+    },
+    "id": "microsoft-teams"
   }
 }

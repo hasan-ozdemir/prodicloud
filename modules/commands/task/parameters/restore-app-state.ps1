@@ -1,5 +1,5 @@
 # 'restore-app-state' option binding for 'task'.
 
-function Get-AzVmTaskRestoreAppStateOptionSpecification {
-    return (Get-AzVmSharedRestoreAppStateOptionSpecification)
+function Get-ClagnosTaskRestoreAppStateOptionSpecification {
+    return (Get-ClagnosSharedRestoreAppStateOptionSpecification)
 }

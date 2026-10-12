@@ -1,7 +1,7 @@
 # Run-command result parsing helpers.
 
-# Handles Test-AzVmBenignRunCommandStdErr.
-function Test-AzVmBenignRunCommandStdErr {
+# Handles Test-ClagnosBenignRunCommandStdErr.
+function Test-ClagnosBenignRunCommandStdErr {
     param(
         [string]$Message
     )
@@ -28,8 +28,8 @@ function Test-AzVmBenignRunCommandStdErr {
     return $false
 }
 
-# Handles Get-AzVmRunCommandResultEnvelope.
-function Get-AzVmRunCommandResultEnvelope {
+# Handles Get-ClagnosRunCommandResultEnvelope.
+function Get-ClagnosRunCommandResultEnvelope {
     param(
         [string]$TaskName,
         [object]$RawJson,
@@ -64,7 +64,7 @@ function Get-AzVmRunCommandResultEnvelope {
         }
 
         if ($isStdErrCode -and -not [string]::IsNullOrWhiteSpace($message)) {
-            if (Test-AzVmBenignRunCommandStdErr -Message $message) {
+            if (Test-ClagnosBenignRunCommandStdErr -Message $message) {
                 Write-Warning ("Ignoring benign run-command stderr line for task '{0}': {1}" -f $TaskName, $message.Trim())
             }
             elseif ($message -match '(?i)(terminatingerror|exception|failed|not recognized|cannot find|categoryinfo)') {
@@ -93,15 +93,15 @@ function Get-AzVmRunCommandResultEnvelope {
     }
 }
 
-# Handles Get-AzVmRunCommandResultMessage.
-function Get-AzVmRunCommandResultMessage {
+# Handles Get-ClagnosRunCommandResultMessage.
+function Get-ClagnosRunCommandResultMessage {
     param(
         [string]$TaskName,
         [object]$RawJson,
         [string]$ModeLabel
     )
 
-    $envelope = Get-AzVmRunCommandResultEnvelope -TaskName $TaskName -RawJson $RawJson -ModeLabel $ModeLabel
+    $envelope = Get-ClagnosRunCommandResultEnvelope -TaskName $TaskName -RawJson $RawJson -ModeLabel $ModeLabel
     if ([bool]$envelope.HasError) {
         throw [string]$envelope.ErrorMessage
     }
@@ -109,8 +109,8 @@ function Get-AzVmRunCommandResultMessage {
     return [string]$envelope.MessageText
 }
 
-# Handles Parse-AzVmRunCommandBatchMarkers.
-function Parse-AzVmRunCommandBatchMarkers {
+# Handles Parse-ClagnosRunCommandBatchMarkers.
+function Parse-ClagnosRunCommandBatchMarkers {
     param(
         [string]$MessageText
     )
@@ -152,7 +152,7 @@ function Parse-AzVmRunCommandBatchMarkers {
             continue
         }
 
-        if ($trimmed -match '^AZ_VM_REBOOT_REQUIRED:') {
+        if ($trimmed -match '^CLAGNOS_REBOOT_REQUIRED:') {
             $result.RebootRequired = $true
             continue
         }
@@ -161,8 +161,8 @@ function Parse-AzVmRunCommandBatchMarkers {
     return [pscustomobject]$result
 }
 
-# Handles Test-AzVmOutputIndicatesRebootRequired.
-function Test-AzVmOutputIndicatesRebootRequired {
+# Handles Test-ClagnosOutputIndicatesRebootRequired.
+function Test-ClagnosOutputIndicatesRebootRequired {
     param(
         [string]$MessageText
     )
@@ -171,15 +171,15 @@ function Test-AzVmOutputIndicatesRebootRequired {
         return $false
     }
 
-    if ($MessageText -match '^AZ_VM_REBOOT_REQUIRED:' -or $MessageText -match '(?im)^TASK_REBOOT_REQUIRED:') {
+    if ($MessageText -match '^CLAGNOS_REBOOT_REQUIRED:' -or $MessageText -match '(?im)^TASK_REBOOT_REQUIRED:') {
         return $true
     }
 
     return ($MessageText -match '(?i)(reboot required|restart required|pending reboot|press any key to install windows subsystem for linux)')
 }
 
-# Handles Get-AzVmTaskDurationsFromMessageText.
-function Get-AzVmTaskDurationsFromMessageText {
+# Handles Get-ClagnosTaskDurationsFromMessageText.
+function Get-ClagnosTaskDurationsFromMessageText {
     param(
         [string]$MessageText
     )

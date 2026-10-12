@@ -1,13 +1,13 @@
 # Contract for the 'set' command.
 
-function Get-AzVmSetOptionSpecifications {
+function Get-ClagnosSetOptionSpecifications {
     return @(
-        (Get-AzVmSetPerfOptionSpecification),
-        (Get-AzVmSetHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmSetGroupOptionSpecification),
-        (Get-AzVmSetVmNameOptionSpecification),
-        (Get-AzVmSetHibernationOptionSpecification),
-        (Get-AzVmSetNestedVirtualizationOptionSpecification)
+        (Get-ClagnosSetPerfOptionSpecification),
+        (Get-ClagnosSetHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosSetGroupOptionSpecification),
+        (Get-ClagnosSetVmNameOptionSpecification),
+        (Get-ClagnosSetHibernationOptionSpecification),
+        (Get-ClagnosSetNestedVirtualizationOptionSpecification)
     )
 }

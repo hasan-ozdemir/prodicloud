@@ -1,5 +1,5 @@
 # 'auto' option binding for 'delete'.
 
-function Get-AzVmDeleteAutoOptionSpecification {
-    return (Get-AzVmSharedAutoOptionSpecification)
+function Get-ClagnosDeleteAutoOptionSpecification {
+    return (Get-ClagnosSharedAutoOptionSpecification)
 }

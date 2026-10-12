@@ -39,5 +39,18 @@
   },
   "dependsOn": [
     "111-install-node-tool"
-  ]
+  ],
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "npm",
+      "value": "@google/gemini-cli"
+    },
+    "displayName": "Google Gemini CLI",
+    "uninstall": {
+      "kind": "npm",
+      "value": "@google/gemini-cli"
+    },
+    "id": "google-gemini-cli"
+  }
 }

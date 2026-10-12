@@ -1,5 +1,5 @@
 # 'vm-init' option binding for 'task'.
 
-function Get-AzVmTaskVmInitOptionSpecification {
-    return (Get-AzVmSharedVmInitOptionSpecification)
+function Get-ClagnosTaskVmInitOptionSpecification {
+    return (Get-ClagnosSharedVmInitOptionSpecification)
 }

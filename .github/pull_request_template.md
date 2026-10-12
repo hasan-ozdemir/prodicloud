@@ -14,7 +14,7 @@
 
 - `tests/code-quality-check.ps1`
 - `tests/documentation-contract-check.ps1`
-- `tests/az-vm-smoke-tests.ps1`
+- `tests/clagnos-smoke-tests.ps1`
 - `tests/powershell-compatibility-check.ps1`
 - Live Azure checks run for release-readiness claims:
 

@@ -1,5 +1,5 @@
 # 'auto' option binding for 'update'.
 
-function Get-AzVmUpdateAutoOptionSpecification {
-    return (Get-AzVmSharedAutoOptionSpecification)
+function Get-ClagnosUpdateAutoOptionSpecification {
+    return (Get-ClagnosSharedAutoOptionSpecification)
 }

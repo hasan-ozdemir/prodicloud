@@ -39,5 +39,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "anydesk.anydesk"
+    },
+    "displayName": "AnyDesk",
+    "uninstall": {
+      "kind": "winget",
+      "value": "anydesk.anydesk"
+    },
+    "id": "anydesk"
   }
 }

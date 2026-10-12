@@ -1,14 +1,14 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-wsl-feature"
 
-Import-Module 'C:\Windows\Temp\az-vm-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-AzVmSessionPath | Out-Null
+    Refresh-ClagnosSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
-    $portableCandidate = "C:\ProgramData\az-vm\tools\winget-x64\winget.exe"
+    $portableCandidate = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
     if (Test-Path -LiteralPath $portableCandidate) {
         return [string]$portableCandidate
     }
@@ -72,7 +72,7 @@ function Test-WslBenignBootstrapLine {
         ([string]$Text -match '^(?i)wsl\.exe : The Windows Subsystem for Linux is not installed\. You\s*$') -or
         ([string]$Text -match '^(?i)can install by running ''wsl\.exe --install''\.$') -or
         ([string]$Text -match '^(?i)For more information please visit https://aka\.ms/wslinstall$') -or
-        ([string]$Text -match '^(?i)At .+az-vm-task-.*\.ps1:\d+ char:\d+$') -or
+        ([string]$Text -match '^(?i)At .+clagnos-task-.*\.ps1:\d+ char:\d+$') -or
         ([string]$Text -match '^(?i)\+\s+wsl\.exe --install --no-distribution$') -or
         ([string]$Text -match '^(?i)\+\s+~+$') -or
         ([string]$Text -match '^(?i)\+\s+CategoryInfo\s+:.*NativeCommandError$') -or

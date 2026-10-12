@@ -41,5 +41,18 @@
   },
   "dependsOn": [
     "01-install-choco-tool"
-  ]
+  ],
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "googlechrome"
+    },
+    "displayName": "Google Chrome",
+    "uninstall": {
+      "kind": "choco",
+      "value": "googlechrome"
+    },
+    "id": "google-chrome"
+  }
 }

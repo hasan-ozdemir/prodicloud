@@ -1,15 +1,15 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-codex-application"
 
-Import-Module 'C:\Windows\Temp\az-vm-store-install-state.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-store-install-state.psm1' -Force -DisableNameChecking
 
 $managerUser = '__VM_ADMIN_USER__'
 $managerPassword = '__VM_ADMIN_PASS__'
-$helperPath = 'C:\Windows\Temp\az-vm-interactive-session-helper.ps1'
+$helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
 $taskName = '120-install-codex-application'
 $packageId = '9PLM9XGG6VKS'
-$legacyRunOnceName = 'AzVmInstallCodexApp'
-$portableWingetPath = 'C:\ProgramData\az-vm\tools\winget-x64\winget.exe'
+$legacyRunOnceName = 'ClagnosInstallCodexApp'
+$portableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
 $interactiveTaskSuffix = 'interactive-install'
 $interactiveDesktopWaitSeconds = 30
 $waitTimeoutSeconds = 240
@@ -158,8 +158,8 @@ function Get-CodexInstallState {
     }
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate $portableWingetPath
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate $portableWingetPath
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
@@ -167,32 +167,32 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 Write-Host "Resolved winget executable: $wingetExe"
 $existingState = Get-CodexInstallState -WingetExe $wingetExe
 if ([bool]$existingState.Healthy) {
-    Remove-AzVmRunOnceEntry -Name $legacyRunOnceName
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     Write-Host 'Existing Codex app installation is already healthy. Skipping winget install.'
     Write-Host 'install-codex-application-completed'
     Write-Host 'Update task completed: install-codex-application'
     return
 }
 
-if (Test-AzVmRunOnceEntryPresent -Name $legacyRunOnceName) {
-    Remove-AzVmRunOnceEntry -Name $legacyRunOnceName
+if (Test-ClagnosRunOnceEntryPresent -Name $legacyRunOnceName) {
+    Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
     Write-Host 'store-install-cleanup => task=120-install-codex-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-AzVmUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds $interactiveDesktopWaitSeconds -PollSeconds 5
-Write-AzVmInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
+$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds $interactiveDesktopWaitSeconds -PollSeconds 5
+Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
 if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-AzVmInteractiveDesktopBlockMessage -ActivityDescription 'Codex app install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-AzVmRunOnceEntry -Name $legacyRunOnceName
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Codex app install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
+    Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw ([string]$blockMessage.WarningMessage)
 }
 
 $workerTaskName = "{0}-{1}" -f $taskName, $interactiveTaskSuffix
-$paths = Get-AzVmInteractivePaths -TaskName $workerTaskName
+$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -265,10 +265,10 @@ function Test-CodexInstalled {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-CodexExecutable)))
 }
 
-Invoke-AzVmRefreshSessionPath
-$wingetExe = Resolve-AzVmWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ClagnosRefreshSessionPath
+$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -277,28 +277,28 @@ if (-not (Test-CodexInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-CodexInstalled)) {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Codex app install could not be verified after interactive winget install.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Codex app install could not be verified after interactive winget install.'
     exit 1
 }
 
-Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Codex app is installed.'
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Codex app is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
-$workerScript = $workerScript.Replace('__STORE_HELPER_PATH__', 'C:\Windows\Temp\az-vm-store-install-state.psm1')
+$workerScript = $workerScript.Replace('__STORE_HELPER_PATH__', 'C:\Windows\Temp\clagnos-store-install-state.psm1')
 $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
 $workerScript = $workerScript.Replace('__TASK_NAME__', $workerTaskName)
 $workerScript = $workerScript.Replace('__PACKAGE_ID__', $packageId)
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', $portableWingetPath)
 
 try {
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -307,12 +307,12 @@ try {
         -RunAsMode 'interactiveToken'
 }
 catch {
-    Invoke-AzVmRefreshSessionPath
+    Invoke-ClagnosRefreshSessionPath
     $catchState = Get-CodexInstallState -WingetExe $wingetExe
     if ([bool]$catchState.Healthy) {
-        Remove-AzVmRunOnceEntry -Name $legacyRunOnceName
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         Write-Host 'install-codex-application-completed'
         Write-Host 'Update task completed: install-codex-application'
         return
@@ -320,28 +320,28 @@ catch {
 
     $interactiveError = [string]$_.Exception.Message
     if ($interactiveError -match $storeSessionErrorRegex) {
-        Remove-AzVmRunOnceEntry -Name $legacyRunOnceName
-        $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary 'Codex app install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
+        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'Codex app install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         throw 'Codex app install requires an interactive Store-capable session and cannot be deferred to a later boot.'
     }
 
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app interactive install failed: {0}' -f $interactiveError) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app interactive install failed: {0}' -f $interactiveError) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }
 
-Invoke-AzVmRefreshSessionPath
+Invoke-ClagnosRefreshSessionPath
 $finalState = Get-CodexInstallState -WingetExe $wingetExe
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw 'Codex app install could not be verified.'
 }
 
-Remove-AzVmRunOnceEntry -Name $legacyRunOnceName
-$stateRecord = Write-AzVmStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-AzVmStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
+$stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
 Write-Host 'install-codex-application-completed'
 Write-Host 'Update task completed: install-codex-application'
 

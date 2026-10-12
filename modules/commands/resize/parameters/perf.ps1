@@ -1,5 +1,5 @@
 # 'perf' option binding for 'resize'.
 
-function Get-AzVmResizePerfOptionSpecification {
-    return (Get-AzVmSharedPerfOptionSpecification)
+function Get-ClagnosResizePerfOptionSpecification {
+    return (Get-ClagnosSharedPerfOptionSpecification)
 }

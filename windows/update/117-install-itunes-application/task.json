@@ -38,5 +38,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Apple.iTunes"
+    },
+    "displayName": "iTunes",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Apple.iTunes"
+    },
+    "id": "itunes"
   }
 }

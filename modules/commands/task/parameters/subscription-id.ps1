@@ -1,5 +1,5 @@
 # 'subscription-id' option binding for 'task'.
 
-function Get-AzVmTaskSubscriptionIdOptionSpecification {
-    return (Get-AzVmSharedSubscriptionIdOptionSpecification)
+function Get-ClagnosTaskSubscriptionIdOptionSpecification {
+    return (Get-ClagnosSharedSubscriptionIdOptionSpecification)
 }

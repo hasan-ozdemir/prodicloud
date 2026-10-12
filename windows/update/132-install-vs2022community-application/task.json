@@ -108,5 +108,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "visualstudio2022community"
+    },
+    "displayName": "Visual Studio Community",
+    "uninstall": {
+      "kind": "choco",
+      "value": "visualstudio2022community"
+    },
+    "id": "visual-studio-community"
   }
 }

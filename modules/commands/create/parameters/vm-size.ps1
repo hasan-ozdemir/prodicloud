@@ -1,5 +1,5 @@
 # 'vm-size' option binding for 'create'.
 
-function Get-AzVmCreateVmSizeOptionSpecification {
-    return (Get-AzVmSharedVmSizeOptionSpecification)
+function Get-ClagnosCreateVmSizeOptionSpecification {
+    return (Get-ClagnosSharedVmSizeOptionSpecification)
 }

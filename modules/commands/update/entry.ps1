@@ -1,6 +1,6 @@
 # Update command entry.
 
-function Invoke-AzVmUpdateCommand {
+function Invoke-ClagnosUpdateCommand {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -8,8 +8,8 @@ function Invoke-AzVmUpdateCommand {
         [switch]$AutoMode
     )
 
-    $runtime = New-AzVmUpdateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode
+    $runtime = New-ClagnosUpdateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode
     $script:UpdateMode = $true
     $script:ExecutionMode = 'update'
-    Invoke-AzVmMain -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -CommandName 'update' -InitialConfigOverrides $runtime.InitialConfigOverrides -ActionPlan $runtime.ActionPlan
+    Invoke-ClagnosMain -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -CommandName 'update' -InitialConfigOverrides $runtime.InitialConfigOverrides -ActionPlan $runtime.ActionPlan
 }

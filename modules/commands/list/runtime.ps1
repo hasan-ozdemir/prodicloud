@@ -1,16 +1,16 @@
 # List command runtime helpers.
 
-function Get-AzVmListSupportedTypes {
+function Get-ClagnosListSupportedTypes {
     return @('group', 'vm', 'disk', 'vnet', 'subnet', 'nic', 'ip', 'nsg', 'nsg-rule')
 }
 
-function Resolve-AzVmListRequestedTypes {
+function Resolve-ClagnosListRequestedTypes {
     param(
         [hashtable]$Options
     )
 
-    $supportedTypes = @(Get-AzVmListSupportedTypes)
-    $rawText = [string](Get-AzVmCliOptionText -Options $Options -Name 'type')
+    $supportedTypes = @(Get-ClagnosListSupportedTypes)
+    $rawText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'type')
     if ([string]::IsNullOrWhiteSpace([string]$rawText)) {
         return @($supportedTypes)
     }
@@ -43,20 +43,20 @@ function Resolve-AzVmListRequestedTypes {
     return @($supportedTypes | Where-Object { $values -contains [string]$_ })
 }
 
-function Get-AzVmListTargetResourceGroups {
+function Get-ClagnosListTargetResourceGroups {
     param(
         [hashtable]$Options,
         [hashtable]$ConfigMap
     )
 
-    $requestedGroup = [string](Get-AzVmCliOptionText -Options $Options -Name 'group')
+    $requestedGroup = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
     if (-not [string]::IsNullOrWhiteSpace([string]$requestedGroup)) {
         $resourceGroup = $requestedGroup.Trim()
-        Assert-AzVmManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'list'
+        Assert-ClagnosManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'list'
         return @([string]$resourceGroup)
     }
 
-    $rows = @(Get-AzVmManagedResourceGroupRows)
+    $rows = @(Get-ClagnosManagedResourceGroupRows)
     return @(
         ConvertTo-ObjectArrayCompat -InputObject $rows |
             ForEach-Object { [string]$_.name } |
@@ -65,7 +65,7 @@ function Get-AzVmListTargetResourceGroups {
     )
 }
 
-function Invoke-AzVmListAzJson {
+function Invoke-ClagnosListAzJson {
     param(
         [string[]]$AzArgs,
         [string]$OperationLabel
@@ -80,7 +80,7 @@ function Invoke-AzVmListAzJson {
     return (ConvertFrom-JsonCompat -InputObject $json)
 }
 
-function Get-AzVmListSectionRows {
+function Get-ClagnosListSectionRows {
     param(
         [string]$TypeName,
         [string[]]$ResourceGroups,
@@ -104,7 +104,7 @@ function Get-AzVmListSectionRows {
         }
         'vm' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $vmRows = @(Invoke-AzVmListAzJson -AzArgs @('vm', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az vm list ({0})" -f [string]$resourceGroup))
+                $vmRows = @(Invoke-ClagnosListAzJson -AzArgs @('vm', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az vm list ({0})" -f [string]$resourceGroup))
                 foreach ($vm in @(ConvertTo-ObjectArrayCompat -InputObject $vmRows)) {
                     $name = [string]$vm.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -116,7 +116,7 @@ function Get-AzVmListSectionRows {
         }
         'disk' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-AzVmListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Compute/disks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list disks ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Compute/disks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list disks ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -128,7 +128,7 @@ function Get-AzVmListSectionRows {
         }
         'vnet' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-AzVmListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/virtualNetworks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list vnet ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/virtualNetworks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list vnet ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -140,7 +140,7 @@ function Get-AzVmListSectionRows {
         }
         'subnet' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $vnetRows = @(Invoke-AzVmListAzJson -AzArgs @('network', 'vnet', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az network vnet list ({0})" -f [string]$resourceGroup))
+                $vnetRows = @(Invoke-ClagnosListAzJson -AzArgs @('network', 'vnet', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az network vnet list ({0})" -f [string]$resourceGroup))
                 foreach ($vnet in @(ConvertTo-ObjectArrayCompat -InputObject $vnetRows)) {
                     $vnetName = [string]$vnet.name
                     foreach ($subnet in @(ConvertTo-ObjectArrayCompat -InputObject $vnet.subnets)) {
@@ -155,7 +155,7 @@ function Get-AzVmListSectionRows {
         }
         'nic' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-AzVmListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkInterfaces', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nic ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkInterfaces', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nic ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -167,7 +167,7 @@ function Get-AzVmListSectionRows {
         }
         'ip' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-AzVmListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/publicIPAddresses', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list public ip ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/publicIPAddresses', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list public ip ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -179,7 +179,7 @@ function Get-AzVmListSectionRows {
         }
         'nsg' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-AzVmListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -191,14 +191,14 @@ function Get-AzVmListSectionRows {
         }
         'nsg-rule' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $nsgRows = @(Invoke-AzVmListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg for rules ({0})" -f [string]$resourceGroup))
+                $nsgRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg for rules ({0})" -f [string]$resourceGroup))
                 foreach ($nsg in @(ConvertTo-ObjectArrayCompat -InputObject $nsgRows)) {
                     $nsgName = [string]$nsg.name
                     if ([string]::IsNullOrWhiteSpace([string]$nsgName)) {
                         continue
                     }
 
-                    $ruleRows = @(Invoke-AzVmListAzJson -AzArgs @('network', 'nsg', 'rule', 'list', '-g', [string]$resourceGroup, '--nsg-name', [string]$nsgName, '-o', 'json', '--only-show-errors') -OperationLabel ("az network nsg rule list ({0}/{1})" -f [string]$resourceGroup, $nsgName))
+                    $ruleRows = @(Invoke-ClagnosListAzJson -AzArgs @('network', 'nsg', 'rule', 'list', '-g', [string]$resourceGroup, '--nsg-name', [string]$nsgName, '-o', 'json', '--only-show-errors') -OperationLabel ("az network nsg rule list ({0}/{1})" -f [string]$resourceGroup, $nsgName))
                     foreach ($rule in @(ConvertTo-ObjectArrayCompat -InputObject $ruleRows)) {
                         $ruleName = [string]$rule.name
                         if (-not [string]::IsNullOrWhiteSpace([string]$ruleName)) {

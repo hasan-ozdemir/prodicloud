@@ -1,17 +1,17 @@
 # Do command runtime helpers.
 
-# Handles Get-AzVmDoActionNames.
-function Get-AzVmDoActionNames {
+# Handles Get-ClagnosDoActionNames.
+function Get-ClagnosDoActionNames {
     return @('status','start','restart','stop','deallocate','hibernate-deallocate','hibernate-stop','reapply','redeploy')
 }
 
-# Handles Get-AzVmDoActionHintText.
-function Get-AzVmDoActionHintText {
-    return ("Use --vm-action={0}." -f ((Get-AzVmDoActionNames) -join '|'))
+# Handles Get-ClagnosDoActionHintText.
+function Get-ClagnosDoActionHintText {
+    return ("Use --vm-action={0}." -f ((Get-ClagnosDoActionNames) -join '|'))
 }
 
-# Handles Resolve-AzVmDoActionName.
-function Resolve-AzVmDoActionName {
+# Handles Resolve-ClagnosDoActionName.
+function Resolve-ClagnosDoActionName {
     param(
         [string]$RawValue,
         [switch]$AllowEmpty
@@ -28,7 +28,7 @@ function Resolve-AzVmDoActionName {
             -Detail "Option '--vm-action' requires a value." `
             -Code 2 `
             -Summary "VM action is missing." `
-            -Hint (Get-AzVmDoActionHintText)
+            -Hint (Get-ClagnosDoActionHintText)
     }
 
     if ($normalized -eq 'release') {
@@ -47,19 +47,19 @@ function Resolve-AzVmDoActionName {
             -Hint "Use --vm-action=hibernate-deallocate or --vm-action=hibernate-stop."
     }
 
-    if ($normalized -notin @(Get-AzVmDoActionNames)) {
+    if ($normalized -notin @(Get-ClagnosDoActionNames)) {
         Throw-FriendlyError `
             -Detail ("Invalid --vm-action value '{0}'." -f $RawValue) `
             -Code 2 `
             -Summary "VM action is invalid." `
-            -Hint (Get-AzVmDoActionHintText)
+            -Hint (Get-ClagnosDoActionHintText)
     }
 
     return $normalized
 }
 
-# Handles Resolve-AzVmVmLifecycleFieldText.
-function Resolve-AzVmVmLifecycleFieldText {
+# Handles Resolve-ClagnosVmLifecycleFieldText.
+function Resolve-ClagnosVmLifecycleFieldText {
     param(
         [string]$DisplayText,
         [string]$CodeText,
@@ -77,8 +77,8 @@ function Resolve-AzVmVmLifecycleFieldText {
     return [string]$DefaultText
 }
 
-# Handles Resolve-AzVmVmLifecycleStateLabel.
-function Resolve-AzVmVmLifecycleStateLabel {
+# Handles Resolve-ClagnosVmLifecycleStateLabel.
+function Resolve-ClagnosVmLifecycleStateLabel {
     param(
         [string]$PowerStateDisplay,
         [string]$PowerStateCode,
@@ -105,8 +105,8 @@ function Resolve-AzVmVmLifecycleStateLabel {
     return 'other'
 }
 
-# Handles ConvertTo-AzVmVmLifecycleSnapshot.
-function ConvertTo-AzVmVmLifecycleSnapshot {
+# Handles ConvertTo-ClagnosVmLifecycleSnapshot.
+function ConvertTo-ClagnosVmLifecycleSnapshot {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -163,7 +163,7 @@ function ConvertTo-AzVmVmLifecycleSnapshot {
         }
     }
 
-    $normalizedState = Resolve-AzVmVmLifecycleStateLabel `
+    $normalizedState = Resolve-ClagnosVmLifecycleStateLabel `
         -PowerStateDisplay $powerStateDisplay `
         -PowerStateCode $powerStateCode `
         -HibernationStateDisplay $hibernationStateDisplay `
@@ -185,8 +185,8 @@ function ConvertTo-AzVmVmLifecycleSnapshot {
     }
 }
 
-# Handles Get-AzVmVmLifecycleSnapshot.
-function Get-AzVmVmLifecycleSnapshot {
+# Handles Get-ClagnosVmLifecycleSnapshot.
+function Get-ClagnosVmLifecycleSnapshot {
     param(
         [string]$ResourceGroup,
         [string]$VmName
@@ -211,25 +211,25 @@ function Get-AzVmVmLifecycleSnapshot {
         throw "VM instance view could not be parsed."
     }
 
-    return (ConvertTo-AzVmVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName -VmObject $vmObject -InstanceViewObject $instanceViewObject)
+    return (ConvertTo-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName -VmObject $vmObject -InstanceViewObject $instanceViewObject)
 }
 
-# Handles Format-AzVmVmLifecycleSummaryText.
-function Format-AzVmVmLifecycleSummaryText {
+# Handles Format-ClagnosVmLifecycleSummaryText.
+function Format-ClagnosVmLifecycleSummaryText {
     param(
         [psobject]$Snapshot
     )
 
-    $powerStateText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)
-    $hibernationStateText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)
-    $provisioningStateText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'
+    $powerStateText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)
+    $hibernationStateText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)
+    $provisioningStateText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'
     $hibernationEnabledText = if ([bool]$Snapshot.HibernationEnabled) { 'true' } else { 'false' }
 
     return ("lifecycle={0}; power={1}; hibernation={2}; provisioning={3}; hibernationEnabled={4}" -f [string]$Snapshot.NormalizedState, $powerStateText, $hibernationStateText, $provisioningStateText, $hibernationEnabledText)
 }
 
-# Handles Get-AzVmDoAllowedSourceStates.
-function Get-AzVmDoAllowedSourceStates {
+# Handles Get-ClagnosDoAllowedSourceStates.
+function Get-ClagnosDoAllowedSourceStates {
     param(
         [string]$ActionName
     )
@@ -247,8 +247,8 @@ function Get-AzVmDoAllowedSourceStates {
     }
 }
 
-# Handles Assert-AzVmDoActionAllowed.
-function Assert-AzVmDoActionAllowed {
+# Handles Assert-ClagnosDoActionAllowed.
+function Assert-ClagnosDoActionAllowed {
     param(
         [string]$ActionName,
         [psobject]$Snapshot
@@ -268,7 +268,7 @@ function Assert-AzVmDoActionAllowed {
 
     if (($ActionName -notin @('reapply','redeploy')) -and -not $provisioningSucceeded) {
         Throw-FriendlyError `
-            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because provisioning is not ready. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-AzVmVmLifecycleSummaryText -Snapshot $Snapshot)) `
+            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because provisioning is not ready. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot)) `
             -Code 66 `
             -Summary "VM action cannot continue because provisioning is not in succeeded state." `
             -Hint "Wait until provisioning succeeds, run '--vm-action=status', then retry."
@@ -276,28 +276,28 @@ function Assert-AzVmDoActionAllowed {
 
     if (($ActionName -in @('hibernate-deallocate','hibernate-stop')) -and -not [bool]$Snapshot.HibernationEnabled) {
         Throw-FriendlyError `
-            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because hibernation is not enabled. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-AzVmVmLifecycleSummaryText -Snapshot $Snapshot)) `
+            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because hibernation is not enabled. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot)) `
             -Code 66 `
             -Summary "Hibernate action is not available for this VM." `
             -Hint "Enable hibernation support first, or use stop/deallocate instead."
     }
 
-    $allowedStates = @(Get-AzVmDoAllowedSourceStates -ActionName $ActionName)
+    $allowedStates = @(Get-ClagnosDoAllowedSourceStates -ActionName $ActionName)
     if ($allowedStates.Count -eq 0) {
         return
     }
 
     if ($allowedStates -notcontains [string]$Snapshot.NormalizedState) {
         Throw-FriendlyError `
-            -Detail ("Requested action '{0}' cannot run for VM '{1}' in resource group '{2}'. {3}. Allowed source states: {4}." -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-AzVmVmLifecycleSummaryText -Snapshot $Snapshot), ($allowedStates -join ', ')) `
+            -Detail ("Requested action '{0}' cannot run for VM '{1}' in resource group '{2}'. {3}. Allowed source states: {4}." -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot), ($allowedStates -join ', ')) `
             -Code 66 `
             -Summary ("VM action '{0}' is not valid for the current VM state." -f $ActionName) `
             -Hint ("Run '--vm-action=status' for current state details and retry only from: {0}." -f ($allowedStates -join ', '))
     }
 }
 
-# Handles Resolve-AzVmDoBoundedTimeoutSeconds.
-function Resolve-AzVmDoBoundedTimeoutSeconds {
+# Handles Resolve-ClagnosDoBoundedTimeoutSeconds.
+function Resolve-ClagnosDoBoundedTimeoutSeconds {
     param(
         [hashtable]$ConfigMap,
         [string]$Key,
@@ -322,30 +322,30 @@ function Resolve-AzVmDoBoundedTimeoutSeconds {
     return [int]$resolvedValue
 }
 
-# Handles Initialize-AzVmDoHibernateStopRuntime.
-function Initialize-AzVmDoHibernateStopRuntime {
+# Handles Initialize-ClagnosDoHibernateStopRuntime.
+function Initialize-ClagnosDoHibernateStopRuntime {
     param(
         [string]$ResourceGroup,
         [string]$VmName
     )
 
-    return (Initialize-AzVmConnectionCommandContext -Options @{
+    return (Initialize-ClagnosConnectionCommandContext -Options @{
             group = [string]$ResourceGroup
             'vm-name' = [string]$VmName
             user = 'manager'
         } -OperationName 'hibernate-stop')
 }
 
-# Handles Invoke-AzVmDoGuestHibernateStopCommand.
-function Invoke-AzVmDoGuestHibernateStopCommand {
+# Handles Invoke-ClagnosDoGuestHibernateStopCommand.
+function Invoke-ClagnosDoGuestHibernateStopCommand {
     param(
         [string]$ResourceGroup,
         [string]$VmName
     )
 
-    $runtime = Initialize-AzVmDoHibernateStopRuntime -ResourceGroup $ResourceGroup -VmName $VmName
-    $sshPort = Resolve-AzVmConnectionPortNumber -PortText ([string]$runtime.VmSshPort) -PortLabel 'SSH'
-    $sshReachable = Wait-AzVmTcpPortReachable -HostName ([string]$runtime.ConnectionHost) -Port $sshPort -MaxAttempts 3 -DelaySeconds 5 -TimeoutSeconds 5 -Label 'ssh'
+    $runtime = Initialize-ClagnosDoHibernateStopRuntime -ResourceGroup $ResourceGroup -VmName $VmName
+    $sshPort = Resolve-ClagnosConnectionPortNumber -PortText ([string]$runtime.VmSshPort) -PortLabel 'SSH'
+    $sshReachable = Wait-ClagnosTcpPortReachable -HostName ([string]$runtime.ConnectionHost) -Port $sshPort -MaxAttempts 3 -DelaySeconds 5 -TimeoutSeconds 5 -Label 'ssh'
     if (-not $sshReachable) {
         Throw-FriendlyError `
             -Detail ("VM '{0}' in resource group '{1}' is running, but SSH port {2} is not reachable on host '{3}'." -f [string]$runtime.VmName, [string]$runtime.ResourceGroup, $sshPort, [string]$runtime.ConnectionHost) `
@@ -354,12 +354,12 @@ function Invoke-AzVmDoGuestHibernateStopCommand {
             -Hint "Confirm the guest SSH service is ready and retry, or use --vm-action=hibernate-deallocate."
     }
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $configuredPySshClientPath = [string](Get-ConfigValue -Config $runtime.ConfigMap -Key 'PYSSH_CLIENT_PATH' -DefaultValue '')
-    $pySshTools = Ensure-AzVmPySshTools -RepoRoot $repoRoot -ConfiguredPySshClientPath $configuredPySshClientPath
-    $connectTimeoutSeconds = Resolve-AzVmDoBoundedTimeoutSeconds -ConfigMap $runtime.ConfigMap -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -DefaultValue 30 -MinimumValue 5 -MaximumValue 300
+    $pySshTools = Ensure-ClagnosPySshTools -RepoRoot $repoRoot -ConfiguredPySshClientPath $configuredPySshClientPath
+    $connectTimeoutSeconds = Resolve-ClagnosDoBoundedTimeoutSeconds -ConfigMap $runtime.ConfigMap -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -DefaultValue 30 -MinimumValue 5 -MaximumValue 300
 
-    $launchResult = Invoke-AzVmProcessWithRetry `
+    $launchResult = Invoke-ClagnosProcessWithRetry `
         -FilePath ([string]$pySshTools.PythonPath) `
         -Arguments @(
             [string]$pySshTools.ClientPath,
@@ -381,8 +381,8 @@ function Invoke-AzVmDoGuestHibernateStopCommand {
     }
 }
 
-# Handles Wait-AzVmDoHibernateStopCompletion.
-function Wait-AzVmDoHibernateStopCompletion {
+# Handles Wait-ClagnosDoHibernateStopCompletion.
+function Wait-ClagnosDoHibernateStopCompletion {
     param(
         [psobject]$Runtime,
         [string]$ResourceGroup,
@@ -395,17 +395,17 @@ function Wait-AzVmDoHibernateStopCompletion {
     if ($MaxAttempts -gt 120) { $MaxAttempts = 120 }
     if ($DelaySeconds -lt 1) { $DelaySeconds = 1 }
 
-    $sshPort = Resolve-AzVmConnectionPortNumber -PortText ([string]$Runtime.VmSshPort) -PortLabel 'SSH'
+    $sshPort = Resolve-ClagnosConnectionPortNumber -PortText ([string]$Runtime.VmSshPort) -PortLabel 'SSH'
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $snapshot = Get-AzVmVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
-        $powerText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
-        $hibernationText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
-        $sshReachable = Test-AzVmTcpPortReachable -HostName ([string]$Runtime.ConnectionHost) -Port $sshPort -TimeoutSeconds 3
+        $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
+        $powerText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
+        $hibernationText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
+        $sshReachable = Test-ClagnosTcpPortReachable -HostName ([string]$Runtime.ConnectionHost) -Port $sshPort -TimeoutSeconds 3
         Write-Host ("Hibernate-stop wait: lifecycle={0}; power={1}; hibernation={2}; ssh-open={3} (attempt {4}/{5})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, [bool]$sshReachable, $attempt, $MaxAttempts)
 
         if ([string]::Equals([string]$snapshot.NormalizedState, 'deallocated', [System.StringComparison]::OrdinalIgnoreCase)) {
             Throw-FriendlyError `
-                -Detail ("VM '{0}' in resource group '{1}' became deallocated while waiting for hibernate-stop. {2}" -f [string]$snapshot.VmName, [string]$snapshot.ResourceGroup, (Format-AzVmVmLifecycleSummaryText -Snapshot $snapshot)) `
+                -Detail ("VM '{0}' in resource group '{1}' became deallocated while waiting for hibernate-stop. {2}" -f [string]$snapshot.VmName, [string]$snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $snapshot)) `
                 -Code 66 `
                 -Summary "Hibernate-stop ended in a deallocated VM." `
                 -Hint "Use --vm-action=hibernate-deallocate when the Azure deallocation-based hibernate path is intended."
@@ -421,8 +421,8 @@ function Wait-AzVmDoHibernateStopCompletion {
     return $null
 }
 
-# Handles Write-AzVmDoStatusReport.
-function Write-AzVmDoStatusReport {
+# Handles Write-ClagnosDoStatusReport.
+function Write-ClagnosDoStatusReport {
     param(
         [psobject]$Snapshot
     )
@@ -430,14 +430,14 @@ function Write-AzVmDoStatusReport {
     $hibernationEnabledText = if ([bool]$Snapshot.HibernationEnabled) { 'true' } else { 'false' }
     Write-Host ("VM lifecycle status for '{0}' in group '{1}':" -f [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup) -ForegroundColor Cyan
     Write-Host ("- lifecycle = {0}" -f [string]$Snapshot.NormalizedState)
-    Write-Host ("- power-state = {0}" -f (Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)))
-    Write-Host ("- hibernation-state = {0}" -f (Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)))
-    Write-Host ("- provisioning-state = {0}" -f (Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'))
+    Write-Host ("- power-state = {0}" -f (Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)))
+    Write-Host ("- hibernation-state = {0}" -f (Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)))
+    Write-Host ("- provisioning-state = {0}" -f (Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'))
     Write-Host ("- hibernation-enabled = {0}" -f $hibernationEnabledText)
 }
 
-# Handles Assert-AzVmConnectionVmRunning.
-function Assert-AzVmConnectionVmRunning {
+# Handles Assert-ClagnosConnectionVmRunning.
+function Assert-ClagnosConnectionVmRunning {
     param(
         [string]$OperationName,
         [psobject]$Snapshot
@@ -449,20 +449,20 @@ function Assert-AzVmConnectionVmRunning {
 
     $commandLabel = ([string]$OperationName).ToUpperInvariant()
     Throw-FriendlyError `
-        -Detail ("The {0} command cannot launch because VM '{1}' in resource group '{2}' is not running. {3}" -f $OperationName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-AzVmVmLifecycleSummaryText -Snapshot $Snapshot)) `
+        -Detail ("The {0} command cannot launch because VM '{1}' in resource group '{2}' is not running. {3}" -f $OperationName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot)) `
         -Code 66 `
         -Summary ("{0} requires the VM to be running." -f $commandLabel) `
-        -Hint ("Start the VM with 'az-vm do --vm-action=start --group={0} --vm-name={1}' and retry." -f [string]$Snapshot.ResourceGroup, [string]$Snapshot.VmName)
+        -Hint ("Start the VM with 'clagnos do --vm-action=start --group={0} --vm-name={1}' and retry." -f [string]$Snapshot.ResourceGroup, [string]$Snapshot.VmName)
 }
 
-# Handles Read-AzVmDoActionInteractive.
-function Read-AzVmDoActionInteractive {
+# Handles Read-ClagnosDoActionInteractive.
+function Read-ClagnosDoActionInteractive {
     param(
         [psobject]$Snapshot
     )
 
     Write-Host ""
-    Write-AzVmDoStatusReport -Snapshot $Snapshot
+    Write-ClagnosDoStatusReport -Snapshot $Snapshot
     Write-Host ""
     Write-Host "Available VM actions (select by number, default=status):" -ForegroundColor Cyan
     $choices = @(
@@ -497,7 +497,7 @@ function Read-AzVmDoActionInteractive {
         }
 
         try {
-            return (Resolve-AzVmDoActionName -RawValue $trimmed)
+            return (Resolve-ClagnosDoActionName -RawValue $trimmed)
         }
         catch {
             Write-Host "Invalid VM action selection. Please enter a valid number or action name." -ForegroundColor Yellow
@@ -505,8 +505,8 @@ function Read-AzVmDoActionInteractive {
     }
 }
 
-# Handles Wait-AzVmDoLifecycleState.
-function Wait-AzVmDoLifecycleState {
+# Handles Wait-ClagnosDoLifecycleState.
+function Wait-ClagnosDoLifecycleState {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -520,9 +520,9 @@ function Wait-AzVmDoLifecycleState {
     if ($DelaySeconds -lt 1) { $DelaySeconds = 1 }
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $snapshot = Get-AzVmVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
-        $powerText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
-        $hibernationText = Resolve-AzVmVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
+        $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
+        $powerText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
+        $hibernationText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
         Write-Host ("VM lifecycle state: {0}; power: {1}; hibernation: {2} (attempt {3}/{4})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, $attempt, $MaxAttempts)
 
         if ([string]::Equals([string]$snapshot.NormalizedState, [string]$DesiredState, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -535,8 +535,8 @@ function Wait-AzVmDoLifecycleState {
     return $null
 }
 
-# Handles Invoke-AzVmDoAzureAction.
-function Invoke-AzVmDoAzureAction {
+# Handles Invoke-ClagnosDoAzureAction.
+function Invoke-ClagnosDoAzureAction {
     param(
         [string]$ActionName,
         [string]$ResourceGroup,

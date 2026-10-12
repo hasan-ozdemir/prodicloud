@@ -1,6 +1,6 @@
 # Create command runtime helpers.
 
-function Assert-AzVmCreateAutoOptions {
+function Assert-ClagnosCreateAutoOptions {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -8,11 +8,11 @@ function Assert-AzVmCreateAutoOptions {
         [hashtable]$ConfigMap
     )
 
-    if (-not (Get-AzVmCliOptionBool -Options $Options -Name 'auto' -DefaultValue $false)) {
+    if (-not (Get-ClagnosCliOptionBool -Options $Options -Name 'auto' -DefaultValue $false)) {
         return
     }
 
-    $validationConfig = if ($ConfigMap) { Resolve-AzVmSupportedDotEnvConfig -ConfigMap $ConfigMap } else { @{} }
+    $validationConfig = if ($ConfigMap) { Resolve-ClagnosSupportedDotEnvConfig -ConfigMap $ConfigMap } else { @{} }
     $platform = if ($WindowsFlag) {
         'windows'
     }
@@ -40,18 +40,18 @@ function Assert-AzVmCreateAutoOptions {
             -Hint "Set SELECTED_VM_OS=windows|linux in .env, or pass --windows/--linux."
     }
 
-    $effectiveVmName = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-name')
+    $effectiveVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
     if ([string]::IsNullOrWhiteSpace([string]$effectiveVmName)) {
         $effectiveVmName = [string](Get-ConfigValue -Config $validationConfig -Key 'SELECTED_VM_NAME' -DefaultValue '')
     }
 
-    $effectiveRegion = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-region')
+    $effectiveRegion = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-region')
     if ([string]::IsNullOrWhiteSpace([string]$effectiveRegion)) {
         $effectiveRegion = [string](Get-ConfigValue -Config $validationConfig -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
     }
 
-    $vmSizeKey = Get-AzVmPlatformVmConfigKey -Platform $normalizedPlatform -BaseKey 'VM_SIZE'
-    $effectiveVmSize = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-size')
+    $vmSizeKey = Get-ClagnosPlatformVmConfigKey -Platform $normalizedPlatform -BaseKey 'VM_SIZE'
+    $effectiveVmSize = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-size')
     if ([string]::IsNullOrWhiteSpace([string]$effectiveVmSize)) {
         $effectiveVmSize = [string](Get-ConfigValue -Config $validationConfig -Key $vmSizeKey -DefaultValue '')
     }
@@ -70,7 +70,7 @@ function Assert-AzVmCreateAutoOptions {
     }
 }
 
-function Test-AzVmCreateResumeExistingTargetActionPlan {
+function Test-ClagnosCreateResumeExistingTargetActionPlan {
     param(
         [psobject]$ActionPlan
     )
@@ -89,7 +89,7 @@ function Test-AzVmCreateResumeExistingTargetActionPlan {
     return ($runsExistingOnlyWindow -and $touchesExistingGuest)
 }
 
-function New-AzVmCreateResumeTargetOverrides {
+function New-ClagnosCreateResumeTargetOverrides {
     param(
         [hashtable]$Options,
         [hashtable]$ConfigMap,
@@ -111,8 +111,8 @@ function New-AzVmCreateResumeTargetOverrides {
 
     $defaultResourceGroup = [string](Get-ConfigValue -Config $ConfigMap -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
     $targetResourceGroup = ''
-    if (-not [string]::IsNullOrWhiteSpace([string]$defaultResourceGroup) -and (Test-AzVmResourceGroupManaged -ResourceGroup $defaultResourceGroup)) {
-        $activeVmNames = @(Get-AzVmVmNamesForResourceGroup -ResourceGroup $defaultResourceGroup)
+    if (-not [string]::IsNullOrWhiteSpace([string]$defaultResourceGroup) -and (Test-ClagnosResourceGroupManaged -ResourceGroup $defaultResourceGroup)) {
+        $activeVmNames = @(Get-ClagnosVmNamesForResourceGroup -ResourceGroup $defaultResourceGroup)
         foreach ($candidateVmName in @($activeVmNames)) {
             if ([string]::Equals([string]$candidateVmName, [string]$resolvedVmName, [System.StringComparison]::OrdinalIgnoreCase)) {
                 $targetResourceGroup = [string]$defaultResourceGroup
@@ -122,7 +122,7 @@ function New-AzVmCreateResumeTargetOverrides {
     }
 
     if ([string]::IsNullOrWhiteSpace([string]$targetResourceGroup)) {
-        $matches = @(Get-AzVmManagedVmMatchRows -VmName $resolvedVmName)
+        $matches = @(Get-ClagnosManagedVmMatchRows -VmName $resolvedVmName)
         if (@($matches).Count -eq 0) {
             Throw-FriendlyError `
                 -Detail ("Create resume could not find an existing managed VM named '{0}'." -f [string]$resolvedVmName) `
@@ -143,7 +143,7 @@ function New-AzVmCreateResumeTargetOverrides {
         $resolvedVmName = [string]$matches[0].VmName
     }
 
-    if (-not (Test-AzVmAzResourceExists -AzArgs @('vm', 'show', '-g', $targetResourceGroup, '-n', $resolvedVmName))) {
+    if (-not (Test-ClagnosAzResourceExists -AzArgs @('vm', 'show', '-g', $targetResourceGroup, '-n', $resolvedVmName))) {
         Throw-FriendlyError `
             -Detail ("Create resume target VM '{0}' was not found in managed resource group '{1}'." -f [string]$resolvedVmName, [string]$targetResourceGroup) `
             -Code 66 `
@@ -151,12 +151,12 @@ function New-AzVmCreateResumeTargetOverrides {
             -Hint "Rerun a full create first, or choose an existing managed VM target."
     }
 
-    $targetLocation = Get-AzVmResourceGroupLocation -ResourceGroup $targetResourceGroup
-    $targetOsType = Get-AzVmManagedTargetOsType -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
-    $networkDescriptor = Get-AzVmVmNetworkDescriptor -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
+    $targetLocation = Get-ClagnosResourceGroupLocation -ResourceGroup $targetResourceGroup
+    $targetOsType = Get-ClagnosManagedTargetOsType -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
+    $networkDescriptor = Get-ClagnosVmNetworkDescriptor -ResourceGroup $targetResourceGroup -VmName $resolvedVmName
 
     $resumeOverrides = @{
-        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-AzVmResolvedSubscriptionContext).SubscriptionId)
+        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-ClagnosResolvedSubscriptionContext).SubscriptionId)
         SELECTED_RESOURCE_GROUP = [string]$targetResourceGroup
         SELECTED_VM_NAME = [string]$resolvedVmName
         SELECTED_AZURE_REGION = [string]$targetLocation
@@ -172,13 +172,13 @@ function New-AzVmCreateResumeTargetOverrides {
     }
 
     foreach ($overrideKey in @($resumeOverrides.Keys)) {
-        Set-AzVmConfigValueSource -Key ([string]$overrideKey) -Source 'azure value'
+        Set-ClagnosConfigValueSource -Key ([string]$overrideKey) -Source 'azure value'
     }
 
     return $resumeOverrides
 }
 
-function New-AzVmCreateCommandRuntime {
+function New-ClagnosCreateCommandRuntime {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -186,61 +186,61 @@ function New-AzVmCreateCommandRuntime {
         [switch]$AutoMode
     )
 
-    $actionPlan = Resolve-AzVmActionPlan -CommandName 'create' -Options $Options
-    $repoRoot = Get-AzVmRepoRoot
+    $actionPlan = Resolve-ClagnosActionPlan -CommandName 'create' -Options $Options
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    Assert-AzVmCreateAutoOptions -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMap $configMap
+    Assert-ClagnosCreateAutoOptions -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMap $configMap
     $createOverrides = @{}
-    $cliSubscriptionId = [string](Get-AzVmCliOptionText -Options $Options -Name 'subscription-id')
+    $cliSubscriptionId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id')
 
     if (-not $AutoMode -and [string]::IsNullOrWhiteSpace([string]$cliSubscriptionId)) {
-        $currentSubscription = Get-AzVmResolvedSubscriptionContext
-        $selectedSubscription = Select-AzVmSubscriptionInteractive -DefaultSubscriptionId ([string]$currentSubscription.SubscriptionId)
-        Set-AzVmResolvedSubscriptionContext `
+        $currentSubscription = Get-ClagnosResolvedSubscriptionContext
+        $selectedSubscription = Select-ClagnosSubscriptionInteractive -DefaultSubscriptionId ([string]$currentSubscription.SubscriptionId)
+        Set-ClagnosResolvedSubscriptionContext `
             -SubscriptionId ([string]$selectedSubscription.id) `
             -SubscriptionName ([string]$selectedSubscription.name) `
             -TenantId ([string]$selectedSubscription.tenantId) `
             -ResolutionSource 'interactive'
         $createOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = [string]$selectedSubscription.id
-        Set-AzVmConfigValueSource -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Source 'interactive value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Source 'interactive value'
     }
 
-    $createVmName = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-name')
+    $createVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
     if (-not [string]::IsNullOrWhiteSpace([string]$createVmName)) {
         $createOverrides['SELECTED_VM_NAME'] = $createVmName.Trim()
-        Set-AzVmConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'cli value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'cli value'
     }
     else {
         $configuredVmName = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_NAME' -DefaultValue '')
         if (-not [string]::IsNullOrWhiteSpace([string]$configuredVmName)) {
             $createOverrides['SELECTED_VM_NAME'] = $configuredVmName.Trim()
-            Set-AzVmConfigValueSource -Key 'SELECTED_VM_NAME' -Source '.env value'
+            Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source '.env value'
         }
     }
 
-    $createVmRegion = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-region')
+    $createVmRegion = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-region')
     if (-not [string]::IsNullOrWhiteSpace([string]$createVmRegion)) {
         $createOverrides['SELECTED_AZURE_REGION'] = $createVmRegion.Trim().ToLowerInvariant()
-        Set-AzVmConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source 'cli value'
+        Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source 'cli value'
     }
     else {
         $configuredVmRegion = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
         if (-not [string]::IsNullOrWhiteSpace([string]$configuredVmRegion)) {
             $createOverrides['SELECTED_AZURE_REGION'] = $configuredVmRegion.Trim().ToLowerInvariant()
-            Set-AzVmConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source '.env value'
+            Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source '.env value'
         }
     }
 
-    $createVmSize = [string](Get-AzVmCliOptionText -Options $Options -Name 'vm-size')
+    $createVmSize = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-size')
     if (-not [string]::IsNullOrWhiteSpace([string]$createVmSize)) {
         $createOverrides['VM_SIZE'] = $createVmSize.Trim()
-        Set-AzVmConfigValueSource -Key 'VM_SIZE' -Source 'cli value'
+        Set-ClagnosConfigValueSource -Key 'VM_SIZE' -Source 'cli value'
     }
 
     $step1OperationName = 'create'
-    if (Test-AzVmCreateResumeExistingTargetActionPlan -ActionPlan $actionPlan) {
-        $resumeOverrides = New-AzVmCreateResumeTargetOverrides -Options $Options -ConfigMap $configMap -VmName ([string]$createOverrides['SELECTED_VM_NAME'])
+    if (Test-ClagnosCreateResumeExistingTargetActionPlan -ActionPlan $actionPlan) {
+        $resumeOverrides = New-ClagnosCreateResumeTargetOverrides -Options $Options -ConfigMap $configMap -VmName ([string]$createOverrides['SELECTED_VM_NAME'])
         foreach ($overrideKey in @($resumeOverrides.Keys)) {
             $createOverrides[[string]$overrideKey] = [string]$resumeOverrides[[string]$overrideKey]
         }

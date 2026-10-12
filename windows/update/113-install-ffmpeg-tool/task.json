@@ -1,5 +1,18 @@
 {
   "priority": 113,
   "enabled": true,
-  "timeout": 90
+  "timeout": 90,
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "choco",
+      "value": "ffmpeg"
+    },
+    "displayName": "FFmpeg",
+    "uninstall": {
+      "kind": "choco",
+      "value": "ffmpeg"
+    },
+    "id": "ffmpeg"
+  }
 }

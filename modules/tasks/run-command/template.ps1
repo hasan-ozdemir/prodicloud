@@ -1,6 +1,6 @@
 # Run-command task block replacement helpers.
 
-function Resolve-AzVmTaskRepoRootFromPath {
+function Resolve-ClagnosTaskRepoRootFromPath {
     param([string]$StartPath)
 
     if ([string]::IsNullOrWhiteSpace([string]$StartPath)) {
@@ -13,7 +13,7 @@ function Resolve-AzVmTaskRepoRootFromPath {
     }
 
     while (-not [string]::IsNullOrWhiteSpace([string]$cursor)) {
-        if (Test-Path -LiteralPath (Join-Path $cursor 'az-vm.ps1')) {
+        if (Test-Path -LiteralPath (Join-Path $cursor 'clagnos.ps1')) {
             return [string]$cursor
         }
 
@@ -28,8 +28,8 @@ function Resolve-AzVmTaskRepoRootFromPath {
     return ''
 }
 
-# Handles Apply-AzVmTaskBlockReplacements.
-function Apply-AzVmTaskBlockReplacements {
+# Handles Apply-ClagnosTaskBlockReplacements.
+function Apply-ClagnosTaskBlockReplacements {
     param(
         [object[]]$TaskBlocks,
         [hashtable]$Replacements,
@@ -66,7 +66,7 @@ function Apply-AzVmTaskBlockReplacements {
         }
         $timeoutSeconds = 180
         if ($taskBlock.PSObject.Properties.Match('TimeoutSeconds').Count -gt 0) {
-            $timeoutSeconds = Get-AzVmTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds 180
+            $timeoutSeconds = Get-ClagnosTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds 180
         }
         $assetSpecs = @()
         if ($taskBlock.PSObject.Properties.Match('AssetSpecs').Count -gt 0 -and $null -ne $taskBlock.AssetSpecs) {
@@ -80,7 +80,7 @@ function Apply-AzVmTaskBlockReplacements {
             }
         }
 
-        $taskOverrides = Get-AzVmTaskBlockTokenOverrides -TaskBlock $taskBlock -Context $Context
+        $taskOverrides = Get-ClagnosTaskBlockTokenOverrides -TaskBlock $taskBlock -Context $Context
         if ($taskOverrides) {
             foreach ($key in $taskOverrides.Keys) {
                 $effectiveReplacements[[string]$key] = [string]$taskOverrides[$key]
@@ -101,7 +101,7 @@ function Apply-AzVmTaskBlockReplacements {
                 continue
             }
 
-            $repoRoot = Resolve-AzVmTaskRepoRootFromPath -StartPath $candidatePath
+            $repoRoot = Resolve-ClagnosTaskRepoRootFromPath -StartPath $candidatePath
             if (-not [string]::IsNullOrWhiteSpace([string]$repoRoot)) {
                 break
             }
@@ -121,8 +121,8 @@ function Apply-AzVmTaskBlockReplacements {
 
         if ($isWindowsPowerShellTask -and -not [string]::IsNullOrWhiteSpace([string]$repoRoot)) {
             $assetSpecs += [pscustomobject]@{
-                LocalPath = (Join-Path $repoRoot 'modules\core\tasks\azvm-session-environment.psm1')
-                RemotePath = 'C:/Windows/Temp/az-vm-session-environment.psm1'
+                LocalPath = (Join-Path $repoRoot 'modules\core\tasks\clagnos-session-environment.psm1')
+                RemotePath = 'C:/Windows/Temp/clagnos-session-environment.psm1'
             }
         }
 
@@ -175,6 +175,7 @@ function Apply-AzVmTaskBlockReplacements {
             Source = if ($taskBlock.PSObject.Properties.Match('Source').Count -gt 0) { [string]$taskBlock.Source } else { '' }
             TaskNumber = if ($taskBlock.PSObject.Properties.Match('TaskNumber').Count -gt 0) { [int]$taskBlock.TaskNumber } else { 0 }
             AppStateSpec = if ($taskBlock.PSObject.Properties.Match('AppStateSpec').Count -gt 0) { $taskBlock.AppStateSpec } else { $null }
+            ProgramSpec = if ($taskBlock.PSObject.Properties.Match('ProgramSpec').Count -gt 0) { $taskBlock.ProgramSpec } else { $null }
             Extensions = if ($taskBlock.PSObject.Properties.Match('Extensions').Count -gt 0) { $taskBlock.Extensions } else { $null }
             DependsOn = if ($taskBlock.PSObject.Properties.Match('DependsOn').Count -gt 0) { @($taskBlock.DependsOn) } else { @() }
             ObservedDurationSeconds = if ($taskBlock.PSObject.Properties.Match('ObservedDurationSeconds').Count -gt 0) { [double]$taskBlock.ObservedDurationSeconds } else { [double]::PositiveInfinity }

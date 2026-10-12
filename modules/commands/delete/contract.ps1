@@ -1,13 +1,13 @@
 # Contract for the 'delete' command.
 
-function Get-AzVmDeleteOptionSpecifications {
+function Get-ClagnosDeleteOptionSpecifications {
     return @(
-        (Get-AzVmDeleteAutoOptionSpecification),
-        (Get-AzVmDeletePerfOptionSpecification),
-        (Get-AzVmDeleteHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmDeleteTargetOptionSpecification),
-        (Get-AzVmDeleteGroupOptionSpecification),
-        (Get-AzVmDeleteYesOptionSpecification)
+        (Get-ClagnosDeleteAutoOptionSpecification),
+        (Get-ClagnosDeletePerfOptionSpecification),
+        (Get-ClagnosDeleteHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosDeleteTargetOptionSpecification),
+        (Get-ClagnosDeleteGroupOptionSpecification),
+        (Get-ClagnosDeleteYesOptionSpecification)
     )
 }

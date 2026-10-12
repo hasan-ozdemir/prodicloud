@@ -4,8 +4,8 @@
   "timeout": 600,
   "assets": [
     {
-      "local": "../../../tools/scripts/az-vm-interactive-session-helper.ps1",
-      "remote": "C:/Windows/Temp/az-vm-interactive-session-helper.ps1"
+      "local": "../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
     }
   ],
   "appState": {
@@ -120,5 +120,18 @@
   },
   "dependsOn": [
     "121-install-wsl-feature"
-  ]
+  ],
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Docker.DockerDesktop"
+    },
+    "displayName": "Docker Desktop",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Docker.DockerDesktop"
+    },
+    "id": "docker-desktop"
+  }
 }

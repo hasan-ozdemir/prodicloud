@@ -14,7 +14,7 @@ $managerPassword = "__VM_ADMIN_PASS__"
 $assistantUser = "__ASSISTANT_USER__"
 $assistantPassword = "__ASSISTANT_PASS__"
 $notepadPath = Join-Path $env:WINDIR "System32\notepad.exe"
-$helperPath = "C:\Windows\Temp\az-vm-interactive-session-helper.ps1"
+$helperPath = "C:\Windows\Temp\clagnos-interactive-session-helper.ps1"
 $textExtensions = @(".txt", ".log", ".ini", ".cfg", ".conf", ".csv", ".xml", ".json", ".yaml", ".yml", ".md", ".ps1", ".cmd", ".bat", ".reg", ".sql")
 $artifactFileNames = @('desktop.ini', 'Thumbs.db')
 $turkishInputTip = '041F:0000041F'
@@ -75,7 +75,7 @@ function Get-RegistryComparableValueText {
     }
 
     if ($Value -is [byte[]]) {
-        $shellPropertyExpression = Convert-AzVmShellSortBytesToPropertyExpression -Bytes ([byte[]]$Value)
+        $shellPropertyExpression = Convert-ClagnosShellSortBytesToPropertyExpression -Bytes ([byte[]]$Value)
         if (-not [string]::IsNullOrWhiteSpace([string]$shellPropertyExpression)) {
             return [string]$shellPropertyExpression
         }
@@ -86,7 +86,7 @@ function Get-RegistryComparableValueText {
     return [string]$Value
 }
 
-function Convert-AzVmShellSortBytesToPropertyExpression {
+function Convert-ClagnosShellSortBytesToPropertyExpression {
     param([byte[]]$Bytes)
 
     if ($null -eq $Bytes -or $Bytes.Length -lt 40) {
@@ -223,7 +223,7 @@ function Set-RegistryValueString {
         [string]$Value
     )
 
-    Set-AzVmRegistryValue -Path $Path -Name $Name -Value ([string]$Value) -Kind String
+    Set-ClagnosRegistryValue -Path $Path -Name $Name -Value ([string]$Value) -Kind String
 }
 
 function Test-OptionalMountedRegistryRoot {
@@ -233,7 +233,7 @@ function Test-OptionalMountedRegistryRoot {
         return $false
     }
 
-    return ($RootPath -match '(?i)^Registry::HKEY_USERS\\AzVm')
+    return ($RootPath -match '(?i)^Registry::HKEY_USERS\\Clagnos')
 }
 
 function Get-SystemLocaleNameSafe {
@@ -373,7 +373,7 @@ function Set-WelcomeScreenAndDefaultUserRegionalState {
         return
     }
 
-    $defaultMountName = 'AzVm10003Default'
+    $defaultMountName = 'Clagnos10003Default'
     $defaultRoot = $null
     try {
         $defaultRoot = Mount-RegistryHive -MountName $defaultMountName -HiveFilePath $defaultProfileHive
@@ -546,7 +546,7 @@ function Invoke-AssistantRegionalInputConfiguration {
 
     Add-Detail ("regional-assistant-start:{0}" -f [string]$UserName)
     $interactiveTaskName = ('{0}-regional-{1}' -f $TaskName, [string]$UserName)
-    $paths = Get-AzVmInteractivePaths -TaskName $interactiveTaskName
+    $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -606,10 +606,10 @@ try {
     Set-WinHomeLocation -GeoId $turkeyGeoId
     Set-24HourFormatState
     Set-TurkishQKeyboardOnly
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Regional settings applied.' -Details @('regional-ok')
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Regional settings applied.' -Details @('regional-ok')
 }
 catch {
-    Write-AzVmInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Regional settings failed.' -Details @([string]$_.Exception.Message)
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Regional settings failed.' -Details @([string]$_.Exception.Message)
     throw
 }
 '@
@@ -624,7 +624,7 @@ catch {
     $workerScript = $workerScript.Replace('__LONG_TIME__', $longTimePattern)
     $workerScript = $workerScript.Replace('__TURKEY_GEO_ID__', [string]$turkeyGeoId)
 
-    $null = Invoke-AzVmInteractiveDesktopAutomation `
+    $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $interactiveTaskName `
         -RunAsUser $UserName `
         -RunAsPassword $UserPassword `
@@ -667,7 +667,7 @@ function Resolve-ManagerRegistryRoots {
     $classesMountName = ''
     if (-not (Test-Path -LiteralPath $classesRoot)) {
         $usrClassPath = Join-Path ([string]$ProfileInfo.ProfilePath) 'AppData\Local\Microsoft\Windows\UsrClass.dat'
-        $classesMountName = 'AzVm04ManagerClasses'
+        $classesMountName = 'Clagnos04ManagerClasses'
         $classesRoot = Mount-RegistryHive -MountName $classesMountName -HiveFilePath $usrClassPath
     }
 
@@ -709,7 +709,7 @@ function Write-Utf8JsonFile {
     )
 
     $parentPath = Split-Path -Path $Path -Parent
-    Ensure-AzVmDirectory -Path $parentPath
+    Ensure-ClagnosDirectory -Path $parentPath
     $jsonText = [string]($Value | ConvertTo-Json -Depth 20)
     [System.IO.File]::WriteAllText($Path, $jsonText, (New-Object System.Text.UTF8Encoding($false)))
 }
@@ -778,7 +778,7 @@ function Backup-TaskManagerSettings {
         return ''
     }
 
-    $backupPath = $SettingsPath + '.az-vm-backup'
+    $backupPath = $SettingsPath + '.clagnos-backup'
     Copy-Item -LiteralPath $SettingsPath -Destination $backupPath -Force
     Add-Detail ("task-manager-settings-backup: {0}" -f $backupPath)
     return [string]$backupPath
@@ -833,7 +833,7 @@ function Ensure-TaskManagerFullViewSetting {
 
     $settingsDirectory = Join-Path $ProfilePath 'AppData\Local\Microsoft\Windows\TaskManager'
     $settingsPath = Join-Path $ProfilePath 'AppData\Local\Microsoft\Windows\TaskManager\settings.json'
-    Ensure-AzVmDirectory -Path $settingsDirectory
+    Ensure-ClagnosDirectory -Path $settingsDirectory
 
     if (-not (Test-Path -LiteralPath $settingsPath)) {
         Add-Detail 'task-manager-settings-skip:no-store'
@@ -1062,7 +1062,7 @@ function Disable-SystemRestoreAndDeleteShadows {
     }
 
     $systemRestoreRoot = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
-    Set-AzVmRegistryValue -Path $systemRestoreRoot -Name 'DisableSR' -Value 1 -Kind DWord
+    Set-ClagnosRegistryValue -Path $systemRestoreRoot -Name 'DisableSR' -Value 1 -Kind DWord
 }
 
 function Invoke-WindowsUxPerformanceTuning {
@@ -1093,47 +1093,47 @@ function Invoke-WindowsUxPerformanceTuning {
 
         Add-Detail 'ux-worker-machine-policy-begin'
         $tsPolicy = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-        Set-AzVmRegistryValue -Path $tsPolicy -Name "fDisableWallpaper" -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $tsPolicy -Name "fDisableFullWindowDrag" -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $tsPolicy -Name "fDisableMenuAnims" -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $tsPolicy -Name "fDisableThemes" -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $tsPolicy -Name "fDisableCursorSetting" -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $tsPolicy -Name "fDisableFontSmoothing" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $tsPolicy -Name "fDisableWallpaper" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $tsPolicy -Name "fDisableFullWindowDrag" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $tsPolicy -Name "fDisableMenuAnims" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $tsPolicy -Name "fDisableThemes" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $tsPolicy -Name "fDisableCursorSetting" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $tsPolicy -Name "fDisableFontSmoothing" -Value 1 -Kind DWord
 
         $oobePolicy = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\OOBE"
-        Set-AzVmRegistryValue -Path $oobePolicy -Name "DisablePrivacyExperience" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $oobePolicy -Name "DisablePrivacyExperience" -Value 1 -Kind DWord
 
         $cloudContent = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
-        Set-AzVmRegistryValue -Path $cloudContent -Name "DisableWindowsConsumerFeatures" -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $cloudContent -Name "DisableConsumerAccountStateContent" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $cloudContent -Name "DisableWindowsConsumerFeatures" -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $cloudContent -Name "DisableConsumerAccountStateContent" -Value 1 -Kind DWord
 
         $widgetsPolicy = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Dsh'
-        Set-AzVmRegistryValue -Path $widgetsPolicy -Name 'AllowNewsAndInterests' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $widgetsPolicy -Name 'AllowNewsAndInterests' -Value 0 -Kind DWord
 
         $explorerPolicy = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer'
-        Set-AzVmRegistryValue -Path $explorerPolicy -Name 'DisableThumbsDBOnNetworkFolders' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $explorerPolicy -Name 'DisableThumbnailCache' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $explorerPolicy -Name 'DisableThumbsDBOnNetworkFolders' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $explorerPolicy -Name 'DisableThumbnailCache' -Value 1 -Kind DWord
 
         $systemRestoreRoot = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore'
         $systemPolicy = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-        Set-AzVmRegistryValue -Path $systemPolicy -Name "EnableFirstLogonAnimation" -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $systemPolicy -Name "EnableFirstLogonAnimation" -Value 0 -Kind DWord
 
         $terminalServerRoot = 'Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Terminal Server'
         $rdpTcpRoot = Join-Path $terminalServerRoot 'WinStations\RDP-Tcp'
-        Set-AzVmRegistryValue -Path $terminalServerRoot -Name 'fDenyTSConnections' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $rdpTcpRoot -Name 'UserAuthentication' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $rdpTcpRoot -Name 'SecurityLayer' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $rdpTcpRoot -Name 'MinEncryptionLevel' -Value 2 -Kind DWord
+        Set-ClagnosRegistryValue -Path $terminalServerRoot -Name 'fDenyTSConnections' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $rdpTcpRoot -Name 'UserAuthentication' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $rdpTcpRoot -Name 'SecurityLayer' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $rdpTcpRoot -Name 'MinEncryptionLevel' -Value 2 -Kind DWord
 
-        $className = "AzVmTextFile"
+        $className = "ClagnosTextFile"
         $classRoot = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\$className"
-        Set-AzVmRegistryValue -Path $classRoot -Name "(default)" -Value "Co VM Text File" -Kind String
+        Set-ClagnosRegistryValue -Path $classRoot -Name "(default)" -Value "Co VM Text File" -Kind String
         $commandPath = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\$className\shell\open\command"
-        Set-AzVmRegistryValue -Path $commandPath -Name "(default)" -Value ("`"$notepadPath`" `"%1`"") -Kind String
+        Set-ClagnosRegistryValue -Path $commandPath -Name "(default)" -Value ("`"$notepadPath`" `"%1`"") -Kind String
 
         foreach ($ext in @($textExtensions)) {
             $extPath = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Classes\$ext"
-            Set-AzVmRegistryValue -Path $extPath -Name "(default)" -Value $className -Kind String
+            Set-ClagnosRegistryValue -Path $extPath -Name "(default)" -Value $className -Kind String
         }
 
         Clear-DesktopEntries -DesktopPath (Join-Path $managerProfilePath 'Desktop')
@@ -1144,44 +1144,44 @@ function Invoke-WindowsUxPerformanceTuning {
         Ensure-HibernationBestEffort
 
         $flyoutPath = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FlyoutMenuSettings'
-        Set-AzVmRegistryValue -Path $flyoutPath -Name 'ShowHibernateOption' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $flyoutPath -Name 'ShowSleepOption' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $flyoutPath -Name 'ShowHibernateOption' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $flyoutPath -Name 'ShowSleepOption' -Value 1 -Kind DWord
 
         Add-Detail 'ux-worker-user-registry-begin'
         $advanced = Join-Path $managerMainRoot 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
         Add-Detail ("ux-worker-explorer-advanced-begin:{0}" -f $advanced)
-        Set-AzVmRegistryValue -Path $advanced -Name 'LaunchTo' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'Hidden' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'ShowSuperHidden' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'HideFileExt' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'ShowInfoTip' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'IconsOnly' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'AutoArrange' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'SnapToGrid' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $advanced -Name 'ShowTaskViewButton' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'LaunchTo' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'Hidden' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'ShowSuperHidden' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'HideFileExt' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'ShowInfoTip' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'IconsOnly' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'AutoArrange' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'SnapToGrid' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $advanced -Name 'ShowTaskViewButton' -Value 0 -Kind DWord
 
         $searchPath = Join-Path $managerMainRoot 'Software\Microsoft\Windows\CurrentVersion\Search'
-        Set-AzVmRegistryValue -Path $searchPath -Name 'SearchboxTaskbarMode' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $searchPath -Name 'SearchboxTaskbarMode' -Value 0 -Kind DWord
 
         $controlPanel = Join-Path $managerMainRoot 'Software\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel'
-        Set-AzVmRegistryValue -Path $controlPanel -Name 'AllItemsIconView' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $controlPanel -Name 'StartupPage' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $controlPanel -Name 'AllItemsIconView' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $controlPanel -Name 'StartupPage' -Value 1 -Kind DWord
 
         $operationStatus = Join-Path $managerMainRoot 'Software\Microsoft\Windows\CurrentVersion\Explorer\OperationStatusManager'
-        Set-AzVmRegistryValue -Path $operationStatus -Name 'EnthusiastMode' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $operationStatus -Name 'EnthusiastMode' -Value 1 -Kind DWord
 
         $keyboard = Join-Path $managerMainRoot 'Control Panel\Keyboard'
-        Set-AzVmRegistryValue -Path $keyboard -Name 'KeyboardDelay' -Value '0' -Kind String
+        Set-ClagnosRegistryValue -Path $keyboard -Name 'KeyboardDelay' -Value '0' -Kind String
 
         $desktopIconRoots = @(
             (Join-Path $managerMainRoot 'Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel'),
             (Join-Path $managerMainRoot 'Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu')
         )
         foreach ($desktopIconRoot in @($desktopIconRoots)) {
-            Set-AzVmRegistryValue -Path $desktopIconRoot -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 1 -Kind DWord
-            Set-AzVmRegistryValue -Path $desktopIconRoot -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 1 -Kind DWord
-            Set-AzVmRegistryValue -Path $desktopIconRoot -Name '{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}' -Value 1 -Kind DWord
-            Set-AzVmRegistryValue -Path $desktopIconRoot -Name '{645FF040-5081-101B-9F08-00AA002F954E}' -Value 1 -Kind DWord
+            Set-ClagnosRegistryValue -Path $desktopIconRoot -Name '{59031a47-3f72-44a7-89c5-5595fe6b30ee}' -Value 1 -Kind DWord
+            Set-ClagnosRegistryValue -Path $desktopIconRoot -Name '{20D04FE0-3AEA-1069-A2D8-08002B30309D}' -Value 1 -Kind DWord
+            Set-ClagnosRegistryValue -Path $desktopIconRoot -Name '{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}' -Value 1 -Kind DWord
+            Set-ClagnosRegistryValue -Path $desktopIconRoot -Name '{645FF040-5081-101B-9F08-00AA002F954E}' -Value 1 -Kind DWord
         }
 
         $currentUserShellRoot = Join-Path $managerClassesRoot 'Local Settings\Software\Microsoft\Windows\Shell'
@@ -1198,30 +1198,30 @@ function Invoke-WindowsUxPerformanceTuning {
         }
 
         $allFoldersShell = Join-Path $managerClassesRoot 'Local Settings\Software\Microsoft\Windows\Shell\Bags\AllFolders\Shell'
-        Set-AzVmRegistryValue -Path $allFoldersShell -Name 'FolderType' -Value 'NotSpecified' -Kind String
-        Set-AzVmRegistryValue -Path $allFoldersShell -Name 'LogicalViewMode' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $allFoldersShell -Name 'Mode' -Value 4 -Kind DWord
-        Set-AzVmRegistryValue -Path $allFoldersShell -Name 'Sort' -Value 'prop:System.ItemNameDisplay' -Kind String
-        Set-AzVmRegistryValue -Path $allFoldersShell -Name 'SortDirection' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $allFoldersShell -Name 'GroupView' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $allFoldersShell -Name 'FolderType' -Value 'NotSpecified' -Kind String
+        Set-ClagnosRegistryValue -Path $allFoldersShell -Name 'LogicalViewMode' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $allFoldersShell -Name 'Mode' -Value 4 -Kind DWord
+        Set-ClagnosRegistryValue -Path $allFoldersShell -Name 'Sort' -Value 'prop:System.ItemNameDisplay' -Kind String
+        Set-ClagnosRegistryValue -Path $allFoldersShell -Name 'SortDirection' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $allFoldersShell -Name 'GroupView' -Value 0 -Kind DWord
 
         $bagOneShell = Join-Path $managerClassesRoot 'Local Settings\Software\Microsoft\Windows\Shell\Bags\1\Shell'
-        Set-AzVmRegistryValue -Path $bagOneShell -Name 'FolderType' -Value 'NotSpecified' -Kind String
-        Set-AzVmRegistryValue -Path $bagOneShell -Name 'LogicalViewMode' -Value 1 -Kind DWord
-        Set-AzVmRegistryValue -Path $bagOneShell -Name 'Mode' -Value 4 -Kind DWord
-        Set-AzVmRegistryValue -Path $bagOneShell -Name 'Sort' -Value 'prop:System.ItemNameDisplay' -Kind String
-        Set-AzVmRegistryValue -Path $bagOneShell -Name 'SortDirection' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $bagOneShell -Name 'GroupView' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $bagOneShell -Name 'FolderType' -Value 'NotSpecified' -Kind String
+        Set-ClagnosRegistryValue -Path $bagOneShell -Name 'LogicalViewMode' -Value 1 -Kind DWord
+        Set-ClagnosRegistryValue -Path $bagOneShell -Name 'Mode' -Value 4 -Kind DWord
+        Set-ClagnosRegistryValue -Path $bagOneShell -Name 'Sort' -Value 'prop:System.ItemNameDisplay' -Kind String
+        Set-ClagnosRegistryValue -Path $bagOneShell -Name 'SortDirection' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $bagOneShell -Name 'GroupView' -Value 0 -Kind DWord
 
         $desktopBag = Join-Path $managerMainRoot 'Software\Microsoft\Windows\Shell\Bags\1\Desktop'
-        Set-AzVmRegistryValue -Path $desktopBag -Name 'IconSize' -Value 48 -Kind DWord
-        Set-AzVmRegistryValue -Path $desktopBag -Name 'Sort' -Value 'prop:System.ItemNameDisplay' -Kind String
-        Set-AzVmRegistryValue -Path $desktopBag -Name 'SortDirection' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $desktopBag -Name 'GroupView' -Value 0 -Kind DWord
-        Set-AzVmRegistryValue -Path $desktopBag -Name 'FFlags' -Value 1075839525 -Kind DWord
+        Set-ClagnosRegistryValue -Path $desktopBag -Name 'IconSize' -Value 48 -Kind DWord
+        Set-ClagnosRegistryValue -Path $desktopBag -Name 'Sort' -Value 'prop:System.ItemNameDisplay' -Kind String
+        Set-ClagnosRegistryValue -Path $desktopBag -Name 'SortDirection' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $desktopBag -Name 'GroupView' -Value 0 -Kind DWord
+        Set-ClagnosRegistryValue -Path $desktopBag -Name 'FFlags' -Value 1075839525 -Kind DWord
 
         $contextMenuPath = Join-Path $managerClassesRoot 'CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32'
-        Set-AzVmRegistryValue -Path $contextMenuPath -Name '(default)' -Value '' -Kind String
+        Set-ClagnosRegistryValue -Path $contextMenuPath -Name '(default)' -Value '' -Kind String
 
         Ensure-TaskManagerFullViewSetting -ProfilePath $managerProfilePath
         Restart-ExplorerShell
@@ -1287,14 +1287,14 @@ if ($WorkerMode) {
     try {
         Invoke-WindowsUxPerformanceTuning
         if (-not [string]::IsNullOrWhiteSpace([string]$ResultPath)) {
-            Write-AzVmInteractiveResult -ResultPath $ResultPath -TaskName $TaskName -Success $true -Summary ('Windows UX tuning applied and validated for admin user {0}.' -f $managerUser) -Details @($details)
+            Write-ClagnosInteractiveResult -ResultPath $ResultPath -TaskName $TaskName -Success $true -Summary ('Windows UX tuning applied and validated for admin user {0}.' -f $managerUser) -Details @($details)
         }
     }
     catch {
         $message = [string]$_.Exception.Message
         Add-Detail ("ux-worker-error: {0}" -f $message)
         if (-not [string]::IsNullOrWhiteSpace([string]$ResultPath)) {
-            Write-AzVmInteractiveResult -ResultPath $ResultPath -TaskName $TaskName -Success $false -Summary $message -Details @($details)
+            Write-ClagnosInteractiveResult -ResultPath $ResultPath -TaskName $TaskName -Success $false -Summary $message -Details @($details)
         }
         throw
     }
@@ -1307,7 +1307,7 @@ if ([string]::IsNullOrWhiteSpace([string]$scriptPath) -or -not (Test-Path -Liter
     throw "Current task script path could not be resolved for worker execution."
 }
 
-$paths = Get-AzVmInteractivePaths -TaskName $TaskName
+$paths = Get-ClagnosInteractivePaths -TaskName $TaskName
 $workerScript = @'
 $scriptPath = '__SCRIPT_PATH__'
 $resultPath = '__RESULT_PATH__'
@@ -1325,7 +1325,7 @@ $workerScript = $workerScript.Replace('__SCRIPT_PATH__', [string]$scriptPath)
 $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
 $workerScript = $workerScript.Replace('__TASK_NAME__', [string]$TaskName)
 
-$null = Invoke-AzVmInteractiveDesktopAutomation `
+$null = Invoke-ClagnosInteractiveDesktopAutomation `
     -TaskName $TaskName `
     -RunAsUser $managerUser `
     -RunAsPassword $managerPassword `

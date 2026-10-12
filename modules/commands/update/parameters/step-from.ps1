@@ -1,5 +1,5 @@
 # 'step-from' option binding for 'update'.
 
-function Get-AzVmUpdateStepFromOptionSpecification {
-    return (Get-AzVmSharedStepFromOptionSpecification)
+function Get-ClagnosUpdateStepFromOptionSpecification {
+    return (Get-ClagnosSharedStepFromOptionSpecification)
 }

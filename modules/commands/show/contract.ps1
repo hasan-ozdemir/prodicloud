@@ -1,11 +1,11 @@
 # Contract for the 'show' command.
 
-function Get-AzVmShowOptionSpecifications {
+function Get-ClagnosShowOptionSpecifications {
     return @(
-        (Get-AzVmShowPerfOptionSpecification),
-        (Get-AzVmShowHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmShowGroupOptionSpecification),
-        (Get-AzVmShowVmNameOptionSpecification)
+        (Get-ClagnosShowPerfOptionSpecification),
+        (Get-ClagnosShowHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosShowGroupOptionSpecification),
+        (Get-ClagnosShowVmNameOptionSpecification)
     )
 }

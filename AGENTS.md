@@ -1,7 +1,7 @@
-# AGENTS.md - az-vm Engineering Contract
+# AGENTS.md - clagnos Engineering Contract
 
 ## Purpose
-This repository manages Azure VM provisioning and lifecycle operations for Windows and Linux through one entrypoint. The project optimizes for parity, deterministic behavior, strong validation before mutation, and operator-visible outcomes.
+This repository manages Azure VM provisioning and lifecycle operations for Windows and Linux through one PowerShell orchestration entrypoint plus an interactive menu frontend. The project optimizes for parity, deterministic behavior, strong validation before mutation, and operator-visible outcomes.
 
 ## Source of Truth Hierarchy
 Use these sources in this order when maintaining the repo:
@@ -28,8 +28,9 @@ Use these sources in this order when maintaining the repo:
 - Respect repository continuity: keep behavior and terminology coherent with prior development unless the user explicitly requests a contract-breaking change.
 
 ## Repository Map
-- `az-vm.cmd`: elevated launcher for Windows operators.
-- `az-vm.ps1`: unified orchestrator entrypoint.
+- `cg.cmd`: elevated interactive launcher for Windows operators.
+- `scripts/clagnos-cli.ps1`: numbered and lettered Clagnos menu frontend.
+- `clagnos.ps1`: unified orchestration and direct-command entrypoint used by the menu.
 - `modules/`: runtime modules grouped by domain.
 - `windows/init/`, `windows/update/`: Windows stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
 - `linux/init/`, `linux/update/`: Linux stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
@@ -38,7 +39,7 @@ Use these sources in this order when maintaining the repo:
 - `docs/prompt-history.md`: human-readable prompt ledger for this repo.
 
 ## Architecture Invariants
-- Keep one orchestrator entrypoint: `az-vm.ps1`.
+- Keep one Azure orchestration entrypoint: `clagnos.ps1`; `scripts/clagnos-cli.ps1` is a frontend and must dispatch through the shared command/resource handlers.
 - Keep Linux and Windows flow and wording as identical as possible.
 - Allow differences only where platform requirements genuinely differ:
   - image selection and guest OS behavior
@@ -49,7 +50,7 @@ Use these sources in this order when maintaining the repo:
 - Keep command behavior deterministic across interactive and auto flows.
 
 ## Command-Surface Rules
-- Current public commands are: `configure`, `create`, `update`, `list`, `show`, `do`, `task`, `connect`, `move`, `resize`, `set`, `exec`, `delete`, `help`.
+- Current public commands are: `configure`, `create`, `initialize`, `update`, `list`, `show`, `do`, `task`, `program`, `component`, `connect`, `move`, `resize`, `set`, `exec`, `delete`, `help`.
 - Do not preserve removed commands or aliases once the repo has cut over to a new surface.
 - If a command or option is renamed, remove the old form cleanly and update all docs/tests in the same change.
 - When a public option is renamed, rename the owning parameter files, manifest entries, parser lookups, help text, README examples, and smoke coverage in the same change; do not leave retired parameter-module filenames behind.
@@ -63,14 +64,20 @@ Use these sources in this order when maintaining the repo:
 - Local-machine task app-state save/restore is Windows-host-only, must validate the current `task.json` allow-list before local restore, and must write task-adjacent backup snapshots plus both `restore-journal.json` and `verify-report.json` before mutating the operator machine.
 - `exec` is SSH-only: it may open an interactive shell or run one remote command through `--command` / `-c`, but it must not own isolated task execution.
 - `connect` owns interactive/test connection flows and requires exactly one transport flag: `--ssh` or `--rdp`.
-- `create` is fresh-only: it creates one new managed resource group plus one new managed VM target and must not be documented or wired as an existing-resource reuse path.
-- `update` is existing-managed-target only: it requires one existing managed resource group plus one existing VM and must not fall through to implicit fresh-create behavior.
+- `create` is fresh-only: it creates one new managed resource group plus one new managed VM target and must not be documented or wired as an existing-resource reuse path. It creates the initial network and does not run `vm-init`, `vm-update`, or program installation tasks.
+- `initialize` runs enabled `vm-init` tasks for one existing managed VM and does not create infrastructure.
+- `update` is existing-managed-target only: it requires one existing managed resource group plus one existing VM and must not fall through to implicit fresh-create behavior. It runs enabled non-program `vm-update` maintenance tasks; program tasks belong to `program`.
+- `program` owns status, install/update, and uninstall for enabled task folders with validated `program` metadata.
+- `component` owns CRUD for Clagnos-managed resource groups, VMs, managed disks, VNets, subnets, NICs, public IPs, NSGs, and NSG rules. It must not expose generic CRUD for unrelated subscription resources.
 - `configure` is the interactive `.env` frontend: it must stay focused on reviewing, editing, validating, previewing, and saving supported `.env` values, and it must not sync `.env` from a live Azure target.
 - `configure` must recover softly for blank-permitted fields: stale or empty picker-backed values should guide the operator back to a valid choice when possible, otherwise clear the staged value and continue; save may be blocked only by unresolved create-critical values.
 - Azure-touching commands support `--subscription-id` plus `-s`; resolution precedence is CLI override -> `.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
 - Azure-touching commands require an authenticated Azure CLI session; help, README, and runtime errors must say `az login` is required. `configure` is the exception: it may open without `az login`, but Azure-backed configure fields must stay read-only until Azure validation is available.
 - Interactive `create` and `update` must prompt for Azure subscription selection when `--subscription-id` is omitted.
+- Interactive `initialize` must also prompt for Azure subscription selection when `--subscription-id` is omitted.
 - `list` is the managed inventory command: it must stay Azure-read-only, must not mutate Azure resources, and must expose managed resource listings through `--type` plus optional exact `--group` filtering.
+- Managed inventory and target validation recognize both `managed-by=clagnos` and the legacy `managed-by=az-vm` tag until the interactive first-inventory migration is accepted and completed. New groups use `managed-by=clagnos`.
+- Component deletion must show every resource in the dependency chain before mutation, delete dependents before dependencies, verify Azure resource absence, and attempt provider-specific purge only where supported. Never claim universal immediate name reuse when Azure retention or provider rules prevent it.
 - Auto-mode strictness is part of the public contract: `create --auto` must resolve platform, VM name, Azure region, and platform VM size from CLI or `SELECTED_*` plus platform defaults in `.env`; `update --auto` must resolve one managed target from CLI or the selected target values in `.env`.
 - `resize --disk-size` requires exactly one intent flag, `--expand` or `--shrink`; shrink remains a non-mutating guidance path when Azure cannot perform the requested change safely.
 
@@ -122,16 +129,19 @@ Use these sources in this order when maintaining the repo:
 - Stage-root shared `app-states/`, task-side helper folders outside the owning task folder, and any legacy overlay paths must not be used as alternate app-state storage locations.
 - Managed app-state save and restore must target only the `manager` and `assistant` OS profiles. Do not capture or replay `default` or arbitrary local user profiles.
 - App-state capture is settings-first. Exclude generated installers, models, telemetry trees, caches, and other low-value runtime artifacts unless a task explicitly proves they are durable required state.
-- `task.json` may supply `priority`, `enabled`, `timeout`, `assets`, and `appState`.
+- `task.json` may supply `priority`, `enabled`, `timeout`, `assets`, `appState`, `dependsOn`, and validated `program` metadata.
 - Task priority precedence is: `task.json priority` -> filename task number -> deterministic fallback within the current task-number band.
 - Runtime code must not auto-write, auto-sync, or auto-reconcile `task.json` files.
 - For task folders with missing `priority`, default to the filename task number when available, otherwise `1000`.
 - For task folders with missing `timeout`, default to `180`.
 - Disabled tasks belong under `disabled/` and must be ignored by execution logic.
+- Program metadata must supply a display name, category, an installed-state check, and an explicit allow-listed uninstall action; `vm-update` excludes these program tasks from its maintenance run.
 - Init and update task inventories may diverge by platform, but the orchestration model should remain parallel in concept.
 
 ## Reliability and Error-Handling Rules
 - Validate before mutating Azure resources.
+- Keep component create/update/delete forms scoped to validated fields and the active Clagnos-managed resource group.
+- If Azure cannot purge a resource or release its name immediately, report the provider's result and do not claim the name is reusable.
 - Prefer fast, filtered Azure checks over broad slow listings.
 - If Azure does not support a requested operation safely, fail before mutation with the explicit platform reason and list the supported alternatives.
 - When lifecycle or connection flows find a VM stuck in provisioning state `Updating`, use one explicit bounded `az vm redeploy` repair attempt before failing the operation.
@@ -151,7 +161,7 @@ Use these sources in this order when maintaining the repo:
 - Do not emit duplicate informational lines without a real state change.
 - Show durations for long-running operations when the feature exists, but avoid noisy transcript spam.
 - When a stage produces warnings, failures, or reboot requests, summarize them clearly at stage end.
-- Interactive `create` and `update` are review-first flows: only `group`, `vm-deploy`, `vm-init`, and `vm-update` may ask `yes/no/cancel` review questions.
+- Interactive `create`, `initialize`, and `update` are review-first flows: `create` reviews `group` and `vm-deploy`; `initialize` reviews `vm-init`; `update` reviews `vm-update`.
 - `configure` and `vm-summary` must always render without confirmation, even when partial step selection skips interior mutation stages.
 
 ## Windows Package and Path Rules
@@ -176,6 +186,7 @@ Use these sources in this order when maintaining the repo:
 - Maintain an always-on sensitive-content audit in local hooks and CI; update that audit in the same change whenever new committed surfaces or new leak-prone example formats are introduced.
 - For live publish or release-readiness claims, require one successful end-to-end live acceptance cycle against the active profile: clean `create` when safe, full natural-order `update`, `show` redaction check, `do --vm-action=status`, connection tests, and enabled feature verification.
 - Update audit/contract checks when command names, docs, env keys, or task-folder behavior change.
+- Maintain a TUI operation-coverage check: every public command and registered component/program action must be reachable from a numbered or lettered menu path.
 
 ## Documentation Responsibilities
 - `AGENTS.md`: engineering contract and collaboration rules.

@@ -1,5 +1,5 @@
 # Shared 'user' command option specification.
 
-function Get-AzVmSharedUserOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'user' -TakesValue)
+function Get-ClagnosSharedUserOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'user' -TakesValue)
 }

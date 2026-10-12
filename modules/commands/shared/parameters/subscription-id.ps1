@@ -1,14 +1,14 @@
 # Shared 'subscription-id' command option specification.
 
-function Get-AzVmSharedSubscriptionIdOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'subscription-id' -ShortNames @('s') -TakesValue -Validate {
+function Get-ClagnosSharedSubscriptionIdOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'subscription-id' -ShortNames @('s') -TakesValue -Validate {
         param([hashtable]$Options)
 
-        if (-not (Test-AzVmCliOptionPresent -Options $Options -Name 'subscription-id')) {
+        if (-not (Test-ClagnosCliOptionPresent -Options $Options -Name 'subscription-id')) {
             return
         }
 
-        $rawValue = [string](Get-AzVmCliOptionText -Options $Options -Name 'subscription-id')
+        $rawValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id')
         if ([string]::IsNullOrWhiteSpace([string]$rawValue)) {
             Throw-FriendlyError `
                 -Detail "Option '--subscription-id' requires a subscription id value." `

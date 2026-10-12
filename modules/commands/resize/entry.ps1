@@ -1,6 +1,6 @@
 # Resize command entry.
 
-function Invoke-AzVmResizeCommand {
+function Invoke-ClagnosResizeCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -8,7 +8,7 @@ function Invoke-AzVmResizeCommand {
         [switch]$LinuxFlag
     )
 
-    if (Test-AzVmCliOptionPresent -Options $Options -Name 'vm-region') {
+    if (Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-region') {
         Throw-FriendlyError `
             -Detail "Option '--vm-region' is not supported with resize command." `
             -Code 62 `
@@ -16,14 +16,14 @@ function Invoke-AzVmResizeCommand {
             -Hint "Use move command for region changes."
     }
 
-    $repoRoot = Get-AzVmRepoRoot
+    $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $operationRequest = Resolve-AzVmResizeOperationRequest -Options $Options
-    $target = Resolve-AzVmManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'resize'
+    $operationRequest = Resolve-ClagnosResizeOperationRequest -Options $Options
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'resize'
     $resourceGroup = [string]$target.ResourceGroup
     $vmName = [string]$target.VmName
-    $isDirectRequest = Test-AzVmResizeDirectRequest -Options $Options
+    $isDirectRequest = Test-ClagnosResizeDirectRequest -Options $Options
 
     $vmJson = az vm show -g $resourceGroup -n $vmName -o json --only-show-errors
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$vmJson)) {
@@ -37,11 +37,11 @@ function Invoke-AzVmResizeCommand {
     $vmObject = ConvertFrom-JsonCompat -InputObject $vmJson
     $currentRegion = [string]$vmObject.location
     $currentSize = [string]$vmObject.hardwareProfile.vmSize
-    $actualPlatform = Get-AzVmPlatformNameFromOsType -OsType ([string]$vmObject.storageProfile.osDisk.osType)
-    $vmSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_SIZE' } else { Get-AzVmPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE' }
-    $vmDiskSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_DISK_SIZE_GB' } else { Get-AzVmPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB' }
+    $actualPlatform = Get-ClagnosPlatformNameFromOsType -OsType ([string]$vmObject.storageProfile.osDisk.osType)
+    $vmSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_SIZE' } else { Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE' }
+    $vmDiskSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_DISK_SIZE_GB' } else { Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB' }
 
-    Assert-AzVmResizePlatformExpectation `
+    Assert-ClagnosResizePlatformExpectation `
         -ActualPlatform $actualPlatform `
         -WindowsFlag:$WindowsFlag `
         -LinuxFlag:$LinuxFlag `
@@ -64,12 +64,12 @@ function Invoke-AzVmResizeCommand {
     }
 
     if ([string]::Equals([string]$operationRequest.Kind, 'disk', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $diskContext = Get-AzVmResizeOsDiskContext -VmObject $vmObject -ResourceGroup $resourceGroup -VmName $vmName
+        $diskContext = Get-ClagnosResizeOsDiskContext -VmObject $vmObject -ResourceGroup $resourceGroup -VmName $vmName
         $targetDiskSizeGb = [int]$operationRequest.TargetDiskSizeGb
 
         if ([string]::Equals([string]$operationRequest.Intent, 'shrink', [System.StringComparison]::OrdinalIgnoreCase)) {
             Write-Host ("Shrink request summary for VM '{0}' in '{1}': disk '{2}' current={3} GB, requested={4} ({5} => {6} GB)." -f $vmName, $resourceGroup, $diskContext.DiskName, $diskContext.DiskSizeGb, $operationRequest.RawText, $operationRequest.Unit, $targetDiskSizeGb) -ForegroundColor Yellow
-            Show-AzVmResizeShrinkAlternatives
+            Show-ClagnosResizeShrinkAlternatives
 
             if ($targetDiskSizeGb -ge $diskContext.DiskSizeGb) {
                 Throw-FriendlyError `
@@ -114,7 +114,7 @@ function Invoke-AzVmResizeCommand {
             az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
             Assert-LastExitCode "az vm deallocate"
         } | Out-Null
-        $deallocated = Wait-AzVmVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
+        $deallocated = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
         if (-not $deallocated) {
             Throw-FriendlyError `
                 -Detail ("VM '{0}' did not reach deallocated state in expected time." -f $vmName) `
@@ -135,7 +135,7 @@ function Invoke-AzVmResizeCommand {
             Assert-LastExitCode "az vm start"
         } | Out-Null
 
-        $running = Wait-AzVmVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM running" -MaxAttempts 18 -DelaySeconds 10
+        $running = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM running" -MaxAttempts 18 -DelaySeconds 10
         if (-not $running) {
             Throw-FriendlyError `
                 -Detail "VM did not return to running state after the managed OS disk expansion." `
@@ -151,7 +151,7 @@ function Invoke-AzVmResizeCommand {
         return
     }
 
-    $targetSize = Resolve-AzVmResizeTargetSize -Options $Options -CurrentRegion $currentRegion -CurrentSize $currentSize -ConfigMap $configMap
+    $targetSize = Resolve-ClagnosResizeTargetSize -Options $Options -CurrentRegion $currentRegion -CurrentSize $currentSize -ConfigMap $configMap
     Assert-LocationExists -Location $currentRegion
     Assert-VmSkuAvailableViaRest -Location $currentRegion -VmSize $targetSize
 
@@ -174,7 +174,7 @@ function Invoke-AzVmResizeCommand {
         az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
         Assert-LastExitCode "az vm deallocate"
     } | Out-Null
-    $deallocated = Wait-AzVmVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
+    $deallocated = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
     if (-not $deallocated) {
         Throw-FriendlyError `
             -Detail ("VM '{0}' did not reach deallocated state in expected time." -f $vmName) `
@@ -193,7 +193,7 @@ function Invoke-AzVmResizeCommand {
         Assert-LastExitCode "az vm start"
     } | Out-Null
 
-    $running = Wait-AzVmVmRunningState -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 3 -DelaySeconds 10
+    $running = Wait-ClagnosVmRunningState -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 3 -DelaySeconds 10
     if (-not $running) {
         Throw-FriendlyError `
             -Detail "VM did not return to running state after resize operation." `

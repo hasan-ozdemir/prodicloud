@@ -21,5 +21,18 @@
     "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "program": {
+    "category": "tool",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Microsoft.Azd"
+    },
+    "displayName": "Azure Developer CLI",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Microsoft.Azd"
+    },
+    "id": "azure-developer-cli"
   }
 }

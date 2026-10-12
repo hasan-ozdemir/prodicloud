@@ -38,5 +38,18 @@
         "distributionAllowList": []
       }
     ]
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "NVAccess.NVDA"
+    },
+    "displayName": "NVDA",
+    "uninstall": {
+      "kind": "winget",
+      "value": "NVAccess.NVDA"
+    },
+    "id": "nvda"
   }
 }

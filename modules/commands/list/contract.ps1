@@ -1,11 +1,11 @@
 # Contract for the 'list' command.
 
-function Get-AzVmListOptionSpecifications {
+function Get-ClagnosListOptionSpecifications {
     return @(
-        (Get-AzVmListPerfOptionSpecification),
-        (Get-AzVmListHelpOptionSpecification),
-        (Get-AzVmSharedSubscriptionIdOptionSpecification),
-        (Get-AzVmListGroupOptionSpecification),
-        (Get-AzVmListTypeOptionSpecification)
+        (Get-ClagnosListPerfOptionSpecification),
+        (Get-ClagnosListHelpOptionSpecification),
+        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
+        (Get-ClagnosListGroupOptionSpecification),
+        (Get-ClagnosListTypeOptionSpecification)
     )
 }

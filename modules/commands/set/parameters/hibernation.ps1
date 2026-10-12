@@ -1,5 +1,5 @@
 # 'hibernation' option binding for 'set'.
 
-function Get-AzVmSetHibernationOptionSpecification {
-    return (Get-AzVmSharedHibernationOptionSpecification)
+function Get-ClagnosSetHibernationOptionSpecification {
+    return (Get-ClagnosSharedHibernationOptionSpecification)
 }

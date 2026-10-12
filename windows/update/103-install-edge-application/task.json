@@ -38,5 +38,18 @@
     "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "program": {
+    "category": "application",
+    "statusCheck": {
+      "kind": "winget",
+      "value": "Microsoft.Edge"
+    },
+    "displayName": "Microsoft Edge",
+    "uninstall": {
+      "kind": "winget",
+      "value": "Microsoft.Edge"
+    },
+    "id": "microsoft-edge"
   }
 }

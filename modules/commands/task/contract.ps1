@@ -1,26 +1,26 @@
 # Contract for the 'task' command.
 
-function Get-AzVmTaskOptionSpecifications {
+function Get-ClagnosTaskOptionSpecifications {
     return @(
-        (Get-AzVmTaskPerfOptionSpecification),
-        (Get-AzVmTaskHelpOptionSpecification),
-        (Get-AzVmTaskListOptionSpecification),
-        (Get-AzVmTaskSaveAppStateOptionSpecification),
-        (Get-AzVmTaskRestoreAppStateOptionSpecification),
-        (Get-AzVmTaskSourceOptionSpecification),
-        (Get-AzVmTaskTargetOptionSpecification),
-        (Get-AzVmTaskUserOptionSpecification),
-        (Get-AzVmTaskRunVmInitOptionSpecification),
-        (Get-AzVmTaskRunVmUpdateOptionSpecification),
-        (Get-AzVmTaskVmInitOptionSpecification),
-        (Get-AzVmTaskVmUpdateOptionSpecification),
-        (Get-AzVmTaskVmInitTaskOptionSpecification),
-        (Get-AzVmTaskVmUpdateTaskOptionSpecification),
-        (Get-AzVmTaskDisabledOptionSpecification),
-        (Get-AzVmTaskGroupOptionSpecification),
-        (Get-AzVmTaskVmNameOptionSpecification),
-        (Get-AzVmTaskSubscriptionIdOptionSpecification),
-        (Get-AzVmTaskWindowsOptionSpecification),
-        (Get-AzVmTaskLinuxOptionSpecification)
+        (Get-ClagnosTaskPerfOptionSpecification),
+        (Get-ClagnosTaskHelpOptionSpecification),
+        (Get-ClagnosTaskListOptionSpecification),
+        (Get-ClagnosTaskSaveAppStateOptionSpecification),
+        (Get-ClagnosTaskRestoreAppStateOptionSpecification),
+        (Get-ClagnosTaskSourceOptionSpecification),
+        (Get-ClagnosTaskTargetOptionSpecification),
+        (Get-ClagnosTaskUserOptionSpecification),
+        (Get-ClagnosTaskRunVmInitOptionSpecification),
+        (Get-ClagnosTaskRunVmUpdateOptionSpecification),
+        (Get-ClagnosTaskVmInitOptionSpecification),
+        (Get-ClagnosTaskVmUpdateOptionSpecification),
+        (Get-ClagnosTaskVmInitTaskOptionSpecification),
+        (Get-ClagnosTaskVmUpdateTaskOptionSpecification),
+        (Get-ClagnosTaskDisabledOptionSpecification),
+        (Get-ClagnosTaskGroupOptionSpecification),
+        (Get-ClagnosTaskVmNameOptionSpecification),
+        (Get-ClagnosTaskSubscriptionIdOptionSpecification),
+        (Get-ClagnosTaskWindowsOptionSpecification),
+        (Get-ClagnosTaskLinuxOptionSpecification)
     )
 }

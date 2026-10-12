@@ -1,5 +1,5 @@
 # Shared 'quiet' command option specification.
 
-function Get-AzVmSharedQuietOptionSpecification {
-    return (New-AzVmCommandOptionSpecification -Name 'quiet' -ShortNames @('q'))
+function Get-ClagnosSharedQuietOptionSpecification {
+    return (New-ClagnosCommandOptionSpecification -Name 'quiet' -ShortNames @('q'))
 }

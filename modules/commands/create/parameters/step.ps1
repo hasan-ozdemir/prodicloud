@@ -1,5 +1,5 @@
 # 'step' option binding for 'create'.
 
-function Get-AzVmCreateStepOptionSpecification {
-    return (Get-AzVmSharedStepOptionSpecification)
+function Get-ClagnosCreateStepOptionSpecification {
+    return (Get-ClagnosSharedStepOptionSpecification)
 }

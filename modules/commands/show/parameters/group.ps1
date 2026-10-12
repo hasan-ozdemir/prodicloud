@@ -1,5 +1,5 @@
 # 'group' option binding for 'show'.
 
-function Get-AzVmShowGroupOptionSpecification {
-    return (Get-AzVmSharedGroupOptionSpecification)
+function Get-ClagnosShowGroupOptionSpecification {
+    return (Get-ClagnosSharedGroupOptionSpecification)
 }

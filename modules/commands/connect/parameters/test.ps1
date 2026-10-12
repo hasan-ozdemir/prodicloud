@@ -1,5 +1,5 @@
 # 'test' option binding for 'connect'.
 
-function Get-AzVmConnectTestOptionSpecification {
-    return (Get-AzVmSharedTestOptionSpecification)
+function Get-ClagnosConnectTestOptionSpecification {
+    return (Get-ClagnosSharedTestOptionSpecification)
 }
