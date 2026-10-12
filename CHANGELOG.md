@@ -3,6 +3,19 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.403] - 2026-10-12
+
+### Changed
+- Audited every builtin package app-state policy and repository snapshot. Replaced whole-profile, browser-session, cloud-auth, cache, history, workspace, and license/activation state with narrow preference-file policies or no app-state policy where the state is identity-bound.
+- Generalized Windows package snapshots for profile paths, host names, IP addresses, system drives, and Visual Studio instance folders; added fail-closed target resolution for `%CLAGNOS_*%` placeholders immediately before replay.
+- Added capture-time secret-field stripping and Linux SSH capture/replay portability for home directories, UIDs/GIDs, host names, IP addresses, CPU count, and memory size.
+- Added a repeatable builtin package app-state maintenance script and snapshot contract checks for builtin and custom catalogs.
+
+### Tests
+- Added package snapshot checks for scoped preference files, generalized paths, secret/session exclusions, and supported placeholders.
+- Added Linux placeholder capture/replay round-trip coverage and Windows profile, disk, CPU, and memory placeholder checks.
+- Revalidated PowerShell compatibility, code quality, docs, Bash syntax, sensitive-content, and release-document checks. No Azure resources were changed.
+
 ## [2026.10.12.402] - 2026-10-12
 
 ### Changed

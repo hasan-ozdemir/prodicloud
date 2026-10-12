@@ -12,6 +12,564 @@ function Ensure-ClagnosAppStateDirectory {
     }
 }
 
+function Get-ClagnosAppStateProfileLeafName {
+    param([string]$UserName)
+
+    $text = if ($null -eq $UserName) { '' } else { [string]$UserName.Trim() }
+    if ([string]::IsNullOrWhiteSpace([string]$text)) { return '' }
+    $text = $text.Replace('/', '\')
+    if ($text.Contains('\')) { $text = [string](@($text -split '\\')[-1]) }
+    return [string]$text.Trim()
+}
+
+function Get-ClagnosAppStateMachinePlaceholderValues {
+    param([hashtable]$Overrides = @{})
+
+    $systemDrive = [string]$env:SystemDrive
+    if ([string]::IsNullOrWhiteSpace([string]$systemDrive) -and -not [string]::IsNullOrWhiteSpace([string]$env:WINDIR)) {
+        $systemDrive = [System.IO.Path]::GetPathRoot([string]$env:WINDIR).TrimEnd('\')
+    }
+
+    $machineValues = @{
+        CLAGNOS_COMPUTER_NAME = [string]$env:COMPUTERNAME
+        CLAGNOS_SYSTEM_DRIVE = [string]$systemDrive
+        CLAGNOS_WINDOWS_DIRECTORY = [string]$env:WINDIR
+        CLAGNOS_PROGRAM_DATA = [string]$env:ProgramData
+        CLAGNOS_PROGRAM_FILES = [string]$env:ProgramFiles
+        CLAGNOS_PROGRAM_FILES_X86 = [string]${env:ProgramFiles(x86)}
+        CLAGNOS_PRIMARY_IPV4_ADDRESS = ''
+        CLAGNOS_TARGET_CPU_COUNT = ''
+        CLAGNOS_TARGET_MEMORY_GB = ''
+    }
+
+    try {
+        $processors = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop)
+        $logicalCount = @($processors | ForEach-Object {
+            if ($_.NumberOfLogicalProcessors) { [int]$_.NumberOfLogicalProcessors }
+            elseif ($_.NumberOfCores) { [int]$_.NumberOfCores }
+        } | Measure-Object -Sum).Sum
+        if ($logicalCount -gt 0) { $machineValues.CLAGNOS_TARGET_CPU_COUNT = [string][int]$logicalCount }
+    }
+    catch { }
+    try {
+        $computer = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        if ([double]$computer.TotalPhysicalMemory -gt 0) {
+            $memoryGb = [Math]::Round(([double]$computer.TotalPhysicalMemory / 1GB), 2)
+            $machineValues.CLAGNOS_TARGET_MEMORY_GB = $memoryGb.ToString('0.##', [Globalization.CultureInfo]::InvariantCulture)
+        }
+    }
+    catch { }
+    try {
+        $addresses = @()
+        if (Get-Command Get-NetIPAddress -ErrorAction SilentlyContinue) {
+            $addresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object {
+                -not [bool]$_.SkipAsSource -and $_.IPAddress -notmatch '^(127\.|169\.254\.)'
+            } | Select-Object -ExpandProperty IPAddress)
+        }
+        if (@($addresses).Count -eq 0) {
+            $addresses = @(Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration -ErrorAction Stop |
+                Where-Object { [bool]$_.IPEnabled } |
+                ForEach-Object { @($_.IPAddress) } |
+                Where-Object { $_ -match '^\d{1,3}(?:\.\d{1,3}){3}$' -and $_ -notmatch '^(127\.|169\.254\.)' })
+        }
+        if (@($addresses).Count -gt 0) { $machineValues.CLAGNOS_PRIMARY_IPV4_ADDRESS = [string]$addresses[0] }
+    }
+    catch { }
+
+    foreach ($key in @($Overrides.Keys)) { $machineValues[[string]$key] = [string]$Overrides[$key] }
+    return $machineValues
+}
+
+function Get-ClagnosAppStateProfilePlaceholderValues {
+    param(
+        [object[]]$ProfileTargets = @(),
+        [string]$ManagerUser = '',
+        [string]$AssistantUser = '',
+        [hashtable]$MachineValues = @{},
+        [hashtable]$Overrides = @{}
+    )
+
+    $profiles = @{}
+    if ([string]::IsNullOrWhiteSpace([string]$ManagerUser)) {
+        $managerTarget = @($ProfileTargets | Where-Object { [string]::Equals([string]$_.Label, 'manager', [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($managerTarget).Count -gt 0) { $ManagerUser = [string]$managerTarget[0].UserName }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$AssistantUser)) {
+        $assistantTarget = @($ProfileTargets | Where-Object { [string]::Equals([string]$_.Label, 'assistant', [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($assistantTarget).Count -gt 0) { $AssistantUser = [string]$assistantTarget[0].UserName }
+    }
+    $cimProfiles = @()
+    if (@($ProfileTargets | Where-Object { $_ -and [string]$_.ProfilePath }).Count -gt 0) {
+        try { $cimProfiles = @(Get-CimInstance -ClassName Win32_UserProfile -ErrorAction Stop) } catch { $cimProfiles = @() }
+    }
+
+    foreach ($profileTarget in @($ProfileTargets)) {
+        if ($null -eq $profileTarget) { continue }
+        $label = [string]$profileTarget.Label
+        $profilePath = [string]$profileTarget.ProfilePath
+        $userName = [string]$profileTarget.UserName
+        if ([string]::IsNullOrWhiteSpace([string]$label) -or [string]::IsNullOrWhiteSpace([string]$profilePath)) { continue }
+
+        $sid = ''
+        foreach ($cimProfile in @($cimProfiles)) {
+            if ([string]::Equals(([string]$cimProfile.LocalPath).TrimEnd('\'), $profilePath.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+                $sid = [string]$cimProfile.SID
+                break
+            }
+        }
+        if ($profileTarget.PSObject.Properties.Match('SID').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$profileTarget.SID)) {
+            $sid = [string]$profileTarget.SID
+        }
+        elseif ($profileTarget.PSObject.Properties.Match('UserSid').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$profileTarget.UserSid)) {
+            $sid = [string]$profileTarget.UserSid
+        }
+
+        $userMap = @{}
+        foreach ($key in @($MachineValues.Keys)) { $userMap[[string]$key] = [string]$MachineValues[$key] }
+        $userMap['CLAGNOS_VM_ADMIN_USER'] = [string](Get-ClagnosAppStateProfileLeafName -UserName $ManagerUser)
+        $userMap['CLAGNOS_ASSISTANT_USER'] = [string](Get-ClagnosAppStateProfileLeafName -UserName $AssistantUser)
+        $userMap['CLAGNOS_TARGET_USER'] = [string](Get-ClagnosAppStateProfileLeafName -UserName $userName)
+        $userMap['CLAGNOS_TARGET_PROFILE_PATH'] = [string]$profilePath
+        $userMap['CLAGNOS_TARGET_USER_SID'] = [string]$sid
+        $userMap['CLAGNOS_LOCAL_APP_DATA'] = Join-Path $profilePath 'AppData\Local'
+        $userMap['CLAGNOS_ROAMING_APP_DATA'] = Join-Path $profilePath 'AppData\Roaming'
+        $userMap['CLAGNOS_VS_INSTANCE_DIRECTORY'] = ''
+
+        $visualStudioRoot = Join-Path $profilePath 'AppData\Local\Microsoft\VisualStudio'
+        if (Test-Path -LiteralPath $visualStudioRoot -PathType Container) {
+            $instance = @(Get-ChildItem -LiteralPath $visualStudioRoot -Directory -Force -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^17\.0_[A-Za-z0-9]+$' } |
+                Sort-Object LastWriteTimeUtc -Descending |
+                Select-Object -First 1)
+            if (@($instance).Count -gt 0) { $userMap['CLAGNOS_VS_INSTANCE_DIRECTORY'] = [string]$instance[0].Name }
+        }
+
+        foreach ($key in @($Overrides.Keys)) { $userMap[[string]$key] = [string]$Overrides[$key] }
+        $profiles[$label.ToLowerInvariant()] = $userMap
+    }
+
+    $managerTarget = @($ProfileTargets | Where-Object { [string]::Equals([string]$_.Label, 'manager', [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    $assistantTarget = @($ProfileTargets | Where-Object { [string]::Equals([string]$_.Label, 'assistant', [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    foreach ($userMap in @($profiles.Values)) {
+        $userMap['CLAGNOS_VM_ADMIN_PROFILE_PATH'] = if (@($managerTarget).Count -gt 0) { [string]$managerTarget[0].ProfilePath } else { '' }
+        $userMap['CLAGNOS_ASSISTANT_PROFILE_PATH'] = if (@($assistantTarget).Count -gt 0) { [string]$assistantTarget[0].ProfilePath } else { '' }
+        $userMap['CLAGNOS_VM_ADMIN_USER_SID'] = if ($profiles.ContainsKey('manager')) { [string]$profiles['manager'].CLAGNOS_TARGET_USER_SID } else { '' }
+        $userMap['CLAGNOS_ASSISTANT_USER_SID'] = if ($profiles.ContainsKey('assistant')) { [string]$profiles['assistant'].CLAGNOS_TARGET_USER_SID } else { '' }
+    }
+
+    return $profiles
+}
+
+function ConvertTo-ClagnosAppStatePortableText {
+    param(
+        [string]$Text,
+        [hashtable]$ActualValues,
+        [ValidateSet('plain','json','registry')][string]$Format = 'plain'
+    )
+
+    $result = [string]$Text
+    foreach ($sourceValue in @($ActualValues.Keys | Sort-Object { ([string]$_).Length } -Descending)) {
+        $actual = [string]$sourceValue
+        $placeholder = [string]$ActualValues[$sourceValue]
+        if ([string]::IsNullOrWhiteSpace([string]$actual) -or [string]::IsNullOrWhiteSpace([string]$placeholder)) { continue }
+        if ($Format -in @('json','registry')) { $actual = $actual.Replace('\', '\\') }
+        $index = $result.IndexOf($actual, [System.StringComparison]::OrdinalIgnoreCase)
+        while ($index -ge 0) {
+            $result = $result.Substring(0, $index) + $placeholder + $result.Substring($index + $actual.Length)
+            $index = $result.IndexOf($actual, $index + $placeholder.Length, [System.StringComparison]::OrdinalIgnoreCase)
+        }
+    }
+
+    if ($ActualValues.ContainsKey('__CLAGNOS_SOURCE_COMPUTER_NAME__')) {
+        $computerName = [string]$ActualValues['__CLAGNOS_SOURCE_COMPUTER_NAME__']
+        if (-not [string]::IsNullOrWhiteSpace([string]$computerName)) {
+            $result = [regex]::Replace($result, '(?i)(?<![A-Z0-9_.-])' + [regex]::Escape($computerName) + '(?![A-Z0-9_.-])', '%CLAGNOS_COMPUTER_NAME%')
+        }
+    }
+    if ($ActualValues.ContainsKey('__CLAGNOS_SOURCE_IPV4__')) {
+        $address = [string]$ActualValues['__CLAGNOS_SOURCE_IPV4__']
+        if (-not [string]::IsNullOrWhiteSpace([string]$address)) {
+            $result = [regex]::Replace($result, '(?<![0-9.])' + [regex]::Escape($address) + '(?![0-9.])', '%CLAGNOS_PRIMARY_IPV4_ADDRESS%')
+        }
+    }
+    return [string]$result
+}
+
+function ConvertTo-ClagnosAppStatePortableObject {
+    param(
+        [AllowNull()]$Value,
+        [hashtable]$ActualValues,
+        [ValidateSet('plain','json','registry')][string]$Format = 'plain',
+        [switch]$RemoveSensitiveFields
+    )
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [string]) { return (ConvertTo-ClagnosAppStatePortableText -Text ([string]$Value) -ActualValues $ActualValues -Format $Format) }
+    if ($Value -is [System.Collections.IDictionary]) {
+        foreach ($key in @($Value.Keys)) {
+            if ($RemoveSensitiveFields -and [string]$key -match '(?i)(password|secret|token|credential|(^|[._-])auth|api.?key|private.?key|account|email|gaia|sign.?in|sync|client.?id|machine.?id|device.?id|sid|subscription|tenant|user.?id)') {
+                $Value.Remove($key)
+                continue
+            }
+            $Value[$key] = ConvertTo-ClagnosAppStatePortableObject -Value $Value[$key] -ActualValues $ActualValues -Format $Format -RemoveSensitiveFields:$RemoveSensitiveFields
+        }
+        return $Value
+    }
+    if ($Value -is [System.Array]) {
+        $items = @()
+        foreach ($item in @($Value)) { $items += (ConvertTo-ClagnosAppStatePortableObject -Value $item -ActualValues $ActualValues -Format $Format -RemoveSensitiveFields:$RemoveSensitiveFields) }
+        return ,$items
+    }
+    if ($Value -is [pscustomobject]) {
+        foreach ($property in @($Value.PSObject.Properties)) {
+            if ($RemoveSensitiveFields -and [string]$property.Name -match '(?i)(password|secret|token|credential|(^|[._-])auth|api.?key|private.?key|account|email|gaia|sign.?in|sync|client.?id|machine.?id|device.?id|sid|subscription|tenant|user.?id)') {
+                $Value.PSObject.Properties.Remove([string]$property.Name)
+                continue
+            }
+            $property.Value = ConvertTo-ClagnosAppStatePortableObject -Value $property.Value -ActualValues $ActualValues -Format $Format -RemoveSensitiveFields:$RemoveSensitiveFields
+        }
+        return $Value
+    }
+    return $Value
+}
+
+function Remove-ClagnosAppStateSensitiveTextLines {
+    param(
+        [string]$Content,
+        [string]$Extension
+    )
+
+    if ([string]$Extension -in @('.xml','.vssettings','.config')) {
+        try {
+            [xml]$document = [string]$Content
+            foreach ($node in @($document.SelectNodes('//*'))) {
+                if ($null -eq $node -or $null -eq $node.ParentNode) { continue }
+                if ([string]$node.LocalName -match '(?i)(password|secret|token|credential|authentication|(^|[._-])auth|api.?key|private.?key|account|email|identity|sign.?in|sync|client.?id|machine.?id|device.?id|sid|subscription|tenant|user.?id)') {
+                    [void]$node.ParentNode.RemoveChild($node)
+                    continue
+                }
+                foreach ($attribute in @($node.Attributes)) {
+                    if ([string]$attribute.Name -match '(?i)(password|secret|token|credential|(^|[._-])auth|api.?key|private.?key|account|email|client.?id|machine.?id|device.?id|sid|tenant|subscription)') {
+                        [void]$node.Attributes.Remove($attribute)
+                    }
+                }
+            }
+            return [string]$document.OuterXml
+        }
+        catch { return [string]$Content }
+    }
+
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $skipSensitiveSection = $false
+    foreach ($line in @(([string]$Content) -split '\r?\n')) {
+        if ($line -match '^\s*\[(?<section>[^\]]+)\]\s*$') {
+            $skipSensitiveSection = ([string]$Matches.section -match '(?i)(password|secret|token|credential|auth|api.?key|private.?key|account|identity)')
+            if ($skipSensitiveSection) { continue }
+        }
+        if ($skipSensitiveSection) { continue }
+        if ($line -match '^\s*[#;]' -or [string]::IsNullOrWhiteSpace([string]$line)) {
+            $lines.Add([string]$line) | Out-Null
+            continue
+        }
+        if ($line -match '^\s*["'']?(?<key>[A-Za-z0-9_.-]+)["'']?\s*(?:=|:)\s*' -and
+            [string]$Matches.key -match '(?i)(password|secret|token|credential|(^|[._-])auth|api.?key|private.?key|account|email|gaia|sign.?in|sync|client.?id|machine.?id|device.?id|sid|subscription|tenant|user.?id)') {
+            continue
+        }
+        if ($line -match '(?i)(?:gh[pousr]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})') {
+            continue
+        }
+        $lines.Add([string]$line) | Out-Null
+    }
+    return @($lines.ToArray()) -join [Environment]::NewLine
+}
+
+function ConvertTo-ClagnosAppStateHardwareSettingsToPortable {
+    param([string]$Content, [string]$FileName)
+
+    if (-not [string]::Equals([string]$FileName, '.wslconfig', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [string]$Content
+    }
+
+    $result = [regex]::Replace([string]$Content, '(?im)^(\s*processors\s*=\s*)\d+\s*$', '$1%CLAGNOS_TARGET_CPU_COUNT%')
+    $result = [regex]::Replace([string]$result, '(?im)^(\s*memory\s*=\s*)\d+(?:\.\d+)?\s*(?:KB|MB|GB|TB)?\s*$', '$1%CLAGNOS_TARGET_MEMORY_GB%GB')
+    return [string]$result
+}
+
+function Get-ClagnosAppStateCaptureActualValues {
+    param(
+        [hashtable]$MachineValues,
+        [hashtable]$ProfileValues,
+        [string]$ProfileLabel
+    )
+
+    $actualValues = @{}
+    foreach ($machinePath in @(
+        @{ Name = 'ProgramFilesX86'; Value = [string]$env:ProgramFilesX86; Token = '%CLAGNOS_PROGRAM_FILES_X86%' },
+        @{ Name = 'ProgramFiles'; Value = [string]$env:ProgramFiles; Token = '%CLAGNOS_PROGRAM_FILES%' },
+        @{ Name = 'ProgramData'; Value = [string]$env:ProgramData; Token = '%CLAGNOS_PROGRAM_DATA%' },
+        @{ Name = 'Windows'; Value = [string]$env:WINDIR; Token = '%CLAGNOS_WINDOWS_DIRECTORY%' }
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$machinePath.Value)) { $actualValues[[string]$machinePath.Value] = [string]$machinePath.Token }
+    }
+    $systemDrive = [string]$MachineValues.CLAGNOS_SYSTEM_DRIVE
+    if (-not [string]::IsNullOrWhiteSpace([string]$systemDrive)) { $actualValues[$systemDrive.TrimEnd('\')] = '%CLAGNOS_SYSTEM_DRIVE%' }
+
+    foreach ($label in @('manager','assistant')) {
+        if ($ProfileValues.ContainsKey([string]$label)) {
+            $profilePath = [string]$ProfileValues[[string]$label].CLAGNOS_TARGET_PROFILE_PATH
+            $pathToken = if ([string]::Equals([string]$label, [string]$ProfileLabel, [System.StringComparison]::OrdinalIgnoreCase)) { '%CLAGNOS_TARGET_PROFILE_PATH%' } elseif ($label -eq 'manager') { '%CLAGNOS_VM_ADMIN_PROFILE_PATH%' } else { '%CLAGNOS_ASSISTANT_PROFILE_PATH%' }
+            if (-not [string]::IsNullOrWhiteSpace([string]$profilePath)) { $actualValues[[string]$profilePath] = [string]$pathToken }
+            $sid = [string]$ProfileValues[[string]$label].CLAGNOS_TARGET_USER_SID
+            $sidToken = if ([string]::Equals([string]$label, [string]$ProfileLabel, [System.StringComparison]::OrdinalIgnoreCase)) { '%CLAGNOS_TARGET_USER_SID%' } elseif ($label -eq 'manager') { '%CLAGNOS_VM_ADMIN_USER_SID%' } else { '%CLAGNOS_ASSISTANT_USER_SID%' }
+            if (-not [string]::IsNullOrWhiteSpace([string]$sid)) { $actualValues[$sid] = [string]$sidToken }
+            if ([string]::Equals([string]$label, [string]$ProfileLabel, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $visualStudioDirectory = [string]$ProfileValues[[string]$label].CLAGNOS_VS_INSTANCE_DIRECTORY
+                if (-not [string]::IsNullOrWhiteSpace([string]$visualStudioDirectory)) { $actualValues[$visualStudioDirectory] = '%CLAGNOS_VS_INSTANCE_DIRECTORY%' }
+            }
+        }
+    }
+    $actualValues['__CLAGNOS_SOURCE_COMPUTER_NAME__'] = [string]$MachineValues.CLAGNOS_COMPUTER_NAME
+    $actualValues['__CLAGNOS_SOURCE_IPV4__'] = [string]$MachineValues.CLAGNOS_PRIMARY_IPV4_ADDRESS
+    return $actualValues
+}
+
+function ConvertTo-ClagnosAppStatePortablePayload {
+    param(
+        [string]$ScratchRoot,
+        [psobject]$Manifest,
+        [object[]]$ProfileTargets = @(),
+        [string]$ManagerUser = '',
+        [string]$AssistantUser = ''
+    )
+
+    $machineValues = Get-ClagnosAppStateMachinePlaceholderValues
+    $profileValues = Get-ClagnosAppStateProfilePlaceholderValues -ProfileTargets @($ProfileTargets) -ManagerUser $ManagerUser -AssistantUser $AssistantUser -MachineValues $machineValues
+    foreach ($collectionName in @('machineDirectories','machineFiles','profileDirectories','profileFiles','registryImports')) {
+        foreach ($entry in @($Manifest.$collectionName)) {
+            if ($null -eq $entry) { continue }
+            $labels = @()
+            if ($entry.PSObject.Properties.Match('targetProfiles').Count -gt 0) {
+                $labels = @($entry.targetProfiles | ForEach-Object { ([string]$_).ToLowerInvariant() } | Where-Object { $_ -in @('manager','assistant') })
+            }
+            $profileLabel = if (@($labels).Count -eq 1) { [string]$labels[0] } else { '' }
+            $actualValues = Get-ClagnosAppStateCaptureActualValues -MachineValues $machineValues -ProfileValues $profileValues -ProfileLabel $profileLabel
+            [void](ConvertTo-ClagnosAppStatePortableObject -Value $entry -ActualValues $actualValues -Format plain)
+        }
+    }
+
+    foreach ($entry in @($Manifest.profileDirectories) + @($Manifest.profileFiles)) {
+        if ($null -eq $entry -or @($entry.targetProfiles).Count -ne 1) { continue }
+        $label = ([string]$entry.targetProfiles[0]).ToLowerInvariant()
+        if ($profileValues.ContainsKey($label) -and $entry.PSObject.Properties.Match('relativeDestinationPath').Count -gt 0) {
+            $value = [string]$entry.relativeDestinationPath
+            $sourceInstance = [string]$profileValues[$label].CLAGNOS_VS_INSTANCE_DIRECTORY
+            if (-not [string]::IsNullOrWhiteSpace([string]$sourceInstance)) {
+                $entry.relativeDestinationPath = $value.Replace($sourceInstance, '%CLAGNOS_VS_INSTANCE_DIRECTORY%')
+            }
+        }
+    }
+
+    $textExtensions = @('.json','.xml','.reg','.ini','.txt','.yaml','.yml','.toml','.config','.settings','.ps1','.psm1','.cmd','.bat','.conf','.properties','.vssettings','.winprf','.vlcrc')
+    foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $ScratchRoot 'payload') -Recurse -File -Force -ErrorAction SilentlyContinue)) {
+        if ([IO.Path]::GetExtension($file.Name).ToLowerInvariant() -notin $textExtensions -and $file.Name -notin @('config','nvda.ini','DEFAULT.JCF','DEFAULT.JDF','.wslconfig')) { continue }
+        $bytes = [IO.File]::ReadAllBytes($file.FullName)
+        $encodingInfo = Get-ClagnosAppStateTextFileEncoding -Bytes $bytes
+        $encoding = [System.Text.Encoding]$encodingInfo.Encoding
+        $content = [string]$encoding.GetString($bytes, [int]$encodingInfo.Offset, $bytes.Length - [int]$encodingInfo.Offset)
+        if ($content.Contains([char]0)) { continue }
+        $relativePath = [string]$file.FullName.Substring($ScratchRoot.Length).TrimStart([char[]]@('\','/')).Replace('\','/')
+        $profileLabel = Get-ClagnosAppStatePayloadProfileLabel -Path $relativePath
+        if ([string]::IsNullOrWhiteSpace([string]$profileLabel)) {
+            foreach ($collectionName in @('profileDirectories','profileFiles','registryImports')) {
+                foreach ($entry in @($Manifest.$collectionName)) {
+                    if ($null -eq $entry -or [string]::IsNullOrWhiteSpace([string]$entry.sourcePath)) { continue }
+                    $sourcePath = ([string]$entry.sourcePath).Replace('\','/').TrimStart('/')
+                    if ($relativePath.StartsWith($sourcePath.TrimEnd('/') + '/', [System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($relativePath, $sourcePath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        if ($entry.PSObject.Properties.Match('targetProfiles').Count -gt 0 -and @($entry.targetProfiles).Count -eq 1) {
+                            $profileLabel = [string]$entry.targetProfiles[0]
+                        }
+                        break
+                    }
+                }
+                if (-not [string]::IsNullOrWhiteSpace([string]$profileLabel)) { break }
+            }
+        }
+        $actualValues = Get-ClagnosAppStateCaptureActualValues -MachineValues $machineValues -ProfileValues $profileValues -ProfileLabel $profileLabel
+        $format = if ([IO.Path]::GetExtension($file.Name).ToLowerInvariant() -eq '.json') { 'json' } elseif ([IO.Path]::GetExtension($file.Name).ToLowerInvariant() -eq '.reg') { 'registry' } else { 'plain' }
+        if ($format -eq 'json') {
+            try {
+                $jsonObject = ConvertFrom-Json -InputObject $content -ErrorAction Stop
+                $jsonObject = ConvertTo-ClagnosAppStatePortableObject -Value $jsonObject -ActualValues $actualValues -Format plain -RemoveSensitiveFields
+                $content = ConvertTo-Json -InputObject $jsonObject -Depth 100
+            }
+            catch {
+                $content = ConvertTo-ClagnosAppStatePortableText -Text $content -ActualValues $actualValues -Format json
+            }
+        }
+        else {
+            $content = ConvertTo-ClagnosAppStatePortableText -Text $content -ActualValues $actualValues -Format $format
+        }
+        $content = ConvertTo-ClagnosAppStateHardwareSettingsToPortable -Content ([string]$content) -FileName ([string]$file.Name)
+        $content = Remove-ClagnosAppStateSensitiveTextLines -Content ([string]$content) -Extension ([IO.Path]::GetExtension($file.Name).ToLowerInvariant())
+        [IO.File]::WriteAllText($file.FullName, [string]$content, $encoding)
+    }
+}
+
+function Resolve-ClagnosAppStatePlaceholderText {
+    param(
+        [string]$Text,
+        [hashtable]$Replacements,
+        [ValidateSet('plain','json','registry')][string]$Format = 'plain',
+        [string]$SourceLabel = 'payload'
+    )
+
+    $pattern = '%(?<name>CLAGNOS_[A-Z0-9_]+)%'
+    $resolved = [regex]::Replace([string]$Text, $pattern, {
+        param($match)
+        $name = [string]$match.Groups['name'].Value
+        if ($null -eq $Replacements -or -not $Replacements.ContainsKey($name)) {
+            throw ("Unsupported app-state placeholder '%{0}%' in {1}." -f $name, $SourceLabel)
+        }
+        $value = [string]$Replacements[$name]
+        if ([string]::IsNullOrWhiteSpace([string]$value)) {
+            throw ("App-state placeholder '%{0}%' has no value for this target in {1}." -f $name, $SourceLabel)
+        }
+        if ($Format -in @('json','registry')) {
+            $encoded = ConvertTo-Json -InputObject $value -Compress
+            return [string]$encoded.Substring(1, $encoded.Length - 2)
+        }
+        return [string]$value
+    })
+
+    if ([regex]::IsMatch([string]$resolved, '%CLAGNOS_[A-Z0-9_]+%')) {
+        throw ("Unresolved clagnos app-state placeholder remains in {0}." -f $SourceLabel)
+    }
+    return [string]$resolved
+}
+
+function Get-ClagnosAppStatePayloadProfileLabel {
+    param([string]$Path)
+
+    $normalized = ([string]$Path).Replace('\', '/')
+    if ($normalized -match '(?i)^payload/(?:profile-directories|profile-files)/(?<label>manager|assistant)/') {
+        return [string]$Matches.label.ToLowerInvariant()
+    }
+    if ($normalized -match '(?i)^payload/registry/user/(?<label>manager|assistant)/') {
+        return [string]$Matches.label.ToLowerInvariant()
+    }
+    return ''
+}
+
+function Get-ClagnosAppStateTextFileEncoding {
+    param([byte[]]$Bytes)
+
+    if ($Bytes.Length -ge 4 -and $Bytes[0] -eq 0 -and $Bytes[1] -eq 0 -and $Bytes[2] -eq 0xFE -and $Bytes[3] -eq 0xFF) {
+        return [pscustomobject]@{ Encoding = [System.Text.Encoding]::UTF32; Offset = 4 }
+    }
+    if ($Bytes.Length -ge 4 -and $Bytes[0] -eq 0xFF -and $Bytes[1] -eq 0xFE -and $Bytes[2] -eq 0 -and $Bytes[3] -eq 0) {
+        return [pscustomobject]@{ Encoding = [System.Text.Encoding]::UTF32; Offset = 4 }
+    }
+    if ($Bytes.Length -ge 3 -and $Bytes[0] -eq 0xEF -and $Bytes[1] -eq 0xBB -and $Bytes[2] -eq 0xBF) {
+        return [pscustomobject]@{ Encoding = New-Object System.Text.UTF8Encoding($true); Offset = 3 }
+    }
+    if ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xFF -and $Bytes[1] -eq 0xFE) {
+        return [pscustomobject]@{ Encoding = [System.Text.Encoding]::Unicode; Offset = 2 }
+    }
+    if ($Bytes.Length -ge 2 -and $Bytes[0] -eq 0xFE -and $Bytes[1] -eq 0xFF) {
+        return [pscustomobject]@{ Encoding = [System.Text.Encoding]::BigEndianUnicode; Offset = 2 }
+    }
+    return [pscustomobject]@{ Encoding = New-Object System.Text.UTF8Encoding($false); Offset = 0 }
+}
+
+function Expand-ClagnosAppStatePayloadPlaceholders {
+    param(
+        [string]$ExpandedRoot,
+        [object[]]$ProfileTargets = @(),
+        [string]$ManagerUser = '',
+        [string]$AssistantUser = '',
+        [hashtable]$MachineOverrides = @{},
+        [hashtable]$ProfileOverrides = @{}
+    )
+
+    $machineValues = Get-ClagnosAppStateMachinePlaceholderValues -Overrides $MachineOverrides
+    $profileValues = Get-ClagnosAppStateProfilePlaceholderValues -ProfileTargets @($ProfileTargets) -ManagerUser $ManagerUser -AssistantUser $AssistantUser -MachineValues $machineValues -Overrides $ProfileOverrides
+    $globalValues = @{}
+    foreach ($key in @($machineValues.Keys)) { $globalValues[[string]$key] = [string]$machineValues[$key] }
+    $globalValues['CLAGNOS_VM_ADMIN_USER'] = [string](Get-ClagnosAppStateProfileLeafName -UserName $ManagerUser)
+    $globalValues['CLAGNOS_ASSISTANT_USER'] = [string](Get-ClagnosAppStateProfileLeafName -UserName $AssistantUser)
+
+    $manifestPath = Join-Path $ExpandedRoot 'app-state.manifest.json'
+    if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+        $manifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop) -ErrorAction Stop
+        foreach ($collectionName in @('machineDirectories','machineFiles','profileDirectories','profileFiles','registryImports')) {
+            if ($manifest.PSObject.Properties.Match($collectionName).Count -lt 1) { continue }
+            $expandedEntries = New-Object 'System.Collections.Generic.List[object]'
+            foreach ($entry in @($manifest.$collectionName)) {
+                if ($null -eq $entry) { continue }
+                $labels = @()
+                if ($entry.PSObject.Properties.Match('targetProfiles').Count -gt 0) {
+                    $labels = @($entry.targetProfiles | ForEach-Object { ([string]$_).ToLowerInvariant() } | Where-Object { $_ -in @('manager','assistant') })
+                }
+                $isUserRegistry = ($collectionName -eq 'registryImports' -and [string]$entry.scope -eq 'user')
+                $isProfileScoped = ($collectionName -in @('profileDirectories','profileFiles') -or $isUserRegistry)
+                if ($isProfileScoped -and @($labels).Count -eq 0) { $labels = @($profileValues.Keys) }
+                if (-not $isProfileScoped -or @($labels).Count -eq 0) {
+                    $labels = @('')
+                }
+                foreach ($label in @($labels)) {
+                    $entryCopy = ConvertFrom-Json -InputObject (ConvertTo-Json -InputObject $entry -Depth 20 -Compress) -ErrorAction Stop
+                    $replacementSet = $globalValues
+                    if (-not [string]::IsNullOrWhiteSpace([string]$label) -and $profileValues.ContainsKey([string]$label)) {
+                        $replacementSet = $profileValues[[string]$label]
+                        if ($isProfileScoped -and $entryCopy.PSObject.Properties.Match('targetProfiles').Count -gt 0) {
+                            $entryCopy.targetProfiles = @([string]$label)
+                        }
+                    }
+                    foreach ($property in @($entryCopy.PSObject.Properties)) {
+                        if ($property.Value -is [string]) {
+                            $property.Value = Resolve-ClagnosAppStatePlaceholderText -Text ([string]$property.Value) -Replacements $replacementSet -Format plain -SourceLabel ('manifest.' + $collectionName + '.' + [string]$property.Name)
+                        }
+                        elseif ($property.Value -is [array]) {
+                            $values = @()
+                            foreach ($item in @($property.Value)) {
+                                if ($item -is [string]) { $values += (Resolve-ClagnosAppStatePlaceholderText -Text ([string]$item) -Replacements $replacementSet -Format plain -SourceLabel ('manifest.' + $collectionName + '.' + [string]$property.Name)) }
+                                else { $values += $item }
+                            }
+                            $property.Value = $values
+                        }
+                    }
+                    $expandedEntries.Add($entryCopy) | Out-Null
+                }
+            }
+            $manifest.$collectionName = @($expandedEntries.ToArray())
+        }
+        Set-Content -LiteralPath $manifestPath -Value (ConvertTo-Json -InputObject $manifest -Depth 40) -Encoding UTF8
+    }
+
+    $textExtensions = @('.json','.xml','.reg','.ini','.txt','.yaml','.yml','.toml','.config','.settings','.ps1','.psm1','.cmd','.bat','.conf','.properties','.vssettings','.winprf','.xspf','.vlcrc')
+    foreach ($file in @(Get-ChildItem -LiteralPath $ExpandedRoot -Recurse -File -Force -ErrorAction Stop)) {
+        if ([string]::Equals([string]$file.FullName, [string]$manifestPath, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+        if ([IO.Path]::GetExtension($file.Name).ToLowerInvariant() -notin $textExtensions -and $file.Name -notin @('config','nvda.ini','DEFAULT.JCF','DEFAULT.JDF')) { continue }
+        $bytes = [IO.File]::ReadAllBytes($file.FullName)
+        $encodingInfo = Get-ClagnosAppStateTextFileEncoding -Bytes $bytes
+        $encoding = [System.Text.Encoding]$encodingInfo.Encoding
+        $content = [string]$encoding.GetString($bytes, [int]$encodingInfo.Offset, $bytes.Length - [int]$encodingInfo.Offset)
+        if ($content.Contains([char]0)) { continue }
+
+        $profileLabel = Get-ClagnosAppStatePayloadProfileLabel -Path ([string]$file.FullName.Substring($ExpandedRoot.Length).TrimStart('\','/'))
+        $replacementSet = $globalValues
+        if (-not [string]::IsNullOrWhiteSpace([string]$profileLabel) -and $profileValues.ContainsKey([string]$profileLabel)) {
+            $replacementSet = $profileValues[[string]$profileLabel]
+        }
+        $format = if ([IO.Path]::GetExtension($file.Name).ToLowerInvariant() -eq '.json') { 'json' } elseif ([IO.Path]::GetExtension($file.Name).ToLowerInvariant() -eq '.reg') { 'registry' } else { 'plain' }
+        $content = Resolve-ClagnosAppStatePlaceholderText -Text $content -Replacements $replacementSet -Format $format -SourceLabel ([string]$file.Name)
+        if ([regex]::IsMatch([string]$content, '%CLAGNOS_[A-Z0-9_]+%')) {
+            throw ("Unresolved app-state placeholder remains in payload file '{0}'." -f [string]$file.FullName)
+        }
+        [IO.File]::WriteAllText($file.FullName, $content, $encoding)
+    }
+}
+
 function Wait-ClagnosAppStateZipReady {
     param(
         [string]$ZipPath,
@@ -2152,10 +2710,15 @@ function Invoke-ClagnosTaskAppStateCapture {
     try {
         Remove-Item -LiteralPath $OutputZipPath -Force -ErrorAction SilentlyContinue
         Invoke-ClagnosTaskAppStateCapturePreflight -TaskName $TaskName
+        $machineDirectoryIndex = 0
         foreach ($entry in @($plan.machineDirectories)) {
             if ($null -eq $entry -or [string]::IsNullOrWhiteSpace([string]$entry.path)) { continue }
+            $machineDirectoryIndex++
+            $machineMatchIndex = 0
             foreach ($matchPath in @(Resolve-ClagnosAppStateCapturePathMatches -BasePath '' -RelativeOrAbsolutePath ([string]$entry.path))) {
-                $payloadPath = Join-Path ('payload\machine-directories') (ConvertTo-ClagnosAppStateCaptureSafeName -Value $matchPath)
+                $machineMatchIndex++
+                $payloadName = ('{0:D3}-{1:D3}-{2}' -f $machineDirectoryIndex, $machineMatchIndex, (ConvertTo-ClagnosAppStateCaptureSafeName -Value (Split-Path -Path $matchPath -Leaf)))
+                $payloadPath = Join-Path 'payload\machine-directories' $payloadName
                 if (Copy-ClagnosAppStateCaptureTree -SourcePath $matchPath -DestinationPath (Join-Path $scratchRoot $payloadPath) -ExcludeNames @($entry.excludeNames) -ExcludePathPatterns @($entry.excludePathPatterns) -ExcludeFilePatterns @($entry.excludeFilePatterns)) {
                     $manifest.machineDirectories += @{
                         sourcePath = [string]$payloadPath
@@ -2169,10 +2732,15 @@ function Invoke-ClagnosTaskAppStateCapture {
             }
         }
 
+        $machineFileIndex = 0
         foreach ($entry in @($plan.machineFiles)) {
             if ($null -eq $entry -or [string]::IsNullOrWhiteSpace([string]$entry.path)) { continue }
+            $machineFileIndex++
+            $machineMatchIndex = 0
             foreach ($matchPath in @(Resolve-ClagnosAppStateCapturePathMatches -BasePath '' -RelativeOrAbsolutePath ([string]$entry.path))) {
-                $payloadPath = Join-Path 'payload\machine-files' (ConvertTo-ClagnosAppStateCaptureSafeName -Value $matchPath)
+                $machineMatchIndex++
+                $payloadName = ('{0:D3}-{1:D3}-{2}' -f $machineFileIndex, $machineMatchIndex, (ConvertTo-ClagnosAppStateCaptureSafeName -Value (Split-Path -Path $matchPath -Leaf)))
+                $payloadPath = Join-Path 'payload\machine-files' $payloadName
                 if (Copy-ClagnosAppStateCaptureTree -SourcePath $matchPath -DestinationPath (Join-Path $scratchRoot $payloadPath) -ExcludeNames @($entry.excludeNames) -ExcludePathPatterns @($entry.excludePathPatterns) -ExcludeFilePatterns @($entry.excludeFilePatterns)) {
                     $manifest.machineFiles += @{
                         sourcePath = [string]$payloadPath
@@ -2196,7 +2764,7 @@ function Invoke-ClagnosTaskAppStateCapture {
                         continue
                     }
 
-                    $payloadPath = Join-Path ('payload\profile-directories\' + (ConvertTo-ClagnosAppStateCaptureSafeName -Value ([string]$profileTarget.UserName))) (ConvertTo-ClagnosAppStateCaptureSafeName -Value $relativeToProfile)
+                    $payloadPath = Join-Path ('payload\profile-directories\' + [string]$profileTarget.Label) (ConvertTo-ClagnosAppStateCaptureSafeName -Value $relativeToProfile)
                     if (Copy-ClagnosAppStateCaptureTree -SourcePath $matchPath -DestinationPath (Join-Path $scratchRoot $payloadPath) -ExcludeNames @($entry.excludeNames) -ExcludePathPatterns @($entry.excludePathPatterns) -ExcludeFilePatterns @($entry.excludeFilePatterns)) {
                         $manifest.profileDirectories += @{
                             sourcePath = [string]$payloadPath
@@ -2222,7 +2790,7 @@ function Invoke-ClagnosTaskAppStateCapture {
                         continue
                     }
 
-                    $payloadPath = Join-Path ('payload\profile-files\' + (ConvertTo-ClagnosAppStateCaptureSafeName -Value ([string]$profileTarget.UserName))) (ConvertTo-ClagnosAppStateCaptureSafeName -Value $relativeToProfile)
+                    $payloadPath = Join-Path ('payload\profile-files\' + [string]$profileTarget.Label) (ConvertTo-ClagnosAppStateCaptureSafeName -Value $relativeToProfile)
                     if (Copy-ClagnosAppStateCaptureTree -SourcePath $matchPath -DestinationPath (Join-Path $scratchRoot $payloadPath) -ExcludeNames @($entry.excludeNames) -ExcludePathPatterns @($entry.excludePathPatterns) -ExcludeFilePatterns @($entry.excludeFilePatterns)) {
                         $manifest.profileFiles += @{
                             sourcePath = [string]$payloadPath
@@ -2257,7 +2825,7 @@ function Invoke-ClagnosTaskAppStateCapture {
         foreach ($entry in @($plan.userRegistryKeys)) {
             if ($null -eq $entry -or [string]::IsNullOrWhiteSpace([string]$entry.path)) { continue }
             foreach ($profileTarget in @(Get-ClagnosAppStateSelectedProfileTargets -ProfileTargets $profileTargets -Entry $entry)) {
-                $payloadPath = Join-Path ('payload\registry\user\' + (ConvertTo-ClagnosAppStateCaptureSafeName -Value ([string]$profileTarget.UserName))) ((ConvertTo-ClagnosAppStateCaptureSafeName -Value ([string]$entry.path)) + '.reg')
+                $payloadPath = Join-Path ('payload\registry\user\' + [string]$profileTarget.Label) ((ConvertTo-ClagnosAppStateCaptureSafeName -Value ([string]$entry.path)) + '.reg')
                 if (Export-ClagnosAppStateUserRegistry -RegistryPath ([string]$entry.path) -DestinationPath (Join-Path $scratchRoot $payloadPath) -ProfileTarget $profileTarget -DistributionAllowList @($entry.distributionAllowList)) {
                     $registryEntry = [ordered]@{
                         sourcePath = [string]$payloadPath
@@ -2285,6 +2853,12 @@ function Invoke-ClagnosTaskAppStateCapture {
             [int]$profileDirectoryExports +
             [int]$profileFileExports
         if ($totalCapturedItems -gt 0) {
+            ConvertTo-ClagnosAppStatePortablePayload `
+                -ScratchRoot $scratchRoot `
+                -Manifest ([pscustomobject]$manifest) `
+                -ProfileTargets @($profileTargets) `
+                -ManagerUser $ManagerUser `
+                -AssistantUser $AssistantUser
             Set-Content -LiteralPath (Join-Path $scratchRoot 'app-state.manifest.json') -Value ($manifest | ConvertTo-Json -Depth 12) -Encoding UTF8
             Compress-ClagnosAppStateCaptureRoot -SourceRoot $scratchRoot -DestinationZipPath $OutputZipPath
         }
@@ -2337,6 +2911,12 @@ function Invoke-ClagnosTaskAppStateReplay {
         $manifest = Get-ClagnosAppStateManifestFromExpandedRoot -ExpandedRoot $scratchRoot -TaskName $TaskName
         Invoke-ClagnosTaskAppStateReplayPreflight -TaskName $TaskName
         $profileTargets = @(Get-ClagnosAppStateProfileTargets -ManagerUser $ManagerUser -AssistantUser $AssistantUser -ProfileTargets @($ProfileTargets))
+        Expand-ClagnosAppStatePayloadPlaceholders `
+            -ExpandedRoot $scratchRoot `
+            -ProfileTargets @($profileTargets) `
+            -ManagerUser $ManagerUser `
+            -AssistantUser $AssistantUser
+        $manifest = Get-ClagnosAppStateManifestFromExpandedRoot -ExpandedRoot $scratchRoot -TaskName $TaskName
         $operations = @(Get-ClagnosTaskAppStateReplayOperations -ExpandedRoot $scratchRoot -Manifest $manifest -ProfileTargets @($profileTargets))
         $backupRoot = Get-ClagnosAppStateScratchRootPath -Prefix 'azv-rollback'
         Ensure-ClagnosAppStateDirectory -Path $backupRoot

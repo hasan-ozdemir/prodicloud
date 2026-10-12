@@ -6939,16 +6939,16 @@ Invoke-Test -Name "App-state runtime keeps managed VM targeting strict and local
     $guestHelperText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-app-state-guest.psm1') -Raw)
     $captureHelperText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-app-state-capture.ps1') -Raw)
     $localAppStateText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-app-state-local.ps1') -Raw)
-    $chromeTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '03-install-chrome-application') -Raw)
-    $edgeTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '110-install-edge-application') -Raw)
+    $chromeTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\google-chrome\package.json') -Raw)
+    $edgeTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\microsoft-edge\package.json') -Raw)
     $copySettingsTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '10005-copy-user-settings') -Raw)
-    $dockerTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '114-install-docker-desktop-application') -Raw)
-    $ollamaTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '116-install-ollama-tool') -Raw)
-    $azdTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '112-install-azd-tool') -Raw)
-    $azureCliTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '105-install-azure-cli-tool') -Raw)
-    $ghCliTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '107-install-gh-tool') -Raw)
-    $jawsTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '131-install-jaws-application') -Raw)
-    $whatsAppTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '120-install-whatsapp-application') -Raw)
+    $dockerTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\docker-desktop\package.json') -Raw)
+    $ollamaTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\ollama\package.json') -Raw)
+    $azdTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\azure-developer-cli\package.json') -Raw)
+    $azureCliTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\azure-cli\package.json') -Raw)
+    $ghCliTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\github-cli\package.json') -Raw)
+    $jawsTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\jaws\package.json') -Raw)
+    $whatsAppTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\whatsapp\package.json') -Raw)
     $sshAssetsText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\tasks\ssh\assets.ps1') -Raw)
     $sshProcessText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\tasks\ssh\process.ps1') -Raw)
     $auditScriptPath = Join-Path $RepoRoot 'tools\scripts\app-state-audit.ps1'
@@ -6997,17 +6997,9 @@ Invoke-Test -Name "App-state runtime keeps managed VM targeting strict and local
     Assert-True -Condition ($localAppStateText -like '*verify-report.json*') -Message 'Local app-state helpers must write a verify report.'
     Assert-True -Condition ($localAppStateText -like '*Get-ClagnosTaskAppStateBackupRootDirectoryPath*') -Message 'Local app-state helpers must resolve task-adjacent backup-app-states roots.'
     Assert-True -Condition ($localAppStateText -like '*rolled-back*') -Message 'Local app-state helpers must mark rollback outcomes in the restore journal.'
-    Assert-True -Condition ($dockerTaskJsonText -like '*DawnWebGPUCache*') -Message 'Task-local app-state specs must exclude low-value WebGPU cache payloads.'
-    Assert-True -Condition ($chromeTaskJsonText -like '*AppData\\Local\\Google\\Chrome\\User Data*') -Message 'Chrome task-local app-state must capture the full User Data root.'
-    Assert-True -Condition ($edgeTaskJsonText -like '*AppData\\Local\\Microsoft\\Edge\\User Data*') -Message 'Edge task-local app-state must capture the full User Data root.'
-    foreach ($browserExclusion in @('Cache', 'Code Cache', 'GPUCache', 'GrShaderCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'ShaderCache', 'Crashpad', 'Crash Reports', 'CrashDumps', 'Temp', 'tmp', '*.lock', '*.tmp', '*.temp', '*.etl', '*.log', '*.crdownload', 'Singleton*')) {
-        Assert-True -Condition ($chromeTaskJsonText -like ('*' + [string]$browserExclusion + '*')) -Message ("Chrome task-local app-state must exclude '{0}'." -f [string]$browserExclusion)
-        Assert-True -Condition ($edgeTaskJsonText -like ('*' + [string]$browserExclusion + '*')) -Message ("Edge task-local app-state must exclude '{0}'." -f [string]$browserExclusion)
-    }
-    foreach ($browserDurablePath in @('Service Worker', 'CacheStorage', 'ScriptCache', 'Database')) {
-        Assert-True -Condition (-not ($chromeTaskJsonText -like ('*' + [string]$browserDurablePath + '*'))) -Message ("Chrome task-local app-state must not exclude durable browser subtree token '{0}'." -f [string]$browserDurablePath)
-        Assert-True -Condition (-not ($edgeTaskJsonText -like ('*' + [string]$browserDurablePath + '*'))) -Message ("Edge task-local app-state must not exclude durable browser subtree token '{0}'." -f [string]$browserDurablePath)
-    }
+    Assert-True -Condition (-not ($dockerTaskJsonText -like '*"appState"*')) -Message 'Docker Desktop must not replay source-machine daemon, context, or registry-credential state.'
+    Assert-True -Condition (-not ($chromeTaskJsonText -like '*"appState"*')) -Message 'Chrome must not copy authenticated browser profiles, cookies, history, or local-state encryption keys.'
+    Assert-True -Condition (-not ($edgeTaskJsonText -like '*"appState"*')) -Message 'Edge must not copy authenticated browser profiles, cookies, history, or local-state encryption keys.'
     Assert-True -Condition (-not ($copySettingsTaskJsonText -like '*"appState"*')) -Message '10005-copy-user-settings must stay out of task-local app-state snapshot and restore.'
     Assert-True -Condition (Test-Path -LiteralPath (Get-RepoSummaryReadbackScriptPath -Platform windows)) -Message 'Windows vm-summary readback script must exist after removing the health task.'
     Assert-True -Condition ($ollamaTaskJsonText -like '*AppData\\Local\\Ollama\\config.json*') -Message 'Task-local Ollama capture specs must keep the local config.json path.'
@@ -7016,22 +7008,12 @@ Invoke-Test -Name "App-state runtime keeps managed VM targeting strict and local
     Assert-True -Condition (-not ($ollamaTaskJsonText -like '*AppData\\Local\\Ollama\"*')) -Message 'Task-local Ollama capture specs must not keep the broad AppData\\Local\\Ollama directory.'
     Assert-True -Condition (-not ($ollamaTaskJsonText -like '*updates_v2*')) -Message 'Task-local Ollama capture specs must not mention installer update payloads after narrowing to config files.'
     Assert-True -Condition (-not ($ollamaTaskJsonText -like '*EBWebView*')) -Message 'Task-local Ollama capture specs must not mention embedded WebView runtime payloads after narrowing to config files.'
-    Assert-True -Condition ($azdTaskJsonText -like '*telemetry*') -Message 'Task-local azd capture specs must exclude telemetry payloads.'
-    Assert-True -Condition ($azureCliTaskJsonText -like '*telemetry*') -Message 'Task-local Azure CLI capture specs must exclude telemetry payloads.'
+    Assert-True -Condition ($azdTaskJsonText -like '*".azd\\config.json*' -and -not ($azdTaskJsonText -like '*auth\\*')) -Message 'Azure Developer CLI state must be limited to portable configuration and exclude authentication caches.'
+    Assert-True -Condition ($azureCliTaskJsonText -like '*".azure\\config*' -and -not ($azureCliTaskJsonText -like '*azureProfile.json*')) -Message 'Azure CLI state must retain only its settings file and exclude user subscription/authentication state.'
     Assert-True -Condition (-not ($ghCliTaskJsonText -like '*AppData\Local\GitHub CLI*')) -Message 'Task-local GitHub CLI capture specs must not keep the heavy local cache tree.'
-    Assert-True -Condition ($whatsAppTaskJsonText -like '*rotatedLogs*') -Message 'WhatsApp task-local app-state must exclude rotated log trees.'
-    Assert-True -Condition ($whatsAppTaskJsonText -like '**\\transfers\\**') -Message 'WhatsApp task-local app-state must exclude transferred-file payloads.'
-    Assert-True -Condition ($whatsAppTaskJsonText -like '*.db-wal*') -Message 'WhatsApp task-local app-state must exclude SQLite WAL payloads.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*portableProfilePayload*') -Message 'JAWS task-local app-state must mark the local payload as portable across managed profiles.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings*') -Message 'JAWS task-local app-state must capture the 2025 settings directory.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*HKLM\\Software\\Freedom Scientific*') -Message 'JAWS task-local app-state must capture the machine Freedom Scientific subtree.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*HKLM\\Software\\WOW6432Node\\Freedom Scientific*') -Message 'JAWS task-local app-state must capture the WOW6432 Freedom Scientific subtree.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*HKCU\\Software\\Freedom Scientific*') -Message 'JAWS task-local app-state must capture the user Freedom Scientific subtree.'
-    Assert-True -Condition (-not ($jawsTaskJsonText -like '*Crashpad*')) -Message 'JAWS task-local app-state must not keep the old trimmed Settings exclusions.'
-    Assert-True -Condition (-not ($jawsTaskJsonText -like '*GPUCache*')) -Message 'JAWS task-local app-state must now allow the full Settings subtree.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*transient-focus*') -Message 'JAWS task-local app-state must exclude transient focus state.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*MessageCenter*') -Message 'JAWS task-local app-state must exclude MessageCenter runtime payloads.'
-    Assert-True -Condition ($jawsTaskJsonText -like '*.log*') -Message 'JAWS task-local app-state must exclude log-file payloads.'
+    Assert-True -Condition (-not ($whatsAppTaskJsonText -like '*"appState"*')) -Message 'WhatsApp must not carry account credentials, chat history, or media state between VCs.'
+    Assert-True -Condition ($jawsTaskJsonText -like '*DEFAULT.JCF*' -and $jawsTaskJsonText -like '*DEFAULT.JDF*' -and -not ($jawsTaskJsonText -like '*HKLM*') -and -not ($jawsTaskJsonText -like '*HKCU*')) -Message 'JAWS portability must retain user preferences and voice profiles without machine licensing registry state.'
+    Assert-True -Condition ($ghCliTaskJsonText -like '*GitHub CLI\\config.yml*' -and -not ($ghCliTaskJsonText -like '*hosts.yml*')) -Message 'GitHub CLI app-state must retain UI defaults but not authentication hosts or tokens.'
     Assert-True -Condition ($localAppStateText -like '*Convert-ClagnosTaskAppStateZipToPortableProfilePayload*') -Message 'Local app-state save must support portable profile payload normalization for task-owned zips.'
     Assert-True -Condition ($localAppStateText -like '*Convert-ClagnosTaskCapturePlanToPortableProfileSourcePlan*') -Message 'Local app-state save must relax profile-target filtering when capturing portable payloads from the operator machine.'
     Assert-True -Condition ($localAppStateText -like '*$effectiveCapturePlan = Convert-ClagnosTaskCapturePlanToPortableProfileSourcePlan*') -Message 'Local app-state save must apply the portable capture-plan rewrite before local capture.'
@@ -7275,7 +7257,12 @@ Invoke-Test -Name "Guest app-state capture resolves wildcard profile paths to co
 
     try {
         New-Item -Path $settingsPath -ItemType Directory -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $settingsPath 'settings.json') -Value '{"theme":"saved"}' -Encoding UTF8
+        $sourceSettings = [ordered]@{
+            theme = 'saved'
+            workspace = (Join-Path $profilePath 'Documents')
+            apiToken = 'fixture-value'
+        }
+        Set-Content -LiteralPath (Join-Path $settingsPath 'settings.json') -Value (ConvertTo-Json -InputObject $sourceSettings -Depth 8) -Encoding UTF8
 
         $plan = [ordered]@{
             machineDirectories = @()
@@ -7317,6 +7304,11 @@ Invoke-Test -Name "Guest app-state capture resolves wildcard profile paths to co
             finally {
                 $reader.Dispose()
             }
+            $payloadEntry = $archive.Entries | Where-Object { ([string]$_.FullName).Replace('\','/') -match 'payload/profile-directories/manager/.+settings\.json$' } | Select-Object -First 1
+            Assert-True -Condition ($null -ne $payloadEntry) -Message 'Guest app-state capture must include the selected settings payload.'
+            $payloadReader = New-Object System.IO.StreamReader($payloadEntry.Open())
+            try { $savedSettings = $payloadReader.ReadToEnd() | ConvertFrom-Json }
+            finally { $payloadReader.Dispose() }
         }
         finally {
             $archive.Dispose()
@@ -7325,6 +7317,8 @@ Invoke-Test -Name "Guest app-state capture resolves wildcard profile paths to co
         $capturedEntry = @($manifest.profileDirectories | Where-Object { @($_.targetProfiles) -contains 'manager' } | Select-Object -First 1)
         Assert-True -Condition (@($capturedEntry).Count -eq 1) -Message 'Guest app-state capture must emit one concrete profile-directory manifest entry.'
         Assert-True -Condition ([string]$capturedEntry[0].relativeDestinationPath -eq 'AppData\Local\Packages\OpenAI.Codex_2p2nqsd0c76g0\Settings') -Message 'Guest app-state capture must record the resolved package path instead of the wildcard rule.'
+        Assert-True -Condition ([string]$savedSettings.workspace -eq '%CLAGNOS_TARGET_PROFILE_PATH%\Documents') -Message 'Guest app-state capture must replace source profile paths with a target profile placeholder.'
+        Assert-True -Condition ($savedSettings.PSObject.Properties.Match('apiToken').Count -eq 0) -Message 'Guest app-state capture must strip sensitive JSON fields before saving the snapshot.'
     }
     finally {
         if ($null -ne $module) {

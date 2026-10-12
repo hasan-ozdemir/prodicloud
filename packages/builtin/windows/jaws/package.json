@@ -16,49 +16,30 @@
   },
   "appStateKey": "133-install-jaws-application",
   "appState": {
-    "portableProfilePayload": true,
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
+    "profileDirectories": [],
+    "profileFiles": [
       {
-        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings",
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JCF",
         "targetProfiles": [
           "manager"
-        ],
-        "excludeNames": [
-          "transient-focus",
-          "transient-session",
-          "MessageCenter"
-        ],
-        "excludePathPatterns": [
-          "*\\MessageCenter\\*"
-        ],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.log"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JDF",
+        "targetProfiles": [
+          "manager"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\VoiceProfiles\\*.VPF",
+        "targetProfiles": [
+          "manager"
         ]
       }
     ],
-    "profileFiles": [],
-    "machineRegistryKeys": [
-      {
-        "path": "HKLM\\Software\\Freedom Scientific",
-        "distributionAllowList": []
-      },
-      {
-        "path": "HKLM\\Software\\WOW6432Node\\Freedom Scientific",
-        "distributionAllowList": []
-      }
-    ],
-    "userRegistryKeys": [
-      {
-        "path": "HKCU\\Software\\Freedom Scientific",
-        "targetProfiles": [
-          "manager"
-        ],
-        "distributionAllowList": []
-      }
-    ]
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
   }
 }

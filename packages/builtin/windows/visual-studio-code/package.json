@@ -18,52 +18,18 @@
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
+    "profileDirectories": [],
+    "profileFiles": [
       {
-        "path": "AppData\\Roaming\\Code\\User",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
+        "path": "AppData\\Roaming\\Code\\User\\settings.json",
+        "targetProfiles": []
       },
       {
-        "path": "AppData\\Roaming\\Code\\Workspaces",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      },
-      {
-        "path": ".vscode\\extensions",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
+        "path": "AppData\\Roaming\\Code\\User\\keybindings.json",
+        "targetProfiles": []
       }
     ],
-    "profileFiles": [],
     "machineRegistryKeys": [],
-    "userRegistryKeys": [
-      {
-        "path": "HKCU\\Software\\Microsoft\\VSCommon",
-        "targetProfiles": [],
-        "distributionAllowList": []
-      }
-    ]
+    "userRegistryKeys": []
   }
 }

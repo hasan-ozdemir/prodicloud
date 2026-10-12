@@ -18,22 +18,13 @@
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
+    "profileDirectories": [],
+    "profileFiles": [
       {
-        "path": ".azure",
-        "targetProfiles": [],
-        "excludeNames": [
-          "logs",
-          ".azure",
-          "telemetry"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.log"
-        ]
+        "path": ".azure\\config",
+        "targetProfiles": []
       }
     ],
-    "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
   }

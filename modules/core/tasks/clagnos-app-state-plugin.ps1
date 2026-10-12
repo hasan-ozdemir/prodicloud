@@ -345,6 +345,121 @@ function Get-ClagnosTaskAppStatePluginInfo {
     }
 }
 
+function Add-ClagnosAppStatePortableJsonKeyFindings {
+    param([AllowNull()]$Value, [System.Collections.Generic.List[string]]$Findings)
+
+    if ($null -eq $Value) { return }
+    if ($Value -is [pscustomobject]) {
+        foreach ($property in @($Value.PSObject.Properties)) {
+            if ([string]$property.Name -match '(?i)(password|secret|token|credential|api.?key|private.?key|account|email|gaia|sign.?in|client.?id|machine.?id|device.?id|subscription|tenant|user.?id)') {
+                $Findings.Add([string]$property.Name) | Out-Null
+            }
+            Add-ClagnosAppStatePortableJsonKeyFindings -Value $property.Value -Findings $Findings
+        }
+    }
+    elseif ($Value -is [array]) {
+        foreach ($item in @($Value)) { Add-ClagnosAppStatePortableJsonKeyFindings -Value $item -Findings $Findings }
+    }
+}
+
+function Assert-ClagnosPackageAppStateArchivePortable {
+    param([string]$ZipPath)
+
+    if ([string]::IsNullOrWhiteSpace([string]$ZipPath) -or -not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
+        throw 'Package app-state archive is missing.'
+    }
+    Initialize-ClagnosAppStateZipSupport
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        $manifestEntry = Get-ClagnosZipArchiveEntryByName -Archive $archive -EntryName 'app-state.manifest.json'
+        if ($null -eq $manifestEntry) { throw 'Package app-state archive has no app-state manifest.' }
+        $manifestReader = New-Object System.IO.StreamReader($manifestEntry.Open())
+        try { $manifest = ConvertFrom-Json -InputObject ([string]$manifestReader.ReadToEnd()) -ErrorAction Stop }
+        finally { $manifestReader.Dispose() }
+        if ($null -eq $manifest -or [int]$manifest.version -lt 1) { throw 'Package app-state archive has an invalid manifest.' }
+        foreach ($registryEntry in @($manifest.registryImports)) {
+            if ($null -eq $registryEntry) { continue }
+            if (-not [string]::Equals([string]$registryEntry.scope, 'user', [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw 'Package app-state must not import machine-wide registry state.'
+            }
+            if ([string]$registryEntry.registryPath -notmatch '(?i)^(?:HKCU|HKEY_CURRENT_USER)\\') {
+                throw 'Package app-state registry imports must target a selected user hive.'
+            }
+            if (@($registryEntry.targetProfiles | Where-Object { [string]$_ -in @('manager','assistant') }).Count -lt 1) {
+                throw 'Package app-state user registry imports must explicitly target manager or assistant.'
+            }
+        }
+
+        $allowedPlaceholders = @(
+            'CLAGNOS_COMPUTER_NAME','CLAGNOS_SYSTEM_DRIVE','CLAGNOS_SYSTEM_ROOT','CLAGNOS_WINDOWS_DIRECTORY',
+            'CLAGNOS_PROGRAM_DATA','CLAGNOS_PROGRAM_FILES','CLAGNOS_PROGRAM_FILES_X86','CLAGNOS_PRIMARY_IPV4_ADDRESS',
+            'CLAGNOS_TARGET_CPU_COUNT','CLAGNOS_TARGET_MEMORY_GB','CLAGNOS_VM_ADMIN_USER','CLAGNOS_ASSISTANT_USER',
+            'CLAGNOS_TARGET_USER','CLAGNOS_TARGET_PROFILE_PATH','CLAGNOS_TARGET_HOME','CLAGNOS_TARGET_USER_SID',
+            'CLAGNOS_TARGET_UID','CLAGNOS_TARGET_GID','CLAGNOS_VM_ADMIN_PROFILE_PATH','CLAGNOS_ASSISTANT_PROFILE_PATH',
+            'CLAGNOS_VM_ADMIN_HOME','CLAGNOS_ASSISTANT_HOME','CLAGNOS_VM_ADMIN_UID','CLAGNOS_ASSISTANT_UID',
+            'CLAGNOS_VM_ADMIN_GID','CLAGNOS_ASSISTANT_GID','CLAGNOS_VM_ADMIN_USER_SID','CLAGNOS_ASSISTANT_USER_SID',
+            'CLAGNOS_LOCAL_APP_DATA','CLAGNOS_ROAMING_APP_DATA','CLAGNOS_VS_INSTANCE_DIRECTORY'
+        )
+        $allowedSet = @{}
+        foreach ($placeholder in $allowedPlaceholders) { $allowedSet[$placeholder] = $true }
+        $manifestJson = ConvertTo-Json -InputObject $manifest -Depth 40 -Compress
+        if ([regex]::IsMatch($manifestJson, '(?i)[A-Z]:\\Users\\[^\\/\s"'']+|S-1-5-21-\d+-\d+-\d+-\d+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|[A-Z]:\\[^\s"'']{2,}')) {
+            throw 'Package app-state manifest contains an un-generalized profile or machine path.'
+        }
+        foreach ($match in @([regex]::Matches($manifestJson, '%CLAGNOS_[A-Z0-9_]+%'))) {
+            if (-not $allowedSet.ContainsKey([string]$match.Groups[0].Value.Trim('%'))) { throw 'Package app-state manifest contains an unsupported target placeholder.' }
+        }
+        $forbiddenMemberPattern = '(?i)(auth\.json|cache\.bin|hosts\.yml|cookies|login data|history|workspacestorage|\.npmrc|\.db$|onedrive|whatsapp|local state|secure preferences)'
+        foreach ($entry in @($archive.Entries)) {
+            if ([string]$entry.FullName -match $forbiddenMemberPattern) { throw 'Package app-state archive contains a login, history, workspace, or cache file.' }
+            if ($entry.Length -le 0 -or $entry.Length -gt 5000000 -or [string]::Equals([string]$entry.FullName, 'app-state.manifest.json', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            $extension = [System.IO.Path]::GetExtension([string]$entry.Name).ToLowerInvariant()
+            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.properties','.vssettings','.jcf','.jdf','.vpf','.vlcrc') -and [string]$entry.Name -ne 'config') { continue }
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $content = [string]$reader.ReadToEnd() }
+            finally { $reader.Dispose() }
+            if ($content.Contains([char]0)) { continue }
+            if ([regex]::IsMatch($content, '(?i)[A-Z]:\\Users\\[^\\/\s"'']+|S-1-5-21-\d+-\d+-\d+-\d+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')) {
+                throw ("Package app-state payload '{0}' has an un-generalized profile, SID, or email value." -f [string]$entry.Name)
+            }
+            if ([regex]::IsMatch($content, '(?i)[A-Z]:\\[^\s"'']{2,}')) {
+                throw ("Package app-state payload '{0}' has an un-generalized absolute drive path." -f [string]$entry.Name)
+            }
+            foreach ($match in @([regex]::Matches($content, '%CLAGNOS_[A-Z0-9_]+%'))) {
+                if (-not $allowedSet.ContainsKey([string]$match.Groups[0].Value.Trim('%'))) { throw 'Package app-state contains an unsupported target placeholder.' }
+            }
+            if ($extension -eq '.json') {
+                try {
+                    $document = ConvertFrom-Json -InputObject $content -ErrorAction Stop
+                    $findings = New-Object 'System.Collections.Generic.List[string]'
+                    Add-ClagnosAppStatePortableJsonKeyFindings -Value $document -Findings $findings
+                    if ($findings.Count -gt 0) { throw 'Package app-state JSON contains an authentication, account, or machine-identity field.' }
+                }
+                catch {
+                    if ($_.Exception.Message -match '(?i)(authentication|account|machine-identity)') { throw }
+                    throw ("Package app-state payload '{0}' is not valid JSON." -f [string]$entry.Name)
+                }
+            }
+            elseif ($extension -in @('.xml','.vssettings','.config')) {
+                try {
+                    [xml]$xmlDocument = $content
+                    $sensitiveNodes = @($xmlDocument.SelectNodes('//*') | Where-Object { [string]$_.LocalName -match '(?i)(password|secret|token|credential|authentication|api.?key|private.?key|account|email|identity|sign.?in|client.?id|machine.?id|device.?id|subscription|tenant)' })
+                    if ($sensitiveNodes.Count -gt 0) { throw 'Package app-state XML contains an authentication, account, or machine-identity field.' }
+                }
+                catch {
+                    if ($_.Exception.Message -match '(?i)(authentication|account|machine-identity)') { throw }
+                    throw ("Package app-state payload '{0}' is not valid XML." -f [string]$entry.Name)
+                }
+            }
+            elseif ($extension -in @('.ini','.yml','.yaml','.toml','.conf','.properties','.reg')) {
+                $badSetting = @($content -split '\r?\n' | Where-Object { $_ -match '^\s*[^#;\[].*?\s*(?:=|:).*?$' -and $_ -match '(?i)(password|secret|token|credential|api.?key|private.?key|account|email|subscription|tenant|user.?id)' })
+                if ($badSetting.Count -gt 0) { throw ("Package app-state payload '{0}' has an unsanitized credential or account field." -f [string]$entry.Name) }
+            }
+        }
+    }
+    finally { $archive.Dispose() }
+}
+
 function Get-ClagnosTaskAppStateSelectedProfileTokens {
     param([string[]]$SelectedProfiles = @())
 
@@ -500,13 +615,19 @@ function New-ClagnosTaskAppStateFilteredZip {
 }
 
 function Get-ClagnosTaskAppStateRemoteZipPath {
-    param([string]$TaskName)
+    param(
+        [string]$TaskName,
+        [ValidateSet('windows','linux')][string]$Platform = 'windows'
+    )
 
     $safeName = ([string]$TaskName -replace '[^A-Za-z0-9\-]', '-').Trim('-')
     if ([string]::IsNullOrWhiteSpace([string]$safeName)) {
         $safeName = 'task'
     }
 
+    if ([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return ('/tmp/clagnos-app-state-{0}.zip' -f $safeName)
+    }
     return ('C:/Windows/Temp/clagnos-app-state-{0}.zip' -f $safeName)
 }
 
@@ -517,10 +638,14 @@ function Get-ClagnosTaskAppStateRemoteGuestHelperPath {
     )
 
     if ([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) {
-        return '/tmp/clagnos-app-state-guest.psm1'
+        return '/tmp/clagnos-app-state-portability.py'
     }
 
     return 'C:/Windows/Temp/clagnos-app-state-guest.psm1'
+}
+
+function Get-ClagnosTaskAppStateLinuxPortabilityModulePath {
+    return (Join-Path $PSScriptRoot 'clagnos-app-state-portability.py')
 }
 
 function Get-ClagnosTaskAppStateGuestScript {
@@ -567,6 +692,7 @@ scratch_root="$(mktemp -d /tmp/clagnos-app-state.XXXXXX)"
 cleanup() {
   rm -rf "$scratch_root"
   rm -f "$zip_path"
+  rm -f /tmp/clagnos-app-state-portability.py
 }
 trap cleanup EXIT
 python_bin=''
@@ -578,12 +704,14 @@ else
   echo 'WARNING: app-state-linux-skip => python interpreter was not found.'
   exit 3
 fi
-"$python_bin" - "$zip_path" "$scratch_root" "$task_name" "$manager_user" "$assistant_user" <<'PY'
+"$python_bin" -B - "$zip_path" "$scratch_root" "$task_name" "$manager_user" "$assistant_user" <<'PY'
 import json
 import os
 import shutil
 import sys
 import zipfile
+sys.path.insert(0, '/tmp')
+from clagnos_app_state_portability import prepare_payload_for_restore
 
 zip_path, scratch_root, task_name, manager_user, assistant_user = sys.argv[1:6]
 
@@ -633,19 +761,7 @@ with open(manifest_path, 'r', encoding='utf-8') as handle:
 if str(manifest.get('taskName', '')).strip().lower() != task_name.strip().lower():
     raise RuntimeError(f"App-state manifest taskName '{manifest.get('taskName', '')}' does not match task '{task_name}'.")
 
-profile_targets = []
-seen_targets = set()
-for label, user_name, profile_path in (
-    ('manager', manager_user, f"/home/{manager_user}" if manager_user else ''),
-    ('assistant', assistant_user, f"/home/{assistant_user}" if assistant_user else ''),
-):
-    if not profile_path or not os.path.isdir(profile_path):
-        continue
-    normalized_path = os.path.normpath(profile_path)
-    if normalized_path in seen_targets:
-        continue
-    profile_targets.append((label, user_name, normalized_path))
-    seen_targets.add(normalized_path)
+manifest, profile_targets = prepare_payload_for_restore(scratch_root, manifest, manager_user, assistant_user)
 
 def select_profile_targets(entry):
     target_profiles = [str(item).strip().lower() for item in entry.get('targetProfiles', []) if str(item).strip()]
@@ -776,12 +892,15 @@ function Invoke-ClagnosTaskAppStatePostProcess {
         Write-Warning ("App-state warning: {0} => {1}" -f [string]$taskName, [string]$pluginInfo.Message)
         return [pscustomobject]@{ Status = 'warning'; Warning = $true; Message = [string]$pluginInfo.Message }
     }
+    if ([string]::Equals([string]$TaskBlock.TaskType, 'package', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$pluginInfo.ZipPath)
+    }
 
     $remoteZipTaskName = [string]$taskName
     if ([string]::Equals([string]$Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase)) {
         $remoteZipTaskName = ('{0}-{1}' -f [string]$taskName, ([guid]::NewGuid().ToString('N').Substring(0, 8)))
     }
-    $remoteZipPath = Get-ClagnosTaskAppStateRemoteZipPath -TaskName $remoteZipTaskName
+    $remoteZipPath = Get-ClagnosTaskAppStateRemoteZipPath -TaskName $remoteZipTaskName -Platform $Platform
     $remoteGuestHelperPath = Get-ClagnosTaskAppStateRemoteGuestHelperPath -Platform $Platform
     try {
         if ([string]::IsNullOrWhiteSpace([string]$HostName) -or
@@ -804,6 +923,11 @@ function Invoke-ClagnosTaskAppStatePostProcess {
             $scriptText = Get-ClagnosTaskAppStateGuestScript -TaskName $taskName -RemoteZipPath $remoteZipPath -ManagerUser $ManagerUser -AssistantUser $AssistantUser
         }
         else {
+            $linuxPortabilityModulePath = Get-ClagnosTaskAppStateLinuxPortabilityModulePath
+            if (-not (Test-Path -LiteralPath $linuxPortabilityModulePath -PathType Leaf)) {
+                throw ("Linux app-state portability helper was not found: {0}" -f $linuxPortabilityModulePath)
+            }
+            Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath $linuxPortabilityModulePath -RemotePath '/tmp/clagnos-app-state-portability.py' -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
             $scriptText = Get-ClagnosTaskAppStateLinuxGuestScript -TaskName $taskName -RemoteZipPath $remoteZipPath -ManagerUser $ManagerUser -AssistantUser $AssistantUser
         }
         $scriptTimeout = $TimeoutSeconds

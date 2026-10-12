@@ -15,42 +15,20 @@
     "value": "@google/gemini-cli"
   },
   "appStateKey": "126-install-google-gemini-tool",
+  "dependsOn": [
+    "nodejs"
+  ],
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": ".gemini",
-        "targetProfiles": [],
-        "excludeNames": [
-          "tmp",
-          "bin",
-          "Cache",
-          "Code Cache",
-          "Logs"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      }
-    ],
+    "profileDirectories": [],
     "profileFiles": [
       {
-        "path": ".npmrc",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
+        "path": ".gemini\\settings.json",
+        "targetProfiles": []
       }
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
-  },
-  "dependsOn": [
-    "nodejs"
-  ]
+  }
 }

@@ -18,108 +18,14 @@
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
+    "profileDirectories": [],
+    "profileFiles": [
       {
-        "path": "AppData\\Roaming\\Microsoft\\VisualStudio",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs",
-          "Packages",
-          "ImageLibrary",
-          "ImageLibrary.cache",
-          "Search",
-          "SettingsLogs",
-          "ComponentModelCache",
-          "vshub"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      },
-      {
-        "path": "AppData\\Local\\Microsoft\\VisualStudio",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs",
-          "Packages",
-          "ImageLibrary",
-          "ImageLibrary.cache",
-          "Search",
-          "SettingsLogs",
-          "ComponentModelCache",
-          "vshub"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      },
-      {
-        "path": ".vs",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs",
-          "Packages",
-          "ImageLibrary",
-          "ImageLibrary.cache",
-          "Search",
-          "SettingsLogs",
-          "ComponentModelCache",
-          "vshub"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
+        "path": "AppData\\Local\\Microsoft\\VisualStudio\\17.0_*\\Settings\\CurrentSettings.vssettings",
+        "targetProfiles": []
       }
     ],
-    "profileFiles": [],
     "machineRegistryKeys": [],
-    "userRegistryKeys": [
-      {
-        "path": "HKCU\\Software\\Microsoft\\VisualStudio",
-        "targetProfiles": [],
-        "distributionAllowList": []
-      },
-      {
-        "path": "HKCU\\Software\\Microsoft\\VSCommon",
-        "targetProfiles": [],
-        "distributionAllowList": []
-      }
-    ]
+    "userRegistryKeys": []
   }
 }

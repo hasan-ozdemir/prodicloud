@@ -67,7 +67,10 @@ $requiredFiles = @(
     'tools\enable-git-hooks.ps1',
     'tools\disable-git-hooks.ps1',
     'tests\pre-commit-release-doc-check.ps1',
+    'tests\package-app-state-contract-check.ps1',
+    'tests\linux-app-state-portability-check.py',
     'tests\sensitive-content-check.ps1',
+    'tools\maintain-package-app-state.ps1',
     '.githooks\pre-commit',
     '.githooks\commit-msg',
     '.github\workflows\quality-gate.yml',
@@ -214,6 +217,8 @@ Assert-True -Condition ($agentsText -match [regex]::Escape('Intentionally local-
 Assert-True -Condition ($agentsText -match [regex]::Escape('Each task folder must contain one same-named task script plus one `task.json`.')) -Message 'AGENTS.md must define the portable task-folder layout.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('`task.json` is the execution-order, enable-state, timeout, asset, and app-state source of truth for tracked and local-only task folders.')) -Message 'AGENTS.md must define task.json as the task contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('The only allowed task app-state source is the owning task or package plugin zip `<task-folder>/app-state/app-state.zip` or `<package-folder>/app-state/app-state.zip`.')) -Message 'AGENTS.md must define the task and package app-state paths.'
+Assert-True -Condition ($agentsText -match [regex]::Escape('Package app-state archives must contain only portable preferences selected by `package.json`; do not capture credentials, authenticated browser profiles, tokens, caches, histories, workspace databases, or licensing/activation registry state.')) -Message 'AGENTS.md must define settings-only package app-state policy.'
+Assert-True -Condition ($agentsText -match [regex]::Escape('Unknown or unavailable tokens must fail before replay.')) -Message 'AGENTS.md must define fail-closed app-state placeholder behavior.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Task- or catalog-adjacent `backup-app-states/` folders are untracked and git-ignored; local-machine restore must write backups under the owning task-stage or package-catalog root, verify the restored content, and roll back from that backup root if verification fails.')) -Message 'AGENTS.md must define the task and package backup-app-states contract.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('Task priority precedence is: `task.json priority` -> filename task number -> deterministic fallback within the current task-number band.')) -Message 'AGENTS.md must define the task-folder priority precedence rule.'
 Assert-True -Condition ($agentsText -match [regex]::Escape('For task folders with missing `priority`, default to the filename task number when available, otherwise `1000`.')) -Message 'AGENTS.md must document the task-folder priority fallback.'
@@ -278,6 +283,12 @@ Assert-True -Condition ($readmeText -match [regex]::Escape('Auto `update` resolv
 Assert-True -Condition ($readmeText -match [regex]::Escape('Reboot-signaling tasks restart the VM immediately, wait for the required transport recovery, and then resume from the next task. The `update` stage retains its Windows final restart after the vm-update maintenance stage; isolated `task --run-vm-update` reruns skip that workflow-only final restart.')) -Message 'README.md must document the task-immediate and workflow-only final Windows vm-update restart behavior.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('isolated `task --run-vm-update` reruns skip that workflow-only final restart')) -Message 'README.md must document that isolated vm-update task reruns skip the workflow-only final restart.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Windows Store package manifests declare the public desktop shortcut refresh as a post-install task.')) -Message 'README.md must document the Store package shortcut refresh follow-up.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('resolve supported `%CLAGNOS_*%` placeholders against the target profile and VM immediately before replay.')) -Message 'README.md must document package app-state placeholder resolution.'
+$packageReadmePath = Join-Path $RepoRoot 'packages\README.md'
+$packageReadmeText = [string](Get-Content -LiteralPath $packageReadmePath -Raw)
+Assert-True -Condition ($packageReadmeText -match [regex]::Escape('If an application stores only identity-bound or machine-bound state, omit its `appState` policy.')) -Message 'Package documentation must define when app-state should be omitted.'
+Assert-True -Condition ($packageReadmeText -match [regex]::Escape('Missing values and unsupported `%CLAGNOS_*%` tokens fail before replay.')) -Message 'Package documentation must define placeholder failure behavior.'
+Assert-True -Condition ($packageReadmeText -match [regex]::Escape('The owning `app-state/app-state.zip` is local-only and git-ignored.')) -Message 'Package documentation must describe the local-only snapshot policy.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('if `--windows` or `--linux` is omitted, interactive mode asks for the VM OS type first and then scopes size, disk, and image defaults to that selection')) -Message 'README.md must document the interactive create OS prompt.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('Interactive `create` reviews the resource group and VM deployment steps; `initialize` and `update` have their own task-stage reviews.')) -Message 'README.md must document lifecycle-specific review checkpoints.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('`configure` and `vm-summary` stay visible in `create` and `update` flows, even when partial step selection skips interior stages.')) -Message 'README.md must document the always-visible configure/vm-summary rule.'

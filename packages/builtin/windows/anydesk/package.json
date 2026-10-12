@@ -14,43 +14,5 @@
     "kind": "winget",
     "value": "anydesk.anydesk"
   },
-  "appStateKey": "109-install-anydesk-application",
-  "appState": {
-    "machineDirectories": [],
-    "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": "AppData\\Roaming\\AnyDesk",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.trace",
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      }
-    ],
-    "profileFiles": [],
-    "machineRegistryKeys": [],
-    "userRegistryKeys": [
-      {
-        "path": "HKCU\\Software\\AnyDesk",
-        "targetProfiles": [],
-        "distributionAllowList": []
-      }
-    ]
-  }
+  "appStateKey": "109-install-anydesk-application"
 }

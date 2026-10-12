@@ -21,7 +21,7 @@
     "profileDirectories": [],
     "profileFiles": [
       {
-        "path": "AppData\\Local\\Ollama\\config.json",
+        "path": "AppData\\Roaming\\ollama app.exe\\config.json",
         "targetProfiles": []
       },
       {
@@ -29,7 +29,7 @@
         "targetProfiles": []
       },
       {
-        "path": "AppData\\Roaming\\ollama app.exe\\config.json",
+        "path": "AppData\\Local\\Ollama\\config.json",
         "targetProfiles": []
       }
     ],

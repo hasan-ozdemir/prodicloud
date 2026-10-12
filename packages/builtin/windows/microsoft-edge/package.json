@@ -14,42 +14,5 @@
     "kind": "winget",
     "value": "Microsoft.Edge"
   },
-  "appStateKey": "103-install-edge-application",
-  "appState": {
-    "machineDirectories": [],
-    "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": "AppData\\Local\\Microsoft\\Edge\\User Data",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "GrShaderCache",
-          "DawnGraphiteCache",
-          "DawnWebGPUCache",
-          "ShaderCache",
-          "Crashpad",
-          "Crash Reports",
-          "CrashDumps",
-          "Temp",
-          "tmp"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.temp",
-          "*.etl",
-          "*.log",
-          "*.crdownload",
-          "Singleton*"
-        ]
-      }
-    ],
-    "profileFiles": [],
-    "machineRegistryKeys": [],
-    "userRegistryKeys": []
-  }
+  "appStateKey": "103-install-edge-application"
 }

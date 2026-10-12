@@ -15,43 +15,6 @@
     "value": "googlechrome"
   },
   "appStateKey": "03-install-chrome-application",
-  "appState": {
-    "machineDirectories": [],
-    "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": "AppData\\Local\\Google\\Chrome\\User Data",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "GrShaderCache",
-          "DawnGraphiteCache",
-          "DawnWebGPUCache",
-          "ShaderCache",
-          "Crashpad",
-          "Crash Reports",
-          "CrashDumps",
-          "Temp",
-          "tmp"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.temp",
-          "*.etl",
-          "*.log",
-          "*.crdownload",
-          "Singleton*"
-        ]
-      }
-    ],
-    "profileFiles": [],
-    "machineRegistryKeys": [],
-    "userRegistryKeys": []
-  },
   "dependsOn": [
     "chocolatey"
   ]

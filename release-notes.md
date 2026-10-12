@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.403 - 2026-10-12
+
+### Summary
+Package app-state is now stored as portable preference data and adapted to the target VM just before replay. Sign-in sessions and other machine-bound state are no longer copied between computers.
+
+### Highlights
+- Audited all builtin app-state policies and snapshots. Narrowed retained snapshots to Azure CLI/AZD configuration, GitHub CLI preferences, JAWS/NVDA settings, Visual Studio user settings, and VLC preferences; removed browser, cloud-account, messaging, remote-access, activation, history, and cache state.
+- Added target placeholders for user profiles, SIDs or UIDs/GIDs, OS paths, host name, primary IP, CPU/memory, and Visual Studio instance paths. Windows and Linux capture generalize these values; replay resolves them against the selected target profile and host.
+- Added fail-closed handling for missing or unsupported placeholders and secret-key filtering during capture.
+- Added repeatable builtin app-state maintenance tooling and automated checks that also cover the custom package catalog contract.
+
+### Validation
+- Package app-state contract checks passed for all builtin and custom manifests and retained archives.
+- Windows placeholder materialization and Linux capture/replay round trips passed. PowerShell compatibility, documentation, code quality, Bash syntax, and sensitive-content checks were rerun. No Azure resources were changed.
+
 ## Release 2026.10.12.402 - 2026-10-12
 
 ### Summary

@@ -112,6 +112,46 @@ Invoke-AuditStep -Name "Documentation contract" -Action {
     }
 }
 
+Invoke-AuditStep -Name "Package app-state contract" -Action {
+    $contractPath = Join-Path $RepoRoot "tests\package-app-state-contract-check.ps1"
+    if (-not (Test-Path -LiteralPath $contractPath)) {
+        throw "package-app-state-contract-check.ps1 was not found."
+    }
+
+    $powerShellHost = Resolve-PowerShellHost
+    & $powerShellHost -NoLogo -NoProfile -ExecutionPolicy Bypass -File $contractPath -RepoRoot $RepoRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "package-app-state-contract-check.ps1 failed."
+    }
+}
+
+Invoke-AuditStep -Name "Python syntax (Linux app-state portability)" -Action {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) { throw "python command was not found." }
+    $helperPath = Join-Path $RepoRoot "modules\core\tasks\clagnos-app-state-portability.py"
+    if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) { throw "Linux app-state portability helper was not found." }
+    $syntaxProbe = @'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+compile(source, str(path), "exec")
+'@
+    $syntaxProbe | & $python.Source -B - $helperPath
+    if ($LASTEXITCODE -ne 0) { throw "Linux app-state portability helper syntax check failed." }
+}
+
+Invoke-AuditStep -Name "Linux app-state placeholder round trip" -Action {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) { throw "python command was not found." }
+    $helperPath = Join-Path $RepoRoot "modules\core\tasks\clagnos-app-state-portability.py"
+    $contractPath = Join-Path $RepoRoot "tests\linux-app-state-portability-check.py"
+    if (-not (Test-Path -LiteralPath $contractPath -PathType Leaf)) { throw "Linux app-state portability contract test was not found." }
+    & $python.Source -B $contractPath $helperPath
+    if ($LASTEXITCODE -ne 0) { throw "Linux app-state placeholder round trip failed." }
+}
+
 Invoke-AuditStep -Name "Python syntax (tools/pyssh/ssh_client.py)" -Action {
     $python = Get-Command python -ErrorAction SilentlyContinue
     if (-not $python) {

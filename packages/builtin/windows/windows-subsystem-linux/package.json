@@ -22,21 +22,10 @@
     "profileFiles": [
       {
         "path": ".wslconfig",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
+        "targetProfiles": []
       }
     ],
     "machineRegistryKeys": [],
-    "userRegistryKeys": [
-      {
-        "path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss",
-        "targetProfiles": [],
-        "distributionAllowList": [
-          "docker-desktop"
-        ]
-      }
-    ]
+    "userRegistryKeys": []
   }
 }

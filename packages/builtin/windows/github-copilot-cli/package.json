@@ -15,37 +15,6 @@
     "value": "@github/copilot"
   },
   "appStateKey": "125-install-github-copilot-tool",
-  "appState": {
-    "machineDirectories": [],
-    "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": ".config\\github-copilot",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      },
-      {
-        "path": "AppData\\Roaming\\GitHub Copilot",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      }
-    ],
-    "profileFiles": [
-      {
-        "path": ".npmrc",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      }
-    ],
-    "machineRegistryKeys": [],
-    "userRegistryKeys": []
-  },
   "dependsOn": [
     "nodejs"
   ]

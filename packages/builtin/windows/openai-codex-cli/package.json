@@ -15,43 +15,20 @@
     "value": "@openai/codex"
   },
   "appStateKey": "124-install-openai-codex-tool",
+  "dependsOn": [
+    "nodejs"
+  ],
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": ".codex",
-        "targetProfiles": [],
-        "excludeNames": [
-          "vendor_imports",
-          ".git",
-          "Cache",
-          "Code Cache",
-          "Logs",
-          "tmp"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      }
-    ],
+    "profileDirectories": [],
     "profileFiles": [
       {
-        "path": ".npmrc",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
+        "path": ".codex\\config.toml",
+        "targetProfiles": []
       }
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
-  },
-  "dependsOn": [
-    "nodejs"
-  ]
+  }
 }

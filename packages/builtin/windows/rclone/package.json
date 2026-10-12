@@ -14,28 +14,5 @@
     "kind": "winget",
     "value": "Rclone.Rclone"
   },
-  "appStateKey": "105-install-rclone-tool",
-  "appState": {
-    "machineDirectories": [],
-    "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": "AppData\\Roaming\\rclone",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      },
-      {
-        "path": ".config\\rclone",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      }
-    ],
-    "profileFiles": [],
-    "machineRegistryKeys": [],
-    "userRegistryKeys": []
-  }
+  "appStateKey": "105-install-rclone-tool"
 }

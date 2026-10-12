@@ -517,6 +517,13 @@ function Invoke-ClagnosPackageOperation {
         return
     }
     if ($Action -eq 'install') {
+        $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
+        if ([string]::Equals([string]$packageAppState.Status, 'invalid', [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ("Package '{0}' has an invalid app-state archive: {1}" -f [string]$package.DisplayName, [string]$packageAppState.Message)
+        }
+        if ([string]::Equals([string]$packageAppState.Status, 'ready', [System.StringComparison]::OrdinalIgnoreCase)) {
+            Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
+        }
         $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock ([psobject]$package.PackageTask) -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
         Write-Host ("Installed or updated {0}." -f [string]$package.DisplayName) -ForegroundColor Green
         return $run

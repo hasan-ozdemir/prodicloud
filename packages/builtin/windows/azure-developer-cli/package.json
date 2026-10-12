@@ -18,20 +18,13 @@
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
+    "profileDirectories": [],
+    "profileFiles": [
       {
-        "path": ".azd",
-        "targetProfiles": [],
-        "excludeNames": [
-          "bin",
-          "telemetry",
-          ".azd"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
+        "path": ".azd\\config.json",
+        "targetProfiles": []
       }
     ],
-    "profileFiles": [],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
   }

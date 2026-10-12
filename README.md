@@ -779,7 +779,7 @@ Direct `task --run-vm-init` and `task --run-vm-update` are the main diagnosis pa
 
 Current task template replacement uses the public selected-value placeholders: `__SELECTED_VM_NAME__`, `__SELECTED_AZURE_REGION__`, `__SELECTED_RESOURCE_GROUP__`, `__SELECTED_COMPANY_NAME__`, `__SELECTED_COMPANY_WEB_ADDRESS__`, `__SELECTED_COMPANY_EMAIL_ADDRESS__`, `__SELECTED_EMPLOYEE_EMAIL_ADDRESS__`, and `__SELECTED_EMPLOYEE_FULL_NAME__`.
 
-Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Local-machine restore snapshots are written under the owning task stage or package catalog `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
+Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Package snapshots are settings-first, exclude sign-in and machine state, and resolve supported `%CLAGNOS_*%` placeholders against the target profile and VM immediately before replay. Validate snapshots with `tests/package-app-state-contract-check.ps1`. Local-machine restore snapshots are written under the owning task stage or package catalog `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
 
 ## Configuration Guide
 

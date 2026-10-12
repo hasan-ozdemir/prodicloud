@@ -400,24 +400,36 @@ function ConvertTo-ClagnosTaskAppStateCapturePlanJson {
 }
 
 function Get-ClagnosTaskAppStateRemoteCapturePlanPath {
-    param([string]$TaskName)
+    param(
+        [string]$TaskName,
+        [ValidateSet('windows','linux')][string]$Platform = 'windows'
+    )
 
     $safeName = (([string]$TaskName -replace '[^A-Za-z0-9\-]', '-').Trim('-'))
     if ([string]::IsNullOrWhiteSpace([string]$safeName)) {
         $safeName = 'task'
     }
 
+    if ([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return ('/tmp/clagnos-app-state-plan-{0}.json' -f $safeName)
+    }
     return ('C:/Windows/Temp/clagnos-app-state-plan-{0}.json' -f $safeName)
 }
 
 function Get-ClagnosTaskAppStateRemoteCaptureZipPath {
-    param([string]$TaskName)
+    param(
+        [string]$TaskName,
+        [ValidateSet('windows','linux')][string]$Platform = 'windows'
+    )
 
     $safeName = (([string]$TaskName -replace '[^A-Za-z0-9\-]', '-').Trim('-'))
     if ([string]::IsNullOrWhiteSpace([string]$safeName)) {
         $safeName = 'task'
     }
 
+    if ([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return ('/tmp/clagnos-app-state-capture-{0}.zip' -f $safeName)
+    }
     return ('C:/Windows/Temp/clagnos-app-state-capture-{0}.zip' -f $safeName)
 }
 
@@ -496,8 +508,8 @@ function Save-ClagnosTaskAppStateFromVm {
         $safeTaskName = 'task'
     }
 
-    $remotePlanPath = Get-ClagnosTaskAppStateRemoteCapturePlanPath -TaskName $taskName
-    $remoteZipPath = Get-ClagnosTaskAppStateRemoteCaptureZipPath -TaskName $taskName
+    $remotePlanPath = Get-ClagnosTaskAppStateRemoteCapturePlanPath -TaskName $taskName -Platform $Platform
+    $remoteZipPath = Get-ClagnosTaskAppStateRemoteCaptureZipPath -TaskName $taskName -Platform $Platform
     $localPlanPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-app-state-plan-{0}-{1}.json' -f $safeTaskName, ([guid]::NewGuid().ToString('N')))
     try {
         $scriptTimeout = $TimeoutSeconds
@@ -515,6 +527,11 @@ function Save-ClagnosTaskAppStateFromVm {
         else {
             $taskShell = 'bash'
             Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath $localPlanPath -RemotePath $remotePlanPath -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
+            $linuxPortabilityModulePath = Join-Path $PSScriptRoot 'clagnos-app-state-portability.py'
+            if (-not (Test-Path -LiteralPath $linuxPortabilityModulePath -PathType Leaf)) {
+                throw ("Linux app-state portability helper was not found: {0}" -f $linuxPortabilityModulePath)
+            }
+            Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath $linuxPortabilityModulePath -RemotePath '/tmp/clagnos-app-state-portability.py' -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
             $bashTaskName = [string]$taskName.Replace("'", "'""'""'")
             $bashRemotePlanPath = [string]$remotePlanPath.Replace("'", "'""'""'")
             $bashRemoteZipPath = [string]$remoteZipPath.Replace("'", "'""'""'")
@@ -527,10 +544,11 @@ plan_path='$bashRemotePlanPath'
 zip_path='$bashRemoteZipPath'
 manager_user='$bashManagerUser'
 assistant_user='$bashAssistantUser'
+portability_module_path='/tmp/clagnos-app-state-portability.py'
 scratch_root="$(mktemp -d /tmp/clagnos-app-state-save.XXXXXX)"
 cleanup() {
   rm -rf "$scratch_root"
-  rm -f "$plan_path"
+  rm -f "$plan_path" "$portability_module_path"
 }
 trap cleanup EXIT
 python_bin=''
@@ -542,7 +560,7 @@ else
   echo 'WARNING: app-state-save-skip => python interpreter was not found.'
   exit 3
 fi
-"$python_bin" - "$task_name" "$plan_path" "$zip_path" "$manager_user" "$assistant_user" <<'PY'
+"$python_bin" -B - "$task_name" "$plan_path" "$zip_path" "$manager_user" "$assistant_user" <<'PY'
 import glob
 import json
 import os
@@ -551,6 +569,8 @@ import shutil
 import sys
 import tempfile
 import zipfile
+sys.path.insert(0, '/tmp')
+from clagnos_app_state_portability import normalize_captured_payload
 
 task_name, plan_path, zip_path, manager_user, assistant_user = sys.argv[1:6]
 
@@ -566,9 +586,15 @@ def expand_machine_path(raw_path: str) -> str:
 def profile_map():
     mapping = {}
     for label, user_name, profile_path in (
-        ('manager', manager_user, f"/home/{manager_user}" if manager_user else ''),
-        ('assistant', assistant_user, f"/home/{assistant_user}" if assistant_user else ''),
+        ('manager', manager_user, ''),
+        ('assistant', assistant_user, ''),
     ):
+        if user_name:
+            try:
+                import pwd
+                profile_path = pwd.getpwnam(user_name).pw_dir
+            except (ImportError, KeyError, OSError):
+                profile_path = f"/home/{user_name}"
         if profile_path and os.path.isdir(profile_path):
             mapping[label] = os.path.normpath(profile_path)
             if user_name:
@@ -751,6 +777,7 @@ for index, rule in enumerate(plan.get('profileFiles', []), start=1):
             profile_file_exports += 1
 
 manifest_path = os.path.join(scratch_root, 'app-state.manifest.json')
+manifest = normalize_captured_payload(scratch_root, manifest, manager_user, assistant_user)
 with open(manifest_path, 'w', encoding='utf-8') as handle:
     json.dump(manifest, handle, indent=2)
 
@@ -812,6 +839,10 @@ PY
         }
 
         Copy-ClagnosAssetFromVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -RemotePath $remoteZipPath -LocalPath $zipPath -ConnectTimeoutSeconds $ConnectTimeoutSeconds
+        if ([string]::Equals([string]$TaskBlock.TaskType, 'package', [System.StringComparison]::OrdinalIgnoreCase)) {
+            try { Assert-ClagnosPackageAppStateArchivePortable -ZipPath $zipPath }
+            catch { Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue; throw }
+        }
         Write-Host ("App-state saved: {0} => {1}" -f [string]$taskName, [string]$zipPath)
         return [pscustomobject]@{ Status = 'saved'; Message = 'saved'; Warning = $false; ZipPath = [string]$zipPath }
     }

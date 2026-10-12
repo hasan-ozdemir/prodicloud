@@ -5696,3 +5696,14 @@ Task: Clarify package/program types by making a definitive conversion in this re
 **Assistant Summary**
 
 Replaced task-backed programs with isolated builtin/custom package catalogs. Moved the 36 standard Windows installers under `packages/builtin/windows/`, renamed scripts and manifests to `install.ps1` and `package.json`, and added custom Windows/Linux catalog roots. Renamed the public command and runtime entities to `package`; Manage Programs now selects one catalog and labels each package `[builtin]` or `[custom]`. Package availability, remote status/install/uninstall, and app-state selection now use the package manifest. Existing app-state archives were moved without inspection and retain their prior identity through `appStateKey`.
+
+### 2026-10-12 16:18 UTC
+**User Prompt**
+
+````text
+Plan update: Thoroughly inspect all app-state data stored for builtin and custom packages in this repository. Generalize it for remote VMs/VCs so every field tied to a source computer is adapted to the target computer during installation, including usernames, registry locations, disk paths, settings names, and values. Repair incomplete or invalid data using local evidence and web research where needed. Store machine-specific values as %PLACEHOLDER% tokens and populate them from the target machine at install time.
+````
+
+**Assistant Summary**
+
+Audited builtin package app-state manifests and all committed snapshots. Removed auth sessions, browser profile data, cloud account state, caches, histories, workspace databases, and license/activation registry state; retained only scoped preference files or omitted state for identity-bound programs. Added capture-time generalization and target-time placeholder expansion for Windows and Linux guest profiles, host names, IP addresses, OS paths, SIDs or UIDs/GIDs, CPU/memory, and the installed Visual Studio instance. Unknown or unavailable placeholders now fail before replay. Added a repeatable builtin snapshot maintenance tool and package app-state contract and round-trip tests; no Azure resources were changed.

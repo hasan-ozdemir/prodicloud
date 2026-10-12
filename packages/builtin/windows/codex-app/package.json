@@ -25,66 +25,6 @@
     }
   ],
   "appStateKey": "120-install-codex-application",
-  "appState": {
-    "machineDirectories": [],
-    "machineFiles": [],
-    "profileDirectories": [
-      {
-        "path": "AppData\\Local\\Packages\\OpenAI.Codex_*\\Settings",
-        "targetProfiles": [],
-        "excludeNames": [],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": []
-      },
-      {
-        "path": "AppData\\Local\\Packages\\OpenAI.Codex_*\\LocalState",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      },
-      {
-        "path": "AppData\\Local\\Packages\\OpenAI.Codex_*\\RoamingState",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
-      }
-    ],
-    "profileFiles": [],
-    "machineRegistryKeys": [],
-    "userRegistryKeys": []
-  },
   "postInstallTasks": [
     "10003-create-public-desktop-shortcuts"
   ]

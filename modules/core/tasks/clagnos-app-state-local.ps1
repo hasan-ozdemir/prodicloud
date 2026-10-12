@@ -1758,6 +1758,11 @@ function Save-ClagnosTaskAppStateFromLocalMachine {
             Write-Host ("App-state canonical manager payload normalized: {0}" -f [string]$taskName)
         }
 
+        if ([string]::Equals([string]$TaskBlock.TaskType, 'package', [System.StringComparison]::OrdinalIgnoreCase)) {
+            try { Assert-ClagnosPackageAppStateArchivePortable -ZipPath $zipPath }
+            catch { Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue; throw }
+        }
+
         return [pscustomobject]@{
             Status = 'saved'
             Message = 'saved'
@@ -1781,6 +1786,9 @@ function Restore-ClagnosTaskAppStateToLocalMachine {
     $taskName = [string]$pluginInfo.TaskName
     if ($pluginInfo.Status -ne 'ready') {
         throw ("Task app-state plugin is not ready for local restore: {0}" -f [string]$pluginInfo.Message)
+    }
+    if ([string]::Equals([string]$TaskBlock.TaskType, 'package', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$pluginInfo.ZipPath)
     }
 
     $profileTargets = @(Resolve-ClagnosLocalAppStateProfileTargets -RequestedUsers $RequestedUsers)

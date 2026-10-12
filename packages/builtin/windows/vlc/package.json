@@ -18,38 +18,18 @@
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
-    "profileDirectories": [
+    "profileDirectories": [],
+    "profileFiles": [
       {
-        "path": "AppData\\Roaming\\vlc",
-        "targetProfiles": [],
-        "excludeNames": [
-          "Cache",
-          "Code Cache",
-          "GPUCache",
-          "DawnCache",
-          "Crashpad",
-          "CrashDumps",
-          "Temp",
-          "tmp",
-          "Logs"
-        ],
-        "excludePathPatterns": [],
-        "excludeFilePatterns": [
-          "*.lock",
-          "*.tmp",
-          "*.etl",
-          "*.log"
-        ]
+        "path": "AppData\\Roaming\\vlc\\vlcrc",
+        "targetProfiles": []
+      },
+      {
+        "path": "AppData\\Roaming\\vlc\\vlc-qt-interface.ini",
+        "targetProfiles": []
       }
     ],
-    "profileFiles": [],
     "machineRegistryKeys": [],
-    "userRegistryKeys": [
-      {
-        "path": "HKCU\\Software\\VideoLAN\\VLC",
-        "targetProfiles": [],
-        "distributionAllowList": []
-      }
-    ]
+    "userRegistryKeys": []
   }
 }
