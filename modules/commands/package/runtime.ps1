@@ -204,7 +204,16 @@ printf 'CLAGNOS_PACKAGE_RESULTS:%s\n' "$json"
     if ([string]::Equals([string]$Action, 'status', [System.StringComparison]::OrdinalIgnoreCase)) {
         return @"
 `$payload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$base64'))
-`$packages = @(ConvertFrom-Json -InputObject `$payload)
+`$parsedPackageInput = ConvertFrom-Json -InputObject `$payload
+`$packages = @()
+foreach (`$entry in @(`$parsedPackageInput)) {
+    # Windows PowerShell 5.1 can return a JSON root array as one nested collection object.
+    # Flatten it so a catalog status pass evaluates each package instead of one unknown row.
+    if (`$entry -is [System.Collections.IList] -and `$entry -isnot [string]) {
+        foreach (`$nestedPackage in `$entry) { `$packages += `$nestedPackage }
+    }
+    elseif (`$null -ne `$entry) { `$packages += `$entry }
+}
 function Get-PackageStatus {
     param([object]`$Package)
     `$check = `$Package.statusCheck
@@ -240,11 +249,11 @@ function Get-PackageStatus {
         }
         'store-state' {
             `$safeName = [regex]::Replace(`$value, '[^A-Za-z0-9._-]', '_')
-            `$path = Join-Path 'C:\PackageData\clagnos\state\store-installs' (`$safeName + '.json')
+            `$path = Join-Path (Join-Path `$env:ProgramData 'clagnos\state\store-installs') (`$safeName + '.json')
             if (-not (Test-Path -LiteralPath `$path)) { return 'unknown' }
             try { `$state = Get-Content -LiteralPath `$path -Raw | ConvertFrom-Json; if ([string]`$state.State -eq 'installed') { return 'installed' }; return 'not-installed' } catch { return 'unknown' }
         }
-        'choco-self' { if (Test-Path -LiteralPath 'C:\PackageData\chocolatey') { return 'installed' }; return 'not-installed' }
+        'choco-self' { if (Test-Path -LiteralPath (Join-Path `$env:ProgramData 'chocolatey')) { return 'installed' }; return 'not-installed' }
         default { return 'unknown' }
     }
 }
@@ -319,7 +328,7 @@ switch ([string]`$uninstall.kind) {
 }
 if ([string]`$package.statusCheck.kind -eq 'store-state') {
     `$safeName = [regex]::Replace([string]`$package.statusCheck.value, '[^A-Za-z0-9._-]', '_')
-    `$statePath = Join-Path 'C:\PackageData\clagnos\state\store-installs' (`$safeName + '.json')
+    `$statePath = Join-Path (Join-Path `$env:ProgramData 'clagnos\state\store-installs') (`$safeName + '.json')
     if (Test-Path -LiteralPath `$statePath) { Remove-Item -LiteralPath `$statePath -Force }
 }
 Write-Output ('CLAGNOS_PACKAGE_REMOVED:' + [string]`$package.id)
@@ -457,6 +466,8 @@ function Invoke-ClagnosPackageOperation {
     )
 
     if ([string]::IsNullOrWhiteSpace($PackageId) -and $Action -ne 'list') { throw 'A package id is required for this action.' }
+    $packageProgressTarget = if ([string]::IsNullOrWhiteSpace($PackageId)) { 'catalog' } else { "package '$PackageId'" }
+    Write-ClagnosActionProgress -Action ("{0} {1} in {2} catalog" -f [string]$Action,[string]$packageProgressTarget,[string]$Catalog)
     $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
     $platform = [string]$taskRuntime.Platform
     $packagesInCatalog = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)

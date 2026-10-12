@@ -75,7 +75,7 @@ function Invoke-ClagnosResourceGroupStep {
         $groupCreateText = (@($groupCreateOutput) | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
         $isGroupBeingDeleted = ($groupCreateText -match '(?i)(ResourceGroupBeingDeleted|deprovisioning state)')
         if ($isGroupBeingDeleted -and $groupCreateAttempt -lt $groupCreateAttempts) {
-            Write-Host ("Resource group '{0}' is still deprovisioning. Retrying in {1}s..." -f $resourceGroup, $groupCreateDelaySeconds) -ForegroundColor Yellow
+            Write-ClagnosActionProgress -Action ("wait {0}s for resource group '{1}' deprovisioning before retrying create" -f $groupCreateDelaySeconds,$resourceGroup)
             Start-Sleep -Seconds $groupCreateDelaySeconds
             continue
         }

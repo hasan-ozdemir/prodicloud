@@ -13,7 +13,7 @@ Required manifest fields are `id`, `displayName`, `category`, `statusCheck`, and
 
 Package app-state is settings-first. Use `profileFiles` and tightly scoped `profileDirectories` for portable preferences. Do not package sign-in sessions, passwords, access or refresh tokens, browser profiles, cloud account state, histories, caches, workspace databases, generated models, or license/activation data. If an application stores only identity-bound or machine-bound state, omit its `appState` policy.
 
-The owning `app-state/app-state.zip` is local-only and git-ignored. Manifests and capture/replay logic are versioned; a VM capture writes a local portable snapshot for later package installs.
+The owning `app-state/app-state.zip` is versioned with its package manifest when it contains reviewed portable preferences. These archives make package installs reproducible from a clean Git checkout. Before adding or changing one, run `tests/package-app-state-contract-check.ps1` and `tests/sensitive-content-check.ps1`; never commit credentials, authenticated sessions, personal identity values, or source-machine paths. Package app-state backups remain local-only and git-ignored.
 
 Capture generalizes known source profile paths, SIDs, drive roots, host names, IP addresses, and Visual Studio instance directories. A package archive may also use these target-resolved placeholders in textual payloads and manifest destinations:
 

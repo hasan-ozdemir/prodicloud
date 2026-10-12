@@ -3,7 +3,8 @@
 function Invoke-ClagnosCapturedProcess {
     param(
         [string]$FilePath,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [string]$ProgressLabel = 'external process'
     )
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -33,6 +34,15 @@ function Invoke-ClagnosCapturedProcess {
     try {
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $waitWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $lastProgressSeconds = 0
+        while (-not $proc.WaitForExit(1000)) {
+            $elapsedSeconds = [int][Math]::Floor($waitWatch.Elapsed.TotalSeconds)
+            if ($elapsedSeconds -ge 30 -and ($elapsedSeconds - $lastProgressSeconds) -ge 30) {
+                $lastProgressSeconds = $elapsedSeconds
+                Write-ClagnosActionProgress -Action ("{0} is still running; {1}s elapsed" -f [string]$ProgressLabel,$elapsedSeconds)
+            }
+        }
         $proc.WaitForExit()
         $stdout = $stdoutTask.GetAwaiter().GetResult()
         $stderr = $stderrTask.GetAwaiter().GetResult()
@@ -58,7 +68,8 @@ function Invoke-ClagnosCapturedProcess {
 function Invoke-ClagnosStreamingCapturedProcess {
     param(
         [string]$FilePath,
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [string]$ProgressLabel = 'guest process'
     )
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -90,6 +101,8 @@ function Invoke-ClagnosStreamingCapturedProcess {
         $stderrReader = $proc.StandardError
         $stdoutClosed = $false
         $stderrClosed = $false
+        $processWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $lastProgressSeconds = 0
         $stdoutTask = $stdoutReader.ReadLineAsync()
         $stderrTask = $stderrReader.ReadLineAsync()
         $outputLines = New-Object 'System.Collections.Generic.List[string]'
@@ -101,6 +114,12 @@ function Invoke-ClagnosStreamingCapturedProcess {
 
             if (@($activeTasks).Count -eq 0) {
                 break
+            }
+
+            $elapsedSeconds = [int][Math]::Floor($processWatch.Elapsed.TotalSeconds)
+            if ($elapsedSeconds -ge 30 -and ($elapsedSeconds - $lastProgressSeconds) -ge 30) {
+                $lastProgressSeconds = $elapsedSeconds
+                Write-ClagnosActionProgress -Action ("{0} is still running; {1}s elapsed" -f [string]$ProgressLabel,$elapsedSeconds)
             }
 
             $completedIndex = [System.Threading.Tasks.Task]::WaitAny(@($activeTasks), 250)
@@ -216,19 +235,19 @@ function Invoke-ClagnosProcessWithRetry {
         $effectiveArguments = if ($SkipPythonBytecodeFlag) { @($Arguments) } else { @('-B') + @($Arguments) }
         if ($SuppressTrackedLogging) {
             $processResult = if ($RelayOutput) {
-                Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
             }
             else {
-                Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
             }
         }
         else {
             $processResult = Invoke-TrackedAction -Label $attemptLabel -Action {
                 if ($RelayOutput) {
-                    Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                    Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
                 }
                 else {
-                    Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments
+                    Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
                 }
             }
         }
@@ -244,7 +263,7 @@ function Invoke-ClagnosProcessWithRetry {
         }
 
         if ($attempt -lt $MaxAttempts) {
-            Write-Host ("Retrying after failure (exit {0}): {1}" -f $lastExit, $Label) -ForegroundColor Yellow
+            Write-ClagnosActionProgress -Action ("wait 2s before retrying {0} after exit {1} (attempt {2}/{3})" -f $Label,$lastExit,($attempt + 1),$MaxAttempts)
             Start-Sleep -Seconds 2
         }
     }

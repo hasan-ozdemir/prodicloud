@@ -1,6 +1,15 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-wsl-feature"
 
+$taskConfig = [ordered]@{
+    ManagerUser = '__VM_ADMIN_USER__'
+    ManagerPassword = '__VM_ADMIN_PASS__'
+    InteractiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+    InteractiveTaskName = '121-install-wsl-feature-store-install'
+    InteractiveDesktopWaitSeconds = 30
+    StoreInstallTimeoutSeconds = 360
+}
+
 Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
@@ -83,6 +92,77 @@ function Test-WslBenignBootstrapLine {
 function Test-WslPackageInstalled {
     $package = @(Get-AppxPackage -AllUsers -Name "MicrosoftCorporationII.WindowsSubsystemForLinux" -ErrorAction SilentlyContinue)
     return (@($package).Count -gt 0)
+}
+
+function Install-WslAppxThroughInteractiveSession {
+    $helperPath = [string]$taskConfig.InteractiveHelperPath
+    if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
+        throw ("The interactive desktop helper asset was not found: {0}" -f $helperPath)
+    }
+    . $helperPath
+    $desktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName ([string]$taskConfig.ManagerUser) -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
+    Write-ClagnosInteractiveDesktopStatusLine -Status $desktopStatus
+    if (-not [bool]$desktopStatus.Ready) {
+        $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'WSL Store package installation' -ExpectedUserName ([string]$taskConfig.ManagerUser) -Status $desktopStatus
+        throw ([string]$blockMessage.WarningMessage)
+    }
+
+    $workerTaskName = [string]$taskConfig.InteractiveTaskName
+    $paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
+    $workerScript = @'
+$ErrorActionPreference = 'Stop'
+$helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+$resultPath = '__RESULT_PATH__'
+$taskName = '__TASK_NAME__'
+$wingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+. $helperPath
+
+function Test-WslAppxInstalled {
+    return (@(Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForLinux' -ErrorAction SilentlyContinue).Count -gt 0)
+}
+
+if (Test-WslAppxInstalled) {
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'The WSL Store package is already registered for the interactive manager user.'
+    exit 0
+}
+if (-not (Test-Path -LiteralPath $wingetPath -PathType Leaf)) {
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'The portable winget executable was not found for the interactive WSL installation.'
+    exit 1
+}
+
+$installOutput = @(& $wingetPath install --id Microsoft.WSL --accept-source-agreements --accept-package-agreements --silent --disable-interactivity 2>&1)
+$installExit = [int]$LASTEXITCODE
+$installText = (@($installOutput | ForEach-Object { [string]$_ }) -join [Environment]::NewLine)
+if ($installExit -ne 0 -and $installExit -ne 3010 -and $installExit -ne -1978335189 -and $installExit -ne -1978335159) {
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("Interactive winget install Microsoft.WSL failed with exit code {0}." -f $installExit) -Details @($installText)
+    exit 1
+}
+
+$deadline = [DateTime]::UtcNow.AddSeconds(180)
+while ([DateTime]::UtcNow -lt $deadline) {
+    if (Test-WslAppxInstalled) {
+        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary ("WSL Store package is registered for the interactive manager user. wingetExit={0}" -f $installExit)
+        exit 0
+    }
+    Start-Sleep -Seconds 3
+}
+
+Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'The WSL Store package did not register within the bounded wait.' -Details @($installText)
+exit 1
+'@
+    $workerScript = $workerScript.Replace('__RESULT_PATH__',[string]$paths.ResultPath)
+    $workerScript = $workerScript.Replace('__TASK_NAME__',$workerTaskName)
+    $interactiveResult = Invoke-ClagnosInteractiveDesktopAutomation `
+        -TaskName $workerTaskName `
+        -RunAsUser ([string]$taskConfig.ManagerUser) `
+        -RunAsPassword ([string]$taskConfig.ManagerPassword) `
+        -WorkerScriptText $workerScript `
+        -WaitTimeoutSeconds ([int]$taskConfig.StoreInstallTimeoutSeconds) `
+        -RunAsMode 'interactiveToken'
+    if ($null -eq $interactiveResult -or -not [bool]$interactiveResult.Success) {
+        throw 'Interactive WSL Store installation did not report a successful result.'
+    }
+    Write-Host ([string]$interactiveResult.Summary)
 }
 
 function Test-WslReady {
@@ -219,17 +299,8 @@ if (-not $wslReadyBeforeBootstrap -or -not $wslPackageInstalled) {
     }
 
     Write-Host "Resolved winget executable: $wingetExe"
-    Write-Host "Running: winget install --id Microsoft.WSL --accept-source-agreements --accept-package-agreements --silent --disable-interactivity"
-    & $wingetExe install --id Microsoft.WSL --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
-    $wingetExit = [int]$LASTEXITCODE
-    if ($wingetExit -ne 0 -and $wingetExit -ne -1978335189 -and $wingetExit -ne -1978335159) {
-        throw "winget install Microsoft.WSL failed with exit code $wingetExit."
-    }
-
-    if ($wingetExit -eq -1978335159 -and -not (Test-WslBootstrapSatisfied)) {
-        throw "winget install Microsoft.WSL returned installer exit code 1603 and WSL is still not ready."
-    }
-
+    Write-Host "Installing the WSL Store package through the interactive manager desktop."
+    Install-WslAppxThroughInteractiveSession
     Refresh-SessionPath
 }
 
@@ -237,8 +308,8 @@ if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
     throw "wsl command is not available after bootstrap."
 }
 
-$wslUpdateExit = Invoke-NativeStep -Label "wsl --update" -AcceptedExitCodes @(0,3010) -Action {
-    wsl.exe --update
+$wslUpdateExit = Invoke-NativeStep -Label "wsl --update --web-download" -AcceptedExitCodes @(0,3010) -Action {
+    wsl.exe --update --web-download
 }
 if ($wslUpdateExit -eq 3010) {
     $rebootRequired = $true

@@ -200,7 +200,7 @@ function Invoke-ClagnosSingleRunCommandTask {
     $azArgs += @('-o', 'json')
     $invokeLabel = ("az vm run-command invoke ({0})" -f [string]$taskName)
     $azTimeoutSeconds = [Math]::Max([int]$taskTimeoutSeconds + 120, [int]$script:AzCommandTimeoutSeconds)
-    Write-Host ("Task started: {0} (max {1}s)" -f [string]$taskName, [int]$taskTimeoutSeconds)
+    Write-ClagnosActionProgress -Action ("run guest task '{0}' with Azure Run Command (max {1}s)" -f [string]$taskName, [int]$taskTimeoutSeconds)
     $taskWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $rawJson = Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds $azTimeoutSeconds -Action {
         Invoke-TrackedAction -Label $invokeLabel -Action {

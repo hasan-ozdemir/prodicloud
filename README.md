@@ -116,7 +116,7 @@ The workflow separates infrastructure creation, initial guest setup, maintenance
 ### Interactive CLI
 Run `.\cg.cmd` to open the menu. The welcome screen shows the `one tool for all common cloud operations` line, the selected Azure subscription name/id. The main menu offers `1. Virtual computers`, `2. Managed resource inventory`, and `3. Cloud subscriptions`; choose a subscription by number to update both the Azure CLI default and Clagnos's saved subscription. Use numbers or the shown letter shortcuts and press Enter. Enter `q` to exit or `b` to return from a submenu. `.\cg.cmd <command> ...` forwards a direct command to the same `clagnos.ps1` runtime.
 
-The selected virtual computer opens with compute, CPU/RAM, disk, storage, network, IP, and attached-resource details. Its menus expose initialization, maintenance, builtin/custom package status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, package app-state, reports, and deletion.
+The selected virtual computer opens with compute, CPU/RAM, disk, storage, network, IP, and attached-resource details. Its menus expose initialization, maintenance, builtin/custom package status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, package app-state, reports, and deletion. Select `o: operations` for numbered power actions (including graceful shutdown, hibernate/resume, immediate power-off, and force reset), feature toggles, resizing, and the other advanced operations.
 
 ### Prerequisites
 - Windows host with PowerShell and the Azure CLI available.
@@ -156,7 +156,7 @@ The selected virtual computer opens with compute, CPU/RAM, disk, storage, networ
 4. Treat `.env` as the home for app-wide identity, secrets, and reusable overrides. Task-only constants should stay in the owning task script's top config block.
 
 ### Fastest Safe Path To Value
-If you want the fastest safe path to value, use this order. The target outcome is not only "the VM exists"; it is "someone can connect and start real work quickly" with a machine that already looks curated. On the current Windows path that includes Store-aware public desktop shortcuts, managed short-launcher wrapping for overlong Chrome/Edge-style shortcut invocations, per-task git-ignored app-state zip plugins resolved from `<task-folder>/app-state/app-state.zip`, and WSL2 plus Docker Desktop prerequisite hardening before developer-runtime health is considered ready:
+If you want the fastest safe path to value, use this order. The target outcome is not only "the VM exists"; it is "someone can connect and start real work quickly" with a machine that already looks curated. On the current Windows path that includes Store-aware public desktop shortcuts, managed short-launcher wrapping for overlong Chrome/Edge-style shortcut invocations, git-ignored task app-state plugins, sanitized package app-state archives versioned beside their package manifests, and WSL2 plus Docker Desktop prerequisite hardening before developer-runtime health is considered ready:
 1. Open `.\cg.cmd`, choose `c: configure settings`, and review the `.env` values and next-create preview.
 2. Choose Virtual computers, then `c: create virtual computer`. This creates the managed group, network, and VM only.
 3. Select the new VM and use `i: initialize VC` to run its enabled `vm-init` tasks.
@@ -175,6 +175,14 @@ az login
 .\cg.cmd
 ```
 In the menu, choose `c` to configure settings if needed, then choose `1` for Virtual computers. Use `c` to create a virtual computer, select it by number, run `i` to initialize it, and use `p` to manage programs.
+
+For a live acceptance run that creates a fresh Windows VC, installs every enabled package in both catalogs, runs every enabled init and update task, validates the full report, nested virtualization, hibernation/resume, and SSH/RDP connectivity, use:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\tests\live-vc-e2e.ps1 -RunLive -VmName <unused-vm-name> -VmSize <compatible-azure-vm-size>
+```
+
+The test requires an unused VM name, a VM size and image that support the configured features, an authenticated active Azure subscription selected in `.env`, and the current Windows operator values. It installs JAWS before task 102 configures the interactive desktop needed by Store packages, then installs every enabled Windows package and leaves the VM running after a successful hibernation/resume check. It is opt-in and never runs in CI. The current B-series default size does not support both hibernation and nested virtualization; choose a compatible size override for this acceptance run. To continue a partially completed run without recreating the managed VM or rerunning init tasks, pass `-ResumeExisting -ResumeFromPackage <catalog>/<package-id>` after fixing the reported cause.
 ### Daily Operator Shortcuts
 ```powershell
 .\cg.cmd --version
@@ -243,7 +251,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | Developer runtime | Docker Desktop, WSL2, npm global package set, Ollama, Codex app, VS 2022 Community, WSL prerequisite hardening, Docker health probes, and docker-desktop-focused WSL state replay | Node-ready SSH environment and updated base packages | Engineering workflows can start earlier and recover with fewer hidden prerequisites. | Faster onboarding and less rebuild waste. |
 | Collaboration and daily apps | Edge, Chrome validation, Teams, WhatsApp, OneDrive, Google Drive, VLC, iTunes, iCloud | Minimal by design | The machine feels operational, not half-finished. | Customer-facing and operator-facing use is easier to stage. |
 | Accessibility and remote support | AnyDesk, Windscribe, NVDA, JAWS, Be My Eyes, startup flows, autologon manager, advanced Windows settings, public desktop shortcuts | Minimal by design | Assisted-operation scenarios are easier to reproduce and support. | Broader usability and faster support response. |
-| Desktop and personalization | Startup configuration, grouped public desktop shortcuts, Store-backed `AppsFolder` launches where supported, Windows UX tuning, advanced settings, per-task git-ignored app-state zip replay, and safe user preference copy | Extensible through the same task model rather than a rich built-in desktop catalog | People connect to a machine that already feels curated and less drift-prone. | Less post-build manual cleanup and faster user adoption. |
+| Desktop and personalization | Startup configuration, grouped public desktop shortcuts, Store-backed `AppsFolder` launches where supported, Windows UX tuning, advanced settings, git-ignored task app-state replay, versioned sanitized package preferences, and safe user preference copy | Extensible through the same task model rather than a rich built-in desktop catalog | People connect to a machine that already feels curated and less drift-prone. | Less post-build manual cleanup and faster user adoption. |
 | Health and observability | Snapshot-health capture, show/report output, direct task reruns, explicit redeploy repair | Snapshot-health capture, show/report output, direct task reruns | Troubleshooting narrows quickly to the failing area. | Less wasted time during support and maintenance. |
 | Lifecycle changes | Create fresh, explicit rebuild by `delete` plus `create`, update, reapply, redeploy, hibernation, move, VM-size resize, managed OS disk expand, explicit shrink guidance | Create fresh, explicit rebuild by `delete` plus `create`, update, move, VM-size resize, managed OS disk expand, explicit shrink guidance | The same toolkit still works after day one. | Operations do not regress to ad hoc portal work. |
 
@@ -260,7 +268,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 ### What It Does
 - Provisions Azure infrastructure for one managed Windows or Linux VM from one orchestrator.
 - Applies deterministic guest initialization and guest update task inventories.
-- Gives operators lifecycle commands for status, start, restart, reapply, redeploy, stop, deallocate, hibernate-stop, hibernate-deallocate, move, resize, connect, inspect, and delete flows.
+- Gives operators lifecycle commands for status, start/resume, restart/reset, shutdown, immediate power-off, reapply, redeploy, stop, deallocate, hibernate-stop, hibernate-deallocate, move, resize, connect, inspect, and delete flows.
 - Keeps command wording, configuration behavior, and execution semantics as parallel as possible across Windows and Linux.
 
 ### Problems It Solves
@@ -387,6 +395,10 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | --- | --- | --- | --- | --- |
 | `.\cg.cmd do --vm-action=status --vm-name=<vm-name>` | `--vm-action=status` | Reads lifecycle state | Preflight and release checks | Fastest safety check before mutation. |
 | `.\cg.cmd do --vm-action=start --group=<resource-group> --vm-name=<vm-name>` | lifecycle action | Starts the VM | Connection prep | Use before `connect --ssh` or `connect --rdp`. |
+| `.\cg.cmd do --vm-action=resume --group=<resource-group> --vm-name=<vm-name>` | `resume` | Starts a hibernated VM | Resume a saved hibernation state | Allowed only while Azure reports the VM hibernated. |
+| `.\cg.cmd do --vm-action=shutdown --group=<resource-group> --vm-name=<vm-name>` | `shutdown` | Requests guest shutdown; VM stays allocated | Graceful power-off | Compute billing continues until deallocation. |
+| `.\cg.cmd do --vm-action=power-off --group=<resource-group> --vm-name=<vm-name>` | `power-off` | Stops immediately without guest shutdown | Forceful power-off | Uses `az vm stop --skip-shutdown`; may lose unsaved guest work and remains allocated. |
+| `.\cg.cmd do --vm-action=reset --group=<resource-group> --vm-name=<vm-name>` | `reset` | Force-restarts an unresponsive VM through Azure redeploy | Recovery operation | Azure `--force` redeploys the VM; it is more disruptive than a normal restart. |
 | `.\cg.cmd do --vm-action=reapply --group=<resource-group> --vm-name=<vm-name>` | `reapply` | Calls Azure reapply | Repair path | Good when provisioning succeeded but the instance needs Azure-side repair. |
 | `.\cg.cmd do --vm-action=redeploy --group=<resource-group> --vm-name=<vm-name>` | `redeploy` | Calls Azure redeploy and waits for recovery | Host-level repair path | Good when the VM needs Azure-side host repair or provisioning recovery. |
 | `.\cg.cmd do --vm-action=hibernate-stop --group=<resource-group> --vm-name=<vm-name>` | `hibernate-stop` | Guest-triggered hibernation through SSH | Preserve guest state without Azure deallocation path | Requires the VM to be running first. |
@@ -417,7 +429,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd exec --group <resource-group> --vm-name <vm-name>` | target selectors | Opens the interactive remote-shell path | Manual guest work | Interactive shell mode is used when no `--command` is provided. |
 | `.\cg.cmd exec --command "Get-Date" --group <resource-group> --vm-name <vm-name>` | `--command`, target selectors | Runs one remote command over SSH | One-shot diagnosis or manual admin action | Uses PowerShell on Windows and bash on Linux. |
 | `.\cg.cmd exec --file .\tools\scripts\sample-remote.ps1 --group <resource-group> --vm-name <vm-name>` | `--file`, target selectors | Runs one local script file remotely over SSH | Safer multi-line remote diagnosis or admin action | Reads the local file content and sends it through the same one-shot exec path. |
-| `.\cg.cmd exec --quiet --command "Get-Date" --group <resource-group> --vm-name <vm-name>` | `--quiet`, `--command`, target selectors | Runs one remote command and prints only its result | Script-friendly automation | Suppresses banner, progress, and completion chatter. |
+| `.\cg.cmd exec --quiet --command "Get-Date" --group <resource-group> --vm-name <vm-name>` | `--quiet`, `--command`, target selectors | Runs one remote command and prints its result with local action progress | Script-friendly automation | Suppresses remote output chatter while retaining local `Doing:` progress and wait heartbeats. |
 | `.\cg.cmd exec -c "uname -a" --group <resource-group> --vm-name <vm-name>` | `-c`, target selectors | Same one-shot remote command path with short syntax | Operator convenience | `-c` and `--command` are equivalent. |
 
 #### `connect`
@@ -696,7 +708,8 @@ Behavior notes:
 - resolves only the selected VM plus SSH context
 - `--command` / `-c` runs one remote PowerShell or bash snippet without opening the interactive shell
 - `--file` / `-f` reads one local script file and runs that content through the same remote exec path
-- `--quiet` / `-q` is valid only with `--command` / `-c` / `--file` and prints only the remote command result
+- `--quiet` / `-q` is valid only with `--command` / `-c` / `--file`; it suppresses remote output chatter but keeps local `Doing:` progress and wait heartbeats visible
+- Azure CLI, VM lifecycle, guest task, package, and connection steps print a safe `Doing: <action>` message before work starts. Blocking Azure CLI and HTTP requests emit elapsed-time heartbeats every 30 seconds; progress labels omit secrets.
 
 ### `connect`
 Purpose: launch the local Windows OpenSSH client or Remote Desktop client for a managed VM, or run connection tests without opening the client.
@@ -779,7 +792,7 @@ Direct `task --run-vm-init` and `task --run-vm-update` are the main diagnosis pa
 
 Current task template replacement uses the public selected-value placeholders: `__SELECTED_VM_NAME__`, `__SELECTED_AZURE_REGION__`, `__SELECTED_RESOURCE_GROUP__`, `__SELECTED_COMPANY_NAME__`, `__SELECTED_COMPANY_WEB_ADDRESS__`, `__SELECTED_COMPANY_EMAIL_ADDRESS__`, `__SELECTED_EMPLOYEE_EMAIL_ADDRESS__`, and `__SELECTED_EMPLOYEE_FULL_NAME__`.
 
-Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Package snapshots are settings-first, exclude sign-in and machine state, and resolve supported `%CLAGNOS_*%` placeholders against the target profile and VM immediately before replay. Validate snapshots with `tests/package-app-state-contract-check.ps1`. Local-machine restore snapshots are written under the owning task stage or package catalog `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
+Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Package snapshots are settings-first, exclude sign-in and machine state, and resolve supported `%CLAGNOS_*%` placeholders against the target profile and VM immediately before replay. Sanitized package archives are versioned in Git with their package definitions; validate every archive with `tests/package-app-state-contract-check.ps1` before committing it. Task app-state plugins remain git-ignored. Local-machine restore snapshots are written under the owning task stage or package catalog `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
 
 ## Configuration Guide
 
@@ -995,12 +1008,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\sensitive-content-ch
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\documentation-contract-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\powershell-compatibility-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\clagnos-smoke-tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\package-app-state-contract-check.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\bash-syntax-check.ps1
 ```
 
 `code-quality-check.ps1` and the local commit hook keep the current tree and the current commit message clean. Run `.\tests\sensitive-content-check.ps1` directly when you also want the full reachable-history commit-message audit.
 
-GitHub Actions runs the non-destructive `.github/workflows/quality-gate.yml` workflow on pull requests, pushes to `main`, and manual dispatch. It covers static audit, an explicit documentation-contract check, PowerShell compatibility, Linux shell syntax, workflow linting, and the non-live smoke-contract suite.
+GitHub Actions runs the non-destructive `.github/workflows/quality-gate.yml` workflow on pull requests, pushes to `main`, and manual dispatch. It covers static audit, an explicit documentation-contract check, PowerShell compatibility, Linux shell syntax, package app-state archive contracts, workflow linting, and the non-live smoke-contract suite. The live Azure E2E script is never run in CI.
 For a release push, the job is not finished until the pushed `main` SHA completes this workflow green.
 
 ### Live Release Acceptance

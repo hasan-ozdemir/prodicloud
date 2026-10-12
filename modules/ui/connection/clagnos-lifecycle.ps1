@@ -256,6 +256,7 @@ function Wait-ClagnosProvisioningReadyOrRepair {
             $updatingAttemptCount = 0
 
             if ($attempt -lt $MaxAttempts) {
+                Write-ClagnosActionProgress -Action ("wait {0}s before repairing VM provisioning state" -f $DelaySeconds)
                 Start-Sleep -Seconds $DelaySeconds
             }
 
@@ -263,7 +264,7 @@ function Wait-ClagnosProvisioningReadyOrRepair {
         }
 
         if ($attempt -lt $MaxAttempts) {
-            Write-Host ("VM provisioning is not ready yet for '{0}' in group '{1}'. {2}. Retrying in {3}s (attempt {4}/{5})..." -f $VmName, $ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $lastSnapshot), $DelaySeconds, $attempt, $MaxAttempts) -ForegroundColor Yellow
+            Write-ClagnosActionProgress -Action ("VM provisioning is not ready for '{0}' in group '{1}'. {2}. Wait {3}s; retry {4}/{5}." -f $VmName, $ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $lastSnapshot), $DelaySeconds, $attempt, $MaxAttempts)
             Start-Sleep -Seconds $DelaySeconds
         }
     }

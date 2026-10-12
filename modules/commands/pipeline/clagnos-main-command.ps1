@@ -339,7 +339,7 @@ function Invoke-ClagnosMain {
                                 $initSshHost = [string]$initVmRuntimeDetails.PublicIP
                             }
                             Invoke-VmRunCommandBlocks -ResourceGroup ([string]$step1Context.ResourceGroup) -VmName ([string]$step1Context.VmName) -CommandId ([string]$platformDefaults.RunCommandId) -TaskBlocks $initTaskBlocks -CombinedShell $combinedShell -TaskOutcomeMode $taskOutcomeMode -Platform $platform -RepoRoot (Get-ClagnosRepoRoot) -ManagerUser ([string]$step1Context.VmUser) -AssistantUser ([string]$step1Context.VmAssistantUser) -SshHost $initSshHost -SshUser ([string]$step1Context.VmUser) -SshPassword ([string]$step1Context.VmPass) -SshPort ([string]$step1Context.SshPort) -SshConnectTimeoutSeconds $sshConnectTimeoutSeconds -ConfiguredPySshClientPath $configuredPySshClientPath | Out-Null
-                            Write-Host 'Waiting 20 seconds for SSH service to settle after init...'
+                            Write-ClagnosActionProgress -Action 'wait 20 seconds for SSH service to settle after init'
                             Start-Sleep -Seconds 20
                         }
                     }

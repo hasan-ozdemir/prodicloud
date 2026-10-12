@@ -5707,3 +5707,47 @@ Plan update: Thoroughly inspect all app-state data stored for builtin and custom
 **Assistant Summary**
 
 Audited builtin package app-state manifests and all committed snapshots. Removed auth sessions, browser profile data, cloud account state, caches, histories, workspace databases, and license/activation registry state; retained only scoped preference files or omitted state for identity-bound programs. Added capture-time generalization and target-time placeholder expansion for Windows and Linux guest profiles, host names, IP addresses, OS paths, SIDs or UIDs/GIDs, CPU/memory, and the installed Visual Studio instance. Unknown or unavailable placeholders now fail before replay. Added a repeatable builtin snapshot maintenance tool and package app-state contract and round-trip tests; no Azure resources were changed.
+
+### 2026-10-12 16:57 UTC
+**User Prompt**
+
+````text
+Plan update: Include every package app-state archive in this Git repository, finish and execute any remaining tasks, and write and run a live end-to-end test using the current configuration to create a virtual computer named `vc1`, enable hibernation and nested virtualization, run every VC init and add-on task, inspect the full success summary, and leave the completed VM running and usable.
+````
+
+**Assistant Summary**
+
+Added all eight sanitized builtin package app-state archives to Git and created a resumable live E2E acceptance script. The `vc1` cycle completed with 8 init tasks, all 36 enabled packages, and 10 update tasks; the full VM/resource summary, redaction, nested virtualization, hibernation/resume, SSH, and RDP checks passed. A nested-virtualization-capable VM size was required for this run. The VM was left running with no cleanup or deletion.
+
+### 2026-10-12 17:11 UTC
+**User Prompt**
+
+````text
+Task: Inspect the builtin JAWS package's `app-state.zip` and update its `install.ps1` script to copy files from the archive's `update-files` directory directly to `C:\Program Files\Freedom Scientific\JAWS\2025` on the remote target, while `jfw.exe` is stopped.
+````
+
+**Assistant Summary**
+
+Updated the JAWS package manifest to stage its app-state archive on the target and extended `install.ps1` to stop `jfw.exe`, validate archive paths, copy the `update-files` payload into the JAWS 2025 directory, verify the copied file sizes, and remove the temporary archive. The live E2E run verified all three deployed files against the repository archive by SHA-256.
+
+### 2026-10-12 21:28 UTC
+**User Prompt**
+
+````text
+Plan update: Add `Doing: <this action>` console progress throughout every VM, VC, cloud, and Azure operation so operators can see each ongoing step and are never left waiting blindly; apply full observability across the repository and application lifecycle.
+````
+
+**Assistant Summary**
+
+Added safe `Doing: <action>` messages to cloud CLI/REST calls, orchestration steps, lifecycle waits, guest commands, SSH tasks, task assets, and connection probes. Long-running Azure and guest operations now emit 30-second heartbeats. `exec --quiet` still shows local progress while suppressing remote chatter. Smoke and documentation contracts cover the observability behavior.
+
+### 2026-10-12 22:40 UTC
+**User Prompt**
+
+````text
+Plan update: Add an `o: operations` submenu to the selected VC screen. It should expose supported VC/VM operations including start, shutdown, hibernate, resume, restart, immediate power-off, reset, enable/disable hibernation, enable/disable nested virtualization, compute resize, and disk resize.
+````
+
+**Assistant Summary**
+
+Replaced the selected VC's generic more-operations shortcut with `o: operations`. Its numbered lifecycle menu now includes start, graceful shutdown, guest and Azure hibernation, hibernated resume, restart, immediate power-off, force reset, deallocation, reapply, and redeploy; the operations menu also exposes existing compute/disk resize, feature toggles, region move, SSH/RDP, remote command, task/app-state, component, and report flows. Lifecycle operations use the `do` state guards; typed confirmations protect immediate power-off and Azure force reset. Power-off and reset mapping tests passed.

@@ -1,5 +1,18 @@
 # Shared runtime step and action wrappers.
 
+function Write-ClagnosActionProgress {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Action
+    )
+
+    $actionText = [string]$Action
+    if ([string]::IsNullOrWhiteSpace($actionText)) { $actionText = 'continue operation' }
+    $actionText = $actionText.Trim()
+    if ($actionText -notmatch '^doing\s*:') { $actionText = 'Doing: ' + $actionText }
+    Write-Host $actionText -ForegroundColor DarkCyan
+}
+
 # Handles Invoke-Step.
 function Invoke-Step {
     param(
@@ -40,9 +53,7 @@ function Invoke-Step {
     $before = @(Get-Variable)
     $stepResult = $null
     $modeLabel = if ($script:AutoMode) { 'auto' } else { 'interactive' }
-    if (-not $script:ClagnosQuietOutput) {
-        Write-Host ("Starting {0} (mode: {1})" -f $prompt, $modeLabel) -ForegroundColor Cyan
-    }
+    Write-ClagnosActionProgress -Action ("Step: {0} (mode: {1})" -f $prompt, $modeLabel)
     $stepWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $stepResult = . $Action
     if ($stepWatch.IsRunning) { $stepWatch.Stop() }
@@ -178,11 +189,12 @@ function Invoke-TrackedAction {
     }
 
     $isAzLabel = ([string]$Label).TrimStart().ToLowerInvariant().StartsWith("az ")
-    if (-not $script:ClagnosQuietOutput) {
-        Write-Host ("starting: {0}" -f $Label) -ForegroundColor DarkCyan
+    if (-not $isAzLabel -or [int]$script:ClagnosTrackedAzureActionDepth -le 0) {
+        Write-ClagnosActionProgress -Action $Label
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     if ($isAzLabel) {
+        $script:ClagnosTrackedAzureActionDepth = [int]$script:ClagnosTrackedAzureActionDepth + 1
         $script:PerfSuppressAzTimingDepth = [int]$script:PerfSuppressAzTimingDepth + 1
     }
     try {
@@ -193,6 +205,7 @@ function Invoke-TrackedAction {
     }
     finally {
         if ($isAzLabel) {
+            $script:ClagnosTrackedAzureActionDepth = [Math]::Max(0, ([int]$script:ClagnosTrackedAzureActionDepth - 1))
             $script:PerfSuppressAzTimingDepth = [Math]::Max(0, ([int]$script:PerfSuppressAzTimingDepth - 1))
         }
         if ($watch.IsRunning) {

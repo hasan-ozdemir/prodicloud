@@ -34,6 +34,10 @@ function Invoke-ClagnosCommandDispatcher {
             return
         }
 
+        if ($CommandName -notin @('help','exec')) {
+            Write-ClagnosActionProgress -Action ("run {0} command" -f [string]$CommandName)
+        }
+
         Initialize-ClagnosCommandSubscriptionState -CommandName $CommandName -Options $Options | Out-Null
 
         switch ($CommandName) {

@@ -143,7 +143,7 @@ function Invoke-ClagnosVmCreateStep {
                 }
 
                 if ($presenceAttempt -lt $presenceProbeAttempts) {
-                    Write-Host ("VM existence probe attempt {0}/{1} did not resolve yet. Retrying in 10s..." -f $presenceAttempt, $presenceProbeAttempts) -ForegroundColor Yellow
+                    Write-ClagnosActionProgress -Action ("wait 10s for VM create result to appear (probe {0}/{1})" -f $presenceAttempt,$presenceProbeAttempts)
                     Start-Sleep -Seconds 10
                 }
             }

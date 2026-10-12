@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.404 - 2026-10-12
+
+### Summary
+Clagnos now reports long-running work as it happens, exposes its complete VC operations set from a dedicated interactive menu, and has a successful live acceptance cycle for `vc1`.
+
+### Highlights
+- Added `Doing: <action>` progress before cloud and guest operations, plus 30-second heartbeats during long waits. Quiet remote execution retains local progress messages.
+- Added the selected VC's numbered `o: operations` menu for VM lifecycle actions, hibernation/resume, force power-off/reset, resize, feature toggles, move, connections, tasks, components, and reports.
+- Added state-checked `resume`, `shutdown`, `power-off`, and `reset` actions. Azure force reset uses `az vm restart --force`, which redeploys the VM; immediate power-off skips guest shutdown but keeps the VM allocated.
+- Added a resumable live E2E test, committed eight sanitized builtin app-state archives, and copied/verified the JAWS `update-files` payload during package install.
+
+### Validation
+- The live `vc1` acceptance test passed after confirming 8 init tasks, 10 update tasks, 36 packages, nested virtualization, hibernation/resume, VM summary redaction, SSH, and RDP. It left the VM running.
+- Windows PowerShell 5.1 and PowerShell 7+ compatibility passed at 174/174 checks. Code quality, documentation, sensitive-content, package app-state, and Bash syntax checks passed.
+
 ## Release 2026.10.12.403 - 2026-10-12
 
 ### Summary

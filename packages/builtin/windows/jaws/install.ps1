@@ -13,6 +13,9 @@ $taskConfig = [ordered]@{
         'HKLM:\Software\Freedom Scientific\JAWS\2025',
         'HKLM:\Software\WOW6432Node\Freedom Scientific\JAWS\2025'
     )
+    JawsInstallDirectory = 'C:\Program Files\Freedom Scientific\JAWS\2025'
+    AppStateArchivePath = 'C:\Windows\Temp\clagnos-jaws-app-state.zip'
+    AppStateUpdateFilesPrefix = 'payload/update-files/'
     WingetSourceTimeoutSeconds = 45
     InstallVerifyTimeoutSeconds = 90
     InstallVerifyPollSeconds = 5
@@ -103,6 +106,100 @@ function Resolve-JawsExe {
     return ""
 }
 
+function Stop-JawsProcessForUpdate {
+    $runningProcesses = @(Get-Process -Name 'jfw' -ErrorAction SilentlyContinue)
+    foreach ($process in @($runningProcesses)) {
+        if ($process.MainWindowHandle -ne [IntPtr]::Zero) {
+            [void]$process.CloseMainWindow()
+        }
+    }
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $runningProcesses = @(Get-Process -Name 'jfw' -ErrorAction SilentlyContinue)
+        if ($runningProcesses.Count -eq 0) { return }
+        Start-Sleep -Milliseconds 250
+    }
+
+    foreach ($process in @(Get-Process -Name 'jfw' -ErrorAction SilentlyContinue)) {
+        Write-Host ("Closing JAWS process {0} before replacing its update files." -f [int]$process.Id)
+        Stop-Process -Id ([int]$process.Id) -Force -ErrorAction Stop
+    }
+
+    for ($attempt = 1; $attempt -le 20; $attempt++) {
+        if (@(Get-Process -Name 'jfw' -ErrorAction SilentlyContinue).Count -eq 0) { return }
+        Start-Sleep -Milliseconds 250
+    }
+    throw 'JAWS (jfw.exe) is still running; its update files cannot be replaced safely.'
+}
+
+function Install-JawsUpdateFilesFromAppState {
+    $archivePath = [string]$taskConfig.AppStateArchivePath
+    $targetRoot = [IO.Path]::GetFullPath([string]$taskConfig.JawsInstallDirectory)
+    $targetExecutable = Join-Path $targetRoot 'jfw.exe'
+    try {
+        if (-not (Test-Path -LiteralPath $archivePath -PathType Leaf)) {
+            throw ("The JAWS app-state asset is missing: {0}" -f $archivePath)
+        }
+        if (-not (Test-Path -LiteralPath $targetExecutable -PathType Leaf)) {
+            throw ("The expected JAWS 2025 installation was not found: {0}" -f $targetExecutable)
+        }
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction Stop
+        $archive = [IO.Compression.ZipFile]::OpenRead($archivePath)
+        try {
+            $prefix = [string]$taskConfig.AppStateUpdateFilesPrefix
+            $updateEntries = @($archive.Entries | Where-Object {
+                ([string]$_.FullName).StartsWith($prefix,[System.StringComparison]::OrdinalIgnoreCase) -and
+                -not ([string]$_.FullName).EndsWith('/')
+            })
+            if ($updateEntries.Count -eq 0) { throw 'The JAWS app-state archive has no update-files payload.' }
+
+            Stop-JawsProcessForUpdate
+            if (@(Get-Process -Name 'jfw' -ErrorAction SilentlyContinue).Count -gt 0) {
+                throw 'JAWS restarted before its update files could be copied.'
+            }
+
+            $copiedFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+            foreach ($entry in @($updateEntries)) {
+                $relativePath = ([string]$entry.FullName).Substring($prefix.Length).Replace('/','\')
+                if ([string]::IsNullOrWhiteSpace($relativePath) -or $relativePath -match '(^|\\)\.\.(\\|$)' -or [IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains('\')) {
+                    throw ("The JAWS update-files archive contains an unsafe or nested path: {0}" -f [string]$entry.FullName)
+                }
+
+                $destinationPath = [IO.Path]::GetFullPath((Join-Path $targetRoot $relativePath))
+                $requiredPrefix = $targetRoot.TrimEnd('\') + '\'
+                if (-not $destinationPath.StartsWith($requiredPrefix,[System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw ("The JAWS update file resolves outside its installation directory: {0}" -f [string]$entry.FullName)
+                }
+                if (-not $copiedFiles.Add([string]$destinationPath)) { throw ("Duplicate JAWS update file: {0}" -f $relativePath) }
+
+                $inputStream = $entry.Open()
+                try {
+                    $outputStream = [IO.File]::Open($destinationPath,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+                    try {
+                        $inputStream.CopyTo($outputStream)
+                        if ($outputStream.Length -ne $entry.Length) { throw ("JAWS update file verification failed: {0}" -f $relativePath) }
+                    }
+                    finally { $outputStream.Dispose() }
+                }
+                finally { $inputStream.Dispose() }
+                Write-Host ("JAWS update file copied and verified: {0}" -f $destinationPath)
+            }
+
+            if (@(Get-Process -Name 'jfw' -ErrorAction SilentlyContinue).Count -gt 0) {
+                throw 'JAWS restarted while its update files were being replaced.'
+            }
+        }
+        finally { $archive.Dispose() }
+    }
+    finally {
+        if (Test-Path -LiteralPath $archivePath -PathType Leaf) {
+            Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Invoke-WingetCommand {
     param(
         [string]$WingetExe,
@@ -186,6 +283,7 @@ Refresh-SessionPath
 $existingExe = Resolve-JawsExe
 if (-not [string]::IsNullOrWhiteSpace([string]$existingExe)) {
     Write-Host ("Existing JAWS installation is already healthy. Skipping winget install. exe={0}" -f $existingExe)
+    Install-JawsUpdateFilesFromAppState
     Write-Host "install-jaws-application-completed"
     Write-Host "Update task completed: install-jaws-application"
     return
@@ -237,5 +335,6 @@ if ([string]::IsNullOrWhiteSpace([string]$installedExe)) {
     throw ("winget install {0} failed with exit code {1}." -f $packageId, $finalInstallExit)
 }
 
+Install-JawsUpdateFilesFromAppState
 Write-Host "install-jaws-application-completed"
 Write-Host "Update task completed: install-jaws-application"

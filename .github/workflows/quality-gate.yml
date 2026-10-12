@@ -81,6 +81,19 @@ jobs:
         run: |
           .\tests\clagnos-smoke-tests.ps1 -RepoRoot $PWD.Path
 
+  package-app-state-contracts:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate tracked package app-state snapshots
+        shell: powershell
+        run: |
+          .\tests\package-app-state-contract-check.ps1 -RepoRoot $PWD.Path
+
   workflow-lint:
     runs-on: ubuntu-latest
     steps:

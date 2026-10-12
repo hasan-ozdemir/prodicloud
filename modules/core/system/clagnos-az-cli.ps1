@@ -71,6 +71,34 @@ function Get-ClagnosAzCliExecutable {
     return [string]$script:AzCliExecutable
 }
 
+function Get-ClagnosAzCliProgressLabel {
+    param([string[]]$Arguments)
+
+    $safeTokens = @()
+    $safeCommandWords = @(
+        'account','ad','aks','appconfig','backup','capacity','cloud','compute','deployment','disk','extension','feature','group','image','keyvault','lock','monitor','network','nsg','nic','operation','policy','public-ip','quota','resource','resource-mover','rest','role','rule','snapshot','storage','subnet','vm','vnet','workspace',
+        'access','account','assign','create','deallocate','delete','discard','enable','extension','get-access-token','image','invoke','list','list-locations','list-skus','move-collection','move-resource','public-ip','resize','restart','revoke-access','rule','run-command','set','show','start','stop','subnet','update','wait','ip-config'
+    )
+    foreach ($argument in @($Arguments)) {
+        $token = [string]$argument
+        if ([string]::IsNullOrWhiteSpace($token) -or $token.StartsWith('-')) { break }
+        if ($safeCommandWords -notcontains $token.ToLowerInvariant()) { break }
+        $safeTokens += $token
+        if ($safeTokens.Count -ge 4) { break }
+    }
+    if ($safeTokens.Count -eq 0) { return 'az request' }
+
+    $label = 'az ' + ($safeTokens -join ' ')
+    if ([string]::Equals([string]$safeTokens[0], 'rest', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $methodIndex = [Array]::IndexOf([string[]]$Arguments, '--method')
+        if ($methodIndex -ge 0 -and $methodIndex + 1 -lt @($Arguments).Count) {
+            $method = [string]$Arguments[$methodIndex + 1]
+            if ($method -match '^(?i)(get|post|put|patch|delete|head|options)$') { $label = 'az rest ' + $method.ToUpperInvariant() }
+        }
+    }
+    return $label
+}
+
 # Handles Invoke-ClagnosAzCliCommand.
 function Invoke-ClagnosAzCliCommand {
     param(
@@ -95,12 +123,13 @@ function Invoke-ClagnosAzCliCommand {
     }
 
     $perfWatch = $null
-    $perfLabel = ''
-    $shouldEmitHeartbeat = $script:PerfMode -and ([int]$script:PerfSuppressAzTimingDepth -le 0)
-    $lastHeartbeatSeconds = 0
-    if ($shouldEmitHeartbeat) {
-        $perfLabel = "az " + ($argValues -join " ")
+    $perfLabel = Get-ClagnosAzCliProgressLabel -Arguments $argValues
+    if ($script:PerfMode -and ([int]$script:PerfSuppressAzTimingDepth -le 0)) {
         $perfWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    }
+
+    if ([int]$script:ClagnosTrackedAzureActionDepth -le 0) {
+        Write-ClagnosActionProgress -Action $perfLabel
     }
 
     try {
@@ -110,16 +139,6 @@ function Invoke-ClagnosAzCliCommand {
         $azExecutableText = [string]$azExecutable
         $useCmdHost = -not $azExecutableText.ToLowerInvariant().EndsWith('.exe')
         $cmdHost = if ([string]::IsNullOrWhiteSpace([string]$env:ComSpec)) { 'cmd.exe' } else { [string]$env:ComSpec }
-
-        if ($timeoutSeconds -eq 0) {
-            if ($useCmdHost) {
-                & $cmdHost /d /c $azExecutableText @argValues
-            }
-            else {
-                & $azExecutableText @argValues
-            }
-            return
-        }
 
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         if ($useCmdHost) {
@@ -143,15 +162,15 @@ function Invoke-ClagnosAzCliCommand {
 
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
-        $waitMs = [int][Math]::Min([double][int]::MaxValue, [double]$timeoutSeconds * 1000.0)
         $elapsedSeconds = 0.0
+        $lastProgressSeconds = 0
         while (-not $proc.WaitForExit(1000)) {
             $elapsedSeconds += 1.0
-            if ($shouldEmitHeartbeat -and -not $script:ClagnosQuietOutput -and $elapsedSeconds -ge 30 -and (($elapsedSeconds - $lastHeartbeatSeconds) -ge 30)) {
-                $lastHeartbeatSeconds = $elapsedSeconds
-                Write-Host ("progress: {0} ({1})" -f $perfLabel, (Convert-ClagnosPerfSecondsText -Seconds $elapsedSeconds)) -ForegroundColor DarkGray
+            if ($elapsedSeconds -ge 30 -and (($elapsedSeconds - $lastProgressSeconds) -ge 30)) {
+                $lastProgressSeconds = $elapsedSeconds
+                Write-ClagnosActionProgress -Action ("{0} (still running; {1:N0}s elapsed)" -f $perfLabel, $elapsedSeconds)
             }
-            if ($elapsedSeconds -ge $timeoutSeconds) {
+            if ($timeoutSeconds -gt 0 -and $elapsedSeconds -ge $timeoutSeconds) {
                 try { $proc.Kill() } catch { }
                 try { [void]$proc.WaitForExit() } catch { }
                 $global:LASTEXITCODE = 124
@@ -302,32 +321,49 @@ function Invoke-ClagnosHttpRestMethod {
         throw "HTTP request URI is required."
     }
 
-    $watch = $null
-    if ($script:PerfMode) {
-        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-ClagnosActionProgress -Action ("send HTTP {0} request ({1})" -f [string]$Method,[string]$PerfLabel)
+
+    $requestTimeoutSeconds = 1800
+    $invokeParams = @{
+        Method = [string]$Method
+        Uri = [string]$Uri
+        ErrorAction = 'Stop'
     }
+    if ($null -ne $Headers) { $invokeParams['Headers'] = $Headers }
+    if ($PSBoundParameters.ContainsKey('Body')) { $invokeParams['Body'] = $Body }
+    $invokeParams['TimeoutSec'] = $requestTimeoutSeconds
+    $httpJob = Start-Job -ScriptBlock {
+        param([hashtable]$RequestParameters)
+        $ErrorActionPreference = 'Stop'
+        Invoke-RestMethod @RequestParameters
+    } -ArgumentList (,$invokeParams)
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
 
     try {
-        $invokeParams = @{
-            Method = [string]$Method
-            Uri = [string]$Uri
-            ErrorAction = 'Stop'
+        $elapsedSeconds = 0
+        $lastHeartbeatSeconds = 0
+        $completed = $null
+        while ($elapsedSeconds -lt $requestTimeoutSeconds) {
+            $completed = Wait-Job -Job $httpJob -Timeout 1
+            if ($null -ne $completed -or [string]$httpJob.State -in @('Completed','Failed','Stopped')) { break }
+            $elapsedSeconds++
+            if ($elapsedSeconds -ge 30 -and ($elapsedSeconds - $lastHeartbeatSeconds) -ge 30) {
+                $lastHeartbeatSeconds = $elapsedSeconds
+                Write-ClagnosActionProgress -Action ("HTTP {0} request ({1}) is still running; {2}s elapsed" -f [string]$Method,[string]$PerfLabel,$elapsedSeconds)
+            }
         }
-        if ($null -ne $Headers) {
-            $invokeParams['Headers'] = $Headers
+        if ($null -eq $completed -and [string]$httpJob.State -in @('Completed','Failed','Stopped')) { $completed = $httpJob }
+        if (-not $completed) {
+            Stop-Job -Job $httpJob -Force -ErrorAction SilentlyContinue | Out-Null
+            throw ("HTTP {0} request timed out after {1}s ({2})." -f [string]$Method,$requestTimeoutSeconds,[string]$PerfLabel)
         }
-        if ($PSBoundParameters.ContainsKey('Body')) {
-            $invokeParams['Body'] = $Body
-        }
-
-        return Invoke-RestMethod @invokeParams
+        return (Receive-Job -Job $httpJob -ErrorAction Stop)
     }
     finally {
         if ($null -ne $watch -and $watch.IsRunning) {
             $watch.Stop()
         }
-        if ($null -ne $watch) {
-            Write-ClagnosPerfTiming -Category "http" -Label $PerfLabel -Seconds $watch.Elapsed.TotalSeconds
-        }
+        if ($script:PerfMode -and $null -ne $watch) { Write-ClagnosPerfTiming -Category "http" -Label $PerfLabel -Seconds $watch.Elapsed.TotalSeconds }
+        Remove-Job -Job $httpJob -Force -ErrorAction SilentlyContinue | Out-Null
     }
 }

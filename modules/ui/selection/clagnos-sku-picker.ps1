@@ -416,7 +416,7 @@ function Invoke-ClagnosRetailPricingRequest {
                 $retryAfterSeconds = 1
             }
 
-            Write-Host ("Retail Pricing API returned HTTP {0}. Retrying in {1}s ({2}/{3})..." -f $statusCode, $retryAfterSeconds, ($retry + 1), $maxRetries) -ForegroundColor Yellow
+            Write-ClagnosActionProgress -Action ("Retail Pricing API returned HTTP {0}; wait {1}s before retry {2}/{3}" -f $statusCode,$retryAfterSeconds,($retry + 1),$maxRetries)
             Start-Sleep -Seconds $retryAfterSeconds
         }
     }

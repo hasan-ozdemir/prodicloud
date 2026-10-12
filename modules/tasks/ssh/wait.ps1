@@ -26,15 +26,16 @@ function Wait-ClagnosVmPowerState {
         Assert-LastExitCode "az vm get-instance-view (power state)"
 
         if ([string]::IsNullOrWhiteSpace([string]$powerState)) {
-            Write-Host ("VM power state is empty (attempt {0}/{1})." -f $attempt, $MaxAttempts) -ForegroundColor Yellow
+            Write-ClagnosActionProgress -Action ("VM power state is empty (attempt {0}/{1})" -f $attempt,$MaxAttempts)
         }
         else {
-            Write-Host ("VM power state: {0} (attempt {1}/{2})" -f [string]$powerState, $attempt, $MaxAttempts)
+            Write-ClagnosActionProgress -Action ("VM power state: {0} (attempt {1}/{2})" -f [string]$powerState, $attempt, $MaxAttempts)
             if ([string]::Equals([string]$powerState, [string]$DesiredPowerState, [System.StringComparison]::OrdinalIgnoreCase)) {
                 return $true
             }
         }
 
+        Write-ClagnosActionProgress -Action ("wait {0}s before checking VM power state again" -f $DelaySeconds)
         Start-Sleep -Seconds $DelaySeconds
     }
 

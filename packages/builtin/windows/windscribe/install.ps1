@@ -22,8 +22,9 @@ function Resolve-WingetExe {
 }
 
 function Test-WindscribeInstalled {
-    Write-Host "Running: winget list windscribe"
-    $listOutput = & $wingetExe list windscribe
+    $packageId = 'Windscribe.Windscribe'
+    Write-Host ("Running: winget list --id {0} --exact" -f $packageId)
+    $listOutput = & $wingetExe list --id $packageId --exact --accept-source-agreements --disable-interactivity
     $listText = [string]($listOutput | Out-String)
     if (-not [string]::IsNullOrWhiteSpace($listText) -and $listText.ToLowerInvariant().Contains("windscribe")) {
         return $true
@@ -53,11 +54,11 @@ if (Test-WindscribeInstalled) {
     return
 }
 
-Write-Host "Running: winget install windscribe --accept-source-agreements --accept-package-agreements --silent --disable-interactivity"
-& $wingetExe install windscribe --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+Write-Host "Running: winget install Windscribe.Windscribe --accept-source-agreements --accept-package-agreements --silent --disable-interactivity"
+& $wingetExe install Windscribe.Windscribe --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
 $installExit = [int]$LASTEXITCODE
 if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-    throw "winget install windscribe failed with exit code $installExit."
+    throw "winget install Windscribe.Windscribe failed with exit code $installExit."
 }
 
 if (-not (Test-WindscribeInstalled)) {

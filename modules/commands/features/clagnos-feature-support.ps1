@@ -144,7 +144,7 @@ function Write-ClagnosFeatureValidationVmStartMessage {
     param([string]$FeatureLabel)
 
     if (-not [string]::IsNullOrWhiteSpace([string]$FeatureLabel)) {
-        Write-Host ("Starting VM for {0} validation..." -f ([string]$FeatureLabel).ToLowerInvariant()) -ForegroundColor Cyan
+        Write-ClagnosActionProgress -Action ("start VM for {0} validation" -f ([string]$FeatureLabel).ToLowerInvariant())
     }
 }
 
@@ -152,7 +152,7 @@ function Write-ClagnosFeatureValidationVmStartedMessage {
     param([string]$FeatureLabel)
 
     if (-not [string]::IsNullOrWhiteSpace([string]$FeatureLabel)) {
-        Write-Host ("VM was started successfully for {0} validation." -f ([string]$FeatureLabel).ToLowerInvariant()) -ForegroundColor Green
+        Write-Host ("VM started successfully for {0} validation." -f ([string]$FeatureLabel).ToLowerInvariant()) -ForegroundColor Green
     }
 }
 
@@ -459,7 +459,7 @@ function Invoke-ClagnosPostDeployFeatureEnablement {
     $nestedSupport = Get-ClagnosNestedVirtualizationSupportInfo -Location ([string]$Context.AzLocation) -VmSize ([string]$Context.VmSize)
     $nestedSecurityState = Get-ClagnosSafeTrimmedText -Value $Context.VmSecurityType
     $vmLifecycleLabel = if ($VmCreatedThisRun) { 'newly created' } else { 'existing' }
-    Write-Host ("Post-deploy feature configuration started for the {0} VM '{1}'." -f $vmLifecycleLabel, $vmName) -ForegroundColor DarkCyan
+    Write-ClagnosActionProgress -Action ("configure post-deploy features for the {0} VM '{1}'" -f $vmLifecycleLabel,$vmName)
 
     try {
         $provisioningWaitResult = Wait-ClagnosProvisioningSucceeded -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 30 -DelaySeconds 10

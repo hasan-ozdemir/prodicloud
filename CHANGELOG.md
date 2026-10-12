@@ -3,6 +3,20 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.404] - 2026-10-12
+
+### Added
+- Added visible `Doing: <action>` progress messages and 30-second heartbeats across Azure CLI/REST calls, VM lifecycle waits, guest processes, SSH tasks, and other long-running operations. `exec --quiet` now suppresses remote chatter while keeping local progress visible.
+- Added the selected VC's `o: operations` menu with numbered status, start, graceful shutdown, both hibernation paths, resume, restart, immediate power-off, force reset, deallocation, reapply, redeploy, compute/disk resize, VM feature toggles, connection, task, component, move, and report actions.
+- Added `do` actions for hibernation-only resume, graceful shutdown, immediate power-off, and force reset. Force power-off and reset require typed confirmation in the interactive menu.
+- Added a resumable live VC E2E acceptance script and tracked all eight sanitized builtin package app-state archives.
+- Added the JAWS install step that stops `jfw.exe`, copies the archive's `update-files` payload into the JAWS 2025 directory, and verifies each copied file.
+
+### Tests
+- Live E2E passed for `vc1`: 8 init tasks, 10 update tasks, 36 enabled packages, hibernation, nested virtualization, full VM/resource summary and redaction, SSH, RDP, and hibernate/resume. The VM was left running.
+- PowerShell compatibility passed with 174/174 smoke checks under Windows PowerShell 5.1 and PowerShell 7+.
+- Code quality, documentation, sensitive-content, package app-state, and Bash syntax checks passed.
+
 ## [2026.10.12.403] - 2026-10-12
 
 ### Changed

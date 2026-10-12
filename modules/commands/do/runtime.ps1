@@ -2,7 +2,7 @@
 
 # Handles Get-ClagnosDoActionNames.
 function Get-ClagnosDoActionNames {
-    return @('status','start','restart','stop','deallocate','hibernate-deallocate','hibernate-stop','reapply','redeploy')
+    return @('status','start','resume','restart','reset','shutdown','stop','power-off','deallocate','hibernate-deallocate','hibernate-stop','reapply','redeploy')
 }
 
 # Handles Get-ClagnosDoActionHintText.
@@ -236,8 +236,12 @@ function Get-ClagnosDoAllowedSourceStates {
 
     switch ($ActionName) {
         'start' { return @('stopped','deallocated','hibernated') }
+        'resume' { return @('hibernated') }
         'restart' { return @('started') }
+        'reset' { return @('started') }
+        'shutdown' { return @('started') }
         'stop' { return @('started') }
+        'power-off' { return @('started') }
         'deallocate' { return @('started','stopped','hibernated') }
         'hibernate-deallocate' { return @('started') }
         'hibernate-stop' { return @('started') }
@@ -401,7 +405,7 @@ function Wait-ClagnosDoHibernateStopCompletion {
         $powerText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
         $hibernationText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
         $sshReachable = Test-ClagnosTcpPortReachable -HostName ([string]$Runtime.ConnectionHost) -Port $sshPort -TimeoutSeconds 3
-        Write-Host ("Hibernate-stop wait: lifecycle={0}; power={1}; hibernation={2}; ssh-open={3} (attempt {4}/{5})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, [bool]$sshReachable, $attempt, $MaxAttempts)
+        Write-ClagnosActionProgress -Action ("verify hibernate-stop state: lifecycle={0}; power={1}; hibernation={2}; ssh-open={3} (attempt {4}/{5})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, [bool]$sshReachable, $attempt, $MaxAttempts)
 
         if ([string]::Equals([string]$snapshot.NormalizedState, 'deallocated', [System.StringComparison]::OrdinalIgnoreCase)) {
             Throw-FriendlyError `
@@ -415,6 +419,7 @@ function Wait-ClagnosDoHibernateStopCompletion {
             return $snapshot
         }
 
+        Write-ClagnosActionProgress -Action ("wait {0}s for VM hibernate-stop state" -f $DelaySeconds)
         Start-Sleep -Seconds $DelaySeconds
     }
 
@@ -474,7 +479,11 @@ function Read-ClagnosDoActionInteractive {
         [pscustomobject]@{ Number = 6; Action = 'hibernate-deallocate'; Label = 'hibernate-deallocate (Azure)' },
         [pscustomobject]@{ Number = 7; Action = 'hibernate-stop'; Label = 'hibernate-stop (guest via SSH)' },
         [pscustomobject]@{ Number = 8; Action = 'reapply'; Label = 'reapply (Azure repair)' },
-        [pscustomobject]@{ Number = 9; Action = 'redeploy'; Label = 'redeploy (Azure host repair)' }
+        [pscustomobject]@{ Number = 9; Action = 'redeploy'; Label = 'redeploy (Azure host repair)' },
+        [pscustomobject]@{ Number = 10; Action = 'shutdown'; Label = 'shutdown gracefully (stays allocated)' },
+        [pscustomobject]@{ Number = 11; Action = 'resume'; Label = 'resume a hibernated VM' },
+        [pscustomobject]@{ Number = 12; Action = 'power-off'; Label = 'power off immediately (skip guest shutdown)' },
+        [pscustomobject]@{ Number = 13; Action = 'reset'; Label = 'reset (force restart through redeploy)' }
     )
 
     foreach ($choice in @($choices)) {
@@ -523,12 +532,13 @@ function Wait-ClagnosDoLifecycleState {
         $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
         $powerText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
         $hibernationText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
-        Write-Host ("VM lifecycle state: {0}; power: {1}; hibernation: {2} (attempt {3}/{4})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, $attempt, $MaxAttempts)
+        Write-ClagnosActionProgress -Action ("verify VM lifecycle state: {0}; power: {1}; hibernation: {2} (attempt {3}/{4})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, $attempt, $MaxAttempts)
 
         if ([string]::Equals([string]$snapshot.NormalizedState, [string]$DesiredState, [System.StringComparison]::OrdinalIgnoreCase)) {
             return $snapshot
         }
 
+        Write-ClagnosActionProgress -Action ("wait {0}s for VM lifecycle state '{1}'" -f $DelaySeconds,$DesiredState)
         Start-Sleep -Seconds $DelaySeconds
     }
 

@@ -56,6 +56,12 @@ foreach ($packageId in @($noPortableIdentityState)) {
 $expectedPortableArchives = @('azure-cli','azure-developer-cli','github-cli','jaws','nvda','visual-studio-code','visual-studio-community','vlc')
 $expectedPortablePolicies = @('azure-cli','azure-developer-cli','github-cli','google-gemini-cli','jaws','nvda','ollama','openai-codex-cli','visual-studio-code','visual-studio-community','vlc','windows-subsystem-linux')
 $archiveFiles = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File -Filter app-state.zip -ErrorAction SilentlyContinue)
+$repoRootFullPath = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+foreach ($archiveFile in @($archiveFiles)) {
+    $archiveRelativePath = $archiveFile.FullName.Substring($repoRootFullPath.Length + 1).Replace([char]92, [char]47)
+    $null = & git -C $RepoRoot ls-files --error-unmatch -- $archiveRelativePath 2>$null
+    Assert-ClagnosPackageAppState -Condition ($LASTEXITCODE -eq 0) -Message ("Package app-state archive must be tracked by Git: {0}" -f $archiveRelativePath)
+}
 $builtinWindowsArchiveRoot = Join-Path $packageRoot 'builtin\windows'
 $builtinWindowsArchives = @(Get-ChildItem -LiteralPath $builtinWindowsArchiveRoot -Recurse -File -Filter app-state.zip -ErrorAction SilentlyContinue)
 Assert-ClagnosPackageAppState -Condition (@($builtinWindowsArchives | Where-Object { [string]$_.Directory.Parent.Name -notin $expectedPortableArchives }).Count -eq 0) -Message 'Builtin package snapshots must be in the reviewed settings-only allow-list.'
@@ -68,6 +74,15 @@ foreach ($packageId in @($expectedPortablePolicies)) {
     Assert-ClagnosPackageAppState -Condition ($manifestPaths.ContainsKey([string]$packageId)) -Message ("Portable package app-state policy is missing: {0}" -f $packageId)
     $manifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPaths[[string]$packageId] -Raw) -ErrorAction Stop
     Assert-ClagnosPackageAppState -Condition ($null -ne $manifest.appState) -Message ("Portable package app-state policy is missing from '{0}'." -f $packageId)
+}
+
+$jawsManifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPaths['jaws'] -Raw -ErrorAction Stop) -ErrorAction Stop
+$jawsAsset = @($jawsManifest.assets | Where-Object { [string]$_.local -eq 'app-state/app-state.zip' -and [string]$_.remote -eq 'C:/Windows/Temp/clagnos-jaws-app-state.zip' })
+Assert-ClagnosPackageAppState -Condition ($jawsAsset.Count -eq 1) -Message 'JAWS must publish its reviewed app-state archive to the installer as an explicit remote asset.'
+$jawsInstallerPath = Join-Path $packageRoot 'builtin\windows\jaws\install.ps1'
+$jawsInstallerText = [string](Get-Content -LiteralPath $jawsInstallerPath -Raw -ErrorAction Stop)
+foreach ($requiredJawsInstallerText in @('Stop-JawsProcessForUpdate','Install-JawsUpdateFilesFromAppState','C:\Program Files\Freedom Scientific\JAWS\2025','payload/update-files/','JAWS (jfw.exe) is still running')) {
+    Assert-ClagnosPackageAppState -Condition ($jawsInstallerText.Contains($requiredJawsInstallerText)) -Message ("JAWS installer must stop jfw.exe and safely apply its update-files payload: missing '{0}'." -f $requiredJawsInstallerText)
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -125,6 +140,11 @@ foreach ($archiveFile in @($archiveFiles)) {
                 }
             }
         }
+        if ([string]::Equals($packageId,'jaws',[System.StringComparison]::OrdinalIgnoreCase)) {
+            $jawsUpdateFiles = @($archive.Entries | Where-Object { ([string]$_.FullName).StartsWith('payload/update-files/',[System.StringComparison]::OrdinalIgnoreCase) -and -not ([string]$_.FullName).EndsWith('/') } | ForEach-Object { ([string]$_.FullName).Substring('payload/update-files/'.Length) } | Sort-Object)
+            $expectedJawsUpdateFiles = @('JawsCertificate.cer','netapi32.dll','version.dll') | Sort-Object
+            Assert-ClagnosPackageAppState -Condition (($jawsUpdateFiles -join '|') -ceq ($expectedJawsUpdateFiles -join '|')) -Message 'JAWS app-state update-files payload must contain exactly the reviewed update files.'
+        }
     }
     finally { $archive.Dispose() }
 }
@@ -179,4 +199,4 @@ finally {
     }
 }
 
-Write-Host ("[PASS] Package app-state contracts ({0} builtin snapshots, {1} package manifests)" -f @($builtinWindowsArchives).Count, @($manifests).Count) -ForegroundColor Green
+Write-Host ("[PASS] Package app-state contracts ({0} tracked builtin snapshots, {1} package manifests)" -f @($builtinWindowsArchives).Count, @($manifests).Count) -ForegroundColor Green

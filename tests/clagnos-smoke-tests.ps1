@@ -849,6 +849,53 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
     }
 }
 
+Invoke-Test -Name "Package status catalog payloads flatten Windows PowerShell 5.1 JSON root arrays" -Action {
+    $packageRuntimePath = Join-Path $RepoRoot 'modules\commands\package\runtime.ps1'
+    $packageRuntimeText = [string](Get-Content -LiteralPath $packageRuntimePath -Raw -ErrorAction Stop)
+    Assert-True -Condition ($packageRuntimeText.IndexOf('parsedPackageInput = ConvertFrom-Json -InputObject',[System.StringComparison]::Ordinal) -ge 0) -Message 'Package status must parse the complete catalog payload before iterating.'
+    Assert-True -Condition ($packageRuntimeText.IndexOf('entry -is [System.Collections.IList]',[System.StringComparison]::Ordinal) -ge 0) -Message 'Package status must flatten a nested PowerShell 5.1 JSON array before evaluating status checks.'
+    Assert-True -Condition ($packageRuntimeText.IndexOf('nestedPackage in',[System.StringComparison]::Ordinal) -ge 0) -Message 'Package status must evaluate every nested catalog package row.'
+    $fixtureJson = ConvertTo-Json -InputObject @(@{ id = 'first-package' },@{ id = 'second-package' }) -Depth 5 -Compress
+    $parsedPackageInput = ConvertFrom-Json -InputObject $fixtureJson -ErrorAction Stop
+    $flattenedPackages = @()
+    foreach ($entry in @($parsedPackageInput)) {
+        if ($entry -is [System.Collections.IList] -and $entry -isnot [string]) {
+            foreach ($nestedPackage in $entry) { $flattenedPackages += $nestedPackage }
+        }
+        elseif ($null -ne $entry) { $flattenedPackages += $entry }
+    }
+    Assert-True -Condition ($flattenedPackages.Count -eq 2 -and [string]$flattenedPackages[0].id -eq 'first-package' -and [string]$flattenedPackages[1].id -eq 'second-package') -Message 'Package status normalization must preserve every JSON package row under Windows PowerShell.'
+}
+
+Invoke-Test -Name "Package status reads the same ProgramData stores used by installers" -Action {
+    $packageRuntimeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\package\runtime.ps1') -Raw -ErrorAction Stop)
+    Assert-True -Condition ($packageRuntimeText.IndexOf('clagnos\state\store-installs',[System.StringComparison]::Ordinal) -ge 0) -Message 'Store package status must read the shared ProgramData install-state root.'
+    Assert-True -Condition ($packageRuntimeText.IndexOf("ProgramData 'chocolatey'",[System.StringComparison]::Ordinal) -ge 0) -Message 'Chocolatey status must read the Chocolatey ProgramData root.'
+    Assert-True -Condition ($packageRuntimeText -notlike '*C:\PackageData\clagnos\state\store-installs*') -Message 'Package status must not use the obsolete PackageData store-state root.'
+
+    $windscribe = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\windscribe\package.json') -Raw) -ErrorAction Stop
+    $vsCode = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\visual-studio-code\package.json') -Raw) -ErrorAction Stop
+    Assert-True -Condition ([string]$windscribe.statusCheck.value -eq 'Windscribe.Windscribe') -Message 'Windscribe status must use the canonical winget package id.'
+    Assert-True -Condition ([string]$vsCode.statusCheck.kind -eq 'command' -and [string]$vsCode.statusCheck.value -eq 'code') -Message 'VS Code status must use the installed command rather than a winget alias.'
+}
+
+Invoke-Test -Name "Unlocker setup skips an unavailable package and Windows UX respects its machine-policy privilege boundary" -Action {
+    $unlockerPath = Join-Path $RepoRoot 'windows\update\110-configure-unlocker-settings\110-configure-unlocker-settings.ps1'
+    $unlockerText = [string](Get-Content -LiteralPath $unlockerPath -Raw -ErrorAction Stop)
+    Assert-True -Condition ($unlockerText -like '*unlocker-settings-skip => IObit Unlocker is not installed*') -Message 'Unlocker settings task must skip cleanly when its optional package is absent.'
+    Assert-True -Condition ($unlockerText -notlike '*choco install io-unlocker*') -Message 'Unlocker settings must not invoke the outdated checksum-mismatched Chocolatey installer.'
+
+    $experiencePath = Join-Path $RepoRoot 'windows\update\10004-configure-windows-experience\10004-configure-windows-experience.ps1'
+    $experienceText = [string](Get-Content -LiteralPath $experiencePath -Raw -ErrorAction Stop)
+    Assert-True -Condition ($experienceText -like '*-SkipMachineDshPolicy*') -Message 'Interactive UX worker must defer the machine DSH policy write.'
+    Assert-True -Condition ($experienceText -like '*ux-worker-machine-policy-verification-deferred => Microsoft.Dsh.AllowNewsAndInterests*') -Message 'Interactive UX worker must also defer machine DSH policy readback.'
+    Assert-True -Condition ($experienceText.Contains('New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList $taskIdentity') -and $experienceText.Contains('IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)')) -Message 'Windows UX task must check its administrator token before writing the DSH machine policy.'
+    Assert-True -Condition ($experienceText -like '*Doing: skip optional machine policy Microsoft.Dsh.AllowNewsAndInterests; task identity has no administrator token*') -Message 'Windows UX task must gracefully skip its optional machine policy when the task identity is not an administrator.'
+    Assert-True -Condition ($experienceText -like '*Start-Process -FilePath $regExecutable*') -Message 'Windows UX task must capture reg.exe output without converting access-denied status into a PowerShell warning.'
+    Assert-True -Condition ($experienceText -like '*Doing: skip optional machine policy Microsoft.Dsh.AllowNewsAndInterests; registry access is denied*') -Message 'Windows UX task must gracefully skip the optional machine policy when registry ACLs deny access.'
+    Assert-True -Condition ($experienceText -like '*Doing: verified machine policy Microsoft.Dsh.AllowNewsAndInterests=0*') -Message 'Windows UX task must verify the DSH policy when the registry write succeeds.'
+}
+
 Invoke-Test -Name "CLI parse help contracts" -Action {
     $parsedGlobalHelp = Parse-ClagnosCliArguments -CommandToken "--help" -RawArgs @()
     Assert-True -Condition ([string]$parsedGlobalHelp.Command -eq "help") -Message "Global --help should resolve to help command."
@@ -950,6 +997,37 @@ Invoke-Test -Name "CLI parse help contracts" -Action {
     Assert-True -Condition ([string]$parsedResizeDiskSize.Options['vm-name'] -eq 'samplevm') -Message "Resize --vm-name <value> parse failed."
     Assert-True -Condition ([string]$parsedResizeDiskSize.Options['disk-size'] -eq '196gb') -Message "Resize --disk-size <value> parse failed."
     Assert-True -Condition ($parsedResizeDiskSize.Options.ContainsKey('expand')) -Message "Resize --expand option was not captured."
+}
+
+Invoke-Test -Name "Azure and guest operations expose safe Doing labels and bounded wait heartbeats" -Action {
+    $previousQuietOutput = [bool]$script:ClagnosQuietOutput
+    try {
+        $script:ClagnosQuietOutput = $true
+        Write-ClagnosActionProgress -Action 'quiet-mode progress probe'
+
+        $safeVmLabel = Get-ClagnosAzCliProgressLabel -Arguments @('vm','create','--admin-password','secret-value')
+        $safeNetworkLabel = Get-ClagnosAzCliProgressLabel -Arguments @('network','vnet','subnet','create','--name','private-name')
+        $stepRunnerText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\runtime\clagnos-step-runner.ps1') -Raw)
+        $actionLoggerText = [string]($stepRunnerText -split '# Handles Invoke-Step\.' | Select-Object -First 1)
+        $azCliText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\system\clagnos-az-cli.ps1') -Raw)
+        $diagnosticsText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\runtime\clagnos-diagnostics.ps1') -Raw)
+        $httpRuntimeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\system\clagnos-az-cli.ps1') -Raw)
+        $sshProcessText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\tasks\ssh\process.ps1') -Raw)
+        $e2eText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'tests\live-vc-e2e.ps1') -Raw)
+
+        Assert-True -Condition ($actionLoggerText.Contains('Write-Host $actionText -ForegroundColor DarkCyan') -and $actionLoggerText -notlike '*ClagnosQuietOutput*') -Message 'The Doing logger must remain visible during explicit quiet output mode.'
+        Assert-True -Condition ([string]$safeVmLabel -eq 'az vm create' -and [string]$safeVmLabel -notmatch 'secret-value') -Message 'Azure progress labels must identify the action without exposing argument secrets.'
+        Assert-True -Condition ([string]$safeNetworkLabel -eq 'az network vnet subnet create' -and [string]$safeNetworkLabel -notmatch 'private-name') -Message 'Azure network progress labels must identify nested actions without exposing resource values.'
+        Assert-True -Condition ($azCliText -like '*still running; {1:N0}s elapsed*') -Message 'Azure CLI calls must emit periodic Doing heartbeats while they run.'
+        Assert-True -Condition ($diagnosticsText -like '*still running; {1}s elapsed*') -Message 'Azure REST-backed job waits must emit periodic Doing heartbeats.'
+        Assert-True -Condition ($httpRuntimeText -like '*while ($elapsedSeconds -lt $requestTimeoutSeconds)*' -and $httpRuntimeText -like '*HTTP {0} request ({1}) is still running*') -Message 'Direct Azure HTTP requests must have a bounded timeout and periodic Doing heartbeats.'
+        Assert-True -Condition ($sshProcessText.Contains("ProgressLabel = 'guest process'") -and $sshProcessText -like '*Write-ClagnosActionProgress -Action*') -Message 'Long-running guest SSH processes must emit periodic Doing heartbeats even between output lines.'
+        Assert-True -Condition ($e2eText -like '*Write-Host $line*') -Message 'The live E2E wrapper must relay child CLI progress output while a command is running.'
+        Assert-True -Condition ($e2eText.Contains('function Get-ClagnosE2eStatusRows') -and $e2eText.Contains('IsNullOrWhiteSpace([string]$row.code)')) -Message 'Live E2E power and hibernation checks must ignore empty root status entries and fall back to instanceView.statuses.'
+    }
+    finally {
+        $script:ClagnosQuietOutput = $previousQuietOutput
+    }
 }
 
 Invoke-Test -Name "CLI entrypoint keeps a normal banner path and a pre-banner version fast path" -Action {
@@ -1068,7 +1146,7 @@ Invoke-Test -Name "Guest task output relay is enabled for vm-init and vm-update 
     Assert-True -Condition ($runCommandParserText -match [regex]::Escape('function Get-ClagnosRunCommandResultEnvelope')) -Message 'Run-command parsing must expose a non-throwing envelope helper.'
     Assert-True -Condition ($runCommandRunnerText -match [regex]::Escape('Get-ClagnosRunCommandResultEnvelope')) -Message 'Run-command task runner must consume the envelope helper.'
     Assert-True -Condition ($runCommandRunnerText -match [regex]::Escape('Guest output relay:')) -Message 'Run-command task runner must label relayed guest output.'
-    Assert-True -Condition ($runCommandRunnerText -match [regex]::Escape('Task started:')) -Message 'Run-command task runner must announce task start.'
+    Assert-True -Condition ($runCommandRunnerText.Contains('Write-ClagnosActionProgress -Action') -and $runCommandRunnerText.Contains('run guest task') -and $runCommandRunnerText.Contains('with Azure Run Command')) -Message 'Run-command task runner must announce task start through the Doing progress logger.'
     Assert-True -Condition ($runCommandRunnerText -match [regex]::Escape('Task completed:')) -Message 'Run-command task runner must announce task completion.'
 }
 
@@ -3143,6 +3221,10 @@ Invoke-Test -Name "Task run and exec command accept the direct target contract" 
 
 Invoke-Test -Name "Do command accepts vm-name and valid vm-action" -Action {
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ 'vm-name' = 'samplevm'; 'vm-action' = 'status' }
+    Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'resume' }
+    Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'shutdown' }
+    Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'power-off' }
+    Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'reset' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'deallocate' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'hibernate-deallocate' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'hibernate-stop' }
@@ -3188,16 +3270,22 @@ Invoke-Test -Name "Do command rejects retired or unknown power actions" -Action 
     }
 }
 
-Invoke-Test -Name "Do help and README document reapply and redeploy" -Action {
+Invoke-Test -Name "Do help, README, and interactive operations document lifecycle actions" -Action {
     $helpText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\cli\clagnos-help.ps1') -Raw)
     $readmeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'README.md') -Raw)
+    $uiText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Raw)
 
-    Assert-True -Condition ($helpText -match [regex]::Escape('--vm-action=<status|start|restart|stop|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>')) -Message 'CLI help must list the explicit hibernate actions in the do action contract.'
+    Assert-True -Condition ($helpText -match [regex]::Escape('--vm-action=<status|start|resume|restart|reset|shutdown|stop|power-off|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>')) -Message 'CLI help must list all supported lifecycle actions.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=reapply --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a reapply example.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=redeploy --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a redeploy example.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=hibernate-stop --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a hibernate-stop example.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=hibernate-deallocate --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a hibernate-deallocate example.'
-    Assert-True -Condition ($readmeText -match [regex]::Escape('Gives operators lifecycle commands for status, start, restart, reapply, redeploy, stop, deallocate, hibernate-stop, hibernate-deallocate')) -Message 'README must mention the explicit hibernate actions in the lifecycle command summary.'
+    Assert-True -Condition ($readmeText -match [regex]::Escape('Gives operators lifecycle commands for status, start/resume, restart/reset, shutdown, immediate power-off, reapply, redeploy, stop, deallocate, hibernate-stop, hibernate-deallocate')) -Message 'README must mention lifecycle actions in the command summary.'
+    Assert-True -Condition ($readmeText -match [regex]::Escape('o: operations')) -Message 'README must describe the selected-VC operations shortcut.'
+    Assert-True -Condition ($uiText -match [regex]::Escape("Write-Host 'o: operations'")) -Message 'Selected VC menu must expose the operations shortcut.'
+    foreach ($lifecycleActionName in @('status','start','shutdown','hibernate-stop','hibernate-deallocate','resume','restart','power-off','reset','deallocate','reapply','redeploy')) {
+        Assert-True -Condition ($uiText -match [regex]::Escape("Action = '$lifecycleActionName'")) -Message ("Operations menu must expose '{0}'." -f $lifecycleActionName)
+    }
     Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd do --vm-action=reapply --group=<resource-group> --vm-name=<vm-name>')) -Message 'README must include a reapply usage example.'
     Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd do --vm-action=redeploy --group=<resource-group> --vm-name=<vm-name>')) -Message 'README must include a redeploy usage example.'
     Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd do --vm-action=hibernate-stop --group=<resource-group> --vm-name=<vm-name>')) -Message 'README must include a hibernate-stop usage example.'
@@ -3771,7 +3859,11 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
     }
 
     Assert-ClagnosDoActionAllowed -ActionName 'status' -Snapshot (New-TestDoSnapshot -NormalizedState 'other' -PowerStateDisplay 'VM starting')
+    Assert-ClagnosDoActionAllowed -ActionName 'resume' -Snapshot (New-TestDoSnapshot -NormalizedState 'hibernated' -PowerStateDisplay 'VM deallocated' -HibernationStateDisplay 'Hibernated' -HibernationStateCode 'HibernationState/hibernated')
     Assert-ClagnosDoActionAllowed -ActionName 'restart' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'reset' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'shutdown' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'power-off' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
     Assert-ClagnosDoActionAllowed -ActionName 'deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'hibernated' -PowerStateDisplay 'VM deallocated' -HibernationStateDisplay 'Hibernated' -HibernationStateCode 'HibernationState/hibernated')
     Assert-ClagnosDoActionAllowed -ActionName 'hibernate-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
     Assert-ClagnosDoActionAllowed -ActionName 'hibernate-stop' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
@@ -3780,6 +3872,7 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
 
     $invalidCases = @(
         @{ Action = 'start'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running') },
+        @{ Action = 'resume'; Snapshot = (New-TestDoSnapshot -NormalizedState 'stopped' -PowerStateDisplay 'VM stopped') },
         @{ Action = 'hibernate-deallocate'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -HibernationEnabled:$false) },
         @{ Action = 'hibernate-stop'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -HibernationEnabled:$false) },
         @{ Action = 'stop'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -ProvisioningStateCode 'ProvisioningState/updating' -ProvisioningStateDisplay 'Updating') }
@@ -3794,6 +3887,89 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
             $threw = $true
         }
         Assert-True -Condition $threw -Message ("Do action eligibility should reject invalid case '{0}'." -f [string]$case.Action)
+    }
+}
+
+Invoke-Test -Name "Do resume, shutdown, power-off, and reset use the intended Azure actions" -Action {
+    $script:DoActionDispatchCall = $null
+    $script:DoActionDispatchState = 'started'
+    $originalFunctionDefinitions = @{}
+    foreach ($functionName in @(
+        'Resolve-ClagnosManagedVmTarget',
+        'Get-ClagnosVmLifecycleSnapshot',
+        'Invoke-ClagnosDoAzureAction',
+        'Wait-ClagnosDoLifecycleState',
+        'Write-ClagnosDoStatusReport'
+    )) {
+        $command = Get-Command $functionName -ErrorAction SilentlyContinue
+        if ($null -ne $command) { $originalFunctionDefinitions[$functionName] = [string]$command.Definition }
+    }
+
+    function Resolve-ClagnosManagedVmTarget {
+        param([hashtable]$Options, [hashtable]$ConfigMap, [string]$OperationName)
+        return [pscustomobject]@{ ResourceGroup = 'rg-samplevm-ate1-g1'; VmName = 'samplevm' }
+    }
+    function Get-ClagnosVmLifecycleSnapshot {
+        param([string]$ResourceGroup, [string]$VmName)
+        $state = [string]$script:DoActionDispatchState
+        $hibernationState = if ($state -eq 'hibernated') { 'Hibernated' } else { '' }
+        $hibernationCode = if ($state -eq 'hibernated') { 'HibernationState/hibernated' } else { '' }
+        $powerState = if ($state -eq 'started') { 'VM running' } elseif ($state -eq 'hibernated') { 'VM deallocated' } else { 'VM stopped' }
+        return [pscustomobject]@{
+            ResourceGroup = $ResourceGroup
+            VmName = $VmName
+            OsType = 'Windows'
+            Location = 'austriaeast'
+            HibernationEnabled = $true
+            ProvisioningStateCode = 'ProvisioningState/succeeded'
+            ProvisioningStateDisplay = 'Provisioning succeeded'
+            PowerStateCode = ''
+            PowerStateDisplay = $powerState
+            HibernationStateCode = $hibernationCode
+            HibernationStateDisplay = $hibernationState
+            NormalizedState = $state
+        }
+    }
+    function Invoke-ClagnosDoAzureAction {
+        param([string]$ActionName, [string]$ResourceGroup, [string]$VmName, [string[]]$AzArguments, [string]$AzContext)
+        $script:DoActionDispatchCall = [pscustomobject]@{
+            ActionName = $ActionName
+            AzArguments = @($AzArguments)
+            AzContext = $AzContext
+        }
+    }
+    function Wait-ClagnosDoLifecycleState {
+        param([string]$ResourceGroup, [string]$VmName, [string]$DesiredState, [int]$MaxAttempts, [int]$DelaySeconds)
+        $script:DoActionDispatchState = $DesiredState
+        return (Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName)
+    }
+    function Write-ClagnosDoStatusReport { param([psobject]$Snapshot) }
+
+    try {
+        $cases = @(
+            @{ Action = 'resume'; SourceState = 'hibernated'; Expected = 'vm start -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors'; Context = 'az vm start (resume)' },
+            @{ Action = 'shutdown'; SourceState = 'started'; Expected = 'vm stop -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors'; Context = 'az vm stop (graceful shutdown)' },
+            @{ Action = 'power-off'; SourceState = 'started'; Expected = 'vm stop -g rg-samplevm-ate1-g1 -n samplevm --skip-shutdown -o none --only-show-errors'; Context = 'az vm stop --skip-shutdown' },
+            @{ Action = 'reset'; SourceState = 'started'; Expected = 'vm restart -g rg-samplevm-ate1-g1 -n samplevm --force -o none --only-show-errors'; Context = 'az vm restart --force' }
+        )
+        foreach ($case in @($cases)) {
+            $script:DoActionDispatchState = [string]$case.SourceState
+            $script:DoActionDispatchCall = $null
+            Invoke-ClagnosDoCommand -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = [string]$case.Action }
+            Assert-True -Condition ($null -ne $script:DoActionDispatchCall) -Message ("'{0}' must call the Azure lifecycle wrapper." -f [string]$case.Action)
+            Assert-True -Condition ([string]$script:DoActionDispatchCall.ActionName -eq [string]$case.Action) -Message ("'{0}' must preserve its lifecycle action name." -f [string]$case.Action)
+            Assert-True -Condition ((@($script:DoActionDispatchCall.AzArguments) -join ' ') -eq [string]$case.Expected) -Message ("'{0}' must use the expected Azure CLI operation." -f [string]$case.Action)
+            Assert-True -Condition ([string]$script:DoActionDispatchCall.AzContext -eq [string]$case.Context) -Message ("'{0}' must use a descriptive Azure progress label." -f [string]$case.Action)
+        }
+    }
+    finally {
+        foreach ($functionName in @('Resolve-ClagnosManagedVmTarget','Get-ClagnosVmLifecycleSnapshot','Invoke-ClagnosDoAzureAction','Wait-ClagnosDoLifecycleState','Write-ClagnosDoStatusReport')) {
+            Remove-Item ("Function:\global:{0}" -f $functionName) -ErrorAction SilentlyContinue
+            Remove-Item ("Function:\{0}" -f $functionName) -ErrorAction SilentlyContinue
+            if ($originalFunctionDefinitions.ContainsKey($functionName)) {
+                Set-Item -Path ("Function:\global:{0}" -f $functionName) -Value ([scriptblock]::Create([string]$originalFunctionDefinitions[$functionName]))
+            }
+        }
     }
 }
 
@@ -3835,6 +4011,22 @@ Invoke-Test -Name "Do interactive action selection" -Action {
         function Read-Host { param([string]$Prompt) return '9' }
         $redeployAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$redeployAction -eq 'redeploy') -Message "Interactive do action selection must expose redeploy."
+
+        function Read-Host { param([string]$Prompt) return '10' }
+        $shutdownAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
+        Assert-True -Condition ([string]$shutdownAction -eq 'shutdown') -Message "Interactive do action selection must expose graceful shutdown."
+
+        function Read-Host { param([string]$Prompt) return '11' }
+        $resumeAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
+        Assert-True -Condition ([string]$resumeAction -eq 'resume') -Message "Interactive do action selection must expose resume."
+
+        function Read-Host { param([string]$Prompt) return '12' }
+        $powerOffAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
+        Assert-True -Condition ([string]$powerOffAction -eq 'power-off') -Message "Interactive do action selection must expose immediate power-off."
+
+        function Read-Host { param([string]$Prompt) return '13' }
+        $resetAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
+        Assert-True -Condition ([string]$resetAction -eq 'reset') -Message "Interactive do action selection must expose forced reset."
     }
     finally {
         Remove-Item Function:\global:Read-Host -ErrorAction SilentlyContinue
@@ -5630,7 +5822,7 @@ Invoke-Test -Name "Windows task and package catalogs are physically isolated" -A
         Assert-True -Condition (@($storePackage.PackageTask.PackageSpec.PostInstallTasks) -contains '10003-create-public-desktop-shortcuts') -Message ("Store package '{0}' must declare its public shortcut post-install task in package.json." -f $storePackageId)
     }
 }
-Invoke-Test -Name "Exec quiet mode suppresses operator chatter for one-shot commands" -Action {
+Invoke-Test -Name "Exec quiet mode suppresses remote chatter but keeps local action progress visible" -Action {
     $script:ExecQuietPythonArgs = @()
     $script:CapturedExecQuietHost = @()
     $previousQuietOutput = [bool]$script:ClagnosQuietOutput
@@ -5693,7 +5885,8 @@ Invoke-Test -Name "Exec quiet mode suppresses operator chatter for one-shot comm
         Invoke-ClagnosExecCommand -Options @{ command = 'Get-Date'; quiet = $true }
 
         Assert-True -Condition ([bool]$script:ClagnosQuietOutput) -Message 'Exec --quiet must enable quiet output mode for the command path.'
-        Assert-True -Condition (@($script:CapturedExecQuietHost).Count -eq 0) -Message 'Exec --quiet must suppress banner/bootstrap/completion chatter on the one-shot command path.'
+        Assert-True -Condition (@($script:CapturedExecQuietHost | Where-Object { [string]$_ -match '(?i)^Doing:' }).Count -eq 1) -Message 'Exec --quiet must print one safe local Doing action label.'
+        Assert-True -Condition (@($script:CapturedExecQuietHost | Where-Object { [string]$_ -match '(?i)bootstrap-output|completed|VM_ADMIN_PASS|secret' }).Count -eq 0) -Message 'Exec --quiet must still suppress bootstrap, completion, and secret-bearing output.'
         $pythonArgsText = (@($script:ExecQuietPythonArgs) -join ' ')
         Assert-True -Condition ($pythonArgsText -match [regex]::Escape('exec --host samplevm.example --port 444 --user manager --password secret --timeout 180 --command powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ')) -Message 'Exec --quiet must still invoke the wrapped one-shot command path.'
         $encodedCommandMatch = [regex]::Match($pythonArgsText, 'EncodedCommand\s+(?<encoded>[A-Za-z0-9+/=]+)')
@@ -6001,14 +6194,19 @@ Invoke-Test -Name "Windows Docker Desktop task clears stale installer locks" -Ac
     Assert-True -Condition ($taskScript -like '*$global:LASTEXITCODE = 0*') -Message 'Docker Desktop task must clear non-fatal native exit codes before completing.'
 }
 
-Invoke-Test -Name "Windows AnyDesk task verifies the executable after non-fatal winget exits" -Action {
+Invoke-Test -Name "Windows AnyDesk package avoids unbounded winget list checks and verifies its executable" -Action {
     $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '122-install-anydesk-application'
     $taskScript = [string](Get-Content -LiteralPath $taskPath -Raw)
     Assert-True -Condition ($taskScript -like '*post-install verification will determine whether the package is usable*') -Message 'AnyDesk task must treat transient winget failures as verification-required, not immediate hard failure.'
     Assert-True -Condition ($taskScript -like '*install-anydesk-application-verified: executable*') -Message 'AnyDesk task must log executable-based verification after install.'
-    Assert-True -Condition ($taskScript -like '*winget list anydesk.anydesk*') -Message 'AnyDesk task must keep a package-list fallback verification path.'
+    Assert-True -Condition ($taskScript -notlike '*winget list anydesk.anydesk*') -Message 'AnyDesk install preflight must not wait on an unbounded winget source query.'
+    Assert-True -Condition ($taskScript -like '*C:\Program Files (x86)\AnyDesk\AnyDesk.exe*') -Message 'AnyDesk package must verify its managed x86 executable path directly.'
     Assert-True -Condition ($taskScript -like '*WaitForExit*') -Message 'AnyDesk task must bound the winget install wait time.'
     Assert-True -Condition ($taskScript -like '*$global:LASTEXITCODE = 0*') -Message 'AnyDesk task must clear non-fatal native exit codes before completing.'
+    $manifestPath = Join-Path (Split-Path $taskPath -Parent) 'package.json'
+    $manifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPath -Raw) -ErrorAction Stop
+    Assert-True -Condition ([string]$manifest.statusCheck.kind -eq 'command' -and [string]$manifest.statusCheck.value -eq 'C:\Program Files (x86)\AnyDesk\AnyDesk.exe') -Message 'AnyDesk status must use its direct executable check instead of winget source enumeration.'
+    Assert-True -Condition ([int]$manifest.timeout -ge 180) -Message 'AnyDesk package timeout must exceed its bounded winget installation window.'
 }
 
 Invoke-Test -Name "Windows VLC task verifies the executable after bounded winget waits" -Action {
@@ -6899,6 +7097,11 @@ Invoke-Test -Name "Windows WSL and health contracts expose Docker prerequisite s
     $healthTaskPath = Get-RepoSummaryReadbackScriptPath -Platform windows
     $wslTaskText = [string](Get-Content -LiteralPath $wslTaskPath -Raw)
     $healthTaskText = [string](Get-Content -LiteralPath $healthTaskPath -Raw)
+    $wslManifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path (Split-Path $wslTaskPath -Parent) 'package.json') -Raw) -ErrorAction Stop
+    Assert-True -Condition ([int]$wslManifest.timeout -ge 600) -Message 'WSL feature installation must allow enough time for servicing-stack DISM enablement.'
+    Assert-True -Condition (@($wslManifest.assets | Where-Object { [string]$_.local -eq '../../../../tools/scripts/clagnos-interactive-session-helper.ps1' -and [string]$_.remote -eq 'C:/Windows/Temp/clagnos-interactive-session-helper.ps1' }).Count -eq 1) -Message 'WSL Store package installation must carry the interactive desktop helper asset.'
+    Assert-True -Condition ($wslTaskText -like '*Install-WslAppxThroughInteractiveSession*' -and $wslTaskText -like '*RunAsMode ''interactiveToken''*') -Message 'WSL Store package installation must run in the interactive manager desktop session.'
+    Assert-True -Condition ($wslTaskText -like '*wsl.exe --update --web-download*') -Message 'WSL updates must use the non-Store web download path.'
 
     foreach ($fragment in @(
         'Get-WindowsOptionalFeatureState',
@@ -8322,7 +8525,7 @@ Invoke-Test -Name "Windows install tasks short-circuit healthy installs and avoi
         '122-install-anydesk-application.ps1' = @('Existing AnyDesk installation is already healthy', 'function Test-AnyDeskInstalled')
         '123-install-windscribe-application.ps1' = @('Existing Windscribe installation is already healthy. Skipping winget install.', 'function Test-WindscribeInstalled')
         '131-install-jaws-application.ps1' = @('Existing JAWS installation is already healthy. Skipping winget install.', 'FreedomScientific.JAWS.2025', 'jfw.exe')
-        '129-configure-unlocker-settings.ps1' = @('Existing Io Unlocker installation is already healthy. Skipping choco install.')
+        '129-configure-unlocker-settings.ps1' = @('unlocker-settings-skip => IObit Unlocker is not installed')
     }
 
     foreach ($entry in $expectedHealthySkipFragments.GetEnumerator()) {

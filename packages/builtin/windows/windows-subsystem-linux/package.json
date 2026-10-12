@@ -3,7 +3,7 @@
   "displayName": "Windows Subsystem for Linux",
   "category": "feature",
   "enabled": true,
-  "timeout": 120,
+  "timeout": 600,
   "sortOrder": 121,
   "installScript": "install.ps1",
   "statusCheck": {
@@ -14,6 +14,12 @@
     "kind": "appx",
     "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
   },
+  "assets": [
+    {
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+    }
+  ],
   "appStateKey": "121-install-wsl-feature",
   "appState": {
     "machineDirectories": [],

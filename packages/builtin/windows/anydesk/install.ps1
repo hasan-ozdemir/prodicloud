@@ -40,17 +40,7 @@ function Test-AnyDeskInstalled {
         }
     }
 
-    Write-Host "Running: winget list anydesk.anydesk"
-    $listOutput = & $wingetExe list anydesk.anydesk
-    $listExit = [int]$LASTEXITCODE
-    $listText = [string]($listOutput | Out-String)
-    if ($listExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($listText) -and $listText.ToLowerInvariant().Contains("anydesk")) {
-        return [pscustomobject]@{
-            Installed = $true
-            Path = ""
-        }
-    }
-
+    Write-Host "AnyDesk was not found at either managed installation path; winget install will verify the package directly."
     return [pscustomobject]@{
         Installed = $false
         Path = ""

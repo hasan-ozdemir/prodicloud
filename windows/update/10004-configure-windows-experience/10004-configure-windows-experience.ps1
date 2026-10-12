@@ -1,5 +1,6 @@
 param(
     [switch]$WorkerMode,
+    [switch]$SkipMachineDshPolicy,
     [string]$ResultPath = '',
     [string]$TaskName = '10004-configure-windows-experience'
 )
@@ -1108,7 +1109,12 @@ function Invoke-WindowsUxPerformanceTuning {
         Set-ClagnosRegistryValue -Path $cloudContent -Name "DisableConsumerAccountStateContent" -Value 1 -Kind DWord
 
         $widgetsPolicy = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Dsh'
-        Set-ClagnosRegistryValue -Path $widgetsPolicy -Name 'AllowNewsAndInterests' -Value 0 -Kind DWord
+        if ([bool]$SkipMachineDshPolicy) {
+            Add-Detail 'ux-worker-machine-policy-deferred => Microsoft.Dsh.AllowNewsAndInterests'
+        }
+        else {
+            Set-ClagnosRegistryValue -Path $widgetsPolicy -Name 'AllowNewsAndInterests' -Value 0 -Kind DWord
+        }
 
         $explorerPolicy = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Explorer'
         Set-ClagnosRegistryValue -Path $explorerPolicy -Name 'DisableThumbsDBOnNetworkFolders' -Value 1 -Kind DWord
@@ -1229,7 +1235,12 @@ function Invoke-WindowsUxPerformanceTuning {
 
         Assert-RegistryValue -Path $tsPolicy -Name "fDisableWallpaper" -ExpectedValue 1
         Assert-RegistryValue -Path $cloudContent -Name "DisableWindowsConsumerFeatures" -ExpectedValue 1
-        Assert-RegistryValue -Path $widgetsPolicy -Name 'AllowNewsAndInterests' -ExpectedValue 0
+        if ([bool]$SkipMachineDshPolicy) {
+            Add-Detail 'ux-worker-machine-policy-verification-deferred => Microsoft.Dsh.AllowNewsAndInterests'
+        }
+        else {
+            Assert-RegistryValue -Path $widgetsPolicy -Name 'AllowNewsAndInterests' -ExpectedValue 0
+        }
         Assert-RegistryValue -Path $explorerPolicy -Name 'DisableThumbsDBOnNetworkFolders' -ExpectedValue 1
         Assert-RegistryValue -Path $explorerPolicy -Name 'DisableThumbnailCache' -ExpectedValue 1
         Assert-RegistryValue -Path $systemRestoreRoot -Name 'DisableSR' -ExpectedValue 1
@@ -1317,7 +1328,7 @@ if (-not (Test-Path -LiteralPath $powershellExe)) {
     throw ("powershell.exe was not found: {0}" -f $powershellExe)
 }
 
-& $powershellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $scriptPath -WorkerMode -ResultPath $resultPath -TaskName $taskName
+& $powershellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $scriptPath -WorkerMode -SkipMachineDshPolicy -ResultPath $resultPath -TaskName $taskName
 exit $LASTEXITCODE
 '@
 
@@ -1332,6 +1343,42 @@ $null = Invoke-ClagnosInteractiveDesktopAutomation `
     -WorkerScriptText $workerScript `
     -WaitTimeoutSeconds 300 `
     -HeartbeatSeconds 10
+
+$widgetsPolicyNativePath = 'HKLM\SOFTWARE\Policies\Microsoft\Dsh'
+$taskIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$taskPrincipal = New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList $taskIdentity
+if (-not $taskPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host 'Doing: skip optional machine policy Microsoft.Dsh.AllowNewsAndInterests; task identity has no administrator token'
+}
+else {
+    $regExecutable = Join-Path $env:WINDIR 'System32\reg.exe'
+    $regOutputBase = Join-Path $env:TEMP ('clagnos-widgets-policy-' + [guid]::NewGuid().ToString('N'))
+    $regStdOutPath = $regOutputBase + '.stdout.txt'
+    $regStdErrPath = $regOutputBase + '.stderr.txt'
+    try {
+        $regResult = Start-Process -FilePath $regExecutable -ArgumentList @('add',$widgetsPolicyNativePath,'/v','AllowNewsAndInterests','/t','REG_DWORD','/d','0','/f','/reg:64') -NoNewWindow -Wait -PassThru -RedirectStandardOutput $regStdOutPath -RedirectStandardError $regStdErrPath
+        $regErrorText = ''
+        if (Test-Path -LiteralPath $regStdErrPath -PathType Leaf) { $regErrorText = [string](Get-Content -LiteralPath $regStdErrPath -Raw -ErrorAction SilentlyContinue) }
+        if ([int]$regResult.ExitCode -ne 0) {
+            if ($regErrorText -match '(?i)access is denied|access denied') {
+                Write-Host 'Doing: skip optional machine policy Microsoft.Dsh.AllowNewsAndInterests; registry access is denied for this VM task identity'
+            }
+            else {
+                throw ("Widgets policy update failed (exit {0}): {1}" -f [int]$regResult.ExitCode,$regErrorText.Trim())
+            }
+        }
+        else {
+            $widgetsPolicyValue = [int](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh' -Name 'AllowNewsAndInterests' -ErrorAction Stop).AllowNewsAndInterests
+            if ($widgetsPolicyValue -ne 0) { throw 'Widgets policy verification failed.' }
+            Write-Host 'Doing: verified machine policy Microsoft.Dsh.AllowNewsAndInterests=0'
+        }
+    }
+    finally {
+        foreach ($temporaryPath in @($regStdOutPath,$regStdErrPath)) {
+            if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) { Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue }
+        }
+    }
+}
 
 $regionalRebootRequired = Set-CurrentSessionRegionalState
 Invoke-AssistantRegionalInputConfiguration -UserName $assistantUser -UserPassword $assistantPassword

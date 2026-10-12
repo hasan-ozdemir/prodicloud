@@ -27,6 +27,7 @@ function Remove-ClagnosMoveCollectionArtifacts {
             $discardArgs += @("-o", "none", "--only-show-errors")
             az @discardArgs 2>$null
         } | Out-Null
+        Write-ClagnosActionProgress -Action 'wait 3 seconds for Azure Resource Mover discard to settle'
         Start-Sleep -Seconds 3
 
         Invoke-TrackedAction -Label ("az resource-mover move-collection bulk-remove --name {0}" -f $CollectionName) -Action {
@@ -35,6 +36,7 @@ function Remove-ClagnosMoveCollectionArtifacts {
             $bulkRemoveArgs += @("-o", "none", "--only-show-errors")
             az @bulkRemoveArgs 2>$null
         } | Out-Null
+        Write-ClagnosActionProgress -Action 'wait 3 seconds for Azure Resource Mover bulk removal to settle'
         Start-Sleep -Seconds 3
     }
 

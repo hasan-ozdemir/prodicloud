@@ -7,12 +7,12 @@
   "sortOrder": 116,
   "installScript": "install.ps1",
   "statusCheck": {
-    "kind": "winget",
-    "value": "vscode"
+    "kind": "command",
+    "value": "code"
   },
   "uninstall": {
     "kind": "winget",
-    "value": "vscode"
+    "value": "Microsoft.VisualStudioCode"
   },
   "appStateKey": "116-install-vscode-application",
   "appState": {

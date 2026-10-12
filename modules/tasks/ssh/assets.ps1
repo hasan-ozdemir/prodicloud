@@ -464,7 +464,7 @@ function Copy-ClagnosAssetToWindowsViaExec {
     }
 
     $remoteSpec = ConvertTo-ClagnosWindowsScpRemoteSpec -HostName $HostName -RemotePath $stagingRemotePath
-    Write-Host ("Task asset copy started: {0} -> {1} (mode=windows-scp, bytes={2})" -f [System.IO.Path]::GetFileName($resolvedLocalPath), [string]$RemotePath, [int64]$fileInfo.Length)
+    Write-ClagnosActionProgress -Action ("copy guest task asset '{0}' to VM (mode=windows-scp, {1} bytes)" -f [System.IO.Path]::GetFileName($resolvedLocalPath),[int64]$fileInfo.Length)
     $transferWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $passwordFilePath = ''
     try {

@@ -126,7 +126,8 @@ Use these sources in this order when maintaining the repo:
 - Malformed task folders must warn and skip instead of aborting the stage, unless duplicate names or duplicate effective priorities make execution order ambiguous.
 - The only allowed task app-state source is the owning task or package plugin zip `<task-folder>/app-state/app-state.zip` or `<package-folder>/app-state/app-state.zip`.
 - Builtin and local-only init/update task folders must use the same post-process app-state contract and the same exact task-local plugin path rule.
-- Task-local and package-local `app-state/` folders are untracked and git-ignored; missing task plugins must log a skip and continue instead of failing the stage.
+- Task-local `app-state/` folders are untracked and git-ignored; missing task plugins must log a skip and continue instead of failing the stage.
+- Sanitized package-local `app-state/app-state.zip` snapshots are versioned with their owning package manifests. Before adding or updating a snapshot, validate its allow-listed payload, generalized target paths, and absence of credentials or machine identity with `tests/package-app-state-contract-check.ps1` and the sensitive-content audit.
 - Task- or catalog-adjacent `backup-app-states/` folders are untracked and git-ignored; local-machine restore must write backups under the owning task-stage or package-catalog root, verify the restored content, and roll back from that backup root if verification fails.
 - Stage-root shared `app-states/`, task-side helper folders outside the owning task folder, and any legacy overlay paths must not be used as alternate app-state storage locations.
 - Managed app-state save and restore must target only the `manager` and `assistant` OS profiles. Do not capture or replay `default` or arbitrary local user profiles.
@@ -169,6 +170,9 @@ Use these sources in this order when maintaining the repo:
 - The only allowed language exception is for literal user-defined display labels or product/site names that are intentionally preserved as-is, such as specific desktop shortcut titles.
 - Keep Linux and Windows wording aligned for equivalent behavior.
 - Keep logs contextual, singular, and readable.
+- Before every Azure CLI request, VM lifecycle operation, remote guest command, task, package install/status/uninstall, and long wait, print an English `Doing: <action>` progress message; never leave the operator waiting without a current action label.
+- For blocking Azure CLI or Azure REST waits, emit a bounded progress heartbeat at least every 30 seconds. Do not include passwords, tokens, or other secret argument values in progress labels.
+- Explicit `exec --quiet` suppresses remote command chatter but still prints local `Doing:` progress labels and wait heartbeats.
 - Do not emit duplicate informational lines without a real state change.
 - Show durations for long-running operations when the feature exists, but avoid noisy transcript spam.
 - When a stage produces warnings, failures, or reboot requests, summarize them clearly at stage end.
@@ -195,6 +199,7 @@ Use these sources in this order when maintaining the repo:
 - Maintain a local hook path and a GitHub Actions quality gate together.
 - No commit may introduce concrete secrets, contact-style values, personal identifiers, organization identifiers, or live-target sample values into tracked code, docs, examples, tests, or commit messages.
 - Maintain an always-on sensitive-content audit in local hooks and CI; update that audit in the same change whenever new committed surfaces or new leak-prone example formats are introduced.
+- Keep sanitized package app-state snapshots in Git and run their tracking, portability, and sensitive-payload contract check in the non-live quality gate. Keep the explicit live Azure acceptance script gated by `-RunLive` and out of CI.
 - For live publish or release-readiness claims, require one successful end-to-end live acceptance cycle against the active profile: clean `create` when safe, full natural-order `update`, `show` redaction check, `do --vm-action=status`, connection tests, and enabled feature verification.
 - Update audit/contract checks when command names, docs, env keys, or task-folder behavior change.
 - Maintain a TUI operation-coverage check: every public command and registered component/package action must be reachable from a numbered or lettered menu path.

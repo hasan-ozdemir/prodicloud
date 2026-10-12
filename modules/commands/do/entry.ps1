@@ -42,6 +42,16 @@ function Invoke-ClagnosDoCommand {
                 -AzArguments @('vm','start','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm start'
         }
+        'resume' {
+            $desiredState = 'started'
+            $completionMessage = ("Do completed: hibernated VM '{0}' in resource group '{1}' has resumed and is now started." -f $vmName, $resourceGroup)
+            Invoke-ClagnosDoAzureAction `
+                -ActionName $action `
+                -ResourceGroup $resourceGroup `
+                -VmName $vmName `
+                -AzArguments @('vm','start','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
+                -AzContext 'az vm start (resume)'
+        }
         'restart' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now restarted." -f $vmName, $resourceGroup)
@@ -52,6 +62,26 @@ function Invoke-ClagnosDoCommand {
                 -AzArguments @('vm','restart','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm restart'
         }
+        'reset' {
+            $desiredState = 'started'
+            $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was force-restarted through Azure redeploy." -f $vmName, $resourceGroup)
+            Invoke-ClagnosDoAzureAction `
+                -ActionName $action `
+                -ResourceGroup $resourceGroup `
+                -VmName $vmName `
+                -AzArguments @('vm','restart','-g',$resourceGroup,'-n',$vmName,'--force','-o','none','--only-show-errors') `
+                -AzContext 'az vm restart --force'
+        }
+        'shutdown' {
+            $desiredState = 'stopped'
+            $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was shut down gracefully and remains allocated." -f $vmName, $resourceGroup)
+            Invoke-ClagnosDoAzureAction `
+                -ActionName $action `
+                -ResourceGroup $resourceGroup `
+                -VmName $vmName `
+                -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
+                -AzContext 'az vm stop (graceful shutdown)'
+        }
         'stop' {
             $desiredState = 'stopped'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now stopped." -f $vmName, $resourceGroup)
@@ -61,6 +91,16 @@ function Invoke-ClagnosDoCommand {
                 -VmName $vmName `
                 -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm stop'
+        }
+        'power-off' {
+            $desiredState = 'stopped'
+            $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was powered off immediately and remains allocated." -f $vmName, $resourceGroup)
+            Invoke-ClagnosDoAzureAction `
+                -ActionName $action `
+                -ResourceGroup $resourceGroup `
+                -VmName $vmName `
+                -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'--skip-shutdown','-o','none','--only-show-errors') `
+                -AzContext 'az vm stop --skip-shutdown'
         }
         'deallocate' {
             $desiredState = 'deallocated'

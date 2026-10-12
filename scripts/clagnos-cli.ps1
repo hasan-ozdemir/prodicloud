@@ -748,7 +748,7 @@ function Show-ClagnosUiTaskMenu {
     }
 }
 
-function Show-ClagnosUiAdvancedMenu {
+function Show-ClagnosUiOperationsMenu {
     param([psobject]$Vm)
 
     while ($true) {
@@ -770,12 +770,32 @@ function Show-ClagnosUiAdvancedMenu {
         $options = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
             '1' {
-                $actions = @('status','start','restart','stop','deallocate','hibernate-stop','hibernate-deallocate','reapply','redeploy')
-                for ($index = 0; $index -lt $actions.Count; $index++) { Write-Host ('{0}. {1}' -f ($index + 1), $actions[$index]) }
+                $actions = @(
+                    [pscustomobject]@{ Action = 'status'; Label = 'status (read-only)' },
+                    [pscustomobject]@{ Action = 'start'; Label = 'start VM' },
+                    [pscustomobject]@{ Action = 'shutdown'; Label = 'shutdown gracefully (stays allocated)' },
+                    [pscustomobject]@{ Action = 'hibernate-stop'; Label = 'hibernate through guest OS (stays allocated)' },
+                    [pscustomobject]@{ Action = 'hibernate-deallocate'; Label = 'hibernate and deallocate' },
+                    [pscustomobject]@{ Action = 'resume'; Label = 'resume hibernated VM' },
+                    [pscustomobject]@{ Action = 'restart'; Label = 'restart VM' },
+                    [pscustomobject]@{ Action = 'power-off'; Label = 'power off immediately (skip guest shutdown)' },
+                    [pscustomobject]@{ Action = 'reset'; Label = 'reset (force restart through Azure redeploy)' },
+                    [pscustomobject]@{ Action = 'deallocate'; Label = 'deallocate VM' },
+                    [pscustomobject]@{ Action = 'reapply'; Label = 'reapply VM configuration' },
+                    [pscustomobject]@{ Action = 'redeploy'; Label = 'redeploy VM to Azure host' }
+                )
+                for ($index = 0; $index -lt $actions.Count; $index++) { Write-Host ('{0}. {1}' -f ($index + 1), [string]$actions[$index].Label) }
                 $actionChoice = Read-ClagnosUiChoice 'VM action number'
                 $actionIndex = 0
                 if (-not [int]::TryParse($actionChoice, [ref]$actionIndex) -or $actionIndex -lt 1 -or $actionIndex -gt $actions.Count) { continue }
-                $options['vm-action'] = [string]$actions[$actionIndex - 1]
+                $selectedAction = [string]$actions[$actionIndex - 1].Action
+                if ($selectedAction -eq 'power-off') {
+                    if ((Read-ClagnosUiChoice 'Type POWER OFF to force an immediate guest power-off') -cne 'POWER OFF') { continue }
+                }
+                elseif ($selectedAction -eq 'reset') {
+                    if ((Read-ClagnosUiChoice 'Type RESET to force a restart through Azure redeploy') -cne 'RESET') { continue }
+                }
+                $options['vm-action'] = $selectedAction
                 Invoke-ClagnosUiCommand -CommandName 'do' -Options $options
             }
             '2' {
@@ -840,7 +860,7 @@ function Show-ClagnosUiVmMenu {
         Write-Host 'i: initialize VC'
         Write-Host 'u: update VC'
         Write-Host 'm: manage VC components'
-        Write-Host 'a: more operations'
+        Write-Host 'o: operations'
         Write-Host 'd: delete VC and its resources'
         Write-Host 'r: refresh details'
         Write-Host 'b: back to virtual computers'
@@ -854,7 +874,7 @@ function Show-ClagnosUiVmMenu {
             'i' { Invoke-ClagnosUiCommand -CommandName 'initialize' -Options $target }
             'u' { Invoke-ClagnosUiCommand -CommandName 'update' -Options $target }
             'm' { Show-ClagnosUiComponentMenu -Vm $Vm }
-            'a' { Show-ClagnosUiAdvancedMenu -Vm $Vm }
+            'o' { Show-ClagnosUiOperationsMenu -Vm $Vm }
             'd' {
                 try {
                     $resources = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('resource', 'list', '--resource-group', [string]$Vm.ClagnosResourceGroup)))

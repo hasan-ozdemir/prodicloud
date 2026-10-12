@@ -596,6 +596,7 @@ function Invoke-ClagnosComponentDelete {
             $showArgs = @('resource','show','--ids',$resourceId,'--subscription',[string]$subscription.SubscriptionId,'-o','none','--only-show-errors')
             az @showArgs 2>$null | Out-Null
             if ($LASTEXITCODE -ne 0) { $removed = $true; break }
+            Write-ClagnosActionProgress -Action ("wait 5s for Azure to confirm deletion of '{0}'" -f [string]$resource.name)
             Start-Sleep -Seconds 5
         }
         if (-not $removed) { throw ("Azure did not confirm deletion of '{0}' within the bounded wait." -f [string]$resource.name) }

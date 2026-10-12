@@ -194,7 +194,7 @@ function Invoke-ClagnosSshTaskBlocks {
             $taskResult = $null
             $taskInvocationError = $null
 
-            Write-Host ("Task started: {0} (max {1}s)" -f $taskName, $taskTimeoutSeconds)
+            Write-ClagnosActionProgress -Action ("run guest task '{0}' (max {1}s)" -f $taskName, $taskTimeoutSeconds)
 
             if ($persistentSessionEnabled -and -not (Test-ClagnosPersistentSshSessionUsable -Session $session)) {
                 try {
@@ -222,7 +222,7 @@ function Invoke-ClagnosSshTaskBlocks {
                             continue
                         }
 
-                        Write-Host ("Task asset copy started: {0} -> {1}" -f $assetLocalPath, $assetRemotePath)
+                        Write-ClagnosActionProgress -Action ("copy guest task asset '{0}' to VM" -f [System.IO.Path]::GetFileName($assetLocalPath))
                         Copy-ClagnosAssetToVm `
                             -PySshPythonPath ([string]$pySsh.PythonPath) `
                             -PySshClientPath ([string]$pySsh.ClientPath) `

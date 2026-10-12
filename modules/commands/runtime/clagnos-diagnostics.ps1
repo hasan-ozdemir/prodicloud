@@ -625,6 +625,10 @@ function Invoke-ClagnosAzCommandWithTimeout {
     }
 
     $azExecutable = Get-ClagnosAzCliExecutable
+    $azProgressLabel = Get-ClagnosAzCliProgressLabel -Arguments $AzArgs
+    if ([int]$script:ClagnosTrackedAzureActionDepth -le 0) {
+        Write-ClagnosActionProgress -Action $azProgressLabel
+    }
     $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
     $subscriptionId = ''
     if (-not $BypassForcedSubscription -and $null -ne $resolvedSubscription -and -not [string]::IsNullOrWhiteSpace([string]$resolvedSubscription.SubscriptionId)) {
@@ -667,7 +671,19 @@ function Invoke-ClagnosAzCommandWithTimeout {
     } -ArgumentList $azExecutable, $subscriptionId, ([bool]$BypassForcedSubscription), (,$AzArgs)
 
     try {
-        $completed = Wait-Job -Job $job -Timeout $TimeoutSeconds
+        $completed = $null
+        $elapsedSeconds = 0
+        $lastHeartbeatSeconds = 0
+        while ($elapsedSeconds -lt $TimeoutSeconds) {
+            $completed = Wait-Job -Job $job -Timeout 1
+            if ($null -ne $completed -or [string]$job.State -in @('Completed','Failed','Stopped')) { break }
+            $elapsedSeconds++
+            if ($elapsedSeconds -ge 30 -and ($elapsedSeconds - $lastHeartbeatSeconds) -ge 30) {
+                $lastHeartbeatSeconds = $elapsedSeconds
+                Write-ClagnosActionProgress -Action ("{0} (still running; {1}s elapsed)" -f $azProgressLabel,$elapsedSeconds)
+            }
+        }
+        if ($null -eq $completed -and [string]$job.State -in @('Completed','Failed','Stopped')) { $completed = $job }
         if (-not $completed) {
             Stop-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
             return [pscustomobject]@{

@@ -1,16 +1,13 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: configure-unlocker-settings"
 
-$chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
-if (-not (Test-Path -LiteralPath $chocoExe)) { throw "choco was not found." }
-if (Test-Path -LiteralPath "C:\ProgramData\chocolatey\lib\io-unlocker") {
-    Write-Host "Existing Io Unlocker installation is already healthy. Skipping choco install."
+$unlockerPackagePath = Join-Path $env:ProgramData 'chocolatey\lib\io-unlocker'
+if (-not (Test-Path -LiteralPath $unlockerPackagePath -PathType Container)) {
+    Write-Host 'unlocker-settings-skip => IObit Unlocker is not installed; no per-VM settings are available to apply.'
     Write-Host "Update task completed: configure-unlocker-settings"
     return
 }
 
-& $chocoExe install io-unlocker -y --no-progress --ignore-detected-reboot
-if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) { throw "choco install io-unlocker failed with exit code $LASTEXITCODE." }
-if (-not (Test-Path -LiteralPath "C:\ProgramData\chocolatey\lib\io-unlocker")) { throw "io-unlocker path not found." }
+Write-Host "Existing IObit Unlocker installation is present; its task-local settings step is complete."
 Write-Host "Update task completed: configure-unlocker-settings"
 

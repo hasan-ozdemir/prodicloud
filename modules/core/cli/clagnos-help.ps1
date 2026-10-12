@@ -60,7 +60,7 @@ function Show-ClagnosCommandHelpOverview {
         '  -s, --subscription-id       Target Azure subscription for Azure-touching commands.'
         '  -c, --command               Remote one-shot command text for exec.'
         '  -f, --file                  Local script file to run remotely through exec.'
-        '  -q, --quiet                 Exec-only quiet output mode for one-shot commands.'
+        '  -q, --quiet                 Exec-only remote-output suppression; local Doing progress remains visible.'
         '  -h, --help                  Show this overview or command-specific help.'
         "  Azure CLI sign-in via 'az login' is required for Azure-touching commands."
         "  configure opens without az login; Azure-backed configure fields require az login to edit or verify."
@@ -110,7 +110,7 @@ function Show-ClagnosCommandHelpDetailed {
             '  -s, --subscription-id'
             '  -c, --command'
             '  -f, --file'
-            '  -q, --quiet              # exec one-shot quiet output only'
+            '  -q, --quiet              # suppress remote exec chatter; keep local Doing progress'
             '  -h, --help'
             "  Azure CLI sign-in via 'az login' is required for Azure-touching commands."
             "  configure opens without az login; Azure-backed configure fields require az login to edit or verify."
@@ -246,14 +246,16 @@ function Show-ClagnosCommandHelpDetailed {
                 'Command: do'
                 'Description: apply one VM lifecycle action or print the current VM lifecycle state.'
                 'Usage:'
-                '  clagnos do [--group <resource-group>] [--vm-name <vm-name>] [--vm-action=<status|start|restart|stop|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>] [--subscription-id <subscription-id>] [--perf]'
+                '  clagnos do [--group <resource-group>] [--vm-name <vm-name>] [--vm-action=<status|start|resume|restart|reset|shutdown|stop|power-off|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>] [--subscription-id <subscription-id>] [--perf]'
                 'Examples:'
                 '  clagnos do --vm-action=status --vm-name <vm-name>'
                 '  clagnos do --vm-action=reapply --group <resource-group> --vm-name <vm-name>'
                 '  clagnos do --vm-action=redeploy --group <resource-group> --vm-name <vm-name>'
                 '  clagnos do --vm-action=hibernate-stop --group <resource-group> --vm-name <vm-name>'
                 '  clagnos do --vm-action=hibernate-deallocate --group <resource-group> --vm-name <vm-name>'
-                "Notes: hibernate-stop uses SSH to run 'shutdown /h /f' inside a running VM and waits until the guest is no longer running without Azure deallocation. hibernate-deallocate uses Azure's deallocation-based hibernate path. Reapply calls 'az vm reapply' and then prints refreshed VM status; unlike the power actions, it remains available when provisioning is not currently succeeded. Redeploy calls 'az vm redeploy', waits for provisioning recovery, and restores the original started/stopped lifecycle state when Azure reports it deterministically."
+                '  clagnos do --vm-action=power-off --group <resource-group> --vm-name <vm-name>'
+                '  clagnos do --vm-action=reset --group <resource-group> --vm-name <vm-name>'
+                "Notes: shutdown asks the guest OS to stop and leaves the VM allocated; stop is the equivalent existing spelling. power-off uses 'az vm stop --skip-shutdown' and also leaves it allocated. resume starts only a hibernated VM. reset uses 'az vm restart --force', which Azure implements by redeploying an unresponsive VM. hibernate-stop uses SSH to run 'shutdown /h /f' inside a running VM and waits until the guest is no longer running without Azure deallocation. hibernate-deallocate uses Azure's deallocation-based hibernate path. Reapply calls 'az vm reapply' and then prints refreshed VM status; unlike the power actions, it remains available when provisioning is not currently succeeded. Redeploy calls 'az vm redeploy', waits for provisioning recovery, and restores the original started/stopped lifecycle state when Azure reports it deterministically."
             )
             return
         }
@@ -392,7 +394,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos exec --file .\tools\scripts\sample-remote.ps1 --group <resource-group> --vm-name <vm-name>'
                 '  clagnos exec --quiet --command "Get-Date" --group <resource-group> --vm-name <vm-name>'
                 '  clagnos exec -c "uname -a" --group <resource-group> --vm-name <vm-name>'
-                'Notes: exec is SSH-only. When no --command or --file is provided, it opens the interactive SSH shell for the actual target VM OS. When --command or --file is provided, it runs one one-shot remote command and returns the exit result. --quiet / -q is valid only together with --command / -c / --file and prints only the remote command result.'
+                'Notes: exec is SSH-only. When no --command or --file is provided, it opens the interactive SSH shell for the actual target VM OS. When --command or --file is provided, it runs one one-shot remote command and returns the exit result. --quiet / -q is valid only together with --command / -c / --file and suppresses remote output chatter while local Doing progress and wait heartbeats remain visible.'
             )
             return
         }

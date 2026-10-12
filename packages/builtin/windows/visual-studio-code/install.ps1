@@ -3,7 +3,7 @@ Write-Host "Update task started: install-vscode-application"
 
 $taskConfig = [ordered]@{
     PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
-    VsCodePackageId = 'vscode'
+    VsCodePackageId = 'Microsoft.VisualStudioCode'
     CodeExecutableCandidates = @(
         'C:\Program Files\Microsoft VS Code\Code.exe',
         'C:\Users\__VM_ADMIN_USER__\AppData\Local\Programs\Microsoft VS Code\Code.exe',

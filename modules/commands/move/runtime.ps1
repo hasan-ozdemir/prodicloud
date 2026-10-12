@@ -143,7 +143,7 @@ function Wait-ClagnosSnapshotCopyReady {
             $previousProgressKey = $progressKey
         }
 
-        Write-Host ("Target snapshot copy {0}/{1}: provisioningState={2}, accessState={3}, completionPercent={4:N1}" -f $copyAttempt, $MaxAttempts, $prov, $acc, $pct)
+        Write-ClagnosActionProgress -Action ("check target snapshot copy {0}/{1}: provisioningState={2}, accessState={3}, completionPercent={4:N1}" -f $copyAttempt, $MaxAttempts, $prov, $acc, $pct)
 
         if ([string]::Equals($prov, "Succeeded", [System.StringComparison]::OrdinalIgnoreCase) -and [string]::Equals($acc, "Available", [System.StringComparison]::OrdinalIgnoreCase) -and $pct -ge 100.0) {
             return $copyState
@@ -157,6 +157,7 @@ function Wait-ClagnosSnapshotCopyReady {
             throw "Target snapshot copy did not complete in expected time."
         }
 
+        Write-ClagnosActionProgress -Action ("wait {0}s for target snapshot copy completion" -f $DelaySeconds)
         Start-Sleep -Seconds $DelaySeconds
     }
 
@@ -215,10 +216,11 @@ function Wait-ClagnosTcpPortReachable {
     if ($DelaySeconds -lt 1) { $DelaySeconds = 1 }
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        Write-Host ("Connectivity check ({0}) {1}:{2} attempt {3}/{4}" -f $Label, $HostName, $Port, $attempt, $MaxAttempts)
+        Write-ClagnosActionProgress -Action ("probe {0} connectivity at {1}:{2} (attempt {3}/{4})" -f $Label,$HostName,$Port,$attempt,$MaxAttempts)
         if (Test-ClagnosTcpPortReachable -HostName $HostName -Port $Port -TimeoutSeconds $TimeoutSeconds) {
             return $true
         }
+        Write-ClagnosActionProgress -Action ("wait {0}s before retrying {1} connectivity" -f $DelaySeconds,$Label)
         Start-Sleep -Seconds $DelaySeconds
     }
 

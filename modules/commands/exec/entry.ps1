@@ -22,6 +22,8 @@ function Invoke-ClagnosExecCommand {
         $script:ClagnosQuietOutput = $true
     }
 
+    Write-ClagnosActionProgress -Action 'open remote SSH command session'
+
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.ConfigMap -OperationName 'exec'
     $selectedResourceGroup = [string]$target.ResourceGroup
     $selectedVmName = [string]$target.VmName

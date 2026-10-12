@@ -8,11 +8,11 @@
   "installScript": "install.ps1",
   "statusCheck": {
     "kind": "winget",
-    "value": "windscribe"
+    "value": "Windscribe.Windscribe"
   },
   "uninstall": {
     "kind": "winget",
-    "value": "windscribe"
+    "value": "Windscribe.Windscribe"
   },
   "appStateKey": "112-install-windscribe-application"
 }

@@ -35,6 +35,7 @@ $script:RetailPricingCacheByLocation = @{}
 $script:RetailPricingMaxRetries = 4
 $script:RetailPricingPageDelayMs = 120
 $script:PerfSuppressAzTimingDepth = 0
+$script:ClagnosTrackedAzureActionDepth = 0
 $script:ManagedByTagKey = 'managed-by'
 $script:ManagedByTagValue = 'clagnos'
 $script:LegacyManagedByTagValue = 'az-vm'

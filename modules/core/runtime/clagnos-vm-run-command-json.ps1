@@ -51,6 +51,7 @@ function Invoke-ClagnosVmRunCommandJson {
     $lastStdOut = ''
     $lastParsedResult = $null
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        Write-ClagnosActionProgress -Action ("run {0} on VM '{1}' (attempt {2}/{3})" -f [string]$ContextLabel,[string]$VmName,$attempt,$MaxAttempts)
         $azArgs = @('vm', 'run-command', 'invoke', '-g', $ResourceGroup, '-n', $VmName, '--command-id', $CommandId, '--scripts')
         $azArgs += @($Scripts)
         $azArgs += @('-o', 'json', '--only-show-errors')
@@ -101,7 +102,7 @@ function Invoke-ClagnosVmRunCommandJson {
         }
 
         if ($attempt -lt $MaxAttempts) {
-            Write-Host ("{0} is not ready yet. Retrying in {1}s (attempt {2}/{3})..." -f [string]$ContextLabel, $RetryDelaySeconds, $attempt, $MaxAttempts) -ForegroundColor Yellow
+            Write-ClagnosActionProgress -Action ("{0} is not ready; wait {1}s before attempt {2}/{3}" -f [string]$ContextLabel, $RetryDelaySeconds, ($attempt + 1), $MaxAttempts)
             Start-Sleep -Seconds $RetryDelaySeconds
         }
     }
