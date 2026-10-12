@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.400 - 2026-10-12
+
+### Summary
+The Clagnos TUI now provides a refreshed cloud-subscription selector and complete menu access to managed resource inventory, component inspection, disabled task inventory, and the existing lifecycle operations. Subscription selection synchronizes the Azure CLI active default with the subscription persisted for Clagnos commands.
+
+### Highlights
+- Added `3. Cloud subscriptions`, listing current Azure CLI subscriptions and marking both the app selection and CLI active default.
+- Added numbered component-detail and disabled-task views, plus numbered lifecycle, resize, and feature choices.
+- Updated help text to match the separate `create`, `initialize`, and `update` contracts.
+- Scanned accessible subscriptions for legacy managed resource groups; none were present, so no resource-group tags were changed.
+
+### Validation
+- All 167 smoke checks passed under Windows PowerShell 5.1 and PowerShell 7+.
+- Code quality, documentation, Bash syntax, and sensitive-content checks passed. No Azure resource mutation was run.
+
 ## Release 2026.10.12.399 - 2026-10-12
 
 ### Summary

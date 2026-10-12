@@ -573,11 +573,16 @@ Invoke-Test -Name "Create, initialize, and update have separate lifecycle stages
     $createPlan = Resolve-ClagnosActionPlan -CommandName 'create' -Options @{}
     $updatePlan = Resolve-ClagnosActionPlan -CommandName 'update' -Options @{}
     $initializeEntry = Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\initialize\entry.ps1') -Raw
+    $helpText = Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\cli\clagnos-help.ps1') -Raw
 
     Assert-True -Condition ((@($createPlan.Actions) -join ',') -eq 'configure,group,network,vm-deploy,vm-summary') -Message 'Create must provision infrastructure and stop after the summary.'
     Assert-True -Condition ((@($updatePlan.Actions) -join ',') -eq 'configure,vm-update,vm-summary') -Message 'Update must run only the maintenance stage and summary.'
     Assert-True -Condition ($initializeEntry -match [regex]::Escape("Target = 'vm-init'")) -Message 'Initialize must dispatch the vm-init stage for an existing VM.'
     Assert-True -Condition ($initializeEntry -match [regex]::Escape("-CommandName 'initialize'")) -Message 'Initialize must be visible as its own command operation.'
+    Assert-True -Condition ($helpText -match [regex]::Escape('Allowed steps: configure, group, network, vm-deploy, vm-summary')) -Message 'Create help must list only its infrastructure steps.'
+    Assert-True -Condition ($helpText -match [regex]::Escape('Allowed steps: configure, vm-update, vm-summary')) -Message 'Update help must list only its maintenance steps.'
+    Assert-True -Condition ($helpText -match [regex]::Escape('It does not create, redeploy, or initialize Azure resources')) -Message 'Update help must not describe infrastructure or init work.'
+    Assert-True -Condition ($helpText -notmatch [regex]::Escape('Existing VMs are redeployed after Azure create-or-update.')) -Message 'Update help must not claim existing VMs are redeployed.'
 }
 
 Invoke-Test -Name "Create and update use review-first workflow checkpoints" -Action {
@@ -949,12 +954,18 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     $launcherText = Get-Content -LiteralPath $launcherPath -Raw
     Assert-True -Condition ($launcherText -match [regex]::Escape('scripts\clagnos-cli.ps1')) -Message 'cg.cmd must launch scripts/clagnos-cli.ps1.'
     Assert-True -Condition ($uiText -match [regex]::Escape('one tool for all common cloud operations')) -Message 'The welcome screen must show the requested one-line product description.'
-    foreach ($menuRoute in @("'initialize'", "'update'", "'program'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'delete'", "'configure'", "'help'")) {
+    foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'program'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('p: manage programs','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
+    Assert-True -Condition ($uiText -match [regex]::Escape("Invoke-ClagnosUiCommand -CommandName 'list'")) -Message 'The inventory submenu must route into the read-only list command.'
+    Assert-True -Condition ($uiText -match [regex]::Escape("'s' { 'show' }")) -Message 'The component submenu must expose property details for the selected resource.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('az account set --subscription')) -Message 'Cloud subscription selection must update the Azure CLI active subscription.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('Save-ClagnosSubscriptionIdToDotEnv')) -Message 'Cloud subscription selection must persist the Clagnos default subscription.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('az account list --all --refresh')) -Message 'Cloud subscriptions must refresh and list all Azure CLI subscriptions.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('This subscription is not enabled and cannot become the active Azure subscription.')) -Message 'Cloud subscriptions must prevent selecting a disabled subscription.'
 }
 
 Invoke-Test -Name "Azure-touching commands accept subscription-id and local-only commands reject it" -Action {
@@ -2959,7 +2970,7 @@ Invoke-Test -Name "Create update and resize docs reflect the current operator co
     $readmeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'README.md') -Raw)
 
     foreach ($fragment in @(
-        'create always targets a fresh managed resource group and fresh managed resources',
+        'create targets a fresh managed resource group, its initial network resources, and one fresh VM',
         'asks for VM OS type first when --windows/--linux is omitted',
         'proposes the next global gX name plus globally unique nX resource ids',
         'Auto mode runs from the fully resolved selection set',

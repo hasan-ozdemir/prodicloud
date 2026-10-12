@@ -5643,3 +5643,24 @@ Implement the plan.
 **Assistant Summary**
 
 Implemented the approved Clagnos rebrand and interactive CLI plan. Renamed the public app/runtime paths and repository references, added `cg.cmd` -> `scripts/clagnos-cli.ps1`, and wired the nested menus to existing orchestration plus new `initialize`, program-management, and Azure-component CRUD commands. Separated fresh create, VM initialization, and maintenance; added managed-tag migration support and dependency-aware component deletion. Updated operator contracts, tests, release notes, and prompt-history safety checks. Local static and compatibility checks passed; no live Azure operations were run.
+### 2026-10-12 13:36 UTC
+**User Prompt**
+
+````text
+Continue the remaining tasks and operations in the approved plan, implement its basic, intermediate, and advanced operations end to end, and perform the authorized one-time update of this app's resource-group tags to managed-by=clagnos.
+````
+
+**Assistant Summary**
+
+Completed the operation-coverage audit and added TUI access to managed resource inventory, component details, disabled task inventory, and numbered lifecycle, resize, and feature choices. Corrected stale lifecycle help. Audited accessible enabled Azure subscriptions for legacy managed-by tags; no eligible groups were found, so no resource-group tag changed. The selected subscription and Azure CLI active default were aligned.
+
+### 2026-10-12 13:37 UTC
+**User Prompt**
+
+````text
+Plan update: set the target Azure subscription for this app to the subscription named <selected-subscription>. Add a Cloud subscriptions main-menu item that lists all current Azure subscriptions through Azure CLI, displays the active selection, and lets me select the subscription used by all other app operations.
+````
+
+**Assistant Summary**
+
+Added the numbered Cloud subscriptions menu with a refreshed Azure CLI subscription inventory, separate Clagnos-selected and CLI-active markers, disabled-subscription protection, and selection that updates both the Azure CLI default and persisted Clagnos subscription. Set the Azure CLI default to the configured app subscription. No legacy-tag resource groups were present, so the one-time group-tag migration had no eligible targets.

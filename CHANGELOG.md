@@ -3,6 +3,21 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.400] - 2026-10-12
+
+### Changed
+- Added the `Cloud subscriptions` menu. It refreshes all Azure CLI subscription rows, marks the Clagnos selection and CLI active default, and numeric selection updates both `az account set` and `.env` `SELECTED_AZURE_SUBSCRIPTION_ID`.
+- Completed interactive access to read-only resource inventory, component details, disabled task inventory, and numeric lifecycle/resize/feature actions; region changes use the shared Azure region picker.
+- Corrected command help so `create`, `initialize`, and `update` accurately describe their separate infrastructure, bootstrap, and maintenance stages.
+
+### Operational Result
+- Audited accessible enabled subscriptions for legacy `managed-by=az-vm` resource groups. No eligible groups were found, so no Azure resource-group tags were changed.
+- Aligned the Azure CLI active default with the Clagnos-selected subscription. No Azure resource mutations were performed.
+
+### Tests
+- Revalidated the 167-check Clagnos smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
+- Revalidated code quality, documentation contracts, Bash syntax, and sensitive-content checks.
+
 ## [2026.10.12.399] - 2026-10-12
 
 ### Changed

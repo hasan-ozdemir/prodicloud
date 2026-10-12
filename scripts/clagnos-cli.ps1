@@ -61,6 +61,142 @@ function Update-ClagnosUiSubscription {
     }
 }
 
+function Get-ClagnosUiAzureCliActiveSubscriptionId {
+    $activeId = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
+        az account show --query id -o tsv --only-show-errors 2>$null
+    }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$activeId)) {
+        throw "Azure CLI could not resolve its active subscription. Run 'az login' and retry."
+    }
+    return ([string]$activeId).Trim()
+}
+
+function Get-ClagnosUiCloudSubscriptionRows {
+    $raw = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
+        az account list --all --refresh -o json --only-show-errors 2>$null
+    }
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$raw)) {
+        throw "Azure CLI could not refresh the subscription list. Run 'az login' and retry."
+    }
+    $rows = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject $raw) | Where-Object {
+        $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_.id)
+    })
+    return @($rows | Sort-Object @{ Expression = { if ([bool]$_.isDefault) { 0 } else { 1 } } }, @{ Expression = { [string]$_.name } }, @{ Expression = { [string]$_.id } })
+}
+
+function Set-ClagnosUiActiveSubscription {
+    param([psobject]$Subscription)
+
+    if ($null -eq $Subscription -or [string]::IsNullOrWhiteSpace([string]$Subscription.id)) {
+        throw 'Select an accessible Azure subscription first.'
+    }
+    if (-not [string]::Equals([string]$Subscription.state, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'A disabled Azure subscription cannot be activated.'
+    }
+
+    $previousCliId = Get-ClagnosUiAzureCliActiveSubscriptionId
+    $previousContext = Get-ClagnosResolvedSubscriptionContext
+    $subscriptionId = [string]$Subscription.id
+    try {
+        az account set --subscription $subscriptionId --only-show-errors
+        Assert-LastExitCode 'az account set'
+    }
+    catch {
+        if (-not [string]::IsNullOrWhiteSpace($previousCliId)) {
+            az account set --subscription $previousCliId --only-show-errors
+            $null = $LASTEXITCODE
+        }
+        throw
+    }
+
+    $verifiedId = Get-ClagnosUiAzureCliActiveSubscriptionId
+    if (-not [string]::Equals($verifiedId, $subscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if (-not [string]::IsNullOrWhiteSpace($previousCliId)) {
+            az account set --subscription $previousCliId --only-show-errors
+            $null = $LASTEXITCODE
+        }
+        throw 'Azure CLI did not confirm the selected active subscription; the previous CLI subscription was restored.'
+    }
+
+    try {
+        Save-ClagnosSubscriptionIdToDotEnv `
+            -EnvFilePath (Join-Path $script:ClagnosUiRepoRoot '.env') `
+            -SubscriptionId $subscriptionId
+    }
+    catch {
+        if (-not [string]::IsNullOrWhiteSpace($previousCliId)) {
+            az account set --subscription $previousCliId --only-show-errors
+            $null = $LASTEXITCODE
+        }
+        if ($null -ne $previousContext) {
+            Set-ClagnosResolvedSubscriptionContext `
+                -SubscriptionId ([string]$previousContext.SubscriptionId) `
+                -SubscriptionName ([string]$previousContext.SubscriptionName) `
+                -TenantId ([string]$previousContext.TenantId) `
+                -ResolutionSource ([string]$previousContext.ResolutionSource)
+        }
+        throw
+    }
+
+    Set-ClagnosResolvedSubscriptionContext `
+        -SubscriptionId $subscriptionId `
+        -SubscriptionName ([string]$Subscription.name) `
+        -TenantId ([string]$Subscription.tenantId) `
+        -ResolutionSource 'interactive'
+    $script:ClagnosUiSubscription = [pscustomobject]@{
+        SubscriptionId = $subscriptionId
+        SubscriptionName = [string]$Subscription.name
+        TenantId = [string]$Subscription.tenantId
+        ResolutionSource = 'interactive'
+    }
+    Write-Host ('Active Azure subscription: {0} ({1})' -f [string]$Subscription.name, $subscriptionId) -ForegroundColor Green
+}
+
+function Show-ClagnosUiCloudSubscriptions {
+    while ($true) {
+        Update-ClagnosUiSubscription
+        Write-ClagnosUiHeader -Title 'Cloud subscriptions'
+        try {
+            $rows = @(Get-ClagnosUiCloudSubscriptionRows)
+            $selectedContext = Get-ClagnosResolvedSubscriptionContext
+            $activeId = Get-ClagnosUiAzureCliActiveSubscriptionId
+            $selectedName = if ($null -ne $selectedContext) { [string]$selectedContext.SubscriptionName } else { '(none)' }
+            $activeRow = @($rows | Where-Object { [string]::Equals([string]$_.id, $activeId, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+            $activeName = if (@($activeRow).Count -gt 0) { [string]$activeRow[0].name } else { $activeId }
+            Write-Host ('Clagnos selected: {0}' -f $selectedName)
+            Write-Host ('Azure CLI active: {0}' -f $activeName)
+            Write-Host ''
+            for ($index = 0; $index -lt $rows.Count; $index++) {
+                $markers = @()
+                if ($null -ne $selectedContext -and [string]::Equals([string]$rows[$index].id, [string]$selectedContext.SubscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) { $markers += 'Clagnos selected' }
+                if ([string]::Equals([string]$rows[$index].id, $activeId, [System.StringComparison]::OrdinalIgnoreCase)) { $markers += 'Azure CLI active' }
+                $markerText = if ($markers.Count -gt 0) { ' [' + ($markers -join '; ') + ']' } else { '' }
+                $stateText = if ([string]::Equals([string]$rows[$index].state, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)) { '' } else { ' [not enabled]' }
+                Write-Host ('{0}. {1} ({2}){3}{4}' -f ($index + 1), [string]$rows[$index].name, [string]$rows[$index].id, $markerText, $stateText)
+            }
+            Write-Host 'b: back'
+            Write-Host 'q: exit'
+            $choice = (Read-ClagnosUiChoice 'Select active cloud subscription').ToLowerInvariant()
+            if ($choice -eq 'b') { return }
+            if ($choice -eq 'q') { exit }
+            $number = 0
+            if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $rows.Count) { continue }
+            if (-not [string]::Equals([string]$rows[$number - 1].state, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)) {
+                Write-Host 'This subscription is not enabled and cannot become the active Azure subscription.' -ForegroundColor Yellow
+                Wait-ClagnosUiContinue
+                continue
+            }
+            Set-ClagnosUiActiveSubscription -Subscription $rows[$number - 1]
+            Wait-ClagnosUiContinue
+        }
+        catch {
+            Write-ClagnosUiError -ErrorRecord $_
+            Wait-ClagnosUiContinue
+            return
+        }
+    }
+}
+
 function Write-ClagnosUiHeader {
     param([string]$Title = 'Clagnos')
 
@@ -395,24 +531,28 @@ function Show-ClagnosUiComponentMenu {
         if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $types.Count) { continue }
         $type = $types[$number - 1]
         Write-ClagnosUiHeader -Title ([string]$type.Label)
-        Write-Host 'l: list/read'
+        Write-Host 'l: list'
+        Write-Host 's: show properties'
         Write-Host 'c: create'
         Write-Host 'u: update properties'
         Write-Host 'd: delete'
-        if ($type.Id -in @('disk','nic')) { Write-Host 'a: attach or detach' }
+        if ($type.Id -in @('disk','nic')) {
+            Write-Host 'a: attach'
+            Write-Host 't: detach'
+        }
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $actionChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($actionChoice -eq 'b') { continue }
         if ($actionChoice -eq 'q') { exit }
-        if ($actionChoice -eq 'a' -and $type.Id -in @('disk','nic')) {
+        if ($actionChoice -in @('a','t') -and $type.Id -in @('disk','nic')) {
             $options = New-ClagnosUiTargetOptions -Vm $Vm
             $options['type'] = [string]$type.Id
-            $options['action'] = (Read-ClagnosUiChoice 'Action: attach or detach').ToLowerInvariant()
+            $options['action'] = if ($actionChoice -eq 'a') { 'attach' } else { 'detach' }
             Invoke-ClagnosUiCommand -CommandName 'component' -Options $options
             continue
         }
-        $action = switch ($actionChoice) { 'l' { 'list' } 'c' { 'create' } 'u' { 'update' } 'd' { 'delete' } default { '' } }
+        $action = switch ($actionChoice) { 'l' { 'list' } 's' { 'show' } 'c' { 'create' } 'u' { 'update' } 'd' { 'delete' } default { '' } }
         if ([string]::IsNullOrWhiteSpace($action)) { continue }
         $options = New-ClagnosUiTargetOptions -Vm $Vm
         $options['type'] = [string]$type.Id
@@ -431,6 +571,7 @@ function Show-ClagnosUiTaskMenu {
         Write-Host '3. Run one update task'
         Write-Host '4. Save task app-state'
         Write-Host '5. Restore task app-state'
+        Write-Host '6. List disabled tasks'
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
@@ -441,14 +582,27 @@ function Show-ClagnosUiTaskMenu {
             '1' { $target['list'] = $true; $target['vm-init'] = $true; $target['vm-update'] = $true; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
             '2' { $taskNumber = Read-ClagnosUiChoice 'Task number'; $target['run-vm-init'] = $taskNumber; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
             '3' { $taskNumber = Read-ClagnosUiChoice 'Task number'; $target['run-vm-update'] = $taskNumber; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
-            { $_ -in @('4','5') } {
-                $stage = (Read-ClagnosUiChoice 'Task stage: init or update').ToLowerInvariant()
+            { $_ -in @('4','5','6') } {
+                if ($choice -eq '6') {
+                    $target['list'] = $true
+                    $target['vm-init'] = $true
+                    $target['vm-update'] = $true
+                    $target['disabled'] = $true
+                    Invoke-ClagnosUiCommand -CommandName 'task' -Options $target
+                    break
+                }
+                Write-Host 'i: init | u: update'
+                $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
+                $stage = switch ($stageChoice) { 'i' { 'init' } 'u' { 'update' } default { '' } }
                 $number = Read-ClagnosUiChoice 'Task number'
-                if ($stage -notin @('init','update')) { continue }
+                if ([string]::IsNullOrWhiteSpace($stage)) { continue }
                 $target[('vm-{0}-task' -f $stage)] = $number
                 $target[$(if ($choice -eq '4') { 'save-app-state' } else { 'restore-app-state' })] = $true
-                $surface = (Read-ClagnosUiChoice 'Target: vm or lm (local Windows host)').ToLowerInvariant()
+                Write-Host 'v: virtual computer | l: local Windows host'
+                $surfaceChoice = (Read-ClagnosUiChoice 'App-state target').ToLowerInvariant()
+                $surface = switch ($surfaceChoice) { 'v' { 'vm' } 'l' { 'lm' } default { '' } }
                 if ($surface -in @('vm','lm')) { $target[$(if ($choice -eq '4') { 'source' } else { 'target' })] = $surface }
+                else { continue }
                 $target['user'] = Read-ClagnosUiChoice 'User (.all., .current., or name)'
                 Invoke-ClagnosUiCommand -CommandName 'task' -Options $target
             }
@@ -478,28 +632,40 @@ function Show-ClagnosUiAdvancedMenu {
         $options = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
             '1' {
-                Write-Host 'Actions: status, start, restart, stop, deallocate, reapply, redeploy, hibernate-stop, hibernate-deallocate'
-                $options['vm-action'] = Read-ClagnosUiChoice 'Action'
+                $actions = @('status','start','restart','stop','deallocate','hibernate-stop','hibernate-deallocate','reapply','redeploy')
+                for ($index = 0; $index -lt $actions.Count; $index++) { Write-Host ('{0}. {1}' -f ($index + 1), $actions[$index]) }
+                $actionChoice = Read-ClagnosUiChoice 'VM action number'
+                $actionIndex = 0
+                if (-not [int]::TryParse($actionChoice, [ref]$actionIndex) -or $actionIndex -lt 1 -or $actionIndex -gt $actions.Count) { continue }
+                $options['vm-action'] = [string]$actions[$actionIndex - 1]
                 Invoke-ClagnosUiCommand -CommandName 'do' -Options $options
             }
             '2' {
-                Write-Host 'Leave size blank to change the OS disk instead.'
-                $size = Read-ClagnosUiChoice 'New VM size (for example Standard_B2s)'
-                if (-not [string]::IsNullOrWhiteSpace($size)) { $options['vm-size'] = $size }
-                else {
-                    $options['disk-size'] = Read-ClagnosUiChoice 'Target disk size (for example 128GB)'
-                    $options[(Read-ClagnosUiChoice 'Intent: expand or shrink').ToLowerInvariant()] = $true
+                Write-Host '1. Change VM size'
+                Write-Host '2. Expand OS disk'
+                Write-Host '3. Show safe shrink guidance'
+                $resizeChoice = Read-ClagnosUiChoice 'Resize action'
+                if ($resizeChoice -eq '1') {
+                    # The resize runtime opens the region-aware Azure SKU picker.
                 }
+                elseif ($resizeChoice -in @('2','3')) {
+                    $options['disk-size'] = Read-ClagnosUiChoice 'Target disk size (for example 128GB)'
+                    $options[$(if ($resizeChoice -eq '2') { 'expand' } else { 'shrink' })] = $true
+                }
+                else { continue }
                 Invoke-ClagnosUiCommand -CommandName 'resize' -Options $options
             }
             '3' {
-                $options['vm-region'] = Read-ClagnosUiChoice 'Target Azure region'
+                $options['vm-region'] = Select-AzLocationInteractive -DefaultLocation ([string]$Vm.location)
                 Invoke-ClagnosUiCommand -CommandName 'move' -Options $options
             }
             '4' {
                 Write-Host 'h: hibernation | n: nested virtualization'
                 $feature = (Read-ClagnosUiChoice 'Feature').ToLowerInvariant()
-                $value = Read-ClagnosUiChoice 'Value: true or false'
+                Write-Host '1: enable | 2: disable'
+                $valueChoice = Read-ClagnosUiChoice 'Feature state'
+                $value = switch ($valueChoice) { '1' { 'true' } '2' { 'false' } default { '' } }
+                if ([string]::IsNullOrWhiteSpace($value)) { continue }
                 if ($feature -eq 'h') { $options['hibernation'] = $value }
                 elseif ($feature -eq 'n') { $options['nested-virtualization'] = $value }
                 else { continue }
@@ -601,28 +767,56 @@ function Show-ClagnosUiVirtualComputers {
     }
 }
 
+function Show-ClagnosUiInventoryMenu {
+    $types = @(
+        @{ Id = 'group'; Label = 'Resource groups' },
+        @{ Id = 'vm'; Label = 'Virtual machines' },
+        @{ Id = 'disk'; Label = 'Managed disks' },
+        @{ Id = 'vnet'; Label = 'Virtual networks' },
+        @{ Id = 'subnet'; Label = 'Subnets' },
+        @{ Id = 'nic'; Label = 'Network interfaces' },
+        @{ Id = 'ip'; Label = 'Public IP addresses' },
+        @{ Id = 'nsg'; Label = 'Network security groups' },
+        @{ Id = 'nsg-rule'; Label = 'Network security rules' }
+    )
+
+    while ($true) {
+        Write-ClagnosUiHeader -Title 'Managed resource inventory'
+        Write-Host '1. All managed resource types'
+        for ($index = 0; $index -lt $types.Count; $index++) {
+            Write-Host ('{0}. {1}' -f ($index + 2), [string]$types[$index].Label)
+        }
+        Write-Host 'b: back'
+        Write-Host 'q: exit'
+        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
+        if ($choice -eq 'b') { return }
+        if ($choice -eq 'q') { exit }
+
+        $number = 0
+        if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt ($types.Count + 1)) { continue }
+        $options = @{}
+        if ($number -gt 1) { $options['type'] = [string]$types[$number - 2].Id }
+        $group = Read-ClagnosUiChoice 'Exact resource group filter (press Enter for all managed groups)'
+        if (-not [string]::IsNullOrWhiteSpace($group)) { $options['group'] = $group }
+        Invoke-ClagnosUiCommand -CommandName 'list' -Options $options
+    }
+}
+
 function Show-ClagnosUiHome {
     while ($true) {
         Update-ClagnosUiSubscription
         Write-ClagnosUiHeader -Title 'Main menu'
         Write-Host '1. Virtual computers'
-        Write-Host 's: select Azure subscription'
+        Write-Host '2. Managed resource inventory'
+        Write-Host '3. Cloud subscriptions'
         Write-Host 'c: configure settings'
         Write-Host 'h: help'
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         switch ($choice) {
             '1' { Show-ClagnosUiVirtualComputers }
-            's' {
-                try {
-                    $rows = @(Get-ClagnosAccessibleSubscriptionRows)
-                    $currentId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
-                    $selected = Select-ClagnosSubscriptionInteractive -DefaultSubscriptionId $currentId
-                    Save-ClagnosSubscriptionIdToDotEnv -EnvFilePath (Join-Path $script:ClagnosUiRepoRoot '.env') -SubscriptionId ([string]$selected.id)
-                    Set-ClagnosResolvedSubscriptionContext -SubscriptionId ([string]$selected.id) -SubscriptionName ([string]$selected.name) -TenantId ([string]$selected.tenantId) -ResolutionSource 'interactive'
-                }
-                catch { Write-ClagnosUiError -ErrorRecord $_; Wait-ClagnosUiContinue }
-            }
+            '2' { Show-ClagnosUiInventoryMenu }
+            '3' { Show-ClagnosUiCloudSubscriptions }
             'c' { Invoke-ClagnosUiCommand -CommandName 'configure' -Options @{} }
             'h' { Invoke-ClagnosUiCommand -CommandName 'help' -Options @{} }
             'q' { return }

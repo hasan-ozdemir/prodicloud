@@ -54,7 +54,7 @@ function Show-ClagnosCommandHelpOverview {
         '  --version                  Print the current clagnos release version and exit.'
         '  --auto[=true|false]         Auto mode (create/initialize/update/delete only).'
         '  --perf[=true|false]         Print timing metrics.'
-        '  --windows / --linux         Force VM platform where supported.'
+        '  --windows / --linux         Force VM platform where supported (create/initialize/update/exec/resize/program).'
         '  -g, --group                 Target resource group where required.'
         '  -v, --vm-name               Target VM name where required.'
         '  -s, --subscription-id       Target Azure subscription for Azure-touching commands.'
@@ -102,8 +102,8 @@ function Show-ClagnosCommandHelpDetailed {
             '  --version                # print the current clagnos release version and exit'
             '  --auto[=true|false]      # create/initialize/update/delete only'
             '  --perf[=true|false]'
-            '  --windows[=true|false]   # create/update/task/resize'
-            '  --linux[=true|false]     # create/update/task/resize'
+            '  --windows[=true|false]   # create/initialize/update/exec/resize/program'
+            '  --linux[=true|false]     # create/initialize/update/exec/resize/program'
             '  -g, --group'
             '  -v, --vm-name'
             '  -s, --subscription-id'
@@ -175,7 +175,8 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos create --auto -s <subscription-guid>'
                 '  clagnos create --auto --windows --vm-name <vm-name> --vm-region <azure-region> --vm-size <vm-sku> -s <subscription-guid>'
                 '  clagnos initialize --group <resource-group> --vm-name <vm-name>'
-                'Notes: create always targets a fresh managed resource group and fresh managed resources for full runs. Interactive mode prompts for Azure subscription when --subscription-id is omitted, asks for VM OS type first when --windows/--linux is omitted, proposes the next global gX name plus globally unique nX resource ids, and asks yes/no/cancel review checkpoints only for group, vm-deploy, vm-init, and vm-update. Auto mode runs from the fully resolved selection set: CLI overrides win, otherwise .env SELECTED_* values plus the platform VM defaults must resolve platform, VM name, Azure region, and VM size. When a partial create window starts at vm-init, vm-update, or vm-summary, clagnos reuses the existing managed target created earlier instead of generating a new gX resource group name. Reboot-signaling vm-init and vm-update tasks restart the VM immediately, wait for recovery, and then continue with the next task. Windows vm-update also ends with one additional final restart before vm-summary. vm-summary starts with a read-only guest readback block and then prints the normal connection details. vm-summary always renders, even for partial step windows. For a destructive rebuild, run delete first and then create again.'
+                'Allowed steps: configure, group, network, vm-deploy, vm-summary'
+                'Notes: create targets a fresh managed resource group, its initial network resources, and one fresh VM. It never reuses existing resource groups or names and stops after the read-only VM summary; run initialize for vm-init tasks and use program for catalogued software. Interactive mode prompts for Azure subscription when --subscription-id is omitted, asks for VM OS type first when --windows/--linux is omitted, proposes the next global gX name plus globally unique nX resource ids, and asks yes/no/cancel only before group creation and VM deployment. Auto mode runs from the fully resolved selection set: CLI overrides win, otherwise .env SELECTED_* values plus platform defaults must resolve platform, VM name, Azure region, and VM size. Use initialize and update for guest stages; use do for explicit lifecycle and repair actions. vm-summary always renders, even for partial step windows. For a destructive rebuild, run delete first and then create again.'
             )
             return
         }
@@ -187,7 +188,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos initialize [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--auto] [--perf]'
                 'Examples:'
                 '  clagnos initialize --group <resource-group> --vm-name <vm-name>'
-                'Notes: initialize never creates Azure resources and runs only enabled vm-init tasks. Task review and reboot recovery follow the shared stage contract.'
+                'Notes: initialize never creates Azure resources and runs only enabled vm-init tasks. Interactive mode prompts for Azure subscription when --subscription-id is omitted. Task review and reboot recovery follow the shared stage contract.'
             )
             return
         }
@@ -202,12 +203,12 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos update --step <step> [--subscription-id <subscription-id>]'
                 '  clagnos update --step-from <step> [--subscription-id <subscription-id>]'
                 '  clagnos update --step-to <step> [--subscription-id <subscription-id>]'
-                'Steps: configure, group, network, vm-deploy, vm-init, vm-update, vm-summary'
+                'Allowed steps: configure, vm-update, vm-summary'
                 'Examples:'
                 '  clagnos update --group <resource-group>'
                 '  clagnos update --auto -s <subscription-guid>'
                 '  clagnos update --auto --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
-                'Notes: update requires an existing managed resource group and an existing managed VM. Interactive mode prompts for Azure subscription when --subscription-id is omitted, selects only managed existing targets, and asks yes/no/cancel review checkpoints only for group, vm-deploy, vm-init, and vm-update. Auto mode runs from the resolved managed target: CLI overrides win, otherwise .env SELECTED_RESOURCE_GROUP and SELECTED_VM_NAME are used, with single-VM auto-resolution still allowed when the selected group contains exactly one VM. Existing VMs are redeployed after Azure create-or-update. Reboot-signaling vm-init and vm-update tasks restart the VM immediately, wait for recovery, and then continue with the next task. Windows vm-update also ends with one additional final restart before vm-summary, and vm-summary starts with a read-only guest readback block before the normal connection details. vm-summary always renders, even for partial step windows.'
+                'Notes: update requires an existing managed resource group and VM. It does not create, redeploy, or initialize Azure resources; it runs enabled non-program vm-update maintenance tasks and then renders the read-only summary. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise .env SELECTED_RESOURCE_GROUP and SELECTED_VM_NAME are used, with single-VM resolution allowed when the selected managed group contains exactly one VM. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-program maintenance tasks. vm-summary always renders, even for partial step windows.'
             )
             return
         }
