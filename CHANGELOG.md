@@ -3,6 +3,12 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.12.405] - 2026-10-12
+
+### Added
+- Expanded the selected VC detail screen with VM identity, image, disk settings, NIC/VNet/subnet/NSG, public IP and DNS, security and feature settings, tags, and attached-resource details.
+- Added SSH and RDP endpoints with the configured manager and assistant usernames/passwords from local `.env`. Passwords are displayed in the interactive detail view and are not included in progress or operation log messages.
+
 ## [2026.10.12.404] - 2026-10-12
 
 ### Added

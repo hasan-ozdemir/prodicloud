@@ -5751,3 +5751,14 @@ Plan update: Add an `o: operations` submenu to the selected VC screen. It should
 **Assistant Summary**
 
 Replaced the selected VC's generic more-operations shortcut with `o: operations`. Its numbered lifecycle menu now includes start, graceful shutdown, guest and Azure hibernation, hibernated resume, restart, immediate power-off, force reset, deallocation, reapply, and redeploy; the operations menu also exposes existing compute/disk resize, feature toggles, region move, SSH/RDP, remote command, task/app-state, component, and report flows. Lifecycle operations use the `do` state guards; typed confirmations protect immediate power-off and Azure force reset. Power-off and reset mapping tests passed.
+
+### 2026-10-12 23:29 UTC
+**User Prompt**
+
+````text
+New feature: In the cg app, after selecting a VC, show that VC's SSH and RDP login information, including usernames and passwords. Display its other VC properties line by line too, including public IP, public DNS, and more.
+````
+
+**Assistant Summary**
+
+Expanded the selected VC detail screen with its VM/resource identity, SKU and CPU/RAM, OS image, disks, NIC/VNet/subnet/NSG, private and public addresses, public DNS/FQDN, security and feature settings, tags, and attached Azure resources. The screen now shows SSH/RDP host and port plus manager and assistant usernames/passwords read from local `.env`. Passwords are rendered only in the detail view and are not added to progress or operation logs; no Azure resources are changed.

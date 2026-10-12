@@ -2,6 +2,16 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.12.405 - 2026-10-12
+
+### Summary
+Selecting a VC now opens a more complete detail screen with its connection endpoints, configured login credentials, network addresses, storage, security settings, and attached Azure resources.
+
+### Highlights
+- Shows the VC's SSH and RDP host/port, plus manager and assistant usernames and passwords read from local `.env`.
+- Adds public IP and public DNS/FQDN, private addresses, NIC and IP configuration, VNet/subnet/NSG, image, OS and data disk settings, security, hibernation, tags, identity, and attached-resource details.
+- Keeps credentials in the interactive screen output and excludes them from progress and operation log messages.
+
 ## Release 2026.10.12.404 - 2026-10-12
 
 ### Summary

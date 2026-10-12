@@ -391,6 +391,33 @@ function Get-ClagnosUiVmSizeFacts {
     return [pscustomobject]@{ Cores = 'Unknown'; MemoryMb = 'Unknown' }
 }
 
+function Format-ClagnosUiDetailValue {
+    param(
+        [AllowNull()][object]$Value,
+        [string]$EmptyText = '(not available)'
+    )
+
+    if ($null -eq $Value) { return $EmptyText }
+    $text = [string]$Value
+    if ([string]::IsNullOrWhiteSpace($text)) { return $EmptyText }
+    return $text
+}
+
+function Get-ClagnosUiAzureResourceIdSegment {
+    param(
+        [string]$ResourceId,
+        [string]$SegmentName
+    )
+
+    $parts = @(([string]$ResourceId).Trim('/') -split '/')
+    for ($index = 0; $index -lt ($parts.Count - 1); $index++) {
+        if ([string]::Equals([string]$parts[$index], [string]$SegmentName, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return [string]$parts[$index + 1]
+        }
+    }
+    return ''
+}
+
 function Show-ClagnosUiVmDetails {
     param([psobject]$Vm)
 
@@ -401,32 +428,207 @@ function Show-ClagnosUiVmDetails {
     $facts = Get-ClagnosUiVmSizeFacts -Location ([string]$full.location) -Size $sizeName
     $memoryGb = if ($facts.MemoryMb -match '^\d+$') { ('{0:N1} GB' -f ([double]$facts.MemoryMb / 1024)) } else { 'Unknown' }
     $power = Get-ClagnosUiPowerState -ResourceGroup $group -VmName $name
+    $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
+    $config = Read-DotEnvFile -Path $envPath
+
+    $privateAddresses = @()
+    $publicAddresses = @()
+    try {
+        $ipRows = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('vm', 'list-ip-addresses', '--resource-group', $group, '--name', $name)))
+        $ipVm = @($ipRows | Where-Object { [string]::Equals([string]$_.virtualMachine.name, $name, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if ($ipVm.Count -gt 0) {
+            $privateAddresses = @($ipVm[0].virtualMachine.network.privateIpAddresses | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            foreach ($publicAddress in @($ipVm[0].virtualMachine.network.publicIpAddresses)) {
+                $publicDetail = $null
+                $publicName = [string]$publicAddress.name
+                $publicGroup = [string]$publicAddress.resourceGroup
+                if ([string]::IsNullOrWhiteSpace($publicGroup)) { $publicGroup = $group }
+                if (-not [string]::IsNullOrWhiteSpace($publicName)) {
+                    try {
+                        $publicDetail = Invoke-ClagnosUiAzJson -Arguments @('network', 'public-ip', 'show', '--resource-group', $publicGroup, '--name', $publicName)
+                    }
+                    catch { }
+                }
+                $publicAddresses += [pscustomobject]@{
+                    Name = $publicName
+                    IpAddress = [string]$publicAddress.ipAddress
+                    Fqdn = if ($null -ne $publicDetail) { [string]$publicDetail.dnsSettings.fqdn } else { '' }
+                    DnsLabel = if ($null -ne $publicDetail) { [string]$publicDetail.dnsSettings.domainNameLabel } else { '' }
+                    Allocation = if ($null -ne $publicDetail) { [string]$publicDetail.publicIPAllocationMethod } else { [string]$publicAddress.ipAllocationMethod }
+                    Sku = if ($null -ne $publicDetail) { [string]$publicDetail.sku.name } else { '' }
+                    Zone = if ($null -ne $publicDetail) { (@($publicDetail.zones) -join ', ') } else { '' }
+                }
+            }
+        }
+    }
+    catch { }
+
+    if ($privateAddresses.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$Vm.privateIps)) {
+        $privateAddresses = @(([string]$Vm.privateIps -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    if ($publicAddresses.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$Vm.publicIps)) {
+        $fallbackPublicIps = @(([string]$Vm.publicIps -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        foreach ($fallbackPublicIp in @($fallbackPublicIps)) {
+            $publicAddresses += [pscustomobject]@{ Name = ''; IpAddress = [string]$fallbackPublicIp; Fqdn = [string]$Vm.fqdns; DnsLabel = ''; Allocation = ''; Sku = ''; Zone = '' }
+        }
+    }
+
     Write-ClagnosUiHeader -Title ('Virtual computer: {0}' -f $name)
+    Write-Host 'Virtual computer:' -ForegroundColor Cyan
+    Write-Host ('  Name: {0}' -f $name)
     Write-Host ('Resource group: {0}' -f $group)
+    Write-Host ('Subscription: {0} ({1})' -f (Format-ClagnosUiDetailValue -Value $script:ClagnosUiSubscription.SubscriptionName), (Format-ClagnosUiDetailValue -Value $Vm.ClagnosSubscriptionId))
+    Write-Host ('Resource ID: {0}' -f (Format-ClagnosUiDetailValue -Value $full.id))
+    Write-Host ('VM ID: {0}' -f (Format-ClagnosUiDetailValue -Value $full.vmId))
     Write-Host ('Operating system: {0}' -f [string]$full.storageProfile.osDisk.osType)
     Write-Host ('State: {0} | Provisioning: {1}' -f $power, [string]$full.provisioningState)
     Write-Host ('Region: {0} | Size: {1}' -f [string]$full.location, $sizeName)
     Write-Host ('CPU: {0} vCPU | RAM: {1}' -f [string]$facts.Cores, $memoryGb)
+    $image = $full.storageProfile.imageReference
+    if ($null -ne $image) {
+        $imageText = '{0}:{1}:{2}:{3}' -f [string]$image.publisher, [string]$image.offer, [string]$image.sku, [string]$image.version
+        if (-not [string]::IsNullOrWhiteSpace([string]$image.id)) { $imageText = [string]$image.id }
+        if (-not [string]::IsNullOrWhiteSpace([string]$image.exactVersion)) { $imageText += (' (exact version {0})' -f [string]$image.exactVersion) }
+        Write-Host ('Image: {0}' -f $imageText)
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$full.storageProfile.osDisk.image)) {
+        Write-Host ('Image: {0}' -f [string]$full.storageProfile.osDisk.image)
+    }
+    Write-Host ('Computer name: {0}' -f (Format-ClagnosUiDetailValue -Value $full.osProfile.computerName))
+    Write-Host ('Availability zone: {0}' -f (Format-ClagnosUiDetailValue -Value (@($full.zones) -join ', ')))
     Write-Host ''
+
     Write-Host 'Storage and disks:' -ForegroundColor Cyan
-    $diskNames = @([string]$full.storageProfile.osDisk.name) + @($full.storageProfile.dataDisks | ForEach-Object { [string]$_.name })
-    foreach ($diskName in @($diskNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)) {
-        try {
-            $disk = Invoke-ClagnosUiAzJson -Arguments @('disk', 'show', '--resource-group', $group, '--name', $diskName)
-            Write-Host ('  {0} | {1} GB | {2}' -f [string]$disk.name, [string]$disk.diskSizeGb, [string]$disk.sku.name)
+    $diskReferences = @()
+    if ($null -ne $full.storageProfile.osDisk) {
+        $diskReferences += [pscustomobject]@{
+            Kind = 'OS disk'
+            Name = [string]$full.storageProfile.osDisk.name
+            ResourceGroup = [string]$full.storageProfile.osDisk.managedDisk.resourceGroup
+            SizeGb = [string]$full.storageProfile.osDisk.diskSizeGb
+            Caching = [string]$full.storageProfile.osDisk.caching
+            Lun = ''
+            CreateOption = [string]$full.storageProfile.osDisk.createOption
+            DeleteOption = [string]$full.storageProfile.osDisk.deleteOption
+            StorageType = [string]$full.storageProfile.osDisk.managedDisk.storageAccountType
         }
-        catch { Write-Host ('  {0} | details unavailable' -f $diskName) -ForegroundColor Yellow }
+    }
+    foreach ($dataDisk in @($full.storageProfile.dataDisks)) {
+        $diskReferences += [pscustomobject]@{
+            Kind = 'Data disk'
+            Name = [string]$dataDisk.name
+            ResourceGroup = [string]$dataDisk.managedDisk.resourceGroup
+            SizeGb = [string]$dataDisk.diskSizeGb
+            Caching = [string]$dataDisk.caching
+            Lun = [string]$dataDisk.lun
+            CreateOption = [string]$dataDisk.createOption
+            DeleteOption = [string]$dataDisk.deleteOption
+            StorageType = [string]$dataDisk.managedDisk.storageAccountType
+        }
+    }
+    foreach ($diskReference in @($diskReferences)) {
+        $diskName = [string]$diskReference.Name
+        if ([string]::IsNullOrWhiteSpace($diskName)) { continue }
+        $diskGroup = [string]$diskReference.ResourceGroup
+        if ([string]::IsNullOrWhiteSpace($diskGroup)) { $diskGroup = $group }
+        try {
+            $disk = Invoke-ClagnosUiAzJson -Arguments @('disk', 'show', '--resource-group', $diskGroup, '--name', $diskName)
+            $sizeGb = if ([string]::IsNullOrWhiteSpace([string]$diskReference.SizeGb)) { [string]$disk.diskSizeGb } else { [string]$diskReference.SizeGb }
+            $detail = ('  {0}: {1} | {2} GB | {3} | caching {4} | create {5}' -f [string]$diskReference.Kind, [string]$disk.name, $sizeGb, [string]$disk.sku.name, (Format-ClagnosUiDetailValue -Value $diskReference.Caching), (Format-ClagnosUiDetailValue -Value $diskReference.CreateOption))
+            if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.Lun)) { $detail += (' | LUN {0}' -f [string]$diskReference.Lun) }
+            if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.DeleteOption)) { $detail += (' | delete {0}' -f [string]$diskReference.DeleteOption) }
+            if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.StorageType)) { $detail += (' | storage {0}' -f [string]$diskReference.StorageType) }
+            if (-not [string]::IsNullOrWhiteSpace([string]$disk.encryption.type)) { $detail += (' | encryption {0}' -f [string]$disk.encryption.type) }
+            Write-Host $detail
+        }
+        catch { Write-Host ('  {0}: {1} | details unavailable' -f [string]$diskReference.Kind, $diskName) -ForegroundColor Yellow }
+    }
+    if ($diskReferences.Count -eq 0) { Write-Host '  (no managed disks reported)' -ForegroundColor Gray }
+    Write-Host ''
+
+    Write-Host 'Networking:' -ForegroundColor Cyan
+    $nicReferences = @(ConvertTo-ObjectArrayCompat -InputObject $full.networkProfile.networkInterfaces)
+    foreach ($nicReference in @($nicReferences)) {
+        $nicName = Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$nicReference.id) -SegmentName 'networkInterfaces'
+        if ([string]::IsNullOrWhiteSpace($nicName)) { continue }
+        $nicGroup = [string]$nicReference.resourceGroup
+        if ([string]::IsNullOrWhiteSpace($nicGroup)) { $nicGroup = $group }
+        try {
+            $nic = Invoke-ClagnosUiAzJson -Arguments @('network', 'nic', 'show', '--resource-group', $nicGroup, '--name', $nicName)
+            Write-Host ('  NIC: {0} | primary {1} | accelerated networking {2} | IP forwarding {3}' -f [string]$nic.name, [bool]$nic.primary, [bool]$nic.enableAcceleratedNetworking, [bool]$nic.enableIPForwarding)
+            $nsgName = Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$nic.networkSecurityGroup.id) -SegmentName 'networkSecurityGroups'
+            if (-not [string]::IsNullOrWhiteSpace($nsgName)) { Write-Host ('    Network security group: {0}' -f $nsgName) }
+            foreach ($ipConfig in @(ConvertTo-ObjectArrayCompat -InputObject $nic.ipConfigurations)) {
+                $vnetName = Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$ipConfig.subnet.id) -SegmentName 'virtualNetworks'
+                $subnetName = Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$ipConfig.subnet.id) -SegmentName 'subnets'
+                Write-Host ('    IP config {0}: private {1} ({2}) | primary {3} | VNet {4} | subnet {5}' -f [string]$ipConfig.name, (Format-ClagnosUiDetailValue -Value $ipConfig.privateIPAddress), (Format-ClagnosUiDetailValue -Value $ipConfig.privateIPAllocationMethod), [bool]$ipConfig.primary, (Format-ClagnosUiDetailValue -Value $vnetName), (Format-ClagnosUiDetailValue -Value $subnetName))
+                if ($null -ne $ipConfig.publicIPAddress -and -not [string]::IsNullOrWhiteSpace([string]$ipConfig.publicIPAddress.id)) {
+                    Write-Host ('      Public IP resource: {0}' -f (Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$ipConfig.publicIPAddress.id) -SegmentName 'publicIPAddresses'))
+                }
+            }
+        }
+        catch { Write-Host ('  NIC: {0} | details unavailable' -f $nicName) -ForegroundColor Yellow }
+    }
+    if ($privateAddresses.Count -gt 0) { Write-Host ('  Private IP address(es): {0}' -f ($privateAddresses -join ', ')) }
+    else { Write-Host '  Private IP address(es): (none reported)' -ForegroundColor Gray }
+    if ($publicAddresses.Count -gt 0) {
+        foreach ($publicAddress in @($publicAddresses)) {
+            Write-Host ('  Public IP: {0} | resource {1}' -f (Format-ClagnosUiDetailValue -Value $publicAddress.IpAddress), (Format-ClagnosUiDetailValue -Value $publicAddress.Name))
+            Write-Host ('    Public DNS: {0} | DNS label: {1}' -f (Format-ClagnosUiDetailValue -Value $publicAddress.Fqdn -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $publicAddress.DnsLabel -EmptyText '(not configured)'))
+            Write-Host ('    Allocation: {0} | SKU: {1} | zone: {2}' -f (Format-ClagnosUiDetailValue -Value $publicAddress.Allocation), (Format-ClagnosUiDetailValue -Value $publicAddress.Sku), (Format-ClagnosUiDetailValue -Value $publicAddress.Zone))
+        }
+    }
+    else { Write-Host '  Public IP/DNS: (no public endpoint reported)' -ForegroundColor Gray }
+    Write-Host ''
+
+    $hibernationEnabled = if ($null -ne $full.additionalCapabilities) { [string]$full.additionalCapabilities.hibernationEnabled } else { 'false' }
+    $securityType = [string]$full.securityProfile.securityType
+    $secureBoot = if ($null -ne $full.securityProfile.uefiSettings) { [string]$full.securityProfile.uefiSettings.secureBootEnabled } else { '(not reported)' }
+    $vTpm = if ($null -ne $full.securityProfile.uefiSettings) { [string]$full.securityProfile.uefiSettings.vTpmEnabled } else { '(not reported)' }
+    $nestedVirtualization = [string](Get-ConfigValue -Config $config -Key 'VM_ENABLE_NESTED_VIRTUALIZATION' -DefaultValue '')
+    if ([string]::IsNullOrWhiteSpace($nestedVirtualization)) { $nestedVirtualization = '(not configured)' }
+    Write-Host 'Security and VM features:' -ForegroundColor Cyan
+    Write-Host ('  Hibernation enabled: {0}' -f (Format-ClagnosUiDetailValue -Value $hibernationEnabled -EmptyText 'false'))
+    Write-Host ('  Nested virtualization setting (.env): {0}' -f $nestedVirtualization)
+    Write-Host ('  Security type: {0}' -f (Format-ClagnosUiDetailValue -Value $securityType))
+    Write-Host ('  Secure Boot: {0} | vTPM: {1}' -f $secureBoot, $vTpm)
+    Write-Host ('  Boot diagnostics: {0}' -f (Format-ClagnosUiDetailValue -Value $full.diagnosticsProfile.bootDiagnostics.enabled))
+    Write-Host ('  Managed identity: {0}' -f (Format-ClagnosUiDetailValue -Value $full.identity.type '(none)'))
+    if ($null -ne $full.tags) {
+        foreach ($tag in @($full.tags.PSObject.Properties | Sort-Object Name)) {
+            Write-Host ('  Tag {0}: {1}' -f [string]$tag.Name, [string]$tag.Value)
+        }
     }
     Write-Host ''
+
+    $adminUser = [string](Get-ConfigValue -Config $config -Key 'VM_ADMIN_USER' -DefaultValue '')
+    $adminPass = [string](Get-ConfigValue -Config $config -Key 'VM_ADMIN_PASS' -DefaultValue '')
+    $assistantUser = [string](Get-ConfigValue -Config $config -Key 'VM_ASSISTANT_USER' -DefaultValue '')
+    $assistantPass = [string](Get-ConfigValue -Config $config -Key 'VM_ASSISTANT_PASS' -DefaultValue '')
+    $sshPort = [string](Get-ConfigValue -Config $config -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))
+    $rdpPort = [string](Get-ConfigValue -Config $config -Key 'VM_RDP_PORT' -DefaultValue (Get-ClagnosDefaultRdpPortText))
+    $connectionHost = if ($publicAddresses.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$publicAddresses[0].Fqdn)) { [string]$publicAddresses[0].Fqdn }
+    elseif ($publicAddresses.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$publicAddresses[0].IpAddress)) { [string]$publicAddresses[0].IpAddress }
+    elseif ($privateAddresses.Count -gt 0) { [string]$privateAddresses[0] }
+    else { '(no reachable address reported)' }
+    Write-Host 'Connection and login credentials (.env):' -ForegroundColor Cyan
+    Write-Host ('  SSH endpoint: {0}:{1} | default role: manager' -f $connectionHost, $sshPort)
+    Write-Host ('    manager username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $adminUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $adminPass -EmptyText '(not configured)'))
+    Write-Host ('    assistant username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $assistantUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $assistantPass -EmptyText '(not configured)'))
+    if ([string]::Equals([string]$full.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-Host ('  RDP endpoint: {0}:{1} | default role: manager' -f $connectionHost, $rdpPort)
+        Write-Host ('    manager username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $adminUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $adminPass -EmptyText '(not configured)'))
+        Write-Host ('    assistant username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $assistantUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $assistantPass -EmptyText '(not configured)'))
+    }
+    else { Write-Host '  RDP: not applicable to this Linux VC.' }
+    Write-Host '  Credentials are read from .env; passwords are excluded from progress and operation log messages.' -ForegroundColor Gray
+    Write-Host ''
+
     Write-Host 'Attached resources:' -ForegroundColor Cyan
     $resources = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('resource', 'list', '--resource-group', $group)))
     foreach ($resource in @($resources | Sort-Object { [string]$_.type }, { [string]$_.name })) {
-        Write-Host ('  {0} | {1}' -f [string]$resource.type, [string]$resource.name)
+        Write-Host ('  {0} | {1} | {2}' -f [string]$resource.type, [string]$resource.name, (Format-ClagnosUiDetailValue -Value $resource.location))
     }
-    Write-Host ''
-    Write-Host 'Network addresses:' -ForegroundColor Cyan
-    if (-not [string]::IsNullOrWhiteSpace([string]$Vm.publicIps)) { Write-Host ('  Public IP: {0}' -f [string]$Vm.publicIps) }
-    if (-not [string]::IsNullOrWhiteSpace([string]$Vm.privateIps)) { Write-Host ('  Private IP: {0}' -f [string]$Vm.privateIps) }
 }
 
 function New-ClagnosUiTargetOptions {
