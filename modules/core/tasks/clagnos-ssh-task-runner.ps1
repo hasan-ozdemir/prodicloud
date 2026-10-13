@@ -50,6 +50,8 @@ function Invoke-ClagnosSshTaskBlocks {
         throw 'SSH task block list is empty.'
     }
 
+    $stageWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
     $SshMaxRetries = Resolve-ClagnosSshRetryCount -RetryText ([string]$SshMaxRetries) -DefaultValue 3
     if ($SshTaskTimeoutSeconds -lt 30) { $SshTaskTimeoutSeconds = 30 }
     if ($SshTaskTimeoutSeconds -gt 7200) { $SshTaskTimeoutSeconds = 7200 }
@@ -560,6 +562,21 @@ function Invoke-ClagnosSshTaskBlocks {
             foreach ($rebootTaskName in @($rebootTaskList)) {
                 Write-Host ("- {0}" -f [string]$rebootTaskName) -ForegroundColor Cyan
             }
+        }
+        if (-not [string]::Equals([string]$PerfTaskCategory, 'task-run', [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($stageWatch.IsRunning) { $stageWatch.Stop() }
+            Write-ClagnosTaskStageHistoryRecord `
+                -Stage 'update' `
+                -Platform $Platform `
+                -ResourceGroup $ResourceGroup `
+                -VmName $VmName `
+                -TaskNames @($TaskBlocks | ForEach-Object { [string]$_.Name }) `
+                -FailedTasks @($uniqueFailedTasks) `
+                -WarningTasks @(@($uniqueWarningTasks) + @($uniqueSignalWarningTasks)) `
+                -SuccessCount @($uniqueSuccessfulTasks).Count `
+                -ErrorCount $totalErrors `
+                -RebootCount $rebootCount `
+                -DurationSeconds $stageWatch.Elapsed.TotalSeconds
         }
         if ($TaskOutcomeMode -eq 'strict' -and ($totalWarnings -gt 0 -or $totalErrors -gt 0)) {
             throw ("VM update strict task outcome mode blocked continuation: warning={0}, error={1}" -f $totalWarnings, $totalErrors)

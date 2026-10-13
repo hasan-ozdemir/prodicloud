@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\tui\run-tui-tests.ps
 
 The same suite is included in `tests/powershell-compatibility-check.ps1` and runs under Windows PowerShell 5.1 and PowerShell 7+.
 
-The suite contains 157 data-driven screen/action scenarios and one process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, and asserts the actual captured console output.
+The suite contains 159 data-driven screen/action scenarios and one process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, and asserts the actual captured console output.
 
 ## Screen and action coverage
 
@@ -23,8 +23,8 @@ The suite contains 157 data-driven screen/action scenarios and one process-level
 | Manage programs | Builtin/custom catalog, package status and disabled markers, enable/disable/install/status/uninstall, uninstall confirmation, app-state save/restore and Windows/Linux local-target handling |
 | Managed inventory | All ten numbered filters, optional resource-group filtering, unfiltered inventory, invalid input, back, and exit |
 | Components | All nine component types; list/show/create/update/delete; disk/NIC attach/detach; invalid input and navigation |
-| Tasks | Init/update listing and isolated runs, disabled task listing, app-state save/restore for VM and local Windows, and task availability enable/disable for both stages |
-| Operations | All twelve lifecycle choices, force confirmations/cancellation, compute and disk resize, move, both feature toggles, SSH/RDP/PowerShell connection and tests, PowerShell command routing, SSH remote command/shell, task/component submenus, report, invalid input, and exit |
+| Tasks | Init/update listing and isolated runs, disabled task listing, local task-run history, app-state save/restore for VM and local Windows, and task availability enable/disable for both stages |
+| Operations | All twelve lifecycle choices, force confirmations/cancellation, compute and disk resize, move, both feature toggles, SSH/RDP/PowerShell connection and tests, PowerShell command routing, SSH remote command/shell, task/component submenus, text report and JSON export, invalid input, and exit |
 
 ## Azure safety boundary
 

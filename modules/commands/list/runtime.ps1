@@ -46,17 +46,27 @@ function Resolve-ClagnosListRequestedTypes {
 function Get-ClagnosListTargetResourceGroups {
     param(
         [hashtable]$Options,
-        [hashtable]$ConfigMap
+        [hashtable]$ConfigMap,
+        [System.Management.Automation.PSReference]$ManagedGroupRows = $null
     )
 
     $requestedGroup = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
     if (-not [string]::IsNullOrWhiteSpace([string]$requestedGroup)) {
         $resourceGroup = $requestedGroup.Trim()
         Assert-ClagnosManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'list'
+        if ($null -ne $ManagedGroupRows) {
+            $groupJson = az group show -n $resourceGroup -o json --only-show-errors
+            Assert-LastExitCode 'az group show (list group metadata)'
+            $groupObject = ConvertFrom-JsonCompat -InputObject $groupJson
+            $ManagedGroupRows.Value = if ($null -eq $groupObject) { @() } else { @($groupObject) }
+        }
         return @([string]$resourceGroup)
     }
 
     $rows = @(Get-ClagnosManagedResourceGroupRows)
+    if ($null -ne $ManagedGroupRows) {
+        $ManagedGroupRows.Value = @($rows)
+    }
     return @(
         ConvertTo-ObjectArrayCompat -InputObject $rows |
             ForEach-Object { [string]$_.name } |
@@ -84,7 +94,8 @@ function Get-ClagnosListSectionRows {
     param(
         [string]$TypeName,
         [string[]]$ResourceGroups,
-        [hashtable]$ConfigMap
+        [hashtable]$ConfigMap,
+        [object[]]$ManagedGroupRows = @()
     )
 
     $activeGroup = [string](Get-ConfigValue -Config $ConfigMap -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
@@ -93,12 +104,14 @@ function Get-ClagnosListSectionRows {
     switch ([string]$TypeName) {
         'group' {
             foreach ($resourceGroup in @($ResourceGroups | Sort-Object -Unique)) {
-                if ([string]::Equals([string]$resourceGroup, [string]$activeGroup, [System.StringComparison]::OrdinalIgnoreCase)) {
-                    [void]$rows.Add(("{0} [active]" -f [string]$resourceGroup))
-                }
-                else {
-                    [void]$rows.Add([string]$resourceGroup)
-                }
+                $groupRow = @(
+                    ConvertTo-ObjectArrayCompat -InputObject $ManagedGroupRows |
+                        Where-Object { [string]::Equals([string]$_.name, [string]$resourceGroup, [System.StringComparison]::OrdinalIgnoreCase) }
+                ) | Select-Object -First 1
+                $location = if ($null -eq $groupRow -or [string]::IsNullOrWhiteSpace([string]$groupRow.location)) { '(unknown)' } else { [string]$groupRow.location }
+                $provisioningState = if ($null -eq $groupRow -or [string]::IsNullOrWhiteSpace([string]$groupRow.properties.provisioningState)) { '(unknown)' } else { [string]$groupRow.properties.provisioningState }
+                $activeLabel = if ([string]::Equals([string]$resourceGroup, [string]$activeGroup, [System.StringComparison]::OrdinalIgnoreCase)) { ' [active]' } else { '' }
+                [void]$rows.Add(("{0}{1} | location={2} | provisioning={3}" -f [string]$resourceGroup, $activeLabel, $location, $provisioningState))
             }
             break
         }

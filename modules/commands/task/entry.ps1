@@ -73,6 +73,14 @@ function Invoke-ClagnosTaskCommand {
 
     $mode = Resolve-ClagnosTaskCommandMode -Options $Options
     Assert-ClagnosTaskCommandOptionScope -Mode $mode -Options $Options
+    if ([string]::Equals($mode, 'history', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $historyRecords = @(Show-ClagnosTaskRunHistory -Limit 25)
+        return [pscustomobject]@{
+            Mode = 'history'
+            Records = @($historyRecords)
+        }
+    }
+
     if ([string]::Equals($mode, 'list', [System.StringComparison]::OrdinalIgnoreCase)) {
         $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
         $includeInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init'

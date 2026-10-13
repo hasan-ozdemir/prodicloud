@@ -3,6 +3,13 @@
 ## Direction
 Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental model, strong validation before mutation, deterministic guest task execution, and documentation that is detailed enough for both operators and maintainers to work from the repository alone.
 
+## Recently Delivered
+- Resize operations now print before/after state snapshots and verify the resulting VM SKU or OS disk size before persisting the requested configuration.
+- Managed group inventory includes the active marker, Azure location, and provisioning state; `show` can export a redacted JSON report.
+- A versioned source release packager writes a build manifest and SHA256 sidecar, with clean-tree, version, and tracked-secret guards.
+- Local task history records isolated task/package outcomes, workflow stage summaries, and deferred app-state work without recording guest output or credentials.
+- These pragmatic items were implemented and verified with fixture-backed tests only. No VC was provisioned or rebuilt.
+
 ## Working Style
 - Prefer business value over feature count.
 - Prefer safer operator workflows over convenience shortcuts.
@@ -30,14 +37,13 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 ## Next Value Band
 
 ### Safer Change Operations
-- Improve move and resize observability with clearer progress checkpoints, cutover summaries, and post-action state snapshots.
+- Continue improving long-running operation progress and cutover summaries; resize state snapshots and Azure readback verification are now in place.
 - Make rollback-state visibility more obvious when a long-running Azure action fails mid-flight.
 - Expand state-aware diagnostics for power, connection, and guest-task related failures.
 
 ### Richer Inspection
-- Improve `show`, `group`, and related inspection paths so they expose more useful metadata without becoming noisy.
+- Continue improving `show`, `group`, and related inspection paths while keeping output focused; managed-group metadata and redacted JSON export are now available.
 - Make task catalogs easier to inspect directly from the CLI, especially for isolated init/update reruns.
-- Add more actionable status summaries for managed resource groups and current VM context.
 
 ### Better Maintainer Ergonomics
 - Keep local hooks fast and focused.
@@ -47,19 +53,17 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 ## Later Value Band
 
 ### Release And Distribution
-- Introduce a cleaner release packaging story once the command surface and documentation stabilize further.
 - Improve release-note generation and historical reporting with more repo-owned helpers and less manual reconstruction.
-- Make versioned release artifacts easier to consume without weakening the current local-first workflow.
+- Keep the versioned source package and checksum workflow aligned with future release needs without weakening the current local-first workflow.
 
 ### Task Metadata And Replayability
 - Extend the new script-local task metadata model only where it creates real operator value, such as explicit prerequisites, reboot expectations, or task intent summaries.
-- Improve historical task-result and deferred-work visibility so post-failure diagnosis is faster.
 - Consider lightweight replay or diagnostic bundles that help reproduce guest-task problems without destructive live loops.
 
 ## Opportunistic Work
-- Read-only reporting or export paths for teams that also manage Azure resources with other tooling.
 - Optional policy-style checks for naming, logging, docs, and task-catalog hygiene.
-- Optional UI or dashboard layers only if they preserve the current repo-first, script-first operating model.
+- Read-only reporting/export is available through the managed report and redacted JSON output.
+- Optional UI or dashboard layers remain conditional and should be considered only if they preserve the current repo-first, script-first operating model and meet the promotion rules.
 
 ## Promotion Rules
 An item is ready to move from idea to implementation only when:

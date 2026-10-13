@@ -25,6 +25,7 @@ function Invoke-ClagnosResizeCommand {
     $vmName = [string]$target.VmName
     $isDirectRequest = Test-ClagnosResizeDirectRequest -Options $Options
 
+    Write-ClagnosActionProgress -Action ("inspect resize target '{0}' in '{1}'" -f $vmName, $resourceGroup)
     $vmJson = az vm show -g $resourceGroup -n $vmName -o json --only-show-errors
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$vmJson)) {
         Throw-FriendlyError `
@@ -109,6 +110,8 @@ function Invoke-ClagnosResizeCommand {
 
         Write-Host ("Managed OS disk expansion plan for '{0}' in '{1}': disk '{2}' {3} GB -> {4} GB (requested '{5}')." -f $vmName, $resourceGroup, $diskContext.DiskName, $diskContext.DiskSizeGb, $targetDiskSizeGb, $operationRequest.RawText)
         Write-Host "Managed OS disk expansion requires the VM to be deallocated before Azure updates the disk size."
+        $beforeSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'before resize'
+        Write-ClagnosResizeStateSnapshot -Stage 'before' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -DiskName $diskContext.DiskName -DiskSizeGb $diskContext.DiskSizeGb -LifecycleSnapshot $beforeSnapshot
 
         Invoke-TrackedAction -Label ("az vm deallocate -g {0} -n {1}" -f $resourceGroup, $vmName) -Action {
             az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
@@ -144,6 +147,11 @@ function Invoke-ClagnosResizeCommand {
                 -Hint "Check VM power state in Azure Portal and start VM manually if needed."
         }
 
+        $afterSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'after resize'
+        $actualDiskSizeGb = Get-ClagnosResizeDiskSizeReadback -DiskId ([string]$diskContext.DiskId) -DiskName ([string]$diskContext.DiskName)
+        Write-ClagnosResizeStateSnapshot -Stage 'after' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -DiskName $diskContext.DiskName -DiskSizeGb $actualDiskSizeGb -LifecycleSnapshot $afterSnapshot
+        Assert-ClagnosResizeReadback -Kind 'disk-size' -ExpectedValue ([string]$targetDiskSizeGb) -ActualValue ([string]$actualDiskSizeGb) -ResourceGroup $resourceGroup -VmName $vmName -LifecycleSnapshot $afterSnapshot
+
         Set-DotEnvValue -Path $envFilePath -Key $vmDiskSizeConfigKey -Value ([string]$targetDiskSizeGb)
         $script:ConfigOverrides[$vmDiskSizeConfigKey] = [string]$targetDiskSizeGb
 
@@ -152,6 +160,7 @@ function Invoke-ClagnosResizeCommand {
     }
 
     $targetSize = Resolve-ClagnosResizeTargetSize -Options $Options -CurrentRegion $currentRegion -CurrentSize $currentSize -ConfigMap $configMap
+    Write-ClagnosActionProgress -Action ("validate VM size '{0}' in region '{1}'" -f $targetSize, $currentRegion)
     Assert-LocationExists -Location $currentRegion
     Assert-VmSkuAvailableViaRest -Location $currentRegion -VmSize $targetSize
 
@@ -169,6 +178,8 @@ function Invoke-ClagnosResizeCommand {
     }
 
     Write-Host ("Applying VM size update for '{0}' in '{1}': {2} -> {3}" -f $vmName, $resourceGroup, $currentSize, $targetSize)
+    $beforeSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'before resize'
+    Write-ClagnosResizeStateSnapshot -Stage 'before' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -LifecycleSnapshot $beforeSnapshot
 
     Invoke-TrackedAction -Label ("az vm deallocate -g {0} -n {1}" -f $resourceGroup, $vmName) -Action {
         az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
@@ -193,7 +204,7 @@ function Invoke-ClagnosResizeCommand {
         Assert-LastExitCode "az vm start"
     } | Out-Null
 
-    $running = Wait-ClagnosVmRunningState -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 3 -DelaySeconds 10
+    $running = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState 'VM running' -MaxAttempts 3 -DelaySeconds 10
     if (-not $running) {
         Throw-FriendlyError `
             -Detail "VM did not return to running state after resize operation." `
@@ -201,6 +212,11 @@ function Invoke-ClagnosResizeCommand {
             -Summary "Resize command completed with unhealthy VM power state." `
             -Hint "Check VM power state in Azure Portal and start VM manually if needed."
     }
+
+    $afterSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'after resize'
+    $actualSize = Get-ClagnosResizeVmSizeReadback -ResourceGroup $resourceGroup -VmName $vmName
+    Write-ClagnosResizeStateSnapshot -Stage 'after' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $actualSize -LifecycleSnapshot $afterSnapshot
+    Assert-ClagnosResizeReadback -Kind 'vm-size' -ExpectedValue $targetSize -ActualValue $actualSize -ResourceGroup $resourceGroup -VmName $vmName -LifecycleSnapshot $afterSnapshot
 
     Set-DotEnvValue -Path $envFilePath -Key $vmSizeConfigKey -Value $targetSize
     $script:ConfigOverrides[$vmSizeConfigKey] = $targetSize

@@ -502,6 +502,81 @@ function ConvertTo-ClagnosShowConfigDisplayValue {
     return $Value
 }
 
+# Handles ConvertTo-ClagnosShowExportDump.
+function ConvertTo-ClagnosShowExportDump {
+    param([hashtable]$Dump)
+
+    $json = ConvertTo-Json -InputObject $Dump -Depth 100 -Compress
+    $safeDump = ConvertFrom-JsonCompat -InputObject $json
+    $configMaps = @(
+        $safeDump.Config.DotEnvValues,
+        $safeDump.Config.RuntimeOverrides,
+        $safeDump.TargetDerivedConfiguration.Summary
+    )
+    foreach ($configMap in @($configMaps)) {
+        if ($null -eq $configMap) { continue }
+        foreach ($property in @($configMap.PSObject.Properties)) {
+            if (Test-ClagnosShowSensitiveConfigKey -Key ([string]$property.Name)) {
+                $property.Value = '[redacted]'
+            }
+        }
+    }
+    return $safeDump
+}
+
+# Handles Export-ClagnosShowReportJson.
+function Export-ClagnosShowReportJson {
+    param(
+        [hashtable]$Dump,
+        [string]$OutputPath,
+        [switch]$Overwrite
+    )
+
+    if ([string]::IsNullOrWhiteSpace([string]$OutputPath)) {
+        Throw-FriendlyError `
+            -Detail "Option '--export-json' requires an output file path." `
+            -Code 64 `
+            -Summary "Show JSON export path is missing." `
+            -Hint "Use --export-json <path> to select a report file."
+    }
+
+    $resolvedOutputPath = [System.IO.Path]::GetFullPath([string]$OutputPath)
+    $parentPath = [System.IO.Path]::GetDirectoryName($resolvedOutputPath)
+    if (-not (Test-Path -LiteralPath $parentPath -PathType Container)) {
+        Throw-FriendlyError `
+            -Detail ("JSON export directory does not exist: {0}" -f $parentPath) `
+            -Code 64 `
+            -Summary "Show JSON export directory was not found." `
+            -Hint "Create the directory first or select an existing output directory."
+    }
+    if ((Test-Path -LiteralPath $resolvedOutputPath) -and -not $Overwrite) {
+        Throw-FriendlyError `
+            -Detail ("JSON export file already exists: {0}" -f $resolvedOutputPath) `
+            -Code 64 `
+            -Summary "Show JSON export would overwrite an existing file." `
+            -Hint "Choose another filename or add --overwrite after reviewing the target path."
+    }
+
+    $tempPath = Join-Path $parentPath ('.clagnos-show-{0}.tmp' -f ([guid]::NewGuid().ToString('N')))
+    try {
+        $safeDump = ConvertTo-ClagnosShowExportDump -Dump $Dump
+        $json = ConvertTo-Json -InputObject $safeDump -Depth 100
+        [System.IO.File]::WriteAllText($tempPath, ([string]$json + [Environment]::NewLine), ([System.Text.UTF8Encoding]::new($false)))
+        if ((Test-Path -LiteralPath $resolvedOutputPath) -and $Overwrite) {
+            Remove-Item -LiteralPath $resolvedOutputPath -Force
+        }
+        Move-Item -LiteralPath $tempPath -Destination $resolvedOutputPath -ErrorAction Stop
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-Host ("Redacted JSON report exported: {0}" -f $resolvedOutputPath) -ForegroundColor Green
+    return $resolvedOutputPath
+}
+
 # Handles Write-ClagnosShowReport.
 function Write-ClagnosShowReport {
     param(

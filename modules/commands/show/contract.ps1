@@ -6,6 +6,8 @@ function Get-ClagnosShowOptionSpecifications {
         (Get-ClagnosShowHelpOptionSpecification),
         (Get-ClagnosSharedSubscriptionIdOptionSpecification),
         (Get-ClagnosShowGroupOptionSpecification),
-        (Get-ClagnosShowVmNameOptionSpecification)
+        (Get-ClagnosShowVmNameOptionSpecification),
+        (Get-ClagnosShowExportJsonOptionSpecification),
+        (Get-ClagnosShowOverwriteOptionSpecification)
     )
 }

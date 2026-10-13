@@ -77,6 +77,7 @@ At a glance:
 - [Developer Benefits](#developer-benefits)
   - [Why Developers Move Faster](#why-developers-move-faster)
   - [Daily Maintainer Flow](#daily-maintainer-flow)
+  - [Versioned Release Source Package](#versioned-release-source-package)
 - [Core Mental Model](#core-mental-model)
   - [One Entrypoint, Two Platforms](#one-entrypoint-two-platforms)
   - [Top-Level Orchestration Steps](#top-level-orchestration-steps)
@@ -311,9 +312,9 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `initialize` | Run enabled `vm-init` tasks on an existing managed VM | Guest-mutating | Initial guest bootstrap | Initialized guest access and base configuration. |
 | `update` | Run enabled `vm-update` maintenance tasks | Guest-mutating | Ongoing maintenance | Package installers live in their isolated package catalogs. |
 | `list` | Print managed inventory by type | Azure-read-only | Inventory, targeting, quick visibility | Managed group/resource listings |
-| `show` | Print a full managed report plus focused target-derived config when one VM is in scope | Azure-read-only | Health review, support handoff, release verification | Inventory and read-only target-derived configuration |
+| `show` | Print a full managed report and optionally export redacted JSON | Azure-read-only | Health review, support handoff, release verification, diagnostic export | Screen report or redacted JSON file |
 | `do` | Apply lifecycle or repair actions | Azure-mutating or read-only for `status` | Power-state control, reapply, redeploy, hibernation flow | Target VM lifecycle action |
-| `task` | List tasks, explicitly enable/disable a task, run one task, or save/restore task or package app-state | Local for inventory and confirmed availability changes; Azure-touching for remote task/app-state actions; local-machine for `--source=lm` / `--target=lm` | Review task state, change future task availability, rerun one task, or refresh one payload | Verified catalog change or one isolated task/app-state action |
+| `task` | List tasks, view local run history, explicitly enable/disable a task, run one task, or save/restore task or package app-state | Local for inventory/history and confirmed availability changes; Azure-touching for remote task/app-state actions; local-machine for `--source=lm` / `--target=lm` | Review task state and outcomes, change future task availability, rerun one task, or refresh one payload | Verified catalog change, history view, or isolated task/app-state action |
 | `package` | Check status, install/update, uninstall, enable, or disable one builtin/custom package | Guest-mutating except status and catalog availability | Manage packages on one VC | Verified catalog or package action result |
 | `component` | List/read/create/update/delete a Clagnos-managed Azure component | Azure-read-only for list/show; Azure-mutating for create/update/delete | Inspect or change one VC component | Component state or dependency-reviewed mutation |
 | `connect` | Launch or test SSH/RDP/Windows PowerShell remoting | Azure-touching, local-client action | SSH access, Windows desktop access, or Windows remote PowerShell commands | Direct client launch, PSSession, or connection test |
@@ -388,6 +389,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd show` | none | Prints the broader managed report | Environment audit | Good for multi-group review. |
 | `.\cg.cmd show --group=<resource-group>` | `--group` | Prints one managed group report | Support handoff and verification | `show` prints the expected inventory while password-bearing `.env` values are redacted. |
 | `.\cg.cmd show --group=<resource-group> --vm-name=<vm-name>` | `--group`, `--vm-name` | Prints the managed report and one VM's target-derived configuration | Focused inspection of a single managed target | `show` stays read-only and uses actual Azure state without writing `.env`. |
+| `.\cg.cmd show --export-json=<path>` | `--export-json`, optional `--overwrite` | Writes a machine-readable report with sensitive configuration redacted | Support handoff or downstream reporting | Existing files are preserved unless `--overwrite` is explicit. |
 
 #### `do`
 
@@ -405,6 +407,8 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd do --vm-action=hibernate-deallocate --group=<resource-group> --vm-name=<vm-name>` | `hibernate-deallocate` | Azure hibernation-through-deallocation path | Platform-backed hibernation path | Use when the VM is configured for hibernation. |
 
 #### `task`
+
+`cg.cmd task --history` prints the latest local task and package execution outcomes without connecting to Azure.
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
@@ -671,6 +675,7 @@ Purpose: print read-only managed inventory sections for clagnos-tagged resource 
 Behavior notes:
 - supports `--type` and `--group` for managed inventory output
 - `list` gives a read-only managed inventory view across groups and resource types
+- `list --type group` includes the active marker, Azure location, and provisioning state for each managed resource group
 - Azure-read-only output; `--subscription-id` / `-s` only changes the subscription context and persists `SELECTED_AZURE_SUBSCRIPTION_ID` when it comes from the CLI
 
 ### `show`
@@ -679,6 +684,7 @@ Purpose: print a full system and configuration dump for app resource groups and 
 Behavior notes:
 - good for support handoff, release verification, and environment auditing
 - password-bearing `.env` values are redacted
+- `--export-json <path>` writes a machine-readable report with sensitive config values redacted; existing files require `--overwrite`
 - when the VM is running, nested virtualization is shown from guest validation evidence
 
 ### `do`
@@ -696,6 +702,9 @@ Behavior notes:
 - shows tracked and local-only task folders together
 - `--run-vm-init` routes one init task through Azure run-command and relays the full guest transcript immediately after that task finishes
 - `--run-vm-update` routes one update task through the SSH task runner and streams guest stdout/stderr live over SSH
+- `--history` shows recent isolated/package outcomes and vm-init/vm-update stage summaries recorded on the operator machine without Azure access
+- history stores task names, target, outcome counts, duration, and deferred app-state task names; it does not save guest output or credentials
+- history is stored under the operator's local application state directory in `clagnos/task-runs.jsonl` and is trimmed to roughly 2,000 rows after the file grows beyond 5 MiB
 - `--save-app-state` defaults to `--source=vm`; `--restore-app-state` defaults to `--target=vm`; both default to `--user=.all.`
 - `--user` accepts `.all.`, `.current.`, one explicit user, or a comma-separated user list such as `--user=operator,assistant`
 - managed VM app-state reads or writes the task-local payload at `<task-folder>/app-state/app-state.zip`
@@ -744,6 +753,8 @@ Behavior notes:
 - `--vm-size` changes compute SKU
 - `--disk-size=... --expand` performs the supported managed OS disk growth path
 - `--disk-size=... --shrink` is a non-mutating guidance path because Azure does not support shrinking an existing managed OS disk in place; the command prints supported rebuild and migration alternatives instead of risking disk integrity
+- both mutating resize paths print before/after lifecycle snapshots and verify the resulting VM SKU or OS disk size with Azure readbacks before saving the requested value into `.env`
+- if Azure's readback differs from the requested target, the command reports the actual state, does not save the target config value, and does not claim an automatic rollback; it starts the VM before performing the final readback
 
 ### `set`
 Purpose: apply hibernation and validate or store nested-virtualization settings.
@@ -867,6 +878,15 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 3. Use `initialize` for initial guest setup, `update` for ongoing vm-update maintenance, and `do` for explicit Azure lifecycle or repair actions.
 4. Use `task` and `exec` to isolate one failing init or update task instead of replaying the whole chain.
 5. Use `move`, `resize`, `set`, and `delete` only after the inventory and current state are explicit.
+
+### Versioned Release Source Package
+After committing the release docs with the version's cumulative commit count, create a versioned source archive and SHA256 sidecar:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-release.ps1
+```
+
+The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a clean git worktree, and no tracked `.env`. It archives the committed tree under `dist/clagnos-<version>/`, adds `BUILD-MANIFEST.json`, and writes `dist/clagnos-<version>.zip.sha256`. The default output directory is git-ignored. Use `-OutputDirectory <path>` to choose another destination or `-Overwrite` to replace an existing artifact deliberately.
 
 ## Core Mental Model
 

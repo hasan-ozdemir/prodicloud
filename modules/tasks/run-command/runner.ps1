@@ -437,6 +437,8 @@ function Invoke-VmRunCommandBlocks {
         throw 'VM run-command task list is empty.'
     }
 
+    $stageWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
     Write-Host 'VM init stage mode: tasks run one-by-one over Azure Run Command.'
     Write-Host ("Task outcome policy: {0}" -f $TaskOutcomeMode)
 
@@ -680,6 +682,22 @@ function Invoke-VmRunCommandBlocks {
             Write-Host ("- {0}" -f [string]$rebootTaskName) -ForegroundColor Cyan
         }
     }
+    if (-not [string]::Equals([string]$PerfTaskCategory, 'task-run', [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($stageWatch.IsRunning) { $stageWatch.Stop() }
+        Write-ClagnosTaskStageHistoryRecord `
+            -Stage 'init' `
+            -Platform $Platform `
+            -ResourceGroup $ResourceGroup `
+            -VmName $VmName `
+            -TaskNames @($TaskBlocks | ForEach-Object { [string]$_.Name }) `
+            -FailedTasks @($uniqueFailedTasks) `
+            -WarningTasks @($uniqueWarningTasks) `
+            -DeferredAppStateTasks @($pendingAppStateTaskBlocks | ForEach-Object { [string]$_.Name }) `
+            -SuccessCount @($uniqueSuccessfulTasks).Count `
+            -ErrorCount $totalErrors `
+            -RebootCount $rebootCount `
+            -DurationSeconds $stageWatch.Elapsed.TotalSeconds
+    }
     if ([string]::Equals([string]$TaskOutcomeMode, 'strict', [System.StringComparison]::OrdinalIgnoreCase) -and ($totalWarnings -gt 0 -or $totalErrors -gt 0)) {
         throw ("VM init strict task outcome mode blocked continuation: warning={0}, error={1}" -f $totalWarnings, $totalErrors)
     }
@@ -689,6 +707,8 @@ function Invoke-VmRunCommandBlocks {
         WarningCount = $totalWarnings
         ErrorCount = $totalErrors
         RebootCount = $rebootCount
+        DeferredAppStateCount = @($pendingAppStateTaskBlocks).Count
+        DeferredAppStateTasks = @($pendingAppStateTaskBlocks | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         RebootRequired = $false
         NextTaskIndex = [int]$processedTaskCount
         TaskDurations = @()

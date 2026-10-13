@@ -3,6 +3,22 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.13.409] - 2026-10-13
+
+### Added
+- Added a versioned source release packager that includes a build manifest and SHA256 sidecar and rejects dirty trees, version/count mismatches, and tracked `.env` files.
+- Added local task execution history for isolated task/package operations and full init/update stage summaries, including deferred app-state work without guest output or credentials.
+- Added a redacted JSON export option to `show`; existing report files require explicit `--overwrite`.
+
+### Changed
+- Resize operations now show before/after lifecycle snapshots, read the resulting VM SKU or OS disk size back from Azure, and persist the requested setting only after the readback matches.
+- Managed group inventory now displays the active marker, Azure location, and provisioning state.
+
+### Validation
+- PowerShell compatibility matrix passed under Windows PowerShell 5.1 and PowerShell 7+: 187 smoke checks and 160 TUI scenarios per runtime.
+- The real `cg.cmd` TUI process used fixture Azure reads only: zero native Azure CLI calls, zero real dispatcher calls, and no resource mutations.
+- Quality audit passed, including documentation, package app-state, release package, sensitive-content, syntax, and CLI help checks.
+
 ## [2026.10.13.408] - 2026-10-13
 
 ### Added

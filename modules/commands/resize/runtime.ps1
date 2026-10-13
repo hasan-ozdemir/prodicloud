@@ -270,6 +270,110 @@ function Get-ClagnosResizeOsDiskContext {
     }
 }
 
+# Handles Get-ClagnosResizeVmSizeReadback.
+function Get-ClagnosResizeVmSizeReadback {
+    param(
+        [string]$ResourceGroup,
+        [string]$VmName
+    )
+
+    Write-ClagnosActionProgress -Action ("verify requested VM size for '{0}'" -f [string]$VmName)
+    $sizeText = [string](az vm show -g $ResourceGroup -n $VmName --query 'hardwareProfile.vmSize' -o tsv --only-show-errors)
+    Assert-LastExitCode 'az vm show (resize verification)'
+    if ([string]::IsNullOrWhiteSpace([string]$sizeText)) {
+        Throw-FriendlyError `
+            -Detail ("Azure returned an empty VM size for '{0}' in '{1}' after resize." -f $VmName, $ResourceGroup) `
+            -Code 62 `
+            -Summary "Resize command could not verify the resulting VM size." `
+            -Hint "Run clagnos show for the target VM and inspect its current hardware profile."
+    }
+
+    return $sizeText.Trim()
+}
+
+# Handles Get-ClagnosResizeDiskSizeReadback.
+function Get-ClagnosResizeDiskSizeReadback {
+    param(
+        [string]$DiskId,
+        [string]$DiskName
+    )
+
+    Write-ClagnosActionProgress -Action ("verify requested OS disk size for '{0}'" -f [string]$DiskName)
+    $sizeText = [string](az disk show --ids $DiskId --query 'diskSizeGb' -o tsv --only-show-errors)
+    Assert-LastExitCode 'az disk show (resize verification)'
+    $sizeGb = 0
+    if (-not [int]::TryParse([string]$sizeText, [ref]$sizeGb) -or $sizeGb -lt 1) {
+        Throw-FriendlyError `
+            -Detail ("Azure returned an invalid diskSizeGb value '{0}' for managed disk '{1}' after resize." -f $sizeText, $DiskName) `
+            -Code 62 `
+            -Summary "Resize command could not verify the resulting OS disk size." `
+            -Hint "Run clagnos component --action=show --type=disk --name=<disk-name> and inspect the disk metadata."
+    }
+
+    return [int]$sizeGb
+}
+
+# Handles Get-ClagnosResizeLifecycleSnapshot.
+function Get-ClagnosResizeLifecycleSnapshot {
+    param(
+        [string]$ResourceGroup,
+        [string]$VmName,
+        [string]$Stage
+    )
+
+    Write-ClagnosActionProgress -Action ("read {0} lifecycle snapshot for '{1}'" -f [string]$Stage, [string]$VmName)
+    try {
+        return (Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName)
+    }
+    catch {
+        Write-Warning ("Resize {0} lifecycle snapshot is unavailable: {1}" -f [string]$Stage, [string]$_.Exception.Message)
+        return $null
+    }
+}
+
+# Handles Write-ClagnosResizeStateSnapshot.
+function Write-ClagnosResizeStateSnapshot {
+    param(
+        [string]$Stage,
+        [string]$VmName,
+        [string]$ResourceGroup,
+        [string]$Region,
+        [string]$VmSize,
+        [string]$DiskName = '',
+        [int]$DiskSizeGb = 0,
+        [psobject]$LifecycleSnapshot = $null
+    )
+
+    $diskText = if ([string]::IsNullOrWhiteSpace([string]$DiskName)) { '(unchanged)' } else { ("{0}={1} GB" -f [string]$DiskName, [int]$DiskSizeGb) }
+    $lifecycleText = if ($null -eq $LifecycleSnapshot) { 'lifecycle=(snapshot unavailable)' } else { Format-ClagnosVmLifecycleSummaryText -Snapshot $LifecycleSnapshot }
+    Write-Host ("Resize {0} state snapshot: VM={1}/{2}; region={3}; size={4}; OS disk={5}; {6}" -f [string]$Stage, [string]$ResourceGroup, [string]$VmName, [string]$Region, [string]$VmSize, [string]$diskText, [string]$lifecycleText) -ForegroundColor DarkCyan
+}
+
+# Handles Assert-ClagnosResizeReadback.
+function Assert-ClagnosResizeReadback {
+    param(
+        [ValidateSet('vm-size','disk-size')]
+        [string]$Kind,
+        [string]$ExpectedValue,
+        [string]$ActualValue,
+        [string]$ResourceGroup,
+        [string]$VmName,
+        [psobject]$LifecycleSnapshot = $null
+    )
+
+    if ([string]::Equals([string]$ExpectedValue, [string]$ActualValue, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
+    $stateText = if ($null -eq $LifecycleSnapshot) { 'lifecycle=(snapshot unavailable)' } else { Format-ClagnosVmLifecycleSummaryText -Snapshot $LifecycleSnapshot }
+    $resourceLabel = if ($Kind -eq 'vm-size') { 'VM size' } else { 'OS disk size (GB)' }
+    Throw-FriendlyError `
+        -Detail ("Resize readback mismatch for VM '{0}' in '{1}': expected {2}='{3}', actual='{4}'. {5}" -f $VmName, $ResourceGroup, $resourceLabel, $ExpectedValue, $ActualValue, $stateText) `
+        -Code 62 `
+        -Summary ("Resize command could not verify the requested {0}." -f $resourceLabel) `
+        -Hint "Inspect the reported target state before retrying. The VM was started after the Azure resize request; no automatic rollback was attempted."
+}
+
 function Show-ClagnosResizeShrinkAlternatives {
     Write-Host "Supported alternatives for a smaller OS disk:" -ForegroundColor Cyan
     Write-Host "1. Create a new VM with the desired smaller OS disk size and migrate the workload."

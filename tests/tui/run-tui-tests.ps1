@@ -888,6 +888,14 @@ Invoke-TuiTest -Name 'Task menu lists active and disabled tasks' -Action {
     Assert-TuiOption -Call $call -Name 'vm-update' -Expected 'True'
 }
 
+Invoke-TuiTest -Name 'Task menu opens local task run history without target selectors' -Action {
+    Set-TuiChoices -Choices @('8','b')
+    & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
+    $call = Assert-TuiCommand -CommandName 'task'
+    Assert-TuiOption -Call $call -Name 'history' -Expected 'True'
+    Assert-Tui -Condition (-not $call.Options.ContainsKey('group') -and -not $call.Options.ContainsKey('vm-name')) -Message 'Local task history must not inherit Azure target selectors.'
+}
+
 Invoke-TuiTest -Name 'Task menu runs a selected init task' -Action {
     Set-TuiChoices -Choices @('2','01-fixture-init','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
@@ -1010,7 +1018,7 @@ Invoke-TuiTest -Name 'Task availability submenu is reachable from Tasks and app-
 Invoke-TuiTest -Name 'Task menu returns on q' -Action {
     Set-TuiChoices -Choices @('q')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
-    Assert-TuiOutputContains -Text '7. Enable/disable a task' -Message 'Task screen must render before q is accepted.'
+    Assert-TuiOutputContains -Text '8. View recent task run history' -Message 'Task screen must render the local history option before q is accepted.'
 }
 
 Invoke-TuiTest -Name 'Task menu ignores an invalid item and returns on b' -Action {
@@ -1147,11 +1155,19 @@ Invoke-TuiTest -Name 'Operations command menu sends a one-shot remote command' -
 }
 
 Invoke-TuiTest -Name 'Operations menu routes Tasks and app-state, Components, and full report' -Action {
-    Set-TuiChoices -Choices @('7','8','9','b')
+    Set-TuiChoices -Choices @('7','8','9','t','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     Assert-Tui -Condition ($script:TuiTaskMenuCount -eq 1) -Message 'Operations option 7 must open Tasks and app-state.'
     Assert-Tui -Condition ($script:TuiComponentMenuCount -eq 1) -Message 'Operations option 8 must open Components.'
     $call = Assert-TuiCommand -CommandName 'show'
+    Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
+}
+
+Invoke-TuiTest -Name 'Operations report submenu maps a redacted JSON export path' -Action {
+    Set-TuiChoices -Choices @('9','j','reports\fixture-vc.json','b')
+    & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
+    $call = Assert-TuiCommand -CommandName 'show'
+    Assert-TuiOption -Call $call -Name 'export-json' -Expected 'reports\fixture-vc.json'
     Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
 }
 

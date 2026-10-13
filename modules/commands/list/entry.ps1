@@ -9,7 +9,9 @@ function Invoke-ClagnosListCommand {
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $requestedTypes = @(Resolve-ClagnosListRequestedTypes -Options $Options)
-    $resourceGroups = @(Get-ClagnosListTargetResourceGroups -Options $Options -ConfigMap $configMap)
+    $managedGroupRows = @()
+    $groupRowsReference = if ($requestedTypes -contains 'group') { [ref]$managedGroupRows } else { $null }
+    $resourceGroups = @(Get-ClagnosListTargetResourceGroups -Options $Options -ConfigMap $configMap -ManagedGroupRows $groupRowsReference)
     $subscriptionContext = Get-ClagnosResolvedSubscriptionContext
 
     Write-Host "Managed clagnos inventory:" -ForegroundColor Cyan
@@ -28,7 +30,7 @@ function Invoke-ClagnosListCommand {
     }
 
     foreach ($typeName in @($requestedTypes)) {
-        $rows = @(Get-ClagnosListSectionRows -TypeName ([string]$typeName) -ResourceGroups @($resourceGroups) -ConfigMap $configMap)
+        $rows = @(Get-ClagnosListSectionRows -TypeName ([string]$typeName) -ResourceGroups @($resourceGroups) -ConfigMap $configMap -ManagedGroupRows @($managedGroupRows))
         Write-Host ""
         Write-Host ("{0}:" -f ([string]$typeName).ToUpperInvariant()) -ForegroundColor Cyan
         if (@($rows).Count -eq 0) {

@@ -123,7 +123,7 @@ function Show-ClagnosCommandHelpDetailed {
             '  list       : managed inventory output'
             '  show       : system and configuration dump'
             '  do         : lifecycle and repair actions'
-            '  task       : task inventory, enable/disable, isolated task runs, task app-state save/restore'
+            '  task       : task inventory/history, enable/disable, isolated task runs, task app-state save/restore'
             '  package    : catalogued package status, install/update, and uninstall'
             '  component  : managed Azure component CRUD and dependency-aware deletion'
             '  connect    : connect --ssh / --rdp / --powershell plus --test'
@@ -223,21 +223,22 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos list'
                 '  clagnos list --type group,vm -s <subscription-guid>'
                 '  clagnos list --type nsg,nsg-rule --group <resource-group>'
-                'Notes: list is Azure-read-only, supports --type and --group for managed inventory output, and keeps a deterministic managed-section order. --type uses comma-separated values. --group is an exact managed resource-group filter. Without --type, list prints all supported managed inventory sections in deterministic order.'
+                'Notes: list is Azure-read-only, supports --type and --group for managed inventory output, and keeps a deterministic managed-section order. The group section shows each group location, provisioning state, and active selection. --type uses comma-separated values. --group is an exact managed resource-group filter. Without --type, list prints all supported managed inventory sections in deterministic order.'
             )
             return
         }
         'show' {
             Write-ClagnosHelpLines @(
                 'Command: show'
-                'Description: print a full system and configuration dump for app resource groups and VMs.'
+                'Description: print a full system and configuration report for managed resource groups and VMs, with an optional redacted JSON export.'
                 'Usage:'
-                '  clagnos show [--subscription-id <subscription-id>] [--perf]'
-                '  clagnos show --group <resource-group> [--vm-name <vm-name>] [--subscription-id <subscription-id>]'
+                '  clagnos show [--subscription-id <subscription-id>] [--export-json <path>] [--overwrite] [--perf]'
+                '  clagnos show --group <resource-group> [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--export-json <path>] [--overwrite]'
                 'Examples:'
                 '  clagnos show'
                 '  clagnos show --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
-                'Notes: password-bearing .env values are redacted in the rendered report. When show can resolve exactly one managed VM target, it also prints a read-only target-derived configuration section using actual Azure state without writing .env. When the VM is running, nested virtualization is shown from guest validation evidence.'
+                '  clagnos show --group <resource-group> --vm-name <vm-name> --export-json .\reports\vm.json'
+                'Notes: password-bearing .env values are redacted in rendered and exported reports. JSON export refuses to overwrite an existing file unless --overwrite is provided. When show can resolve exactly one managed VM target, it also prints a read-only target-derived configuration section using actual Azure state without writing .env. When the VM is running, nested virtualization is shown from guest validation evidence.'
             )
             return
         }
@@ -262,9 +263,10 @@ function Show-ClagnosCommandHelpDetailed {
         'task' {
             Write-ClagnosHelpLines @(
                 'Command: task'
-                'Description: list discovered init/update tasks, enable/disable a task for future runs, run one task in isolation, or save/restore one task-owned app-state payload against a VM or the local Windows machine.'
+                'Description: list discovered init/update tasks, view local task-run history, enable/disable tasks, run one task in isolation, or save/restore task-owned app-state.'
                 'Usage:'
                 '  clagnos task --list [--vm-init] [--vm-update] [--disabled] [--windows|--linux] [--perf]'
+                '  clagnos task --history'
                 '  clagnos task --enable --vm-init-task <task-number|task-name> [--windows|--linux]'
                 '  clagnos task --disable --vm-update-task <task-number|task-name> [--windows|--linux]'
                 '  clagnos task --run-vm-init <task-number|task-name> [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--perf]'
@@ -277,6 +279,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos task --restore-app-state --package <package-id> --package-catalog <builtin|custom> [--target <vm|lm>] [--user <.all.|.current.|user[,user...]>] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux]'
                 'Examples:'
                 '  clagnos task --list --vm-update'
+                '  clagnos task --history'
                 '  clagnos task --disable --vm-update-task 114 --windows'
                 '  clagnos task --enable --vm-update-task 114 --windows'
                 '  clagnos task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>'
@@ -285,7 +288,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=vm --user=assistant --vm-update-task=115 --group <resource-group> --vm-name <vm-name>'
-                'Notes: --list, --enable, and --disable are local task-catalog operations and do not require az login. Enable/disable applies only to task folders and requires a typed confirmation. Use `package --action enable|disable` for package availability. Package app-state uses --package plus --package-catalog and shares the same VM/local-machine profile rules. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts and does not perform the workflow-only final vm-update restart. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only and writes a restore journal plus backup root before local replay.'
+                'Notes: --list, --history, --enable, and --disable are local task-catalog operations and do not require az login. --history reads the local task-runs.jsonl file on this machine. Enable/disable applies only to task folders and requires a typed confirmation. Use `package --action enable|disable` for package availability. Package app-state uses --package plus --package-catalog and shares the same VM/local-machine profile rules. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts and does not perform the workflow-only final vm-update restart. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only and writes a restore journal plus backup root before local replay.'
             )
             return
         }

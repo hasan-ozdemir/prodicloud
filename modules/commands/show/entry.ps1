@@ -9,6 +9,43 @@ function Invoke-ClagnosShowCommand {
         [switch]$LinuxFlag
     )
 
+    $exportRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'export-json'
+    $overwriteRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'overwrite'
+    if ($overwriteRequested -and -not $exportRequested) {
+        Throw-FriendlyError `
+            -Detail "Option '--overwrite' requires '--export-json'." `
+            -Code 64 `
+            -Summary "Show export options are incomplete." `
+            -Hint "Use --export-json <path> with --overwrite only when replacing an existing report file."
+    }
+    $exportPath = ''
+    if ($exportRequested) {
+        $rawExportPath = [string](Get-ClagnosCliOptionText -Options $Options -Name 'export-json')
+        if ([string]::IsNullOrWhiteSpace([string]$rawExportPath)) {
+            Throw-FriendlyError `
+                -Detail "Option '--export-json' requires an output file path." `
+                -Code 64 `
+                -Summary "Show JSON export path is missing." `
+                -Hint "Use --export-json <path> to select a report file."
+        }
+        $exportPath = [System.IO.Path]::GetFullPath([string]$rawExportPath)
+        $exportParent = [System.IO.Path]::GetDirectoryName($exportPath)
+        if (-not (Test-Path -LiteralPath $exportParent -PathType Container)) {
+            Throw-FriendlyError `
+                -Detail ("JSON export directory does not exist: {0}" -f $exportParent) `
+                -Code 64 `
+                -Summary "Show JSON export directory was not found." `
+                -Hint "Create the directory first or select an existing output directory."
+        }
+        if ((Test-Path -LiteralPath $exportPath) -and -not $overwriteRequested) {
+            Throw-FriendlyError `
+                -Detail ("JSON export file already exists: {0}" -f $exportPath) `
+                -Code 64 `
+                -Summary "Show JSON export would overwrite an existing file." `
+                -Hint "Choose another filename or add --overwrite after reviewing the target path."
+        }
+    }
+
     $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot '.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
@@ -129,5 +166,8 @@ function Invoke-ClagnosShowCommand {
         ResourceGroups = @($groupDumps)
     }
 
+    if ($exportRequested) {
+        Export-ClagnosShowReportJson -Dump $dump -OutputPath $exportPath -Overwrite:$overwriteRequested | Out-Null
+    }
     Write-ClagnosShowReport -Dump $dump
 }

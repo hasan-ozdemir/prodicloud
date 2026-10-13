@@ -5795,3 +5795,14 @@ Feature request: Add a way to connect to a virtual computer with PowerShell and 
 **Assistant Summary**
 
 Added Windows-only `connect --powershell` with a persistent PSSession command prompt, one-shot `--command`, and authenticated `--test` paths. Added the connection choices and endpoint to the VC Operations menu and details screen, and documented the CLI usage. Extended the existing enabled init task 06 to add both manager and assistant to Remote Management Users; WinRM still uses Negotiate with Basic authentication and unencrypted traffic disabled. The PowerShell compatibility matrix passed 179 smoke checks and 158 TUI scenarios in Windows PowerShell 5.1 and PowerShell 7+, with zero Azure mutations.
+
+### 2026-10-13 08:27 UTC
+**User Prompt**
+
+````text
+Finish only the items that can be implemented quickly and pragmatically. Do not try to provision a VC from scratch while doing this work.
+````
+
+**Assistant Summary**
+
+Completed the quick, concrete roadmap items: resize lifecycle snapshots and Azure readback verification; managed group location/provisioning metadata; versioned source packaging with a manifest and SHA256 sidecar; local task and deferred app-state history; and redacted JSON export for `show`. Updated the roadmap and release records. Windows PowerShell 5.1 and PowerShell 7+ each passed 187 smoke checks and 160 TUI scenarios, and the quality audit passed. All TUI Azure access came from fixtures; no Azure resource was mutated and no VC was provisioned or rebuilt.

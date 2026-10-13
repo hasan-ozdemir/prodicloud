@@ -4,6 +4,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+$script:ClagnosTaskHistoryDisabled = $true
+$script:ClagnosTaskHistoryPathOverride = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-smoke-history-' + [guid]::NewGuid().ToString('N') + '\task-runs.jsonl')
 
 $passCount = 0
 $failCount = 0
@@ -958,6 +960,9 @@ Invoke-Test -Name "CLI parse help contracts" -Action {
     $parsedTaskRunUpdate = Parse-ClagnosCliArguments -CommandToken "task" -RawArgs @("--run-vm-update=10002")
     Assert-True -Condition ([string]$parsedTaskRunUpdate.Options['run-vm-update'] -eq '10002') -Message "Task --run-vm-update=value parse failed."
 
+    $parsedTaskHistory = Parse-ClagnosCliArguments -CommandToken 'task' -RawArgs @('--history')
+    Assert-True -Condition ($parsedTaskHistory.Options.ContainsKey('history')) -Message 'Task --history option was not captured.'
+
     $parsedExecCommand = Parse-ClagnosCliArguments -CommandToken "exec" -RawArgs @("--command", "Get-Date")
     Assert-True -Condition ([string]$parsedExecCommand.Options['command'] -eq 'Get-Date') -Message "Exec --command <value> parse failed."
 
@@ -993,6 +998,10 @@ Invoke-Test -Name "CLI parse help contracts" -Action {
 
     $parsedSubscriptionInline = Parse-ClagnosCliArguments -CommandToken "show" -RawArgs @("-s=22222222-2222-2222-2222-222222222222")
     Assert-True -Condition ([string]$parsedSubscriptionInline.Options['subscription-id'] -eq '22222222-2222-2222-2222-222222222222') -Message "Inline -s=value must normalize into subscription-id."
+
+    $parsedShowJsonExport = Parse-ClagnosCliArguments -CommandToken 'show' -RawArgs @('--export-json', '.\reports\vm.json', '--overwrite')
+    Assert-True -Condition ([string]$parsedShowJsonExport.Options['export-json'] -eq '.\reports\vm.json') -Message 'Show --export-json must preserve the selected file path.'
+    Assert-True -Condition ($parsedShowJsonExport.Options.ContainsKey('overwrite')) -Message 'Show --overwrite option was not captured.'
 
     $parsedConnectShortSelectors = Parse-ClagnosCliArguments -CommandToken "connect" -RawArgs @("--ssh", "-g", "rg-samplevm-ate1-g1", "-v", "samplevm", "-s", "33333333-3333-3333-3333-333333333333")
     Assert-True -Condition ([string]$parsedConnectShortSelectors.Options['group'] -eq 'rg-samplevm-ate1-g1') -Message "Short -g must normalize into group."
@@ -1240,6 +1249,8 @@ Invoke-Test -Name "Configure and list accept the current option contract" -Actio
     Assert-ClagnosCommandOptions -CommandName 'list' -Options @{ type = 'group,vm'; 'subscription-id' = '11111111-1111-1111-1111-111111111111' }
     Assert-ClagnosCommandOptions -CommandName 'list' -Options @{ type = 'nsg,nsg-rule'; group = 'rg-samplevm-ate1-g1'; 'subscription-id' = '11111111-1111-1111-1111-111111111111' }
     Assert-ClagnosCommandOptions -CommandName 'show' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'subscription-id' = '11111111-1111-1111-1111-111111111111' }
+    Assert-ClagnosCommandOptions -CommandName 'show' -Options @{ 'export-json' = 'report.json' }
+    Assert-ClagnosCommandOptions -CommandName 'show' -Options @{ 'export-json' = 'report.json'; overwrite = $true }
 }
 
 Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface" -Action {
@@ -1822,6 +1833,21 @@ Invoke-Test -Name "List rejects invalid type filter" -Action {
     }
 }
 
+Invoke-Test -Name "List group inventory includes active marker, location, and provisioning state" -Action {
+    $rows = @(Get-ClagnosListSectionRows `
+        -TypeName 'group' `
+        -ResourceGroups @('rg-active-ate1-g1','rg-other-cin1-g2') `
+        -ConfigMap @{ SELECTED_RESOURCE_GROUP = 'rg-active-ate1-g1' } `
+        -ManagedGroupRows @(
+            [pscustomobject]@{ name = 'rg-active-ate1-g1'; location = 'austriaeast'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' } },
+            [pscustomobject]@{ name = 'rg-other-cin1-g2'; location = 'centralindia'; properties = [pscustomobject]@{ provisioningState = 'Accepted' } }
+        ))
+
+    Assert-True -Condition (@($rows).Count -eq 2) -Message 'Managed group inventory must keep one metadata row per group.'
+    Assert-True -Condition ([string]$rows[0] -match 'rg-active-ate1-g1 \[active\].*location=austriaeast.*provisioning=Succeeded') -Message 'Active resource group row must show its location and provisioning state.'
+    Assert-True -Condition ([string]$rows[1] -match 'rg-other-cin1-g2.*location=centralindia.*provisioning=Accepted') -Message 'Other resource group row must show its location and provisioning state.'
+}
+
 Invoke-Test -Name "Interactive create platform prompt ignores persisted SELECTED_VM_OS when flags are missing" -Action {
     function Read-Host {
         param([string]$Prompt)
@@ -1988,6 +2014,152 @@ Invoke-Test -Name "Task command accepts list filters" -Action {
     Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ list = $true }
     Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ list = $true; 'vm-init' = $true; windows = $true }
     Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ list = $true; 'vm-update' = $true; disabled = $true; linux = $true }
+    Assert-ClagnosCommandOptions -CommandName 'task' -Options @{ history = $true }
+}
+
+Invoke-Test -Name "Task run history persists local outcome metadata and omits guest output" -Action {
+    $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $historyRoot = Join-Path $tempBase ('clagnos-task-history-test-' + [guid]::NewGuid().ToString('N'))
+    $previousHistoryPathOverride = [string]$script:ClagnosTaskHistoryPathOverride
+    $script:ClagnosTaskHistoryPathOverride = Join-Path $historyRoot 'task-runs.jsonl'
+    try {
+        Write-ClagnosTaskRunHistoryRecord -Record ([ordered]@{
+            SchemaVersion = 1
+            CompletedAtUtc = '2026-10-13T00:00:00.0000000Z'
+            Operation = 'task'
+            Stage = 'update'
+            Platform = 'windows'
+            ResourceGroup = 'rg-sample'
+            VmName = 'samplevm'
+            TaskNumber = 101
+            TaskName = '101-test-task'
+            Requested = '101'
+            Outcome = 'completed-with-warnings'
+            SuccessCount = 1
+            FailedCount = 0
+            WarningCount = 1
+            ErrorCount = 0
+            RebootCount = 0
+            DeferredAppStateCount = 0
+            DurationSeconds = 12.5
+            FailureCategory = ''
+            FailureSummary = ''
+        })
+
+        $records = @(Get-ClagnosTaskRunHistoryRecords -Limit 25)
+        Assert-True -Condition ($records.Count -eq 1) -Message 'Task history reader must return the appended JSONL record.'
+        Assert-True -Condition ([string]$records[0].Outcome -eq 'completed-with-warnings') -Message 'Task history must preserve the run outcome.'
+        Assert-True -Condition ([int]$records[0].WarningCount -eq 1) -Message 'Task history must preserve warning counts.'
+        Assert-True -Condition ([string]$records[0].PSObject.Properties['VmPass'] -eq '') -Message 'Task history must not contain guest credentials.'
+        Assert-True -Condition ([string](Get-Content -LiteralPath $script:ClagnosTaskHistoryPathOverride -Raw) -notmatch 'password|guest output') -Message 'Task history JSONL must not include secrets or guest command output.'
+    }
+    finally {
+        $resolvedHistoryRoot = [System.IO.Path]::GetFullPath($historyRoot)
+        $resolvedTempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedHistoryRoot.StartsWith(($resolvedTempBase + 'clagnos-task-history-test-'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ("Refusing to remove unexpected task history test path: {0}" -f $resolvedHistoryRoot)
+        }
+        if (Test-Path -LiteralPath $resolvedHistoryRoot) { Remove-Item -LiteralPath $resolvedHistoryRoot -Recurse -Force }
+        $script:ClagnosTaskHistoryPathOverride = $previousHistoryPathOverride
+    }
+}
+
+Invoke-Test -Name "Task execution wrapper records outcome and deferred app-state metadata" -Action {
+    $originalDisabled = [bool]$script:ClagnosTaskHistoryDisabled
+    $script:ClagnosTaskHistoryDisabled = $false
+    $script:CapturedTaskRunHistoryRecord = $null
+    $originalFunctionDefinitions = @{}
+    foreach ($functionName in @('Invoke-ClagnosTaskExecutionWithTargetCore','Write-ClagnosTaskRunHistoryRecord')) {
+        $command = Get-Command $functionName -ErrorAction SilentlyContinue
+        if ($null -ne $command) { $originalFunctionDefinitions[$functionName] = [string]$command.Definition }
+    }
+
+    function Invoke-ClagnosTaskExecutionWithTargetCore {
+        param([pscustomobject]$Runtime,[hashtable]$Options,[string]$OperationName,[string]$Stage,[string]$Requested,[psobject]$PackageTaskBlock,[switch]$AutoMode,[string]$TaskOutcomeModeOverride)
+        return [pscustomobject]@{
+            Stage = 'update'
+            Task = [pscustomobject]@{ TaskNumber = 101; Name = '101-fixture-update' }
+            Result = [pscustomobject]@{ SuccessCount = 1; FailedCount = 0; WarningCount = 1; ErrorCount = 0; RebootCount = 0; DeferredAppStateCount = 2; DeferredAppStateTasks = @('101-state-alpha','101-state-beta') }
+        }
+    }
+    function Write-ClagnosTaskRunHistoryRecord { param([psobject]$Record) $script:CapturedTaskRunHistoryRecord = $Record }
+    foreach ($functionName in @('Invoke-ClagnosTaskExecutionWithTargetCore','Write-ClagnosTaskRunHistoryRecord')) {
+        $localFunction = Get-Command $functionName -CommandType Function -ErrorAction Stop
+        $mockDefinition = [scriptblock]::Create([string]$localFunction.Definition)
+        Set-Item -Path ("Function:\script:{0}" -f $functionName) -Value $mockDefinition
+        Set-Item -Path ("Function:\global:{0}" -f $functionName) -Value $mockDefinition
+    }
+
+    try {
+        $runResult = Invoke-ClagnosTaskExecutionWithTarget `
+            -Runtime ([pscustomobject]@{ Platform = 'windows'; Context = [pscustomobject]@{ ResourceGroup = 'rg-sample'; VmName = 'samplevm' } }) `
+            -Options @{ group = 'rg-sample'; 'vm-name' = 'samplevm' } `
+            -OperationName 'task' `
+            -Stage 'update' `
+            -Requested '101-fixture-update'
+
+        Assert-True -Condition ([string]$runResult.Task.Name -eq '101-fixture-update') -Message 'Task history wrapper must preserve the task execution result.'
+        Assert-True -Condition ([string]$script:CapturedTaskRunHistoryRecord.Outcome -eq 'completed-with-warnings') -Message 'Task history must classify warning outcomes.'
+        Assert-True -Condition ([int]$script:CapturedTaskRunHistoryRecord.DeferredAppStateCount -eq 2) -Message 'Task history must retain deferred app-state counts.'
+        Assert-True -Condition (@($script:CapturedTaskRunHistoryRecord.DeferredAppStateTasks).Count -eq 2) -Message 'Task history must identify deferred app-state tasks.'
+        Assert-True -Condition (-not $script:CapturedTaskRunHistoryRecord.Contains('VmPass')) -Message 'Task history must not include VM credentials.'
+    }
+    finally {
+        $script:ClagnosTaskHistoryDisabled = $originalDisabled
+        Remove-Item Function:\global:Invoke-ClagnosTaskExecutionWithTargetCore -ErrorAction SilentlyContinue
+        Remove-Item Function:\global:Write-ClagnosTaskRunHistoryRecord -ErrorAction SilentlyContinue
+        Remove-Item Function:\Invoke-ClagnosTaskExecutionWithTargetCore -ErrorAction SilentlyContinue
+        Remove-Item Function:\Write-ClagnosTaskRunHistoryRecord -ErrorAction SilentlyContinue
+        Remove-Item Function:\script:Invoke-ClagnosTaskExecutionWithTargetCore -ErrorAction SilentlyContinue
+        Remove-Item Function:\script:Write-ClagnosTaskRunHistoryRecord -ErrorAction SilentlyContinue
+        foreach ($functionName in @('Invoke-ClagnosTaskExecutionWithTargetCore','Write-ClagnosTaskRunHistoryRecord')) {
+            if ($originalFunctionDefinitions.ContainsKey($functionName)) {
+                Set-Item -Path ("Function:\script:{0}" -f $functionName) -Value ([scriptblock]::Create([string]$originalFunctionDefinitions[$functionName]))
+                Set-Item -Path ("Function:\global:{0}" -f $functionName) -Value ([scriptblock]::Create([string]$originalFunctionDefinitions[$functionName]))
+            }
+        }
+        Remove-Variable -Name CapturedTaskRunHistoryRecord -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "Workflow task history records stage tasks and unresolved deferred work" -Action {
+    $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $historyRoot = Join-Path $tempBase ('clagnos-task-stage-history-test-' + [guid]::NewGuid().ToString('N'))
+    $previousHistoryPathOverride = [string]$script:ClagnosTaskHistoryPathOverride
+    $previousHistoryDisabled = [bool]$script:ClagnosTaskHistoryDisabled
+    $script:ClagnosTaskHistoryPathOverride = Join-Path $historyRoot 'task-runs.jsonl'
+    $script:ClagnosTaskHistoryDisabled = $false
+    try {
+        Write-ClagnosTaskStageHistoryRecord `
+            -Stage 'init' `
+            -Platform 'windows' `
+            -ResourceGroup 'rg-sample' `
+            -VmName 'samplevm' `
+            -TaskNames @('01-first-task','02-second-task') `
+            -FailedTasks @('02-second-task') `
+            -WarningTasks @('02-second-task => app-state-deferred') `
+            -DeferredAppStateTasks @('02-second-task') `
+            -SuccessCount 1 `
+            -ErrorCount 0 `
+            -RebootCount 1 `
+            -DurationSeconds 34.5
+
+        $visibleRecords = @(Show-ClagnosTaskRunHistory -Limit 25)
+        Assert-True -Condition ($visibleRecords.Count -eq 1) -Message 'Task history screen must read the saved stage record without Azure setup.'
+        Assert-True -Condition ([string]$visibleRecords[0].Outcome -eq 'completed-with-failures') -Message 'Stage history must summarize a failed task outcome.'
+        Assert-True -Condition ([int]$visibleRecords[0].DeferredAppStateCount -eq 1) -Message 'Stage history must preserve deferred app-state counts.'
+        Assert-True -Condition ((@($visibleRecords[0].TaskNames) -join ',') -eq '01-first-task,02-second-task') -Message 'Stage history must preserve task names for support diagnosis.'
+    }
+    finally {
+        $resolvedHistoryRoot = [System.IO.Path]::GetFullPath($historyRoot)
+        $resolvedTempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedHistoryRoot.StartsWith(($resolvedTempBase + 'clagnos-task-stage-history-test-'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ("Refusing to remove unexpected task stage history test path: {0}" -f $resolvedHistoryRoot)
+        }
+        if (Test-Path -LiteralPath $resolvedHistoryRoot) { Remove-Item -LiteralPath $resolvedHistoryRoot -Recurse -Force }
+        $script:ClagnosTaskHistoryPathOverride = $previousHistoryPathOverride
+        $script:ClagnosTaskHistoryDisabled = $previousHistoryDisabled
+    }
 }
 
 Invoke-Test -Name "Task command lists discovered tasks in runtime order" -Action {
@@ -3533,6 +3705,7 @@ Invoke-Test -Name "Resize expand path deallocates, grows disk, restarts, and per
     $script:ResizeExpandAzCalls = @()
     $script:ResizeExpandWaits = @()
     $script:ResizeExpandPersist = $null
+    $script:ResizeExpandSnapshots = @()
     $script:ConfigOverrides = @{}
     $originalFunctionDefinitions = @{}
 
@@ -3541,6 +3714,9 @@ Invoke-Test -Name "Resize expand path deallocates, grows disk, restarts, and per
         'Read-DotEnvFile',
         'Resolve-ClagnosManagedVmTarget',
         'Get-ClagnosResizeOsDiskContext',
+        'Get-ClagnosResizeLifecycleSnapshot',
+        'Get-ClagnosResizeDiskSizeReadback',
+        'Write-ClagnosResizeStateSnapshot',
         'Invoke-TrackedAction',
         'Wait-ClagnosVmPowerState',
         'Set-DotEnvValue',
@@ -3569,6 +3745,27 @@ Invoke-Test -Name "Resize expand path deallocates, grows disk, restarts, and per
             DiskSizeGb = 128
             SkuName = 'Premium_LRS'
         }
+    }
+    function Get-ClagnosResizeLifecycleSnapshot {
+        param([string]$ResourceGroup, [string]$VmName, [string]$Stage)
+        $powerState = if ($Stage -eq 'before resize') { 'VM running' } else { 'VM running' }
+        return [pscustomobject]@{
+            ResourceGroup = $ResourceGroup
+            VmName = $VmName
+            NormalizedState = 'started'
+            PowerStateDisplay = $powerState
+            PowerStateCode = 'PowerState/running'
+            HibernationStateDisplay = '(none)'
+            HibernationStateCode = ''
+            ProvisioningStateDisplay = 'Provisioning succeeded'
+            ProvisioningStateCode = 'ProvisioningState/succeeded'
+            HibernationEnabled = $false
+        }
+    }
+    function Get-ClagnosResizeDiskSizeReadback { param([string]$DiskId, [string]$DiskName) return 196 }
+    function Write-ClagnosResizeStateSnapshot {
+        param([string]$Stage, [string]$VmName, [string]$ResourceGroup, [string]$Region, [string]$VmSize, [string]$DiskName, [int]$DiskSizeGb, [psobject]$LifecycleSnapshot)
+        $script:ResizeExpandSnapshots += ,([pscustomobject]@{ Stage = $Stage; VmSize = $VmSize; DiskSizeGb = $DiskSizeGb; Power = $LifecycleSnapshot.PowerStateDisplay })
     }
     function Invoke-TrackedAction {
         param([string]$Label, [scriptblock]$Action)
@@ -3634,6 +3831,8 @@ Invoke-Test -Name "Resize expand path deallocates, grows disk, restarts, and per
         Assert-True -Condition ([string]$script:ResizeExpandPersist.Key -eq 'WIN_VM_DISK_SIZE_GB') -Message "Disk expand path must persist the Windows disk-size config key for a Windows VM."
         Assert-True -Condition ([string]$script:ResizeExpandPersist.Value -eq '196') -Message "Disk expand path must persist the expanded disk size."
         Assert-True -Condition ([string]$script:ConfigOverrides.WIN_VM_DISK_SIZE_GB -eq '196') -Message "Disk expand path must update in-memory config overrides with the expanded disk size."
+        Assert-True -Condition ((@($script:ResizeExpandSnapshots | ForEach-Object { [string]$_.Stage }) -join ',') -eq 'before,after') -Message 'Disk expand must print before and after state snapshots.'
+        Assert-True -Condition ([int]$script:ResizeExpandSnapshots[1].DiskSizeGb -eq 196) -Message 'Disk expand after snapshot must use the Azure readback size.'
     }
     finally {
         foreach ($functionName in @(
@@ -3641,6 +3840,9 @@ Invoke-Test -Name "Resize expand path deallocates, grows disk, restarts, and per
             'Read-DotEnvFile',
             'Resolve-ClagnosManagedVmTarget',
             'Get-ClagnosResizeOsDiskContext',
+            'Get-ClagnosResizeLifecycleSnapshot',
+            'Get-ClagnosResizeDiskSizeReadback',
+            'Write-ClagnosResizeStateSnapshot',
             'Invoke-TrackedAction',
             'Wait-ClagnosVmPowerState',
             'Set-DotEnvValue',
@@ -3656,6 +3858,182 @@ Invoke-Test -Name "Resize expand path deallocates, grows disk, restarts, and per
         Remove-Variable -Name ResizeExpandAzCalls -Scope Script -ErrorAction SilentlyContinue
         Remove-Variable -Name ResizeExpandWaits -Scope Script -ErrorAction SilentlyContinue
         Remove-Variable -Name ResizeExpandPersist -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name ResizeExpandSnapshots -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name ConfigOverrides -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "Resize post-action Azure readback helpers query VM size and disk size" -Action {
+    $script:ResizeReadbackAzCalls = @()
+    try {
+        function az {
+            $line = @($args) -join ' '
+            $script:ResizeReadbackAzCalls += $line
+            switch ($line) {
+                'vm show -g rg-samplevm-ate1-g1 -n samplevm --query hardwareProfile.vmSize -o tsv --only-show-errors' {
+                    $global:LASTEXITCODE = 0
+                    return 'Standard_D8as_v5'
+                }
+                'disk show --ids /subscriptions/test/disks/disk-samplevm --query diskSizeGb -o tsv --only-show-errors' {
+                    $global:LASTEXITCODE = 0
+                    return '196'
+                }
+                default { throw ("Unexpected resize readback query: {0}" -f $line) }
+            }
+        }
+
+        $vmSize = Get-ClagnosResizeVmSizeReadback -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm'
+        $diskSize = Get-ClagnosResizeDiskSizeReadback -DiskId '/subscriptions/test/disks/disk-samplevm' -DiskName 'disk-samplevm'
+
+        Assert-True -Condition ([string]$vmSize -eq 'Standard_D8as_v5') -Message 'VM resize readback must return the Azure-confirmed SKU.'
+        Assert-True -Condition ([int]$diskSize -eq 196) -Message 'Disk resize readback must parse the Azure-confirmed size.'
+        Assert-True -Condition (@($script:ResizeReadbackAzCalls).Count -eq 2) -Message 'Resize must use read-only Azure queries for both post-action properties.'
+    }
+    finally {
+        Remove-Item Function:\az -ErrorAction SilentlyContinue
+        Remove-Variable -Name ResizeReadbackAzCalls -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "Resize readback mismatch reports the actual state without claiming rollback" -Action {
+    $snapshot = [pscustomobject]@{
+        NormalizedState = 'started'
+        PowerStateDisplay = 'VM running'
+        PowerStateCode = 'PowerState/running'
+        HibernationStateDisplay = '(none)'
+        HibernationStateCode = ''
+        ProvisioningStateDisplay = 'Provisioning succeeded'
+        ProvisioningStateCode = 'ProvisioningState/succeeded'
+        HibernationEnabled = $false
+    }
+    $failureText = ''
+    $failureHint = ''
+    try {
+        Assert-ClagnosResizeReadback -Kind 'vm-size' -ExpectedValue 'Standard_D8as_v5' -ActualValue 'Standard_D4as_v5' -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm' -LifecycleSnapshot $snapshot
+    }
+    catch {
+        $failureText = [string]$_.Exception.Message
+        $failureHint = [string]$_.Exception.Data['Hint']
+    }
+
+    Assert-True -Condition ($failureText -match 'expected VM size=.Standard_D8as_v5., actual=.Standard_D4as_v5.') -Message 'Resize readback failure must state expected and actual values.'
+    Assert-True -Condition ($failureText -match 'VM running') -Message 'Resize readback failure must include the current VM power state.'
+    Assert-True -Condition ($failureHint -match 'no automatic rollback was attempted') -Message 'Resize readback failure must state the recovery boundary accurately.'
+}
+
+Invoke-Test -Name "Resize VM size path reads back the resulting SKU and lifecycle state" -Action {
+    $script:ResizeVmSizeAzCalls = @()
+    $script:ResizeVmSizePersist = $null
+    $script:ResizeVmSizeSnapshots = @()
+    $script:ConfigOverrides = @{}
+    $originalFunctionDefinitions = @{}
+
+    foreach ($functionName in @(
+        'Get-ClagnosRepoRoot',
+        'Read-DotEnvFile',
+        'Resolve-ClagnosManagedVmTarget',
+        'Get-ClagnosResizeLifecycleSnapshot',
+        'Get-ClagnosResizeVmSizeReadback',
+        'Write-ClagnosResizeStateSnapshot',
+        'Assert-LocationExists',
+        'Assert-VmSkuAvailableViaRest',
+        'Invoke-TrackedAction',
+        'Wait-ClagnosVmPowerState',
+        'Set-DotEnvValue',
+        'az'
+    )) {
+        $command = Get-Command $functionName -ErrorAction SilentlyContinue
+        if ($null -ne $command) { $originalFunctionDefinitions[$functionName] = [string]$command.Definition }
+    }
+
+    function Get-ClagnosRepoRoot { return $RepoRoot }
+    function Read-DotEnvFile { param([string]$Path) return @{} }
+    function Resolve-ClagnosManagedVmTarget {
+        param([hashtable]$Options, [hashtable]$ConfigMap, [string]$OperationName)
+        return [pscustomobject]@{ ResourceGroup = 'rg-samplevm-ate1-g1'; VmName = 'samplevm' }
+    }
+    function Get-ClagnosResizeLifecycleSnapshot {
+        param([string]$ResourceGroup, [string]$VmName, [string]$Stage)
+        return [pscustomobject]@{
+            ResourceGroup = $ResourceGroup
+            VmName = $VmName
+            NormalizedState = 'started'
+            PowerStateDisplay = 'VM running'
+            PowerStateCode = 'PowerState/running'
+            HibernationStateDisplay = '(none)'
+            HibernationStateCode = ''
+            ProvisioningStateDisplay = 'Provisioning succeeded'
+            ProvisioningStateCode = 'ProvisioningState/succeeded'
+            HibernationEnabled = $false
+        }
+    }
+    function Get-ClagnosResizeVmSizeReadback { param([string]$ResourceGroup, [string]$VmName) return 'Standard_D8as_v5' }
+    function Write-ClagnosResizeStateSnapshot {
+        param([string]$Stage, [string]$VmName, [string]$ResourceGroup, [string]$Region, [string]$VmSize, [string]$DiskName, [int]$DiskSizeGb, [psobject]$LifecycleSnapshot)
+        $script:ResizeVmSizeSnapshots += ,([pscustomobject]@{ Stage = $Stage; VmSize = $VmSize; Power = $LifecycleSnapshot.PowerStateDisplay })
+    }
+    function Assert-LocationExists { param([string]$Location) }
+    function Assert-VmSkuAvailableViaRest { param([string]$Location, [string]$VmSize) }
+    function Invoke-TrackedAction { param([string]$Label, [scriptblock]$Action) & $Action }
+    function Wait-ClagnosVmPowerState { param([string]$ResourceGroup, [string]$VmName, [string]$DesiredPowerState, [int]$MaxAttempts, [int]$DelaySeconds) return $true }
+    function Set-DotEnvValue {
+        param([string]$Path, [string]$Key, [string]$Value)
+        $script:ResizeVmSizePersist = [pscustomobject]@{ Key = $Key; Value = $Value }
+    }
+    function az {
+        $line = @($args) -join ' '
+        $script:ResizeVmSizeAzCalls += $line
+        switch ($line) {
+            'vm show -g rg-samplevm-ate1-g1 -n samplevm -o json --only-show-errors' {
+                $global:LASTEXITCODE = 0
+                return '{"location":"austriaeast","hardwareProfile":{"vmSize":"Standard_D4as_v5"},"storageProfile":{"osDisk":{"osType":"Windows"}}}'
+            }
+            'vm deallocate -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors' { $global:LASTEXITCODE = 0; return '' }
+            'vm resize -g rg-samplevm-ate1-g1 -n samplevm --size Standard_D8as_v5 -o none --only-show-errors' { $global:LASTEXITCODE = 0; return '' }
+            'vm start -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors' { $global:LASTEXITCODE = 0; return '' }
+            default { throw ("Unexpected Azure call during VM resize test: {0}" -f $line) }
+        }
+    }
+
+    foreach ($functionName in @('Get-ClagnosRepoRoot','Read-DotEnvFile','Resolve-ClagnosManagedVmTarget','Get-ClagnosResizeLifecycleSnapshot','Get-ClagnosResizeVmSizeReadback','Write-ClagnosResizeStateSnapshot','Assert-LocationExists','Assert-VmSkuAvailableViaRest','Invoke-TrackedAction','Wait-ClagnosVmPowerState','Set-DotEnvValue','az')) {
+        $localFunction = Get-Command $functionName -CommandType Function -ErrorAction Stop
+        $mockDefinition = [scriptblock]::Create([string]$localFunction.Definition)
+        Set-Item -Path ("Function:\script:{0}" -f $functionName) -Value $mockDefinition
+        Set-Item -Path ("Function:\global:{0}" -f $functionName) -Value $mockDefinition
+    }
+
+    try {
+        Invoke-ClagnosResizeCommand -Options @{
+            group = 'rg-samplevm-ate1-g1'
+            'vm-name' = 'samplevm'
+            'vm-size' = 'Standard_D8as_v5'
+        } -AutoMode:$false -WindowsFlag -LinuxFlag:$false
+
+        $expectedAzSequence = @(
+            'vm show -g rg-samplevm-ate1-g1 -n samplevm -o json --only-show-errors',
+            'vm deallocate -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors',
+            'vm resize -g rg-samplevm-ate1-g1 -n samplevm --size Standard_D8as_v5 -o none --only-show-errors',
+            'vm start -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors'
+        )
+        Assert-True -Condition ((@($script:ResizeVmSizeAzCalls) -join "`n") -eq ($expectedAzSequence -join "`n")) -Message 'VM resize must keep its Azure mutation sequence explicit.'
+        Assert-True -Condition ((@($script:ResizeVmSizeSnapshots | ForEach-Object { [string]$_.Stage }) -join ',') -eq 'before,after') -Message 'VM resize must print before and after lifecycle snapshots.'
+        Assert-True -Condition ([string]$script:ResizeVmSizeSnapshots[1].VmSize -eq 'Standard_D8as_v5') -Message 'VM resize after snapshot must use the Azure-confirmed SKU.'
+        Assert-True -Condition ([string]$script:ResizeVmSizePersist.Key -eq 'WIN_VM_SIZE') -Message 'VM resize must persist the platform-specific VM-size key after readback.'
+        Assert-True -Condition ([string]$script:ResizeVmSizePersist.Value -eq 'Standard_D8as_v5') -Message 'VM resize must persist the Azure-confirmed VM size.'
+    }
+    finally {
+        foreach ($functionName in @('Get-ClagnosRepoRoot','Read-DotEnvFile','Resolve-ClagnosManagedVmTarget','Get-ClagnosResizeLifecycleSnapshot','Get-ClagnosResizeVmSizeReadback','Write-ClagnosResizeStateSnapshot','Assert-LocationExists','Assert-VmSkuAvailableViaRest','Invoke-TrackedAction','Wait-ClagnosVmPowerState','Set-DotEnvValue','az')) {
+            Remove-Item ("Function:\global:{0}" -f $functionName) -ErrorAction SilentlyContinue
+            Remove-Item ("Function:\script:{0}" -f $functionName) -ErrorAction SilentlyContinue
+            Remove-Item ("Function:\{0}" -f $functionName) -ErrorAction SilentlyContinue
+            if ($originalFunctionDefinitions.ContainsKey($functionName)) {
+                Set-Item -Path ("Function:\script:{0}" -f $functionName) -Value ([scriptblock]::Create([string]$originalFunctionDefinitions[$functionName]))
+                Set-Item -Path ("Function:\global:{0}" -f $functionName) -Value ([scriptblock]::Create([string]$originalFunctionDefinitions[$functionName]))
+            }
+        }
+        Remove-Variable -Name ResizeVmSizeAzCalls -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name ResizeVmSizePersist -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name ResizeVmSizeSnapshots -Scope Script -ErrorAction SilentlyContinue
         Remove-Variable -Name ConfigOverrides -Scope Script -ErrorAction SilentlyContinue
     }
 }
@@ -4692,6 +5070,44 @@ Invoke-Test -Name "Show report redacts password-bearing config values and prints
     finally {
         Remove-Item Function:\Write-Host -ErrorAction SilentlyContinue
         Remove-Variable -Name ShowReportCapturedHostLines -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "Show JSON export redacts passwords, tokens, and refuses implicit overwrite" -Action {
+    $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $exportRoot = Join-Path $tempBase ('clagnos-show-export-test-' + [guid]::NewGuid().ToString('N'))
+    $exportPath = Join-Path $exportRoot 'report.json'
+    New-Item -ItemType Directory -Path $exportRoot -Force | Out-Null
+    $dump = [ordered]@{
+        Command = 'show'
+        Config = [ordered]@{
+            DotEnvValues = [ordered]@{ VM_ADMIN_PASS = '<runtime-secret>'; VM_NAME = 'samplevm' }
+            RuntimeOverrides = [ordered]@{ MAP_ACCESS_TOKEN = '<runtime-secret>' }
+        }
+        TargetDerivedConfiguration = [ordered]@{ Summary = [ordered]@{ VM_ASSISTANT_PASS = '<runtime-secret>'; SelectedRegion = 'austriaeast' } }
+    }
+    try {
+        Export-ClagnosShowReportJson -Dump $dump -OutputPath $exportPath | Out-Null
+        $jsonText = [string](Get-Content -LiteralPath $exportPath -Raw)
+        $export = ConvertFrom-JsonCompat -InputObject $jsonText
+        Assert-True -Condition ([string]$export.Config.DotEnvValues.VM_ADMIN_PASS -eq '[redacted]') -Message 'Show JSON export must redact passwords in .env values.'
+        Assert-True -Condition ([string]$export.Config.RuntimeOverrides.MAP_ACCESS_TOKEN -eq '[redacted]') -Message 'Show JSON export must redact tokens in runtime overrides.'
+        Assert-True -Condition ([string]$export.TargetDerivedConfiguration.Summary.VM_ASSISTANT_PASS -eq '[redacted]') -Message 'Show JSON export must redact sensitive target-derived values.'
+        Assert-True -Condition (-not ($jsonText -match 'runtime-secret')) -Message 'Show JSON export must not contain raw secrets.'
+
+        $overwriteBlocked = $false
+        try { Export-ClagnosShowReportJson -Dump $dump -OutputPath $exportPath | Out-Null }
+        catch { $overwriteBlocked = $true }
+        Assert-True -Condition $overwriteBlocked -Message 'Show JSON export must refuse to overwrite an existing file by default.'
+        Export-ClagnosShowReportJson -Dump $dump -OutputPath $exportPath -Overwrite | Out-Null
+    }
+    finally {
+        $resolvedExportRoot = [System.IO.Path]::GetFullPath($exportRoot)
+        $resolvedTempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedExportRoot.StartsWith(($resolvedTempBase + 'clagnos-show-export-test-'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ("Refusing to remove unexpected show export test path: {0}" -f $resolvedExportRoot)
+        }
+        if (Test-Path -LiteralPath $resolvedExportRoot) { Remove-Item -LiteralPath $resolvedExportRoot -Recurse -Force }
     }
 }
 
@@ -8831,6 +9247,13 @@ Invoke-Test -Name "iCloud task publishes interactive helper asset" -Action {
     Assert-True -Condition ([string]$resolvedTask.Script -like '*cannot be deferred to a later boot*') -Message "iCloud task must fail explicitly instead of scheduling a deferred install."
     Assert-True -Condition ($assetCopies.Count -ge 2) -Message "iCloud task must materialize helper assets."
 }
+
+$historyTestDirectory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath([string]$script:ClagnosTaskHistoryPathOverride))
+$tempHistoryRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+if (-not $historyTestDirectory.StartsWith(($tempHistoryRoot + 'clagnos-smoke-history-'), [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw ("Refusing to remove unexpected smoke history path: {0}" -f $historyTestDirectory)
+}
+if (Test-Path -LiteralPath $historyTestDirectory) { Remove-Item -LiteralPath $historyTestDirectory -Recurse -Force }
 
 Write-Host ""
 Write-Host ("Compatibility smoke summary -> Passed: {0}, Failed: {1}" -f $passCount, $failCount)

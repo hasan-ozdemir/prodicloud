@@ -913,6 +913,7 @@ function Show-ClagnosUiTaskMenu {
         Write-Host '5. Restore task app-state'
         Write-Host '6. List disabled tasks'
         Write-Host '7. Enable/disable a task'
+        Write-Host '8. View recent task run history'
         Write-Host 'b: back'
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
@@ -948,6 +949,7 @@ function Show-ClagnosUiTaskMenu {
                 Invoke-ClagnosUiCommand -CommandName 'task' -Options $target
             }
             '7' { Show-ClagnosUiTaskAvailabilityMenu -Vm $Vm }
+            '8' { Invoke-ClagnosUiCommand -CommandName 'task' -Options @{ history = $true } }
         }
     }
 }
@@ -1057,7 +1059,23 @@ function Show-ClagnosUiOperationsMenu {
             }
             '7' { Show-ClagnosUiTaskMenu -Vm $Vm }
             '8' { Show-ClagnosUiComponentMenu -Vm $Vm }
-            '9' { Invoke-ClagnosUiCommand -CommandName 'show' -Options $options }
+            '9' {
+                Write-Host 't: show report on screen | j: export redacted JSON'
+                $reportMode = (Read-ClagnosUiChoice 'Report output').ToLowerInvariant()
+                if ($reportMode -eq 'j') {
+                    $exportPath = Read-ClagnosUiChoice 'JSON export path'
+                    if ([string]::IsNullOrWhiteSpace([string]$exportPath)) { continue }
+                    $options['export-json'] = $exportPath
+                    if (Test-Path -LiteralPath $exportPath -PathType Leaf) {
+                        if ((Read-ClagnosUiChoice 'Type OVERWRITE to replace the existing report file') -cne 'OVERWRITE') { continue }
+                        $options['overwrite'] = $true
+                    }
+                }
+                elseif ($reportMode -notin @('','t')) {
+                    continue
+                }
+                Invoke-ClagnosUiCommand -CommandName 'show' -Options $options
+            }
         }
     }
 }

@@ -45,6 +45,153 @@ function Get-ClagnosTaskListRows {
     return @($rows)
 }
 
+# Handles Get-ClagnosTaskRunHistoryPath.
+function Get-ClagnosTaskRunHistoryPath {
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosTaskHistoryPathOverride)) {
+        return [string]$script:ClagnosTaskHistoryPathOverride
+    }
+
+    $stateRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    if ([string]::IsNullOrWhiteSpace([string]$stateRoot)) {
+        $stateRoot = [System.IO.Path]::GetTempPath()
+    }
+    return (Join-Path (Join-Path $stateRoot 'clagnos') 'task-runs.jsonl')
+}
+
+# Handles Write-ClagnosTaskRunHistoryRecord.
+function Write-ClagnosTaskRunHistoryRecord {
+    param([psobject]$Record)
+
+    $historyPath = Get-ClagnosTaskRunHistoryPath
+    $historyDirectory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($historyPath))
+    if (-not (Test-Path -LiteralPath $historyDirectory -PathType Container)) {
+        New-Item -ItemType Directory -Path $historyDirectory -Force | Out-Null
+    }
+
+    if ((Test-Path -LiteralPath $historyPath -PathType Leaf) -and (Get-Item -LiteralPath $historyPath).Length -gt 5MB) {
+        $recentLines = @(Get-Content -LiteralPath $historyPath -Tail 1999 -ErrorAction SilentlyContinue)
+        [System.IO.File]::WriteAllLines($historyPath, [string[]]$recentLines, ([System.Text.UTF8Encoding]::new($false)))
+    }
+
+    $jsonLine = ConvertTo-Json -InputObject $Record -Depth 8 -Compress
+    [System.IO.File]::AppendAllText($historyPath, ([string]$jsonLine + [Environment]::NewLine), ([System.Text.UTF8Encoding]::new($false)))
+}
+
+# Handles Write-ClagnosTaskStageHistoryRecord.
+function Write-ClagnosTaskStageHistoryRecord {
+    param(
+        [string]$Stage,
+        [string]$Platform,
+        [string]$ResourceGroup,
+        [string]$VmName,
+        [string[]]$TaskNames = @(),
+        [string[]]$FailedTasks = @(),
+        [string[]]$WarningTasks = @(),
+        [string[]]$DeferredAppStateTasks = @(),
+        [int]$SuccessCount = 0,
+        [int]$ErrorCount = 0,
+        [int]$RebootCount = 0,
+        [double]$DurationSeconds = 0
+    )
+
+    if ([bool]$script:ClagnosTaskHistoryDisabled) { return }
+    $normalizedFailedTasks = @($FailedTasks | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+    $normalizedWarningTasks = @($WarningTasks | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+    $normalizedDeferredTasks = @($DeferredAppStateTasks | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+    $outcome = if ($normalizedFailedTasks.Count -gt 0 -or $ErrorCount -gt 0) { 'completed-with-failures' } elseif ($normalizedWarningTasks.Count -gt 0) { 'completed-with-warnings' } else { 'completed' }
+    $record = [ordered]@{
+        SchemaVersion = 1
+        CompletedAtUtc = [DateTime]::UtcNow.ToString('o')
+        Operation = 'workflow-stage'
+        Stage = [string]$Stage
+        Platform = [string]$Platform
+        ResourceGroup = [string]$ResourceGroup
+        VmName = [string]$VmName
+        TaskNumber = 0
+        TaskName = ("vm-{0} stage" -f [string]$Stage)
+        TaskNames = @($TaskNames | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        Requested = ''
+        Outcome = $outcome
+        SuccessCount = [int]$SuccessCount
+        FailedCount = [int]$normalizedFailedTasks.Count
+        WarningCount = [int]$normalizedWarningTasks.Count
+        ErrorCount = [int]$ErrorCount
+        RebootCount = [int]$RebootCount
+        DeferredAppStateCount = [int]$normalizedDeferredTasks.Count
+        DeferredAppStateTasks = @($normalizedDeferredTasks)
+        FailedTasks = @($normalizedFailedTasks)
+        WarningTasks = @($normalizedWarningTasks)
+        DurationSeconds = [Math]::Round([double]$DurationSeconds, 1)
+        FailureCategory = ''
+        FailureSummary = ''
+    }
+    try {
+        Write-ClagnosTaskRunHistoryRecord -Record $record
+    }
+    catch {
+        Write-Warning ("Local task history could not be saved: {0}" -f [string]$_.Exception.Message)
+    }
+}
+
+# Handles Get-ClagnosTaskRunHistoryRecords.
+function Get-ClagnosTaskRunHistoryRecords {
+    param([int]$Limit = 25)
+
+    if ($Limit -lt 1) { $Limit = 1 }
+    if ($Limit -gt 200) { $Limit = 200 }
+    $historyPath = Get-ClagnosTaskRunHistoryPath
+    if (-not (Test-Path -LiteralPath $historyPath -PathType Leaf)) {
+        return @()
+    }
+
+    $records = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($line in @(Get-Content -LiteralPath $historyPath -Tail $Limit -ErrorAction Stop)) {
+        if ([string]::IsNullOrWhiteSpace([string]$line)) { continue }
+        try {
+            $record = ConvertFrom-JsonCompat -InputObject ([string]$line)
+            if ($null -ne $record) { $records.Add($record) }
+        }
+        catch {
+            Write-Warning 'A malformed local task history row was skipped.'
+        }
+    }
+    return @($records.ToArray())
+}
+
+# Handles Show-ClagnosTaskRunHistory.
+function Show-ClagnosTaskRunHistory {
+    param([int]$Limit = 25)
+
+    $records = @(Get-ClagnosTaskRunHistoryRecords -Limit $Limit)
+    Write-Host ("Recent local task runs (last {0}):" -f [Math]::Min([Math]::Max($Limit, 1), 200)) -ForegroundColor Cyan
+    if (@($records).Count -eq 0) {
+        Write-Host '- No task run history has been recorded on this operator machine.'
+        return @()
+    }
+
+    foreach ($record in @($records)) {
+        $target = if (-not [string]::IsNullOrWhiteSpace([string]$record.ResourceGroup) -or -not [string]::IsNullOrWhiteSpace([string]$record.VmName)) {
+            ("{0}/{1}" -f [string]$record.ResourceGroup, [string]$record.VmName)
+        }
+        else { '(target not resolved)' }
+        $taskName = if (-not [string]::IsNullOrWhiteSpace([string]$record.TaskName)) { [string]$record.TaskName } else { [string]$record.Requested }
+        Write-Host ("- {0} | {1} | {2} | {3} | {4} | success={5}; failed={6}; warning={7}; error={8}; deferred={9}; duration={10:N1}s" -f [string]$record.CompletedAtUtc, [string]$record.Outcome, [string]$record.Stage, $taskName, $target, [int]$record.SuccessCount, [int]$record.FailedCount, [int]$record.WarningCount, [int]$record.ErrorCount, [int]$record.DeferredAppStateCount, [double]$record.DurationSeconds)
+        foreach ($taskNameInStage in @($record.TaskNames)) {
+            Write-Host ("  stage task: {0}" -f [string]$taskNameInStage)
+        }
+        foreach ($failedTaskName in @($record.FailedTasks)) {
+            Write-Host ("  failed task: {0}" -f [string]$failedTaskName) -ForegroundColor Red
+        }
+        foreach ($warningTaskName in @($record.WarningTasks)) {
+            Write-Host ("  warning task: {0}" -f [string]$warningTaskName) -ForegroundColor Yellow
+        }
+        foreach ($deferredTask in @($record.DeferredAppStateTasks)) {
+            Write-Host ("  deferred app-state: {0}" -f [string]$deferredTask) -ForegroundColor Yellow
+        }
+    }
+    return @($records)
+}
+
 # Handles Resolve-ClagnosTaskSelection.
 function Resolve-ClagnosTaskSelection {
     param(
@@ -129,6 +276,7 @@ function Resolve-ClagnosTaskCommandMode {
 
     $actions = @(
         @{ Name = 'list'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'list') }
+        @{ Name = 'history'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'history') }
         @{ Name = 'save-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'save-app-state') }
         @{ Name = 'restore-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'restore-app-state') }
         @{ Name = 'run-vm-init'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-init') }
@@ -143,14 +291,14 @@ function Resolve-ClagnosTaskCommandMode {
             -Detail "Task command requires one action path." `
             -Code 2 `
             -Summary "Task command usage is incomplete." `
-            -Hint "Use clagnos task --list, --enable/--disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
+            -Hint "Use clagnos task --list/--history, --enable/--disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
     }
     if (@($presentActions).Count -gt 1) {
         Throw-FriendlyError `
             -Detail "Task command received conflicting action options." `
             -Code 2 `
             -Summary "Only one task action can run at a time." `
-            -Hint "Use exactly one of --list, --enable, --disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
+            -Hint "Use exactly one of --list, --history, --enable, --disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
     }
 
     return [string]$presentActions[0].Name
@@ -351,6 +499,19 @@ function Assert-ClagnosTaskCommandOptionScope {
             }
         }
 
+        return
+    }
+
+    if ([string]::Equals($Mode, 'history', [System.StringComparison]::OrdinalIgnoreCase)) {
+        foreach ($optionName in @('list', 'disabled', 'vm-init', 'vm-update', 'vm-init-task', 'vm-update-task', 'package', 'package-catalog', 'run-vm-init', 'run-vm-update', 'save-app-state', 'restore-app-state', 'source', 'target', 'user', 'enable', 'disable', 'group', 'vm-name', 'subscription-id')) {
+            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+                Throw-FriendlyError `
+                    -Detail ("Task history mode does not support --{0}." -f [string]$optionName) `
+                    -Code 2 `
+                    -Summary "Task history received an unsupported option." `
+                    -Hint "Use only clagnos task --history to show recent local task outcomes."
+            }
+        }
         return
     }
 
@@ -679,7 +840,7 @@ function Resolve-ClagnosTaskExecutionPlanForStage {
     }
 }
 
-function Invoke-ClagnosTaskExecutionWithTarget {
+function Invoke-ClagnosTaskExecutionWithTargetCore {
     param(
         [pscustomobject]$Runtime,
         [hashtable]$Options,
@@ -786,4 +947,155 @@ function Invoke-ClagnosTaskExecutionWithTarget {
         TaskOutcomeMode = $effectiveTaskOutcomeMode
         Result = $sshTaskResult
     }
+}
+
+# Handles Get-ClagnosTaskRunResultCount.
+function Get-ClagnosTaskRunResultCount {
+    param(
+        [psobject]$Result,
+        [string]$PropertyName
+    )
+
+    if ($null -ne $Result -and $Result.PSObject.Properties.Match($PropertyName).Count -gt 0) {
+        $count = 0
+        if ([int]::TryParse([string]$Result.$PropertyName, [ref]$count)) { return [int]$count }
+    }
+    return 0
+}
+
+# Handles New-ClagnosTaskRunHistoryRecord.
+function New-ClagnosTaskRunHistoryRecord {
+    param(
+        [psobject]$Runtime,
+        [hashtable]$Options,
+        [string]$OperationName,
+        [string]$Stage,
+        [string]$Requested,
+        [psobject]$PackageTaskBlock,
+        [psobject]$RunResult,
+        [System.Management.Automation.ErrorRecord]$Failure,
+        [double]$DurationSeconds
+    )
+
+    $taskBlock = if ($null -ne $RunResult -and $null -ne $RunResult.Task) { $RunResult.Task } else { $PackageTaskBlock }
+    $taskName = if ($null -ne $taskBlock) { [string]$taskBlock.Name } else { '' }
+    $taskNumber = if ($null -ne $taskBlock -and $taskBlock.PSObject.Properties.Match('TaskNumber').Count -gt 0) { [int]$taskBlock.TaskNumber } else { 0 }
+    if ($taskNumber -lt 1 -and [string]$Requested -match '^(\d{2,5})') { $taskNumber = [int]$Matches[1] }
+    $taskNames = @($taskName)
+    if ($null -ne $RunResult -and $RunResult.PSObject.Properties.Match('TaskBlocks').Count -gt 0) {
+        $taskNames = @($RunResult.TaskBlocks | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    }
+    $resultPayload = if ($null -ne $RunResult) { $RunResult.Result } else { $null }
+    $failedCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'FailedCount'
+    $warningCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'WarningCount'
+    $errorCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'ErrorCount'
+    $successCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'SuccessCount'
+    $rebootCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'RebootCount'
+    $deferredTasks = @()
+    if ($null -ne $resultPayload -and $resultPayload.PSObject.Properties.Match('DeferredAppStateTasks').Count -gt 0) {
+        $deferredTasks = @($resultPayload.DeferredAppStateTasks | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    }
+    $deferredCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'DeferredAppStateCount'
+    if ($deferredCount -lt 1) { $deferredCount = @($deferredTasks).Count }
+    $failedTasks = if ($null -ne $resultPayload -and $resultPayload.PSObject.Properties.Match('FailedTasks').Count -gt 0) { @($resultPayload.FailedTasks | ForEach-Object { [string]$_ }) } else { @() }
+    $warningTasks = if ($null -ne $resultPayload -and $resultPayload.PSObject.Properties.Match('WarningTasks').Count -gt 0) { @($resultPayload.WarningTasks | ForEach-Object { [string]$_ }) } else { @() }
+
+    $outcome = 'completed'
+    $failureSummary = ''
+    $failureCategory = ''
+    if ($null -ne $Failure) {
+        $outcome = 'failed'
+        $failureCategory = [string]$Failure.Exception.GetType().Name
+        if ($Failure.Exception.Data.Contains('Summary')) { $failureSummary = [string]$Failure.Exception.Data['Summary'] }
+    }
+    elseif ($failedCount -gt 0 -or $errorCount -gt 0) {
+        $outcome = 'completed-with-failures'
+    }
+    elseif ($warningCount -gt 0) {
+        $outcome = 'completed-with-warnings'
+    }
+
+    $context = if ($null -ne $Runtime) { $Runtime.Context } else { $null }
+    $resourceGroup = if ($null -ne $context) { [string]$context.ResourceGroup } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'group') }
+    $vmName = if ($null -ne $context) { [string]$context.VmName } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name') }
+    $platform = if ($null -ne $Runtime) { [string]$Runtime.Platform } else { '' }
+
+    return [ordered]@{
+        SchemaVersion = 1
+        CompletedAtUtc = [DateTime]::UtcNow.ToString('o')
+        Operation = [string]$OperationName
+        Stage = if ($null -ne $RunResult -and -not [string]::IsNullOrWhiteSpace([string]$RunResult.Stage)) { [string]$RunResult.Stage } else { [string]$Stage }
+        Platform = $platform
+        ResourceGroup = $resourceGroup
+        VmName = $vmName
+        TaskNumber = [int]$taskNumber
+        TaskName = $taskName
+        TaskNames = @($taskNames)
+        Requested = [string]$Requested
+        Outcome = $outcome
+        SuccessCount = [int]$successCount
+        FailedCount = [int]$failedCount
+        WarningCount = [int]$warningCount
+        ErrorCount = [int]$errorCount
+        RebootCount = [int]$rebootCount
+        DeferredAppStateCount = [int]$deferredCount
+        DeferredAppStateTasks = @($deferredTasks)
+        FailedTasks = @($failedTasks)
+        WarningTasks = @($warningTasks)
+        DurationSeconds = [Math]::Round([double]$DurationSeconds, 1)
+        FailureCategory = $failureCategory
+        FailureSummary = $failureSummary
+    }
+}
+
+# Handles Invoke-ClagnosTaskExecutionWithTarget.
+function Invoke-ClagnosTaskExecutionWithTarget {
+    param(
+        [pscustomobject]$Runtime,
+        [hashtable]$Options,
+        [string]$OperationName = 'task',
+        [string]$Stage,
+        [string]$Requested,
+        [psobject]$PackageTaskBlock,
+        [switch]$AutoMode,
+        [ValidateSet('continue','strict')]
+        [string]$TaskOutcomeModeOverride = ''
+    )
+
+    if ([bool]$script:ClagnosTaskHistoryDisabled) {
+        return (Invoke-ClagnosTaskExecutionWithTargetCore @PSBoundParameters)
+    }
+
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $runResult = $null
+    $failure = $null
+    try {
+        $runResult = Invoke-ClagnosTaskExecutionWithTargetCore @PSBoundParameters
+    }
+    catch {
+        $failure = $_
+    }
+    finally {
+        if ($watch.IsRunning) { $watch.Stop() }
+    }
+
+    $historyRecord = New-ClagnosTaskRunHistoryRecord `
+        -Runtime $Runtime `
+        -Options $Options `
+        -OperationName $OperationName `
+        -Stage $Stage `
+        -Requested $Requested `
+        -PackageTaskBlock $PackageTaskBlock `
+        -RunResult $runResult `
+        -Failure $failure `
+        -DurationSeconds $watch.Elapsed.TotalSeconds
+    try {
+        Write-ClagnosTaskRunHistoryRecord -Record $historyRecord
+    }
+    catch {
+        Write-Warning ("Local task history could not be saved: {0}" -f [string]$_.Exception.Message)
+    }
+
+    if ($null -ne $failure) { throw $failure }
+    return $runResult
 }

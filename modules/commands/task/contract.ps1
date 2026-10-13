@@ -5,6 +5,7 @@ function Get-ClagnosTaskOptionSpecifications {
         (Get-ClagnosTaskPerfOptionSpecification),
         (Get-ClagnosTaskHelpOptionSpecification),
         (Get-ClagnosTaskListOptionSpecification),
+        (Get-ClagnosTaskHistoryOptionSpecification),
         (Get-ClagnosTaskSaveAppStateOptionSpecification),
         (Get-ClagnosTaskRestoreAppStateOptionSpecification),
         (Get-ClagnosTaskSourceOptionSpecification),

@@ -2,6 +2,23 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.13.409 - 2026-10-13
+
+### Summary
+Clagnos adds practical reporting, task-history, resize-verification, and source-package workflows while keeping validation fixture-backed and non-mutating.
+
+### Highlights
+- `resize` prints before/after lifecycle snapshots and verifies Azure's actual VM SKU or OS disk size before saving the requested value to `.env`.
+- `list --type=group` shows the active group, Azure location, and provisioning state.
+- `show --export-json=<path>` writes a machine-readable report with sensitive configuration values redacted; replacing a file requires `--overwrite`.
+- `task --history` shows local isolated task/package outcomes and init/update stage summaries, including deferred app-state tasks, without guest output or credentials.
+- `tools/package-release.ps1` creates a versioned source ZIP with `BUILD-MANIFEST.json` and a SHA256 sidecar after checking version alignment, worktree cleanliness, and tracked `.env` exclusion.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ compatibility checks passed: 187 smoke checks and 160 TUI scenarios per runtime.
+- The real `cg.cmd` process test used fixture Azure reads only. No native Azure CLI calls, real dispatcher calls, Azure mutations, or VC provisioning occurred.
+- Full quality audit passed.
+
 ## Release 2026.10.13.408 - 2026-10-13
 
 ### Summary
