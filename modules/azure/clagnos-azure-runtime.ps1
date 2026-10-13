@@ -89,6 +89,26 @@ function Assert-VmSkuAvailableViaRest {
             -Summary "The VM size is not available in the selected region." `
             -Hint "Update vmSize or azLocation. The script cannot continue with an unsupported combination."
     }
+
+    Write-ClagnosActionProgress -Action ("verify VM size '{0}' is offered to the active subscription in '{1}'" -f $VmSize, $Location)
+    $subscriptionSkuJson = az vm list-skus `
+        --location $Location `
+        --resource-type virtualMachines `
+        --size $VmSize `
+        --output json `
+        --only-show-errors
+    Assert-LastExitCode 'az vm list-skus (subscription SKU availability)'
+    $subscriptionSkuRows = @(
+        ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject $subscriptionSkuJson) |
+            Where-Object { [string]::Equals([string]$_.name, [string]$VmSize, [System.StringComparison]::OrdinalIgnoreCase) }
+    )
+    if ($subscriptionSkuRows.Count -eq 0) {
+        Throw-FriendlyError `
+            -Detail "VM size '$VmSize' exists in region '$Location' but is not offered to the active Azure subscription there; subscription SKU restrictions may apply." `
+            -Code 20 `
+            -Summary "The VM size is not available to the active Azure subscription." `
+            -Hint ("Choose a size returned by 'az vm list-skus --location {0} --resource-type virtualMachines --size <sku>'. The target VM has not been deallocated." -f $Location)
+    }
 }
 
 # Handles Assert-VmOsDiskSizeCompatible.

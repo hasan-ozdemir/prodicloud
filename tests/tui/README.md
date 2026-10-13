@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\tui\run-tui-tests.ps
 
 The same suite is included in `tests/powershell-compatibility-check.ps1` and runs under Windows PowerShell 5.1 and PowerShell 7+.
 
-The suite contains 159 data-driven screen/action scenarios and one process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, and asserts the actual captured console output.
+The suite contains 159 data-driven screen/action scenarios and one process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, asserts the actual captured console output, and invokes `cg.cmd help resize` to verify command arguments survive backend loading.
 
 ## Screen and action coverage
 

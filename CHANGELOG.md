@@ -3,6 +3,16 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.13.410] - 2026-10-13
+
+### Fixed
+- Fixed `cg.cmd` command mode losing forwarded arguments when the interactive frontend dot-sourced the shared runtime; added a real-launcher `help resize` regression check.
+- Extended VM size prechecks to honor active-subscription SKU restrictions before resize or other VM changes can begin.
+
+### Validation
+- PowerShell compatibility matrix passed under Windows PowerShell 5.1 and PowerShell 7+: 188 smoke checks and 160 TUI scenarios per runtime.
+- The launcher and restricted-SKU regression checks used fixture environments; no resource mutations were attempted.
+
 ## [2026.10.13.409] - 2026-10-13
 
 ### Added

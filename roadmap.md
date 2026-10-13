@@ -8,6 +8,8 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 - Managed group inventory includes the active marker, Azure location, and provisioning state; `show` can export a redacted JSON report.
 - A versioned source release packager writes a build manifest and SHA256 sidecar, with clean-tree, version, and tracked-secret guards.
 - Local task history records isolated task/package outcomes, workflow stage summaries, and deferred app-state work without recording guest output or credentials.
+- The `cg.cmd` launcher preserves command-line arguments while loading the shared runtime.
+- VM SKU validation checks the active subscription's offered SKU list before lifecycle changes, so restricted sizes fail before deallocation.
 - These pragmatic items were implemented and verified with fixture-backed tests only. No VC was provisioned or rebuilt.
 
 ## Working Style

@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.13.410 - 2026-10-13
+
+### Summary
+The `cg.cmd` launcher preserves command-line arguments, and VM size validation honors active-subscription SKU restrictions before lifecycle changes.
+
+### Highlights
+- Fixed command mode falling through into the interactive menu after the runtime's `CliTokens` parameter shadowed the launcher arguments.
+- Added a process-level regression check that runs `cg.cmd help resize` through the real batch launcher in a temporary fixture workspace.
+- Added an active-subscription `az vm list-skus` precheck after regional validation; unavailable VM sizes now fail before deallocation.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ compatibility checks passed: 188 smoke checks and 160 TUI scenarios per runtime.
+- Launcher and restricted-SKU regression checks used fixtures and attempted no resource mutations.
+
 ## Release 2026.10.13.409 - 2026-10-13
 
 ### Summary

@@ -10,6 +10,10 @@ $env:PYTHONDONTWRITEBYTECODE = '1'
 
 $script:ClagnosUiRepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $script:ClagnosUiBackendPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.ps1'
+$script:ClagnosUiStartupTokens = $null
+if ($null -ne $CliTokens) {
+    $script:ClagnosUiStartupTokens = [string[]]@($CliTokens | ForEach-Object { [string]$_ })
+}
 $script:ClagnosUiSubscription = $null
 $script:ClagnosUiSubscriptionError = ''
 
@@ -19,6 +23,9 @@ if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
 
 . $script:ClagnosUiBackendPath
 
+# The dot-sourced runtime declares the same CliTokens parameter. Restore the
+# launcher arguments saved above before deciding between command and TUI mode.
+$CliTokens = if ($null -ne $script:ClagnosUiStartupTokens) { [string[]]$script:ClagnosUiStartupTokens } else { $null }
 if ($null -ne $CliTokens -and @($CliTokens).Count -gt 0) {
     if (@($CliTokens).Count -eq 1 -and [string]$CliTokens[0] -match '^(?i)--version(?:=(?:1|true|yes|on)?)?$') {
         Write-Host ("clagnos version {0}" -f (Get-ClagnosCliVersionInfo))

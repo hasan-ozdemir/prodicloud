@@ -5806,3 +5806,14 @@ Finish only the items that can be implemented quickly and pragmatically. Do not 
 **Assistant Summary**
 
 Completed the quick, concrete roadmap items: resize lifecycle snapshots and Azure readback verification; managed group location/provisioning metadata; versioned source packaging with a manifest and SHA256 sidecar; local task and deferred app-state history; and redacted JSON export for `show`. Updated the roadmap and release records. Windows PowerShell 5.1 and PowerShell 7+ each passed 187 smoke checks and 160 TUI scenarios, and the quality audit passed. All TUI Azure access came from fixtures; no Azure resource was mutated and no VC was provisioned or rebuilt.
+
+### 2026-10-13 09:11 UTC
+**User Prompt**
+
+````text
+Important task: Use the `cg` CLI to resize the machine size of the `vc1` computer to `Standard_B2ls_v2`. If that capacity is unavailable, use `Standard_B2as_v2`. Correct any incompatibility; fix and commit any application-code problems, then rerun the task. Only resize the machine, do not change disks or networking, and successfully reboot the resized computer.
+````
+
+**Assistant Summary**
+
+Fixed `cg.cmd` command mode losing forwarded arguments while loading the shared runtime and added a real-launcher regression check. Extended SKU preflight to check availability in Clagnos's selected subscription before resize. PowerShell 5.1 and PowerShell 7+ passed 188 smoke checks and 160 TUI scenarios each. An initial standalone `az vm list-skus` query used the native Azure CLI default context rather than Clagnos's selected subscription, so its restriction result did not apply to this operation. Through `cg.cmd resize`, Clagnos confirmed `Standard_B2ls_v2` in its active subscription, deallocated `vc1`, resized it, started it, then read back the requested SKU and `VM running`. No disk or network resource was changed.

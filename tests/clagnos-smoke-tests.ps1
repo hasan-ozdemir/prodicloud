@@ -1559,6 +1559,47 @@ Invoke-Test -Name "Configure save readiness blocks unresolved create-critical va
     }
 }
 
+Invoke-Test -Name "SKU precheck rejects subscription-restricted sizes before VM mutation" -Action {
+    $script:SkuPrecheckCalls = @()
+    $script:SkuPrecheckAvailable = $true
+    try {
+        function az {
+            $commandLine = @($args | ForEach-Object { [string]$_ }) -join ' '
+            $script:SkuPrecheckCalls += $commandLine
+            $global:LASTEXITCODE = 0
+            if ($commandLine -like 'account show*') { return 'subscription-fixture' }
+            if ($commandLine -like 'rest*') { return 'Standard_B2ls_v2' }
+            if ($commandLine -like 'vm list-skus*') {
+                if ([bool]$script:SkuPrecheckAvailable) { return '[{"name":"Standard_B2ls_v2"}]' }
+                return '[]'
+            }
+            return ''
+        }
+
+        Assert-VmSkuAvailableViaRest -Location 'eastus' -VmSize 'Standard_B2ls_v2'
+        Assert-True -Condition (@($script:SkuPrecheckCalls | Where-Object { $_ -like 'vm list-skus*' }).Count -eq 1) -Message 'SKU validation must query the active-subscription-aware Azure VM SKU list.'
+
+        $script:SkuPrecheckAvailable = $false
+        $threw = $false
+        try {
+            Assert-VmSkuAvailableViaRest -Location 'eastus' -VmSize 'Standard_B2ls_v2'
+        }
+        catch {
+            $threw = $true
+            Assert-True -Condition ([string]$_.Exception.Data['Summary'] -eq 'The VM size is not available to the active Azure subscription.') -Message 'A subscription-restricted SKU must fail with a clear availability error.'
+            Assert-True -Condition ([string]$_.Exception.Data['Hint'] -like '*has not been deallocated*') -Message 'The restricted-SKU guidance must state that resize did not deallocate the target.'
+        }
+        Assert-True -Condition $threw -Message 'A SKU absent from the active-subscription list must be rejected before resize can deallocate a VM.'
+        Assert-True -Condition (@($script:SkuPrecheckCalls | Where-Object { $_ -match '(?i)\bdeallocate\b|\bresize\b|\bstart\b' }).Count -eq 0) -Message 'The SKU availability precheck must not attempt VM lifecycle mutations.'
+    }
+    finally {
+        Remove-Item Function:\global:az -ErrorAction SilentlyContinue
+        Remove-Item Function:\az -ErrorAction SilentlyContinue
+        Remove-Variable -Name SkuPrecheckCalls -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name SkuPrecheckAvailable -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
 Invoke-Test -Name "Feature preconditions fail fast when hibernation is unsupported" -Action {
     try {
         function Get-ClagnosHibernationSupportInfo {

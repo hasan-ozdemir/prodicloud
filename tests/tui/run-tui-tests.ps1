@@ -1209,6 +1209,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
     New-Item -ItemType Directory -Path $sandboxRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $fixtureBin -Force | Out-Null
     $process = $null
+    $helpProcess = $null
 
     try {
         foreach ($relativePath in @('cg.cmd','clagnos.ps1','release-notes.md')) {
@@ -1328,9 +1329,41 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $mutatingFixtureCalls = @($azLines | Where-Object { $_ -match $mutationPattern })
         Assert-Tui -Condition ($mutatingFixtureCalls.Count -eq 0) -Message ('The actual cg.cmd scenario attempted a blocked Azure mutation: {0}' -f ($mutatingFixtureCalls -join '; '))
         Assert-Tui -Condition ($stderr -notmatch 'Blocked Azure mutation attempted') -Message 'The Azure fixture must not report any attempted mutating command.'
+
+        $helpProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $helpProcessInfo.FileName = Join-Path $systemRoot 'System32\cmd.exe'
+        $helpProcessInfo.Arguments = ('/d /s /c ""{0}" help resize"' -f (Join-Path $sandboxRoot 'cg.cmd'))
+        $helpProcessInfo.WorkingDirectory = $sandboxRoot
+        $helpProcessInfo.UseShellExecute = $false
+        $helpProcessInfo.CreateNoWindow = $true
+        $helpProcessInfo.RedirectStandardInput = $true
+        $helpProcessInfo.RedirectStandardOutput = $true
+        $helpProcessInfo.RedirectStandardError = $true
+        $helpProcessInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
+        $helpProcessInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
+        $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $azLogPath
+        $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_NET_LOG'] = $netLogPath
+        $helpProcess = New-Object System.Diagnostics.Process
+        $helpProcess.StartInfo = $helpProcessInfo
+        [void]$helpProcess.Start()
+        $helpStdoutTask = $helpProcess.StandardOutput.ReadToEndAsync()
+        $helpStderrTask = $helpProcess.StandardError.ReadToEndAsync()
+        $helpProcess.StandardInput.Close()
+        if (-not $helpProcess.WaitForExit(30000)) {
+            $helpProcess.Kill()
+            throw 'The cg.cmd resize-help argument passthrough exceeded its 30-second timeout.'
+        }
+        $helpProcess.WaitForExit()
+        $helpStdoutTask.Wait()
+        $helpStderrTask.Wait()
+        $helpOutput = [string]$helpStdoutTask.Result
+        $helpErrorOutput = [string]$helpStderrTask.Result
+        Assert-Tui -Condition ($helpProcess.ExitCode -eq 0 -and $helpOutput.Contains('Command: resize') -and $helpOutput.Contains('Usage:')) -Message ("cg.cmd did not preserve command-line help arguments. Exit={0}; output={1}; stderr={2}" -f $helpProcess.ExitCode,$helpOutput,$helpErrorOutput)
+        Assert-Tui -Condition ($helpErrorOutput -notmatch 'null-valued expression') -Message 'cg.cmd command mode must not fall through to the interactive TUI when arguments are supplied.'
     }
     finally {
         if ($null -ne $process) { $process.Dispose() }
+        if ($null -ne $helpProcess) { $helpProcess.Dispose() }
         $resolvedSandbox = [System.IO.Path]::GetFullPath($sandboxRoot)
         $resolvedTempBase = [System.IO.Path]::GetFullPath($tempBase).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
         $expectedPrefix = $resolvedTempBase + 'clagnos-tui-e2e-'
