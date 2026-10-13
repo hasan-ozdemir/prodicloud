@@ -595,6 +595,7 @@ Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, V
     Assert-TuiOutputContains -Text 'Hibernation enabled: True' -Message 'VC details must show actual Azure hibernation state.'
     Assert-TuiOutputContains -Text 'Nested virtualization setting (.env): true' -Message 'VC details must show configured nested virtualization intent.'
     Assert-TuiOutputContains -Text 'SSH endpoint: fixture.eastus.cloudapp.azure.com:22222' -Message 'SSH endpoint must use configured port and the public DNS name.'
+    Assert-TuiOutputContains -Text 'PowerShell remoting endpoint: fixture.eastus.cloudapp.azure.com:5985' -Message 'Windows VC details must show the WinRM endpoint.'
     Assert-TuiOutputContains -Text 'manager-fixture | password: <runtime-secret>' -Message 'Manager credentials must be shown.'
     Assert-TuiOutputContains -Text 'assistant-fixture | password: <runtime-secret>' -Message 'Assistant credentials must be shown.'
     Assert-TuiOutputContains -Text 'RDP endpoint: fixture.eastus.cloudapp.azure.com:3390' -Message 'RDP endpoint must use configured port and the public DNS name.'
@@ -1098,18 +1099,24 @@ foreach ($featureCase in @(
 }
 
 foreach ($connectionCase in @(
-    @{ Key = 's'; Name = 'SSH'; Windows = $true; Test = $false },
-    @{ Key = 'r'; Name = 'RDP'; Windows = $true; Test = $false },
-    @{ Key = 't'; Name = 'SSH test'; Windows = $true; Test = $true },
-    @{ Key = 'd'; Name = 'RDP test'; Windows = $true; Test = $true }
+    @{ Key = 's'; Name = 'SSH'; Transport = 'ssh'; Windows = $true; Test = $false },
+    @{ Key = 'r'; Name = 'RDP'; Transport = 'rdp'; Windows = $true; Test = $false },
+    @{ Key = 't'; Name = 'SSH test'; Transport = 'ssh'; Windows = $true; Test = $true },
+    @{ Key = 'd'; Name = 'RDP test'; Transport = 'rdp'; Windows = $true; Test = $true },
+    @{ Key = 'p'; Name = 'PowerShell remoting'; Transport = 'powershell'; Windows = $true; Test = $false },
+    @{ Key = 'c'; Name = 'PowerShell command'; Transport = 'powershell'; Windows = $true; Test = $false; Command = 'Get-Date' },
+    @{ Key = 'w'; Name = 'PowerShell test'; Transport = 'powershell'; Windows = $true; Test = $true }
 )) {
     Invoke-TuiTest -Name ("Operations connection menu supports {0}" -f $connectionCase.Name) -Action {
-        Set-TuiChoices -Choices @('5', [string]$connectionCase.Key, 'b')
+        $choices = @('5', [string]$connectionCase.Key)
+        if ($connectionCase.ContainsKey('Command')) { $choices += [string]$connectionCase.Command }
+        $choices += 'b'
+        Set-TuiChoices -Choices $choices
         & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
         $call = Assert-TuiCommand -CommandName 'connect'
-        $transport = if ($connectionCase.Key -in @('s','t')) { 'ssh' } else { 'rdp' }
-        Assert-TuiOption -Call $call -Name $transport -Expected 'True'
+        Assert-TuiOption -Call $call -Name ([string]$connectionCase.Transport) -Expected 'True'
         if ($connectionCase.Test) { Assert-TuiOption -Call $call -Name 'test' -Expected 'True' }
+        if ($connectionCase.ContainsKey('Command')) { Assert-TuiOption -Call $call -Name 'command' -Expected ([string]$connectionCase.Command) }
     }
 }
 
@@ -1117,6 +1124,12 @@ Invoke-TuiTest -Name 'Operations connection menu rejects RDP for a Linux VC' -Ac
     Set-TuiChoices -Choices @('5','r','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiLinuxVm
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'RDP must not dispatch for a Linux target.'
+}
+
+Invoke-TuiTest -Name 'Operations connection menu rejects PowerShell remoting for a Linux VC' -Action {
+    Set-TuiChoices -Choices @('5','p','b')
+    & $script:TuiOriginalOperationsMenu -Vm $script:TuiLinuxVm
+    Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'PowerShell remoting must not dispatch for a Linux target.'
 }
 
 Invoke-TuiTest -Name 'Operations command menu opens an interactive shell when command input is blank' -Action {
@@ -1146,6 +1159,7 @@ Invoke-TuiTest -Name 'Operations menu displays its complete action hierarchy and
     Set-TuiChoices -Choices @('q')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     Assert-TuiOutputContains -Text '9. Full read-only report' -Message 'Operations screen must render every top-level category.'
+    Assert-TuiOutputContains -Text '5. Connect by SSH, RDP, or PowerShell' -Message 'Operations screen must make PowerShell remoting discoverable.'
 }
 
 Invoke-TuiTest -Name 'Operations menu ignores invalid top-level selections without dispatching' -Action {
@@ -1249,7 +1263,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
 
-        foreach ($choice in @('1','1','p','1','b','b','m','3','b','b','o','1','b','b','b','2','b','3','b','q')) {
+        foreach ($choice in @('1','1','p','1','b','b','m','3','b','b','o','1','b','5','q','b','b','2','b','3','b','q')) {
             $process.StandardInput.WriteLine([string]$choice)
         }
         $process.StandardInput.Close()
@@ -1275,6 +1289,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Public IP: 203.0.113.8',
             'Public DNS: tui-fixture.eastus.cloudapp.azure.com',
             'SSH endpoint: tui-fixture.eastus.cloudapp.azure.com:22222',
+            'PowerShell remoting endpoint: tui-fixture.eastus.cloudapp.azure.com:5985',
             'fixture-manager | password: <runtime-secret>',
             'fixture-assistant | password: <runtime-secret>',
             'Manage programs on tui-fixture-vc',
@@ -1282,6 +1297,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Components of tui-fixture-vc',
             'Operations for tui-fixture-vc',
             '1. Power, status, and repair',
+            'p: PowerShell session',
             'Managed resource inventory',
             'Cloud subscriptions',
             'TUI Fixture Subscription'

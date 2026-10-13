@@ -5784,3 +5784,14 @@ Test clarification: I wanted the tests to run against the real `cg.cmd` and veri
 **Assistant Summary**
 
 Added a process-level TUI scenario that launches the real `cg.cmd` and copied Clagnos UI/runtime source in an isolated temporary workspace, sends scripted stdin choices, and asserts captured console output across the home menu, VC details, package catalog, components, operations, inventory, and subscriptions. A fixture `az.cmd` supplies read-only responses and rejects mutations; a fixture `net.exe` satisfies the launcher elevation check. The operator `.env` and real Azure CLI are not used. The expanded suite passed 154/154 under Windows PowerShell 5.1 and PowerShell 7+ with no Azure mutations.
+
+### 2026-10-13 00:24 UTC
+**User Prompt**
+
+````text
+Feature request: Add a way to connect to a virtual computer with PowerShell and run commands. If that method does not exist, enable it; make one of the VC init tasks grant remote PowerShell access.
+````
+
+**Assistant Summary**
+
+Added Windows-only `connect --powershell` with a persistent PSSession command prompt, one-shot `--command`, and authenticated `--test` paths. Added the connection choices and endpoint to the VC Operations menu and details screen, and documented the CLI usage. Extended the existing enabled init task 06 to add both manager and assistant to Remote Management Users; WinRM still uses Negotiate with Basic authentication and unencrypted traffic disabled. The PowerShell compatibility matrix passed 179 smoke checks and 158 TUI scenarios in Windows PowerShell 5.1 and PowerShell 7+, with zero Azure mutations.

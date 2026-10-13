@@ -2,6 +2,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "Init task started: configure-powershell-remoting"
 
 $managerUser = "__VM_ADMIN_USER__"
+$assistantUser = "__ASSISTANT_USER__"
 $winRmPort = 5985
 
 function Set-RegistryValue {
@@ -166,6 +167,7 @@ Enable-PSRemoting -SkipNetworkProfileCheck -Force
 Set-Service -Name WinRM -StartupType Automatic
 Start-Service -Name WinRM -ErrorAction SilentlyContinue
 Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName $managerUser
+Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName $assistantUser
 
 $systemPolicyPath = 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
 Set-RegistryValue -Path $systemPolicyPath -Name 'LocalAccountTokenFilterPolicy' -Value 1 -Kind DWord
@@ -185,9 +187,11 @@ if ($null -eq $wsmanResult) {
 Assert-WinRmListener
 Assert-RegistryValue -Path $systemPolicyPath -Name 'LocalAccountTokenFilterPolicy' -ExpectedValue 1
 Assert-LocalGroupMember -GroupName 'Remote Management Users' -MemberName $managerUser
+Assert-LocalGroupMember -GroupName 'Remote Management Users' -MemberName $assistantUser
 
 $winRmService = Get-Service -Name WinRM -ErrorAction Stop
 Write-Host ("powershell-remoting-group-ready: group=Remote Management Users; user=.\\{0}" -f $managerUser)
-Write-Host ("powershell-remoting-ready: service={0}; start-type={1}; port={2}; user=.\\{3}" -f [string]$winRmService.Status, [string]$winRmService.StartType, $winRmPort, $managerUser)
+Write-Host ("powershell-remoting-group-ready: group=Remote Management Users; user=.\\{0}" -f $assistantUser)
+Write-Host ("powershell-remoting-ready: service={0}; start-type={1}; port={2}; users=.\\{3},.\\{4}" -f [string]$winRmService.Status, [string]$winRmService.StartType, $winRmPort, $managerUser, $assistantUser)
 Write-Host "configure-powershell-remoting-ready"
 Write-Host "Init task completed: configure-powershell-remoting"

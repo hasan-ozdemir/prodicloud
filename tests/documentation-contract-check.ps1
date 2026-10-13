@@ -256,6 +256,8 @@ Assert-True -Condition ($readmeText -match [regex]::Escape('task --run-vm-init 0
 Assert-True -Condition ($readmeText -match [regex]::Escape('task --run-vm-update 10002')) -Message 'README.md must include the task run-vm-update example.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('connect --ssh')) -Message 'README.md must document connect --ssh.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('connect --rdp')) -Message 'README.md must document connect --rdp.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('connect --powershell')) -Message 'README.md must document connect --powershell.'
+Assert-True -Condition ($readmeText -match [regex]::Escape('PowerShell remoting uses TCP 5985')) -Message 'README.md must document the managed WinRM endpoint.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('exec --command')) -Message 'README.md must document exec --command.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('SELECTED_COMPANY_WEB_ADDRESS')) -Message 'README.md must document SELECTED_COMPANY_WEB_ADDRESS.'
 Assert-True -Condition ($readmeText -match [regex]::Escape('SELECTED_COMPANY_EMAIL_ADDRESS')) -Message 'README.md must document SELECTED_COMPANY_EMAIL_ADDRESS.'

@@ -6,6 +6,61 @@ function Invoke-ClagnosConnectCommand {
     )
 
     $mode = Resolve-ClagnosConnectMode -Options $Options
+    $commandRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'command'
+    $testRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'test'
+    if ($commandRequested -and -not [string]::Equals([string]$mode, 'powershell', [System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-FriendlyError `
+            -Detail "The --command option is only supported with --powershell." `
+            -Code 66 `
+            -Summary "Connect command transport is invalid." `
+            -Hint "Use clagnos connect --powershell --command <PowerShell-command>."
+    }
+
+    if ([string]::Equals([string]$mode, 'powershell', [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($testRequested -and $commandRequested) {
+            Throw-FriendlyError `
+                -Detail "Both --test and --command were provided for PowerShell remoting." `
+                -Code 66 `
+                -Summary "PowerShell remoting mode is ambiguous." `
+                -Hint "Use --test by itself, or use --command to execute a remote command."
+        }
+        if ($testRequested) {
+            Invoke-ClagnosPowerShellConnectivityTest -Options $Options
+            return
+        }
+
+        $runtime = Initialize-ClagnosConnectionCommandContext -Options $Options -OperationName 'connect-powershell'
+        Assert-ClagnosPowerShellVm -Runtime $runtime
+        $powerShellPort = Resolve-ClagnosConnectionPortNumber -PortText ([string]$runtime.VmPowerShellPort) -PortLabel 'PowerShell remoting'
+        Write-ClagnosActionProgress -Action ("open remote PowerShell session to '{0}:{1}'" -f [string]$runtime.ConnectionHost, $powerShellPort)
+        $session = New-ClagnosPowerShellRemotingSession -Runtime $runtime
+        try {
+            if ($commandRequested) {
+                $commandText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'command')
+                if ([string]::IsNullOrWhiteSpace([string]$commandText)) {
+                    Throw-FriendlyError `
+                        -Detail "The --command option was provided without PowerShell command text." `
+                        -Code 66 `
+                        -Summary "Remote PowerShell command is empty." `
+                        -Hint "Provide a command such as --command 'Get-Date'."
+                }
+
+                Write-ClagnosActionProgress -Action ("run a PowerShell command on VM '{0}'" -f [string]$runtime.VmName)
+                Invoke-ClagnosPowerShellRemoteCommand -Session $session -CommandText $commandText
+                Write-Host ("PowerShell command completed on VM '{0}'." -f [string]$runtime.VmName) -ForegroundColor Green
+            }
+            else {
+                Invoke-ClagnosInteractivePowerShellSession -Session $session -ConnectionHost ([string]$runtime.ConnectionHost) -VmName ([string]$runtime.VmName)
+            }
+        }
+        finally {
+            if ($null -ne $session) {
+                Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+            }
+        }
+        return
+    }
+
     if ([string]::Equals($mode, 'ssh', [System.StringComparison]::OrdinalIgnoreCase)) {
         if (Test-ClagnosCliOptionPresent -Options $Options -Name 'test') {
             Invoke-ClagnosSshConnectivityTest -Options $Options

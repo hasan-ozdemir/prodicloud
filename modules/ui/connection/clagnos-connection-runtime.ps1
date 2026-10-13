@@ -15,6 +15,7 @@ function Get-ClagnosConnectionOperationDisplayText {
     switch ($operation) {
         'connect-ssh' { return 'connect --ssh' }
         'connect-rdp' { return 'connect --rdp' }
+        'connect-powershell' { return 'connect --powershell' }
         default { return $operation }
     }
 }
@@ -210,6 +211,7 @@ function Initialize-ClagnosConnectionCommandContext {
     Assert-ClagnosConnectionVmRunning -OperationName $OperationName -Snapshot $lifecycleSnapshot
     $vmSshPort = Resolve-ClagnosConnectionPortText -ConfigMap $configMap -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText) -Label 'SSH'
     $vmRdpPort = Resolve-ClagnosConnectionPortText -ConfigMap $configMap -Key 'VM_RDP_PORT' -DefaultValue (Get-ClagnosDefaultRdpPortText) -Label 'RDP'
+    $vmPowerShellPort = Get-ClagnosDefaultPowerShellPortText
     $logicalRole = Resolve-ClagnosConnectionRoleName -Options $Options
     $credentials = Resolve-ClagnosConnectionCredentials -RoleName $logicalRole -ConfigMap $configMap -EnvFilePath $envFilePath
 
@@ -223,6 +225,7 @@ function Initialize-ClagnosConnectionCommandContext {
         VmAssistantPass = [string](Get-ConfigValue -Config $configMap -Key 'VM_ASSISTANT_PASS' -DefaultValue '')
         SshPort = [string]$vmSshPort
         RdpPort = [string]$vmRdpPort
+        PowerShellPort = [string]$vmPowerShellPort
     }
 
     if ($logicalRole -eq 'manager') {
@@ -270,6 +273,7 @@ function Initialize-ClagnosConnectionCommandContext {
         SelectedPassword = [string]$credentials.Password
         VmSshPort = [string]$vmSshPort
         VmRdpPort = [string]$vmRdpPort
+        VmPowerShellPort = [string]$vmPowerShellPort
     }
 }
 
@@ -290,6 +294,106 @@ function Resolve-ClagnosConnectionPortNumber {
     }
 
     return [int]$resolvedPort
+}
+
+# Handles Assert-ClagnosPowerShellVm.
+function Assert-ClagnosPowerShellVm {
+    param(
+        [psobject]$Runtime
+    )
+
+    if ([string]::Equals(([string]$Runtime.OsType).Trim(), 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return
+    }
+
+    Throw-FriendlyError `
+        -Detail ("VM '{0}' reports osType '{1}', so WinRM PowerShell remoting is not supported." -f [string]$Runtime.VmName, [string]$Runtime.OsType) `
+        -Code 66 `
+        -Summary "Connect --powershell is only available for Windows VMs." `
+        -Hint "Use clagnos connect --ssh for Linux VMs."
+}
+
+# Handles New-ClagnosPowerShellCredential.
+function New-ClagnosPowerShellCredential {
+    param(
+        [string]$UserName,
+        [string]$Password
+    )
+
+    $securePassword = ConvertTo-SecureString -String ([string]$Password) -AsPlainText -Force
+    $localUserName = (".\{0}" -f [string]$UserName)
+    return [System.Management.Automation.PSCredential]::new($localUserName, $securePassword)
+}
+
+# Handles New-ClagnosPowerShellRemotingSession.
+function New-ClagnosPowerShellRemotingSession {
+    param(
+        [psobject]$Runtime
+    )
+
+    $port = Resolve-ClagnosConnectionPortNumber -PortText ([string]$Runtime.VmPowerShellPort) -PortLabel 'PowerShell remoting'
+    $credential = New-ClagnosPowerShellCredential -UserName ([string]$Runtime.SelectedUserName) -Password ([string]$Runtime.SelectedPassword)
+    Write-ClagnosActionProgress -Action ("authenticate PowerShell remoting session to '{0}:{1}'" -f [string]$Runtime.ConnectionHost, $port)
+    try {
+        return (New-PSSession `
+            -ComputerName ([string]$Runtime.ConnectionHost) `
+            -Port $port `
+            -Credential $credential `
+            -Authentication Negotiate `
+            -ErrorAction Stop)
+    }
+    catch {
+        Throw-FriendlyError `
+            -Detail ("Could not open a PowerShell remoting session to '{0}:{1}': {2}" -f [string]$Runtime.ConnectionHost, $port, [string]$_.Exception.Message) `
+            -Code 66 `
+            -Summary "PowerShell remoting connection failed." `
+            -Hint ("Run Windows init task 06 to enable WinRM. Check TCP {0}, and if connecting by IP or a non-domain host, add only that endpoint to the local WSMan TrustedHosts list." -f $port)
+    }
+}
+
+# Handles Invoke-ClagnosPowerShellRemoteCommand.
+function Invoke-ClagnosPowerShellRemoteCommand {
+    param(
+        [object]$Session,
+        [string]$CommandText
+    )
+
+    Invoke-Command -Session $Session -ScriptBlock {
+        param([string]$RemoteCommandText)
+        Invoke-Expression -Command $RemoteCommandText
+    } -ArgumentList ([string]$CommandText) -ErrorAction Stop
+}
+
+# Handles Invoke-ClagnosInteractivePowerShellSession.
+function Invoke-ClagnosInteractivePowerShellSession {
+    param(
+        [object]$Session,
+        [string]$ConnectionHost,
+        [string]$VmName
+    )
+
+    Write-Host ("PowerShell remoting session connected to {0} ({1})." -f [string]$VmName, [string]$ConnectionHost) -ForegroundColor Green
+    Write-Host "Enter one PowerShell command per line; type 'exit' to close the remote session." -ForegroundColor Cyan
+    while ($true) {
+        $commandText = Read-Host ("{0} PS" -f [string]$ConnectionHost)
+        if ([string]::IsNullOrWhiteSpace([string]$commandText)) {
+            continue
+        }
+        if ([string]::Equals(([string]$commandText).Trim(), 'exit', [System.StringComparison]::OrdinalIgnoreCase) -or
+            [string]::Equals(([string]$commandText).Trim(), 'quit', [System.StringComparison]::OrdinalIgnoreCase)) {
+            break
+        }
+
+        try {
+            Write-ClagnosActionProgress -Action ("run an interactive PowerShell command on '{0}'" -f [string]$ConnectionHost)
+            Invoke-ClagnosPowerShellRemoteCommand -Session $Session -CommandText ([string]$commandText)
+        }
+        catch {
+            Write-Host ("Remote PowerShell command failed: {0}" -f [string]$_.Exception.Message) -ForegroundColor Red
+        }
+    }
+
+    Write-Host "PowerShell remoting session closed." -ForegroundColor Green
 }
 
 # Handles Test-ClagnosConnectionIdentityOutputMatchesUser.
@@ -420,4 +524,55 @@ function Invoke-ClagnosRdpConnectivityTest {
     }
 
     Write-Host ("RDP test passed for '{0}:{1}'." -f [string]$runtime.ConnectionHost, [string]$runtime.VmRdpPort) -ForegroundColor Green
+}
+
+# Handles Invoke-ClagnosPowerShellConnectivityTest.
+function Invoke-ClagnosPowerShellConnectivityTest {
+    param(
+        [hashtable]$Options
+    )
+
+    $runtime = Initialize-ClagnosConnectionCommandContext -Options $Options -OperationName 'connect-powershell'
+    Assert-ClagnosPowerShellVm -Runtime $runtime
+    $port = Resolve-ClagnosConnectionPortNumber -PortText ([string]$runtime.VmPowerShellPort) -PortLabel 'PowerShell remoting'
+    Write-ClagnosActionProgress -Action ("check WinRM PowerShell remoting endpoint '{0}:{1}'" -f [string]$runtime.ConnectionHost, $port)
+    $reachable = Wait-ClagnosTcpPortReachable -HostName ([string]$runtime.ConnectionHost) -Port $port -MaxAttempts 6 -DelaySeconds 5 -TimeoutSeconds 5 -Label 'PowerShell remoting'
+    if (-not $reachable) {
+        Throw-FriendlyError `
+            -Detail ("PowerShell remoting port {0} was not reachable on host '{1}' for VM '{2}'." -f $port, [string]$runtime.ConnectionHost, [string]$runtime.VmName) `
+            -Code 66 `
+            -Summary "PowerShell remoting connectivity test failed." `
+            -Hint ("Run Windows init task 06 and verify the VM's NSG, firewall, WinRM service, and TCP {0}." -f $port)
+    }
+
+    $session = New-ClagnosPowerShellRemotingSession -Runtime $runtime
+    try {
+        $identityOutput = @(
+            Invoke-Command -Session $session -ScriptBlock {
+                [System.Environment]::MachineName
+                [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+            } -ErrorAction Stop
+        ) -join "`n"
+        if (-not (Test-ClagnosConnectionIdentityOutputMatchesUser -ExpectedUserName ([string]$runtime.SelectedUserName) -OutputText ([string]$identityOutput))) {
+            Throw-FriendlyError `
+                -Detail ("PowerShell remoting returned an unexpected account identity: {0}" -f [string]$identityOutput) `
+                -Code 66 `
+                -Summary "PowerShell remoting connectivity test failed." `
+                -Hint "Verify the selected Windows VM account and its Remote Management Users or Administrators membership."
+        }
+    }
+    catch {
+        Throw-FriendlyError `
+            -Detail ("PowerShell remoting identity probe failed for '{0}:{1}': {2}" -f [string]$runtime.ConnectionHost, $port, [string]$_.Exception.Message) `
+            -Code 66 `
+            -Summary "PowerShell remoting connectivity test failed." `
+            -Hint "Run Windows init task 06, verify the selected account, and check WinRM reachability."
+    }
+    finally {
+        if ($null -ne $session) {
+            Remove-PSSession -Session $session -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-Host ("PowerShell remoting test passed for '{0}@{1}:{2}'." -f [string]$runtime.SelectedUserName, [string]$runtime.ConnectionHost, $port) -ForegroundColor Green
 }

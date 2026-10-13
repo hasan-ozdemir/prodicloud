@@ -116,7 +116,7 @@ The workflow separates infrastructure creation, initial guest setup, maintenance
 ### Interactive CLI
 Run `.\cg.cmd` to open the menu. The welcome screen shows the `one tool for all common cloud operations` line, the selected Azure subscription name/id. The main menu offers `1. Virtual computers`, `2. Managed resource inventory`, and `3. Cloud subscriptions`; choose a subscription by number to update both the Azure CLI default and Clagnos's saved subscription. Use numbers or the shown letter shortcuts and press Enter. Enter `q` to exit or `b` to return from a submenu. `.\cg.cmd <command> ...` forwards a direct command to the same `clagnos.ps1` runtime.
 
-The selected virtual computer opens with compute, CPU/RAM, OS image, disks, security/feature settings, NIC/VNet/subnet/NSG, private/public IP, public DNS, tags, and attached-resource details. It also shows SSH/RDP endpoints and the configured manager and assistant usernames/passwords read from local `.env`; passwords are not included in progress or operation log messages. Its menus expose initialization, maintenance, builtin/custom package status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP, remote commands, active and disabled tasks, package app-state, reports, and deletion. Select `o: operations` for numbered power actions (including graceful shutdown, hibernate/resume, immediate power-off, and force reset), feature toggles, resizing, and the other advanced operations.
+The selected virtual computer opens with compute, CPU/RAM, OS image, disks, security/feature settings, NIC/VNet/subnet/NSG, private/public IP, public DNS, tags, and attached-resource details. It also shows SSH/RDP endpoints, the Windows PowerShell remoting endpoint, and the configured manager and assistant usernames/passwords read from local `.env`; passwords are not included in progress or operation log messages. Its menus expose initialization, maintenance, builtin/custom package status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP/PowerShell remoting, remote commands, active and disabled tasks, package app-state, reports, and deletion. Select `o: operations` for numbered power actions (including graceful shutdown, hibernate/resume, immediate power-off, and force reset), feature toggles, resizing, and the other advanced operations.
 
 ### Prerequisites
 - Windows host with PowerShell and the Azure CLI available.
@@ -246,7 +246,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 
 | Outcome area | Windows managed VM outcome | Linux managed VM outcome | Operator impact | Business value |
 | --- | --- | --- | --- | --- |
-| Base access | Local users, OpenSSH, RDP, firewall ports, repo-managed connection flow | Local users, SSHD port config, firewall ports, repo-managed connection flow | Teams can connect immediately with less setup drift. | Handoffs happen faster and with less rediscovery. |
+| Base access | Local users, OpenSSH, RDP, WinRM PowerShell remoting, firewall ports, repo-managed connection flow | Local users, SSHD port config, firewall ports, repo-managed connection flow | Teams can connect immediately with less setup drift. | Handoffs happen faster and with less rediscovery. |
 | Core tooling | PowerShell 7, Git, Python, Node.js, Azure CLI, GitHub CLI, azd, VS Code, 7-Zip, Sysinternals, FFmpeg | System package upgrade, Node capability tuning, SSHD tuning | A new VM becomes useful for cloud, scripting, and diagnostics fast. | Less first-day setup work and less tool inconsistency. |
 | Developer runtime | Docker Desktop, WSL2, npm global package set, Ollama, Codex app, VS 2022 Community, WSL prerequisite hardening, Docker health probes, and docker-desktop-focused WSL state replay | Node-ready SSH environment and updated base packages | Engineering workflows can start earlier and recover with fewer hidden prerequisites. | Faster onboarding and less rebuild waste. |
 | Collaboration and daily apps | Edge, Chrome validation, Teams, WhatsApp, OneDrive, Google Drive, VLC, iTunes, iCloud | Minimal by design | The machine feels operational, not half-finished. | Customer-facing and operator-facing use is easier to stage. |
@@ -316,7 +316,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `task` | List tasks, explicitly enable/disable a task, run one task, or save/restore task or package app-state | Local for inventory and confirmed availability changes; Azure-touching for remote task/app-state actions; local-machine for `--source=lm` / `--target=lm` | Review task state, change future task availability, rerun one task, or refresh one payload | Verified catalog change or one isolated task/app-state action |
 | `package` | Check status, install/update, uninstall, enable, or disable one builtin/custom package | Guest-mutating except status and catalog availability | Manage packages on one VC | Verified catalog or package action result |
 | `component` | List/read/create/update/delete a Clagnos-managed Azure component | Azure-read-only for list/show; Azure-mutating for create/update/delete | Inspect or change one VC component | Component state or dependency-reviewed mutation |
-| `connect` | Launch or test SSH/RDP access | Azure-touching, local-client action | Linux or Windows SSH access, or Windows desktop access | Direct client launch or connection test |
+| `connect` | Launch or test SSH/RDP/Windows PowerShell remoting | Azure-touching, local-client action | SSH access, Windows desktop access, or Windows remote PowerShell commands | Direct client launch, PSSession, or connection test |
 | `exec` | Open direct remote shell path or run one remote command | Azure-touching and guest-touching | Interactive shell work or one-shot remote command execution | One direct shell or command result |
 | `move` | Move a managed VM to another region | Azure-mutating | Planned cutover or regional relocation | Health-gated regional move |
 | `resize` | Change VM SKU or expand OS disk | Azure-mutating | Compute sizing change or safe disk growth | Resized VM or grown OS disk |
@@ -443,6 +443,10 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd connect --rdp --group <resource-group> --vm-name <vm-name> --user assistant` | `--rdp`, `--group`, `--vm-name`, `--user` | Opens RDP as a selected user | Assistant desktop access | Uses `cmdkey` before `mstsc.exe`. |
 | `.\cg.cmd connect --rdp --group <resource-group> --vm-name <vm-name> --user manager --test` | `--rdp`, `--test` | Runs a non-interactive TCP reachability check | Release and connection verification | Useful before a full interactive desktop session. |
 
+| `cg.cmd connect --powershell --group <resource-group> --vm-name <vm-name> --user manager` | `--powershell`, target selectors, `--user` | Opens a remote PowerShell command prompt over WinRM | Windows guest administration | Type one command per line; enter `exit` to close. Windows init task 06 enables WinRM on TCP 5985. |
+| `cg.cmd connect --powershell --command "Get-Service WinRM" --group <resource-group> --vm-name <vm-name>` | `--powershell`, `--command`, target selectors | Runs one PowerShell command through a remote PSSession | One-shot Windows diagnosis or administration | Uses Negotiate authentication and the selected VM user credentials. |
+| `cg.cmd connect --powershell --test --group <resource-group> --vm-name <vm-name> --user manager` | `--powershell`, `--test`, target selectors | Checks TCP reachability, opens a WinRM session, and verifies the remote account | Connection verification | Does not mutate Azure resources. |
+
 #### `move`
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
@@ -534,12 +538,14 @@ Practical outcomes:
 .\cg.cmd exec --group <resource-group> --vm-name <vm-name>
 .\cg.cmd connect --ssh --group <resource-group> --vm-name <vm-name> --user manager
 .\cg.cmd connect --rdp --group <resource-group> --vm-name <vm-name> --user assistant
+.\cg.cmd connect --powershell --group <resource-group> --vm-name <vm-name> --user manager
+.\cg.cmd connect --powershell --command "Get-Service WinRM" --group <resource-group> --vm-name <vm-name>
 ```
 
 Practical outcomes:
 - support and development teams can rerun only the failing task instead of replaying the whole deployment
 - `task` exposes the real discovered inventory, including tracked and local-only tasks
-- `connect --ssh` and `connect --rdp` remain direct operator commands, with `--user=manager --test` available for non-interactive validation
+- `connect --ssh`, `connect --rdp`, and Windows-only `connect --powershell` remain direct operator commands; `connect --powershell --command <text>` runs one remote command, and `--test` verifies WinRM authentication/readiness
 
 ### Resize Compute Or OS Disk In Place
 ```powershell
@@ -712,13 +718,16 @@ Behavior notes:
 - Azure CLI, VM lifecycle, guest task, package, and connection steps print a safe `Doing: <action>` message before work starts. Blocking Azure CLI and HTTP requests emit elapsed-time heartbeats every 30 seconds; progress labels omit secrets.
 
 ### `connect`
-Purpose: launch the local Windows OpenSSH client or Remote Desktop client for a managed VM, or run connection tests without opening the client.
+Purpose: launch the local Windows OpenSSH client or Remote Desktop client, open a Windows PowerShell remoting session, or run connection tests for a managed VM.
 
 Behavior notes:
 - only works when the VM is already running
-- requires exactly one transport flag: `--ssh` or `--rdp`
-- `--test` performs a non-interactive handshake or reachability check instead of opening the external client
+- requires exactly one transport flag: `--ssh`, `--rdp`, or `--powershell`
+- `--test` performs a non-interactive handshake or reachability check instead of opening an external client/session
 - `connect --rdp` is only valid for Windows VMs
+- `connect --powershell` is Windows-only, uses WinRM Negotiate over TCP 5985, and opens a remote command prompt backed by one persistent PSSession; type `exit` to close it
+- `connect --powershell --command <text>` runs one remote command, while `connect --powershell --test` checks TCP reachability, authentication, and the selected account
+- Windows init task `06-configure-powershell-remoting` enables WinRM, keeps Basic authentication and unencrypted traffic disabled, and grants the manager and assistant accounts remote-management access; the default `TCP_PORTS` includes 5985, which must stay listed for WinRM access when customizing that setting
 
 ### `move`
 Purpose: move a managed VM to another Azure region with a health-gated cutover.
@@ -834,7 +843,7 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 - Managed resource ids use a global `nX` suffix that increments across all generated managed resources and is never reused by another managed resource of any type.
 
 ### Connection And Task Settings
-- Configure SSH and RDP ports through the committed runtime contract instead of editing tasks blindly.
+- Configure SSH and RDP ports through the committed runtime contract instead of editing tasks blindly; Windows PowerShell remoting uses TCP 5985.
 - Keep long-running task timeouts in `task.json`, not hidden in repo-wide runtime logic.
 - Use `--perf` when you want timing evidence for long-running flows.
 
@@ -976,8 +985,9 @@ Each task directory is self-contained. The folder holds one same-named script, o
 
 ### Connection Failures
 - Check `do --vm-action=status`.
-- Confirm the VM is running before `connect --ssh` or `connect --rdp`.
+- Confirm the VM is running before `connect --ssh`, `connect --rdp`, or `connect --powershell`.
 - Verify guest firewall, NSG exposure, and configured ports together.
+- For Windows PowerShell remoting, run init task 06, verify TCP 5985, and add the exact host to local WSMan TrustedHosts only when the endpoint is an IP or non-domain host.
 - If Azure keeps the VM in provisioning state `Updating`, the connection and direct-task runtime now performs one bounded `az vm redeploy` repair attempt before it gives up.
 
 ### Move And Resize Expectations

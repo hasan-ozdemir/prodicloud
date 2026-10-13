@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.13.408 - 2026-10-13
+
+### Summary
+Windows virtual computers can now be opened through Clagnos PowerShell remoting for an interactive remote command prompt, one-shot commands, and an authenticated connectivity check.
+
+### Highlights
+- Added `cg.cmd connect --powershell` over WinRM Negotiate on TCP 5985. The interactive mode keeps one PSSession open and accepts one PowerShell command per line; `exit` closes it.
+- Added `--command` and `--test` modes, surfaced the connection and test commands in the workflow summary, and added PowerShell options to the selected VC operations menu.
+- Extended the existing enabled Windows init task 06 to grant both manager and assistant accounts Remote Management Users access. Basic authentication and unencrypted WinRM remain disabled.
+- The default TCP port list already includes 5985. Keep that port in a customized `TCP_PORTS` value when WinRM connectivity is wanted.
+
+### Validation
+- Compatibility checks passed under Windows PowerShell 5.1 and PowerShell 7+: 179 smoke checks and 158 TUI scenarios per runtime.
+- The real `cg.cmd` process scenario captured the VC endpoint and PowerShell submenu; all tests reported zero native Azure CLI calls, zero real dispatcher calls, and no Azure mutations.
+
 ## Release 2026.10.13.407 - 2026-10-13
 
 ### Summary

@@ -42,7 +42,7 @@ function Show-ClagnosCommandHelpOverview {
         '  task       List tasks, enable/disable one task, run one task, or save/restore task app-state.'
         '  package    Check, install, update, or uninstall a catalogued VM package.'
         '  component  Manage Clagnos-owned Azure resource components.'
-        '  connect    Launch SSH or RDP client/test for a managed VM.'
+        '  connect    Launch SSH/RDP clients or a Windows PowerShell remoting session for a managed VM.'
         '  move       Move an existing VM to another Azure region.'
         '  resize     Change VM size or expand the managed OS disk for an existing VM.'
         '  set        Apply hibernation and validate or store nested virtualization settings.'
@@ -126,7 +126,7 @@ function Show-ClagnosCommandHelpDetailed {
             '  task       : task inventory, enable/disable, isolated task runs, task app-state save/restore'
             '  package    : catalogued package status, install/update, and uninstall'
             '  component  : managed Azure component CRUD and dependency-aware deletion'
-            '  connect    : connect --ssh / connect --rdp plus --test'
+            '  connect    : connect --ssh / --rdp / --powershell plus --test'
             '  move       : managed region move'
             '  resize     : VM-size or disk expand guidance'
             '  set        : hibernation and nested virtualization settings'
@@ -322,17 +322,21 @@ function Show-ClagnosCommandHelpDetailed {
         'connect' {
             Write-ClagnosHelpLines @(
                 'Command: connect'
-                'Description: launch Windows OpenSSH client or mstsc for a managed VM, or run connection tests without launching the client.'
+                'Description: launch SSH/RDP clients or a PowerShell remoting session for a managed VM, or test connection readiness.'
                 'Usage:'
                 '  clagnos connect --ssh [--group <resource-group>] [--vm-name <vm-name>] [--user <manager|assistant>] [--test] [--subscription-id <subscription-id>] [--perf]'
                 '  clagnos connect --rdp [--group <resource-group>] [--vm-name <vm-name>] [--user <manager|assistant>] [--test] [--subscription-id <subscription-id>] [--perf]'
+                '  clagnos connect --powershell [--group <resource-group>] [--vm-name <vm-name>] [--user <manager|assistant>] [--command <PowerShell-command> | --test] [--subscription-id <subscription-id>] [--perf]'
                 'Examples:'
                 '  clagnos connect --ssh --vm-name <vm-name> -s <subscription-guid>'
                 '  clagnos connect --ssh --group <resource-group> --vm-name <vm-name> --user assistant'
                 '  clagnos connect --ssh --group <resource-group> --vm-name <vm-name> --user manager --test'
                 '  clagnos connect --rdp --vm-name <vm-name> --user assistant'
                 '  clagnos connect --rdp --group <resource-group> --vm-name <vm-name> --user manager --test'
-                'Notes: the VM must already be running. connect --ssh uses Windows OpenSSH. connect --rdp uses cmdkey plus mstsc and is only available for Windows VMs. --test performs a non-interactive reachability/authentication check instead of launching the external client.'
+                '  clagnos connect --powershell --vm-name <vm-name> --user manager'
+                '  clagnos connect --powershell --command "Get-Service WinRM" --vm-name <vm-name>'
+                '  clagnos connect --powershell --test --vm-name <vm-name>'
+                'Notes: the VM must already be running. Use exactly one of --ssh, --rdp, or --powershell. PowerShell remoting is Windows-only and uses WinRM Negotiate on TCP 5985; Windows init task 06 enables WinRM and grants both managed user accounts remote-management access. Without --command, --powershell opens a line-oriented remote PowerShell prompt; --test authenticates and runs an identity probe.'
             )
             return
         }

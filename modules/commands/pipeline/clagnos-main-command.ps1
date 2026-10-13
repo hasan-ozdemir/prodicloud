@@ -45,7 +45,7 @@ function Write-ClagnosWorkflowSummary {
         -SshConnectTimeoutSeconds $SshConnectTimeoutSeconds
 
     $connectionModel = if ([bool]$PlatformDefaults.IncludeRdp) {
-        Get-ClagnosConnectionDisplayModel -Context $Context -ManagerUser ([string]$Context.VmUser) -AssistantUser ([string]$Context.VmAssistantUser) -SshPort ([string]$Context.SshPort) -RdpPort ([string]$Context.RdpPort) -PowerShellPort '5985' -IncludeRdp -IncludePowerShellRemoting
+        Get-ClagnosConnectionDisplayModel -Context $Context -ManagerUser ([string]$Context.VmUser) -AssistantUser ([string]$Context.VmAssistantUser) -SshPort ([string]$Context.SshPort) -RdpPort ([string]$Context.RdpPort) -PowerShellPort (Get-ClagnosDefaultPowerShellPortText) -IncludeRdp -IncludePowerShellRemoting
     }
     else {
         Get-ClagnosConnectionDisplayModel -Context $Context -ManagerUser ([string]$Context.VmUser) -AssistantUser ([string]$Context.VmAssistantUser) -SshPort ([string]$Context.SshPort)
@@ -69,6 +69,8 @@ function Write-ClagnosWorkflowSummary {
     if ($connectionModel.Contains('PowerShellConnections')) {
         Write-Host "PowerShell remoting commands:"
         foreach ($psConnection in @($connectionModel.PowerShellConnections)) {
+            Write-Host ("- clagnos: cg.cmd connect --powershell --group {0} --vm-name {1} --user {2}" -f [string]$Context.ResourceGroup, [string]$Context.VmName, [string]$psConnection.User)
+            Write-Host ("  test: cg.cmd connect --powershell --group {0} --vm-name {1} --user {2} --test" -f [string]$Context.ResourceGroup, [string]$Context.VmName, [string]$psConnection.User)
             Write-Host ("- {0}: {1}" -f ([string]$psConnection.User), ([string]$psConnection.EnterPSSessionCommand))
             Write-Host ("  username: {0}" -f ([string]$psConnection.Username))
             Write-Host ("  trusted-hosts: {0}" -f ([string]$psConnection.TrustedHostsCommand))

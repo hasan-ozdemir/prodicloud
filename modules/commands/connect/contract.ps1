@@ -8,8 +8,10 @@ function Get-ClagnosConnectOptionSpecifications {
         (Get-ClagnosConnectGroupOptionSpecification),
         (Get-ClagnosConnectVmNameOptionSpecification),
         (Get-ClagnosConnectUserOptionSpecification),
+        (Get-ClagnosConnectCommandOptionSpecification),
         (Get-ClagnosConnectTestOptionSpecification),
         (Get-ClagnosConnectSshOptionSpecification),
-        (Get-ClagnosConnectRdpOptionSpecification)
+        (Get-ClagnosConnectRdpOptionSpecification),
+        (Get-ClagnosConnectPowerShellOptionSpecification)
     )
 }

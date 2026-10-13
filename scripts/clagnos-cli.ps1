@@ -607,6 +607,7 @@ function Show-ClagnosUiVmDetails {
     $assistantPass = [string](Get-ConfigValue -Config $config -Key 'VM_ASSISTANT_PASS' -DefaultValue '')
     $sshPort = [string](Get-ConfigValue -Config $config -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))
     $rdpPort = [string](Get-ConfigValue -Config $config -Key 'VM_RDP_PORT' -DefaultValue (Get-ClagnosDefaultRdpPortText))
+    $powerShellPort = Get-ClagnosDefaultPowerShellPortText
     $connectionHost = if ($publicAddresses.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$publicAddresses[0].Fqdn)) { [string]$publicAddresses[0].Fqdn }
     elseif ($publicAddresses.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$publicAddresses[0].IpAddress)) { [string]$publicAddresses[0].IpAddress }
     elseif ($privateAddresses.Count -gt 0) { [string]$privateAddresses[0] }
@@ -619,6 +620,7 @@ function Show-ClagnosUiVmDetails {
         Write-Host ('  RDP endpoint: {0}:{1} | default role: manager' -f $connectionHost, $rdpPort)
         Write-Host ('    manager username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $adminUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $adminPass -EmptyText '(not configured)'))
         Write-Host ('    assistant username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $assistantUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $assistantPass -EmptyText '(not configured)'))
+        Write-Host ('  PowerShell remoting endpoint: {0}:{1} | roles: manager and assistant | authentication: Negotiate' -f $connectionHost, $powerShellPort)
     }
     else { Write-Host '  RDP: not applicable to this Linux VC.' }
     Write-Host '  Credentials are read from .env; passwords are excluded from progress and operation log messages.' -ForegroundColor Gray
@@ -959,7 +961,7 @@ function Show-ClagnosUiOperationsMenu {
         Write-Host '2. Resize VM or disk'
         Write-Host '3. Move to another region'
         Write-Host '4. VM features'
-        Write-Host '5. Connect by SSH or RDP'
+        Write-Host '5. Connect by SSH, RDP, or PowerShell'
         Write-Host '6. Run a remote command or shell'
         Write-Host '7. Tasks and app-state'
         Write-Host '8. Component CRUD'
@@ -1032,12 +1034,20 @@ function Show-ClagnosUiOperationsMenu {
                 Invoke-ClagnosUiCommand -CommandName 'set' -Options $options
             }
             '5' {
-                Write-Host 's: SSH | r: RDP | t: test SSH | d: test RDP'
+                $isWindowsVm = [string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)
+                if ($isWindowsVm) {
+                    Write-Host 's: SSH | r: RDP | t: test SSH | d: test RDP | p: PowerShell session | c: PowerShell command | w: test PowerShell'
+                }
+                else {
+                    Write-Host 's: SSH | t: test SSH'
+                }
                 $transport = (Read-ClagnosUiChoice 'Connection').ToLowerInvariant()
                 if ($transport -in @('s','t')) { $options['ssh'] = $true }
-                elseif ($transport -in @('r','d') -and [string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { $options['rdp'] = $true }
+                elseif ($transport -in @('r','d') -and $isWindowsVm) { $options['rdp'] = $true }
+                elseif ($transport -in @('p','c','w') -and $isWindowsVm) { $options['powershell'] = $true }
                 else { continue }
-                if ($transport -in @('t','d')) { $options['test'] = $true }
+                if ($transport -in @('t','d','w')) { $options['test'] = $true }
+                if ($transport -eq 'c') { $options['command'] = Read-ClagnosUiChoice 'Remote PowerShell command' }
                 Invoke-ClagnosUiCommand -CommandName 'connect' -Options $options
             }
             '6' {

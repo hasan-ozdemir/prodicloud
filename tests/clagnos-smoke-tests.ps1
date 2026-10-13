@@ -945,6 +945,13 @@ Invoke-Test -Name "CLI parse help contracts" -Action {
     $parsedConnectRdpTest = Parse-ClagnosCliArguments -CommandToken "connect" -RawArgs @("--rdp", "--test")
     Assert-True -Condition ($parsedConnectRdpTest.Options.ContainsKey("rdp")) -Message "Connect --rdp option was not captured."
 
+    $parsedConnectPowerShellCommand = Parse-ClagnosCliArguments -CommandToken 'connect' -RawArgs @('--powershell', '--command', 'Get-Date')
+    Assert-True -Condition ($parsedConnectPowerShellCommand.Options.ContainsKey('powershell')) -Message 'Connect --powershell option was not captured.'
+    Assert-True -Condition ([string]$parsedConnectPowerShellCommand.Options['command'] -eq 'Get-Date') -Message 'Connect --powershell --command value was not captured.'
+
+    $parsedConnectPowerShellTest = Parse-ClagnosCliArguments -CommandToken 'connect' -RawArgs @('--powershell', '--test')
+    Assert-True -Condition ($parsedConnectPowerShellTest.Options.ContainsKey('test')) -Message 'Connect --powershell --test option was not captured.'
+
     $parsedTaskRunInit = Parse-ClagnosCliArguments -CommandToken "task" -RawArgs @("--run-vm-init", "01")
     Assert-True -Condition ([string]$parsedTaskRunInit.Options['run-vm-init'] -eq '01') -Message "Task --run-vm-init <value> parse failed."
 
@@ -1212,11 +1219,13 @@ Invoke-Test -Name "CLI option assertions allow command help" -Action {
     Assert-ClagnosCommandOptions -CommandName "delete" -Options @{ help = $true }
 }
 
-Invoke-Test -Name "Connect command accepts SSH and RDP test mode" -Action {
+Invoke-Test -Name "Connect command accepts SSH, RDP, and PowerShell remoting modes" -Action {
     Assert-ClagnosCommandOptions -CommandName "connect" -Options @{ ssh = $true; test = $true }
     Assert-ClagnosCommandOptions -CommandName "connect" -Options @{ ssh = $true; 'vm-name' = 'samplevm'; user = 'manager'; test = $true }
     Assert-ClagnosCommandOptions -CommandName "connect" -Options @{ rdp = $true; test = $true }
     Assert-ClagnosCommandOptions -CommandName "connect" -Options @{ rdp = $true; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; user = 'assistant'; test = $true }
+    Assert-ClagnosCommandOptions -CommandName 'connect' -Options @{ powershell = $true; test = $true }
+    Assert-ClagnosCommandOptions -CommandName 'connect' -Options @{ powershell = $true; command = 'Get-Date'; group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; user = 'manager' }
 }
 
 Invoke-Test -Name "Create and update accept vm-name override" -Action {
@@ -4857,6 +4866,169 @@ Invoke-Test -Name "Connect --rdp test mode checks reachability without launching
     }
 }
 
+Invoke-Test -Name "Connect --powershell runs a remote command through a managed PSSession" -Action {
+    $script:PowerShellConnectInvocation = $null
+    $script:PowerShellSessionRemoved = $false
+    try {
+        function Initialize-ClagnosConnectionCommandContext {
+            param([hashtable]$Options, [string]$OperationName)
+            return [pscustomobject]@{
+                VmName = 'samplevm'
+                ResourceGroup = 'rg-samplevm-ate1-g1'
+                ConnectionHost = 'samplevm.example'
+                SelectedUserName = 'manager'
+                SelectedPassword = 'secret'
+                VmPowerShellPort = '5985'
+                OsType = 'Windows'
+            }
+        }
+        function Assert-ClagnosPowerShellVm { param([psobject]$Runtime) }
+        function New-ClagnosPowerShellRemotingSession { param([psobject]$Runtime) return [pscustomobject]@{ Id = 1 } }
+        function Invoke-ClagnosPowerShellRemoteCommand {
+            param([object]$Session, [string]$CommandText)
+            $script:PowerShellConnectInvocation = [pscustomobject]@{ Session = $Session; CommandText = $CommandText }
+        }
+        function Remove-PSSession { param([object]$Session, [string]$ErrorAction) $script:PowerShellSessionRemoved = $true }
+        function Write-ClagnosActionProgress { param([string]$Action) }
+
+        Invoke-ClagnosConnectCommand -Options @{ powershell = $true; command = 'Get-Date'; user = 'manager' }
+
+        Assert-True -Condition ($null -ne $script:PowerShellConnectInvocation) -Message 'PowerShell command mode must invoke the remote command helper.'
+        Assert-True -Condition ([string]$script:PowerShellConnectInvocation.CommandText -eq 'Get-Date') -Message 'PowerShell command mode must preserve the selected remote command.'
+        Assert-True -Condition ($script:PowerShellSessionRemoved) -Message 'PowerShell command mode must close its PSSession.'
+    }
+    finally {
+        foreach ($functionName in @('Initialize-ClagnosConnectionCommandContext','Assert-ClagnosPowerShellVm','New-ClagnosPowerShellRemotingSession','Invoke-ClagnosPowerShellRemoteCommand','Remove-PSSession','Write-ClagnosActionProgress')) {
+            Remove-Item ("Function:\{0}" -f $functionName) -ErrorAction SilentlyContinue
+        }
+        Remove-Variable -Name PowerShellConnectInvocation -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name PowerShellSessionRemoved -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "PowerShell remoting creates a Negotiate session with the selected local account" -Action {
+    $script:PowerShellSessionParameters = $null
+    $script:PowerShellSessionProgress = @()
+    try {
+        function New-PSSession {
+            [CmdletBinding()]
+            param(
+                [string]$ComputerName,
+                [int]$Port,
+                [System.Management.Automation.PSCredential]$Credential,
+                [string]$Authentication
+            )
+            $script:PowerShellSessionParameters = [pscustomobject]@{
+                ComputerName = $ComputerName
+                Port = $Port
+                Credential = $Credential
+                Authentication = $Authentication
+            }
+            return [pscustomobject]@{ Id = 4 }
+        }
+        function Write-ClagnosActionProgress { param([string]$Action) $script:PowerShellSessionProgress += $Action }
+
+        $session = New-ClagnosPowerShellRemotingSession -Runtime ([pscustomobject]@{
+            ConnectionHost = 'samplevm.example'
+            VmPowerShellPort = '5985'
+            SelectedUserName = 'manager'
+            SelectedPassword = 'secret'
+        })
+
+        Assert-True -Condition ($null -ne $session) -Message 'PowerShell remoting must return the opened session.'
+        Assert-True -Condition ([string]$script:PowerShellSessionParameters.ComputerName -eq 'samplevm.example') -Message 'PowerShell remoting must target the resolved VC host.'
+        Assert-True -Condition ([int]$script:PowerShellSessionParameters.Port -eq 5985) -Message 'PowerShell remoting must use the WinRM port.'
+        Assert-True -Condition ([string]$script:PowerShellSessionParameters.Authentication -eq 'Negotiate') -Message 'PowerShell remoting must use Negotiate authentication.'
+        Assert-True -Condition ([string]$script:PowerShellSessionParameters.Credential.UserName -eq '.\manager') -Message 'PowerShell remoting must use the selected local VM account.'
+        Assert-True -Condition ([string]$script:PowerShellSessionParameters.Credential.GetNetworkCredential().Password -eq 'secret') -Message 'PowerShell credentials must be passed through a PSCredential object.'
+        Assert-True -Condition ((@($script:PowerShellSessionProgress) -join ' ') -notmatch 'secret') -Message 'PowerShell progress labels must never disclose the password.'
+    }
+    finally {
+        Remove-Item Function:\New-PSSession -ErrorAction SilentlyContinue
+        Remove-Item Function:\Write-ClagnosActionProgress -ErrorAction SilentlyContinue
+        Remove-Variable -Name PowerShellSessionParameters -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name PowerShellSessionProgress -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "Connect --powershell test verifies the WinRM endpoint and remote account" -Action {
+    $script:PowerShellTestPorts = @()
+    $script:PowerShellTestSessionRemoved = $false
+    try {
+        function Initialize-ClagnosConnectionCommandContext {
+            param([hashtable]$Options, [string]$OperationName)
+            return [pscustomobject]@{
+                VmName = 'samplevm'
+                ResourceGroup = 'rg-samplevm-ate1-g1'
+                ConnectionHost = 'samplevm.example'
+                SelectedUserName = 'manager'
+                SelectedPassword = 'secret'
+                VmPowerShellPort = '5985'
+                OsType = 'Windows'
+            }
+        }
+        function Wait-ClagnosTcpPortReachable {
+            param([string]$HostName, [int]$Port, [int]$MaxAttempts, [int]$DelaySeconds, [int]$TimeoutSeconds, [string]$Label)
+            $script:PowerShellTestPorts += ,([pscustomobject]@{ HostName = $HostName; Port = $Port; Label = $Label })
+            return $true
+        }
+        function New-ClagnosPowerShellRemotingSession { param([psobject]$Runtime) return [pscustomobject]@{ Id = 2 } }
+        function Invoke-Command {
+            [CmdletBinding()]
+            param([object]$Session, [scriptblock]$ScriptBlock, [object[]]$ArgumentList)
+            return @('samplevm', 'samplevm\manager')
+        }
+        function Remove-PSSession { param([object]$Session, [string]$ErrorAction) $script:PowerShellTestSessionRemoved = $true }
+
+        Invoke-ClagnosPowerShellConnectivityTest -Options @{ powershell = $true; test = $true; user = 'manager' }
+
+        Assert-True -Condition (@($script:PowerShellTestPorts).Count -eq 1) -Message 'PowerShell remoting test must probe the configured TCP endpoint.'
+        Assert-True -Condition ([int]$script:PowerShellTestPorts[0].Port -eq 5985) -Message 'PowerShell remoting test must use the default WinRM port.'
+        Assert-True -Condition ($script:PowerShellTestSessionRemoved) -Message 'PowerShell remoting test must close its temporary PSSession.'
+    }
+    finally {
+        foreach ($functionName in @('Initialize-ClagnosConnectionCommandContext','Wait-ClagnosTcpPortReachable','New-ClagnosPowerShellRemotingSession','Invoke-Command','Remove-PSSession')) {
+            Remove-Item ("Function:\{0}" -f $functionName) -ErrorAction SilentlyContinue
+        }
+        Remove-Variable -Name PowerShellTestPorts -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name PowerShellTestSessionRemoved -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "PowerShell remoting interactive shell dispatches commands and exits cleanly" -Action {
+    $script:PowerShellInteractiveCommands = @()
+    $script:PowerShellInteractiveChoices = New-Object 'System.Collections.Generic.Queue[string]'
+    $script:PowerShellInteractiveChoices.Enqueue('Get-Date')
+    $script:PowerShellInteractiveChoices.Enqueue('exit')
+    try {
+        function Read-Host { param([string]$Prompt) return $script:PowerShellInteractiveChoices.Dequeue() }
+        function Invoke-ClagnosPowerShellRemoteCommand { param([object]$Session, [string]$CommandText) $script:PowerShellInteractiveCommands += $CommandText }
+
+        Invoke-ClagnosInteractivePowerShellSession -Session ([pscustomobject]@{ Id = 3 }) -ConnectionHost 'samplevm.example' -VmName 'samplevm'
+
+        Assert-True -Condition (@($script:PowerShellInteractiveCommands).Count -eq 1) -Message 'Interactive PowerShell shell must dispatch entered commands.'
+        Assert-True -Condition ([string]$script:PowerShellInteractiveCommands[0] -eq 'Get-Date') -Message 'Interactive PowerShell shell must stop before sending the exit command remotely.'
+    }
+    finally {
+        Remove-Item Function:\Read-Host -ErrorAction SilentlyContinue
+        Remove-Item Function:\Invoke-ClagnosPowerShellRemoteCommand -ErrorAction SilentlyContinue
+        Remove-Variable -Name PowerShellInteractiveCommands -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name PowerShellInteractiveChoices -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
+Invoke-Test -Name "Connect rejects mixed transports and SSH command execution" -Action {
+    $mixedTransportThrew = $false
+    try { Resolve-ClagnosConnectMode -Options @{ ssh = $true; powershell = $true } | Out-Null }
+    catch { $mixedTransportThrew = $true }
+    Assert-True -Condition $mixedTransportThrew -Message 'Connect must require exactly one transport selector.'
+
+    $sshCommandThrew = $false
+    try { Invoke-ClagnosConnectCommand -Options @{ ssh = $true; command = 'Get-Date' } }
+    catch { $sshCommandThrew = $true }
+    Assert-True -Condition $sshCommandThrew -Message 'The --command option must be rejected with SSH transport.'
+}
+
 Invoke-Test -Name "Persistent SSH protocol normalizes spinner-prefixed markers" -Action {
     $normalizedEnd = Normalize-ClagnosProtocolLine -Text '   / CLAGNOS_TASK_END:117-install-teams-application:4294967295'
     Assert-True -Condition ([string]$normalizedEnd -eq 'CLAGNOS_TASK_END:117-install-teams-application:4294967295') -Message 'Spinner-prefixed task end markers must normalize back to the protocol marker.'
@@ -8271,6 +8443,8 @@ Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Actio
 
     foreach ($fragment in @(
         'Enable-PSRemoting -SkipNetworkProfileCheck -Force',
+        '__VM_ADMIN_USER__',
+        '__ASSISTANT_USER__',
         'Set-Service -Name WinRM -StartupType Automatic',
         'Start-Service -Name WinRM',
         'Remote Management Users',
@@ -8285,7 +8459,9 @@ Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Actio
     }
 
     Assert-True -Condition ($remotingTaskJsonText -like '*"priority": 7*') -Message 'PowerShell remoting init task priority must stay 7.'
+    Assert-True -Condition ($remotingTaskJsonText -like '*"enabled": true*') -Message 'PowerShell remoting init task must remain enabled.'
     Assert-True -Condition ($remotingTaskJsonText -like '*05-configure-firewall-settings*') -Message 'PowerShell remoting init task must depend on firewall configuration.'
+    Assert-True -Condition (($remotingTaskText -like "*Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName `$managerUser*") -and ($remotingTaskText -like "*Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName `$assistantUser*")) -Message 'PowerShell remoting init task must grant both managed users access.'
     Assert-True -Condition ($platformDefaultsText -like '*5985*') -Message 'Default TCP ports must include 5985 for WinRM.'
     Assert-True -Condition ($envExampleText -like '*5985*') -Message '.env.example TCP port defaults must include 5985 for WinRM.'
 
@@ -8294,6 +8470,7 @@ Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Actio
         'TrustedHostsCommand',
         'EnterPSSessionCommand',
         'InvokeCommand',
+        'cg.cmd connect --powershell',
         '5985'
     )) {
         Assert-True -Condition (($guestRuntimeText + "`n" + $mainCommandText) -like ('*' + [string]$fragment + '*')) -Message ("Connection summary must include PowerShell remoting fragment '{0}'." -f [string]$fragment)

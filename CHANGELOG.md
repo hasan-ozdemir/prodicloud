@@ -3,6 +3,20 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.13.408] - 2026-10-13
+
+### Added
+- Added Windows-only `connect --powershell` with an interactive persistent PSSession prompt, one-shot `--command`, and authenticated `--test` modes; exposed these paths in the selected VC Operations menu and VC connection details.
+- Added direct command examples to the workflow summary and CLI help. The connection flow uses WinRM Negotiate on TCP 5985 and keeps credentials inside a PSCredential object.
+
+### Changed
+- Extended the existing enabled Windows init task `06-configure-powershell-remoting` to grant both manager and assistant accounts access through Remote Management Users. WinRM Basic authentication and unencrypted transport remain disabled.
+- Expanded non-live command and TUI coverage for PowerShell connect selection, command execution, session testing, Linux rejection, and actual `cg.cmd` screen output.
+
+### Validation
+- PowerShell compatibility matrix passed: 179 smoke checks and 158 TUI scenarios under Windows PowerShell 5.1 and PowerShell 7+.
+- TUI tests used fixture Azure reads only: zero native Azure CLI calls, zero real dispatcher calls, and no Azure mutations.
+
 ## [2026.10.13.407] - 2026-10-13
 
 ### Changed
