@@ -3,6 +3,16 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.13.411] - 2026-10-13
+
+### Fixed
+- Removed Windows/Linux platform flags from interactive `do` actions; the power and status menu now dispatches options accepted by the shared command contract.
+
+### Validation
+- TUI coverage passed 160/160, including every lifecycle action and a check that `do` receives no unsupported platform flags.
+- PowerShell compatibility and quality checks passed under Windows PowerShell 5.1 and PowerShell 7+.
+- A no-argument `cg.cmd` interactive journey resized `vc1` to `Standard_B2s_v2`, read back the new size, and confirmed the VM was running through the menu status action. Disk and network resources were unchanged.
+
 ## [2026.10.13.410] - 2026-10-13
 
 ### Fixed

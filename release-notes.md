@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.13.411 - 2026-10-13
+
+### Summary
+The interactive VM power and status menu now passes only options supported by the shared `do` command.
+
+### Highlights
+- Removed OS platform flags from `do` dispatches; the TUI status action now works for a selected virtual computer.
+- Added TUI coverage that checks all lifecycle actions use command-contract-valid options.
+
+### Validation
+- TUI suite passed 160/160 under Windows PowerShell 5.1 and PowerShell 7+.
+- The argless `cg.cmd` workflow selected `vc1`, changed its size to `Standard_B2s_v2`, verified the resulting size, and confirmed `VM running` through the interactive status menu. No disk or network resource was changed.
+- Full quality audit passed.
+
 ## Release 2026.10.13.410 - 2026-10-13
 
 ### Summary

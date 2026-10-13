@@ -10,6 +10,7 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 - Local task history records isolated task/package outcomes, workflow stage summaries, and deferred app-state work without recording guest output or credentials.
 - The `cg.cmd` launcher preserves command-line arguments while loading the shared runtime.
 - VM SKU validation checks the active subscription's offered SKU list before lifecycle changes, so restricted sizes fail before deallocation.
+- The interactive power/status menu now sends only options accepted by the `do` command contract.
 - These pragmatic items were implemented and verified with fixture-backed tests only. No VC was provisioned or rebuilt.
 
 ## Working Style

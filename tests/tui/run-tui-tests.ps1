@@ -1045,6 +1045,7 @@ foreach ($powerActionCase in $powerActionCases) {
         $call = Assert-TuiCommand -CommandName 'do'
         Assert-TuiOption -Call $call -Name 'vm-action' -Expected ([string]$powerActionCase.Action)
         Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
+        Assert-Tui -Condition (-not $call.Options.ContainsKey('windows') -and -not $call.Options.ContainsKey('linux')) -Message 'Power actions must not receive platform flags rejected by the do command contract.'
     }
 }
 

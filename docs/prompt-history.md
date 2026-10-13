@@ -5817,3 +5817,14 @@ Important task: Use the `cg` CLI to resize the machine size of the `vc1` compute
 **Assistant Summary**
 
 Fixed `cg.cmd` command mode losing forwarded arguments while loading the shared runtime and added a real-launcher regression check. Extended SKU preflight to check availability in Clagnos's selected subscription before resize. PowerShell 5.1 and PowerShell 7+ passed 188 smoke checks and 160 TUI scenarios each. An initial standalone `az vm list-skus` query used the native Azure CLI default context rather than Clagnos's selected subscription, so its restriction result did not apply to this operation. Through `cg.cmd resize`, Clagnos confirmed `Standard_B2ls_v2` in its active subscription, deallocated `vc1`, resized it, started it, then read back the requested SKU and `VM running`. No disk or network resource was changed.
+
+### 2026-10-13 12:52 UTC
+**User Prompt**
+
+````text
+New task: Please use the Clagnos CLI interactively, without command-line parameters, and select the relevant menus as I would to change the size of the existing virtual computer named `vc1` to `Standard_B2s_v2`. This should both reach the desired VM size and confirm I can complete the task through the fully interactive `cg.cmd` menus.
+````
+
+**Assistant Summary**
+
+Launched `cg.cmd` with no arguments and navigated the numbered menus to `vc1` → Operations → Resize VM or disk → Change VM size. Selected `Standard_B2s_v2` from the East US SKU picker and confirmed the resize. Clagnos deallocated the VM, resized it, started it, read back `Standard_B2s_v2`, and confirmed `VM running` with provisioning succeeded through the interactive status menu. No disk or network resource was changed. Fixed the TUI status action so it no longer passes unsupported Windows/Linux flags to `do`; PowerShell compatibility and quality checks passed.

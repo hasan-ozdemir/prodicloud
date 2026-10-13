@@ -1009,6 +1009,8 @@ function Show-ClagnosUiOperationsMenu {
                     if ((Read-ClagnosUiChoice 'Type RESET to force a restart through Azure redeploy') -cne 'RESET') { continue }
                 }
                 $options['vm-action'] = $selectedAction
+                [void]$options.Remove('windows')
+                [void]$options.Remove('linux')
                 Invoke-ClagnosUiCommand -CommandName 'do' -Options $options
             }
             '2' {

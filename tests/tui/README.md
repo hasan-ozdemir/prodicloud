@@ -24,7 +24,7 @@ The suite contains 159 data-driven screen/action scenarios and one process-level
 | Managed inventory | All ten numbered filters, optional resource-group filtering, unfiltered inventory, invalid input, back, and exit |
 | Components | All nine component types; list/show/create/update/delete; disk/NIC attach/detach; invalid input and navigation |
 | Tasks | Init/update listing and isolated runs, disabled task listing, local task-run history, app-state save/restore for VM and local Windows, and task availability enable/disable for both stages |
-| Operations | All twelve lifecycle choices, force confirmations/cancellation, compute and disk resize, move, both feature toggles, SSH/RDP/PowerShell connection and tests, PowerShell command routing, SSH remote command/shell, task/component submenus, text report and JSON export, invalid input, and exit |
+| Operations | All twelve lifecycle choices with command-contract-valid target options, force confirmations/cancellation, compute and disk resize, move, both feature toggles, SSH/RDP/PowerShell connection and tests, PowerShell command routing, SSH remote command/shell, task/component submenus, text report and JSON export, invalid input, and exit |
 
 ## Azure safety boundary
 
