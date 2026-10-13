@@ -2,6 +2,19 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.13.412 - 2026-10-13
+
+### Summary
+The virtual computer inventory and detail screens now read Azure VM power state from the correct Azure CLI response field.
+
+### Highlights
+- Supports Azure CLI's `instanceView.statuses` response and the Compute REST instance-view response's root `statuses` array.
+- Uses Azure's `displayStatus` when present and derives a readable label from a `PowerState/*` code when it is absent.
+
+### Validation
+- The real parameterless `cg.cmd` showed `vc1` as `VM running` in its virtual computer list after the fix.
+- The status lookup is read-only; no VM or disk/network resources were changed.
+
 ## Release 2026.10.13.411 - 2026-10-13
 
 ### Summary

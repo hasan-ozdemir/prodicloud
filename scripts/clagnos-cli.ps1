@@ -376,8 +376,40 @@ function Get-ClagnosUiPowerState {
 
     try {
         $instance = Invoke-ClagnosUiAzJson -Arguments @('vm', 'get-instance-view', '--resource-group', $ResourceGroup, '--name', $VmName)
-        foreach ($status in @(ConvertTo-ObjectArrayCompat -InputObject $instance.statuses)) {
-            if ([string]$status.code -like 'PowerState/*') { return [string]$status.displayStatus }
+
+        # Azure CLI wraps the Compute instance view under instanceView, while
+        # the direct Compute Instance View REST response exposes statuses at
+        # the root. Accept both documented response shapes.
+        $statusRows = @()
+        if ($null -ne $instance.instanceView) {
+            $statusRows += @(ConvertTo-ObjectArrayCompat -InputObject $instance.instanceView.statuses)
+        }
+        if ($null -ne $instance.statuses) {
+            $statusRows += @(ConvertTo-ObjectArrayCompat -InputObject $instance.statuses)
+        }
+        if ($null -ne $instance.properties -and $null -ne $instance.properties.instanceView) {
+            $statusRows += @(ConvertTo-ObjectArrayCompat -InputObject $instance.properties.instanceView.statuses)
+        }
+
+        foreach ($status in @($statusRows)) {
+            $statusCode = [string]$status.code
+            if ($statusCode -match '^(?i)PowerState/(?<state>.+)$') {
+                $displayStatus = [string]$status.displayStatus
+                if (-not [string]::IsNullOrWhiteSpace($displayStatus)) {
+                    return $displayStatus.Trim()
+                }
+
+                $powerState = [string]$Matches.state
+                switch ($powerState.ToLowerInvariant()) {
+                    'starting' { return 'VM starting' }
+                    'running' { return 'VM running' }
+                    'stopping' { return 'VM stopping' }
+                    'stopped' { return 'VM stopped' }
+                    'deallocating' { return 'VM deallocating' }
+                    'deallocated' { return 'VM deallocated' }
+                    default { return ('VM {0}' -f $powerState) }
+                }
+            }
         }
     }
     catch { return 'Unknown' }

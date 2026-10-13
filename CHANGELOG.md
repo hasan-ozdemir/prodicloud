@@ -3,6 +3,15 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.13.412] - 2026-10-13
+
+### Fixed
+- Fixed interactive VM inventory and detail screens reporting `Unknown` when Azure CLI returned the documented nested `instanceView.statuses` response. The TUI now reads CLI and direct REST response shapes and normalizes power-state codes when Azure omits `displayStatus`.
+
+### Validation
+- Opened the real `cg.cmd` without parameters and confirmed the `vc1` inventory row displayed `VM running` using a read-only Azure request.
+- The detail screen uses the same corrected power-state resolver; no VM or related resource was mutated.
+
 ## [2026.10.13.411] - 2026-10-13
 
 ### Fixed

@@ -5828,3 +5828,14 @@ New task: Please use the Clagnos CLI interactively, without command-line paramet
 **Assistant Summary**
 
 Launched `cg.cmd` with no arguments and navigated the numbered menus to `vc1` → Operations → Resize VM or disk → Change VM size. Selected `Standard_B2s_v2` from the East US SKU picker and confirmed the resize. Clagnos deallocated the VM, resized it, started it, read back `Standard_B2s_v2`, and confirmed `VM running` with provisioning succeeded through the interactive status menu. No disk or network resource was changed. Fixed the TUI status action so it no longer passes unsupported Windows/Linux flags to `do`; PowerShell compatibility and quality checks passed.
+
+### 2026-10-13 13:00 UTC
+**User Prompt**
+
+````text
+New task: On screens displaying virtual computer details, the VC status is shown as `unknown`. Please research the official Azure CLI and Azure REST guides for the correct way to obtain VM state and fix the corresponding application code so it reports a VM's actual status reliably.
+````
+
+**Assistant Summary**
+
+Microsoft's Azure CLI guide shows `az vm get-instance-view` power-state data under `instanceView.statuses`; the Compute REST instance-view response puts `statuses` at its root. Clagnos checked only the root field, so it missed the documented Azure CLI response. Updated the shared TUI status resolver to support both shapes and to derive a readable label from `PowerState/*` when `displayStatus` is missing. Opened the real parameterless `cg.cmd`; the `vc1` row then displayed `VM running`. The query was read-only and no Azure resources were changed.
