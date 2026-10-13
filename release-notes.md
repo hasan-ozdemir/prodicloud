@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.13.407 - 2026-10-13
+
+### Summary
+TUI verification now launches the actual `cg.cmd` in an isolated fixture environment and checks its real console output.
+
+### Highlights
+- Added a process-level screen journey through the home menu, VC list/details, package catalog, component menu, operations menu, managed inventory, and cloud subscriptions.
+- The test copies the real launcher, UI, and runtime modules into a temporary sandbox and feeds scripted input to the launched process.
+- The sandbox uses fake Azure read responses and a fake launcher elevation check. Mutating Azure verbs are rejected; the operator `.env` and real Azure CLI are not used.
+
+### Validation
+- All 154 TUI scenarios passed under Windows PowerShell 5.1 and PowerShell 7+.
+- The actual `cg.cmd` process output was captured and checked; no native Azure CLI call or Azure resource mutation occurred.
+
 ## Release 2026.10.12.406 - 2026-10-12
 
 ### Summary

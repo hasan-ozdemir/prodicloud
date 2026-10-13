@@ -14,6 +14,9 @@ $script:TuiAzureReadQueries = New-Object 'System.Collections.Generic.List[string
 $script:TuiChoicePrompts = New-Object 'System.Collections.Generic.List[string]'
 $script:TuiSubscriptionSelections = New-Object 'System.Collections.Generic.List[string]'
 $script:TuiChoiceQueue = New-Object System.Collections.Queue
+$script:TuiTotalNativeAzureCalls = 0
+$script:TuiTotalRealDispatcherCalls = 0
+$script:TuiTotalFixtureAzureReads = 0
 
 function Assert-Tui {
     param([bool]$Condition, [string]$Message)
@@ -104,8 +107,9 @@ function Invoke-TuiTest {
         [Console]::WriteLine(('[PASS] {0}' -f $Name))
     }
     catch {
-        $script:TuiTestResults.Add([pscustomobject]@{ Name = $Name; Passed = $false; Error = [string]$_.Exception.Message })
-        [Console]::WriteLine(('[FAIL] {0}: {1}' -f $Name, $_.Exception.Message))
+        $errorText = [regex]::Replace([string]$_.Exception.Message, '\s+', ' ').Trim()
+        $script:TuiTestResults.Add([pscustomobject]@{ Name = $Name; Passed = $false; Error = $errorText })
+        [Console]::WriteLine(('[FAIL] {0}: {1}' -f $Name, $errorText))
         [Console]::WriteLine(('       reads={0}; queued={1}; screens={2}; commands={3}; output={4}' -f $script:TuiReadCount, $script:TuiChoiceQueue.Count, (@($script:TuiScreenTitles) -join '|'), (@($script:TuiCommandInvocations | ForEach-Object { [string]$_.CommandName }) -join ','), ((@($script:TuiRenderedLines | Select-Object -First 5)) -join '|')))
     }
 }
@@ -243,8 +247,8 @@ $script:TuiOriginalTaskMenu = (Get-Command Show-ClagnosUiTaskMenu).ScriptBlock
 $script:TuiOriginalOperationsMenu = (Get-Command Show-ClagnosUiOperationsMenu).ScriptBlock
 
 # The command dispatcher and Azure CLI are deliberately blocked for every test.
-function az { $script:TuiNativeAzureCalls++; throw 'Native Azure CLI is blocked in TUI tests.' }
-function Invoke-ClagnosCommandDispatcher { $script:TuiRealDispatcherCalls++; throw 'The real command dispatcher is blocked in TUI tests.' }
+function az { $script:TuiNativeAzureCalls++; $script:TuiTotalNativeAzureCalls++; throw 'Native Azure CLI is blocked in TUI tests.' }
+function Invoke-ClagnosCommandDispatcher { $script:TuiRealDispatcherCalls++; $script:TuiTotalRealDispatcherCalls++; throw 'The real command dispatcher is blocked in TUI tests.' }
 
 function Write-Host {
     [CmdletBinding()]
@@ -1168,8 +1172,145 @@ Invoke-TuiTest -Name 'Operations connection menu ignores invalid transport choic
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'An unknown SSH/RDP transport letter must not dispatch.'
 }
 
+Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azure reads only' -Action {
+    $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+    $sandboxRoot = Join-Path $tempBase ('clagnos-tui-e2e-' + [guid]::NewGuid().ToString('N'))
+    $fixtureBin = Join-Path $sandboxRoot 'fixture-bin'
+    New-Item -ItemType Directory -Path $sandboxRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $fixtureBin -Force | Out-Null
+    $process = $null
+
+    try {
+        foreach ($relativePath in @('cg.cmd','clagnos.ps1','release-notes.md')) {
+            Copy-Item -LiteralPath (Join-Path $RepoRoot $relativePath) -Destination (Join-Path $sandboxRoot $relativePath) -Force
+        }
+        Copy-Item -LiteralPath (Join-Path $RepoRoot 'modules') -Destination (Join-Path $sandboxRoot 'modules') -Recurse -Force
+        New-Item -ItemType Directory -Path (Join-Path $sandboxRoot 'scripts') -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cli.ps1') -Force
+        foreach ($catalogRoot in @('packages\builtin\windows','packages\custom\windows','packages\builtin\linux','packages\custom\linux')) {
+            New-Item -ItemType Directory -Path (Join-Path $sandboxRoot $catalogRoot) -Force | Out-Null
+        }
+        foreach ($fixtureName in @('az.cmd','az-fixture.ps1')) {
+            Copy-Item -LiteralPath (Join-Path $RepoRoot (Join-Path 'tests\tui\fixtures' $fixtureName)) -Destination (Join-Path $fixtureBin $fixtureName) -Force
+        }
+        $netSourcePath = Join-Path $RepoRoot 'tests\tui\fixtures\net-fixture.cs'
+        $netExePath = Join-Path $fixtureBin 'net.exe'
+        if ([string]$PSVersionTable.PSEdition -eq 'Desktop') {
+            $netSource = [string](Get-Content -LiteralPath $netSourcePath -Raw)
+            Add-Type -TypeDefinition $netSource -Language CSharp -OutputType ConsoleApplication -OutputAssembly $netExePath -ErrorAction Stop | Out-Null
+        }
+        else {
+            $windowsPowerShell = Get-Command powershell.exe -ErrorAction Stop
+            $sourceLiteral = "'" + ([string]$netSourcePath).Replace("'", "''") + "'"
+            $outputLiteral = "'" + ([string]$netExePath).Replace("'", "''") + "'"
+            $compileCode = '$ErrorActionPreference = ''Stop''; $sourceText = Get-Content -LiteralPath ' + $sourceLiteral + ' -Raw; Add-Type -TypeDefinition $sourceText -Language CSharp -OutputType ConsoleApplication -OutputAssembly ' + $outputLiteral + ' | Out-Null'
+            $encodedCompileCode = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($compileCode))
+            $compileOutput = & $windowsPowerShell.Source -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCompileCode 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ('Could not build the temporary net.exe fixture: {0}' -f ((@($compileOutput) | ForEach-Object { [string]$_ }) -join ' ')) }
+        }
+        New-Item -ItemType Directory -Path (Join-Path $sandboxRoot '.azure-fixture') -Force | Out-Null
+        $envLines = @(
+            'SELECTED_AZURE_SUBSCRIPTION_ID=00000000-0000-4000-8000-000000000000',
+            'SELECTED_VM_OS=windows',
+            'SELECTED_AZURE_REGION=eastus',
+            'SELECTED_VM_NAME=tui-fixture-vc',
+            'VM_ADMIN_USER=fixture-manager',
+            'VM_ADMIN_PASS=<runtime-secret>',
+            'VM_ASSISTANT_USER=fixture-assistant',
+            'VM_ASSISTANT_PASS=<runtime-secret>',
+            'VM_SSH_PORT=22222',
+            'VM_RDP_PORT=3390',
+            'VM_ENABLE_HIBERNATION=true',
+            'VM_ENABLE_NESTED_VIRTUALIZATION=true'
+        )
+        Set-Content -LiteralPath (Join-Path $sandboxRoot '.env') -Value $envLines -Encoding ASCII
+        $azLogPath = Join-Path $sandboxRoot 'az-fixture.log'
+        $netLogPath = Join-Path $sandboxRoot 'net-fixture.log'
+
+        $systemRoot = [string]$env:SystemRoot
+        $powershellRoot = Join-Path $systemRoot 'System32\WindowsPowerShell\v1.0'
+        $pathParts = @($fixtureBin, (Join-Path $systemRoot 'System32'), $powershellRoot, $systemRoot)
+        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $processInfo.FileName = Join-Path $systemRoot 'System32\cmd.exe'
+        $processInfo.Arguments = ('/d /s /c ""{0}""' -f (Join-Path $sandboxRoot 'cg.cmd'))
+        $processInfo.WorkingDirectory = $sandboxRoot
+        $processInfo.UseShellExecute = $false
+        $processInfo.CreateNoWindow = $true
+        $processInfo.RedirectStandardInput = $true
+        $processInfo.RedirectStandardOutput = $true
+        $processInfo.RedirectStandardError = $true
+        $processInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
+        $processInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
+        $processInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $azLogPath
+        $processInfo.EnvironmentVariables['CLAGNOS_TUI_NET_LOG'] = $netLogPath
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $processInfo
+        [void]$process.Start()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+
+        foreach ($choice in @('1','1','p','1','b','b','m','3','b','b','o','1','b','b','b','2','b','3','b','q')) {
+            $process.StandardInput.WriteLine([string]$choice)
+        }
+        $process.StandardInput.Close()
+        if (-not $process.WaitForExit(90000)) {
+            $process.Kill()
+            throw 'The real cg.cmd console session exceeded its 90-second timeout.'
+        }
+        $process.WaitForExit()
+        $stdoutTask.Wait()
+        $stderrTask.Wait()
+        $stdout = [string]$stdoutTask.Result
+        $stderr = [string]$stderrTask.Result
+        $plainOutput = [regex]::Replace($stdout, '\x1B\[[0-9;?]*[ -/]*[@-~]', '')
+        $netTrace = if (Test-Path -LiteralPath $netLogPath) { @(Get-Content -LiteralPath $netLogPath) -join '; ' } else { '(net shim was not called)' }
+        $azTrace = if (Test-Path -LiteralPath $azLogPath) { @(Get-Content -LiteralPath $azLogPath) -join '; ' } else { '(az fixture was not called)' }
+        Assert-Tui -Condition ($process.ExitCode -eq 0) -Message ("cg.cmd returned {0}. Output: {1}; stderr: {2}; net: {3}; az: {4}" -f $process.ExitCode, $plainOutput, $stderr, $netTrace, $azTrace)
+
+        foreach ($expectedText in @(
+            'one tool for all common cloud operations',
+            'Main menu',
+            'Virtual computers',
+            'Virtual computer: tui-fixture-vc',
+            'Public IP: 203.0.113.8',
+            'Public DNS: tui-fixture.eastus.cloudapp.azure.com',
+            'SSH endpoint: tui-fixture.eastus.cloudapp.azure.com:22222',
+            'fixture-manager | password: <runtime-secret>',
+            'fixture-assistant | password: <runtime-secret>',
+            'Manage programs on tui-fixture-vc',
+            'No packages are registered in the builtin catalog for windows.',
+            'Components of tui-fixture-vc',
+            'Operations for tui-fixture-vc',
+            '1. Power, status, and repair',
+            'Managed resource inventory',
+            'Cloud subscriptions',
+            'TUI Fixture Subscription'
+        )) {
+            Assert-Tui -Condition ($plainOutput.Contains($expectedText)) -Message ("Real cg.cmd output did not contain expected screen text: {0}. Process exit={1}; stdout={2}; stderr={3}; net={4}; az={5}" -f $expectedText,$process.ExitCode,$plainOutput,$stderr,$netTrace,$azTrace)
+        }
+
+        $azLines = @(Get-Content -LiteralPath $azLogPath -ErrorAction Stop)
+        Assert-Tui -Condition ($azLines.Count -gt 0) -Message 'The process TUI scenario must exercise the isolated Azure CLI fixture.'
+        $script:TuiTotalFixtureAzureReads += $azLines.Count
+        $mutationPattern = '(?i)(^|\s)(create|update|delete|set|start|stop|restart|deallocate|resize|reapply|redeploy|attach|detach|power-off|run-command)(\s|$)'
+        $mutatingFixtureCalls = @($azLines | Where-Object { $_ -match $mutationPattern })
+        Assert-Tui -Condition ($mutatingFixtureCalls.Count -eq 0) -Message ('The actual cg.cmd scenario attempted a blocked Azure mutation: {0}' -f ($mutatingFixtureCalls -join '; '))
+        Assert-Tui -Condition ($stderr -notmatch 'Blocked Azure mutation attempted') -Message 'The Azure fixture must not report any attempted mutating command.'
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
+        $resolvedSandbox = [System.IO.Path]::GetFullPath($sandboxRoot)
+        $resolvedTempBase = [System.IO.Path]::GetFullPath($tempBase).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        $expectedPrefix = $resolvedTempBase + 'clagnos-tui-e2e-'
+        if (-not $resolvedSandbox.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ('Refusing to remove an unexpected TUI fixture path: {0}' -f $resolvedSandbox)
+        }
+        if (Test-Path -LiteralPath $resolvedSandbox) { Remove-Item -LiteralPath $resolvedSandbox -Recurse -Force }
+    }
+}
+
 $passedCount = @($script:TuiTestResults | Where-Object { $_.Passed }).Count
 $failedResults = @($script:TuiTestResults | Where-Object { -not $_.Passed })
 [Console]::WriteLine('')
-[Console]::WriteLine(('TUI coverage summary -> Passed: {0}, Failed: {1}, Native Azure CLI calls: 0, real dispatcher calls: 0' -f $passedCount, $failedResults.Count))
+[Console]::WriteLine(('TUI coverage summary -> Passed: {0}, Failed: {1}, native Azure CLI calls: {2}, fixture Azure reads: {3}, real dispatcher calls: {4}' -f $passedCount, $failedResults.Count, $script:TuiTotalNativeAzureCalls, $script:TuiTotalFixtureAzureReads, $script:TuiTotalRealDispatcherCalls))
 if ($failedResults.Count -gt 0) { exit 1 }

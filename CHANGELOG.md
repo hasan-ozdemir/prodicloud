@@ -3,6 +3,16 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.13.407] - 2026-10-13
+
+### Changed
+- Added a process-level TUI acceptance scenario that launches the actual `cg.cmd` and Clagnos UI/runtime source in a temporary sandbox, scripts stdin choices, and checks captured console output.
+- Added a fixture Azure CLI and launcher elevation shim. The fixture returns read-only subscription/VM/resource data and rejects Azure mutation verbs; the process test uses a sanitized temporary `.env` and never reads the operator's credentials.
+
+### Validation
+- TUI suite passed 154/154 scenarios in Windows PowerShell 5.1 and PowerShell 7+.
+- The real-launcher scenario verified main navigation, selected VC details/credentials, package catalog, components, operations, inventory, and subscriptions. It reported zero native Azure CLI calls, zero real dispatcher calls, and no mutation attempts.
+
 ## [2026.10.12.406] - 2026-10-12
 
 ### Added

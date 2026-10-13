@@ -5773,3 +5773,14 @@ Test request: Before I launch the cg application, write individual end-to-end te
 **Assistant Summary**
 
 Added a fixture-backed TUI suite that exercises all displayed menu categories and action routes, including the VC details screen, subscriptions, inventory, package catalogs, component operations, task/app-state flows, and all VM operations. The harness blocks the native Azure CLI and real command dispatcher and asserts both call counts stay at zero. All 153 scenarios passed under Windows PowerShell 5.1 and PowerShell 7+; no Azure resources were changed.
+
+### 2026-10-13 00:01 UTC
+**User Prompt**
+
+````text
+Test clarification: I wanted the tests to run against the real `cg.cmd` and verify the actual output shown on screen. Can they run that way?
+````
+
+**Assistant Summary**
+
+Added a process-level TUI scenario that launches the real `cg.cmd` and copied Clagnos UI/runtime source in an isolated temporary workspace, sends scripted stdin choices, and asserts captured console output across the home menu, VC details, package catalog, components, operations, inventory, and subscriptions. A fixture `az.cmd` supplies read-only responses and rejects mutations; a fixture `net.exe` satisfies the launcher elevation check. The operator `.env` and real Azure CLI are not used. The expanded suite passed 154/154 under Windows PowerShell 5.1 and PowerShell 7+ with no Azure mutations.

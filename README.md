@@ -1015,7 +1015,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\bash-syntax-check.ps
 
 `code-quality-check.ps1` and the local commit hook keep the current tree and the current commit message clean. Run `.\tests\sensitive-content-check.ps1` directly when you also want the full reachable-history commit-message audit.
 
-The TUI suite exercises each menu screen, numbered/lettered action, command routing, confirmation, and information display with the Azure CLI and real command dispatcher blocked. The PowerShell compatibility matrix runs it under both Windows PowerShell 5.1 and PowerShell 7+; the runner reports zero native Azure CLI calls and zero real dispatcher calls.
+The TUI suite has 153 detailed menu/action scenarios plus a process-level test that launches the real `cg.cmd` from an isolated fixture copy and checks captured console output. It uses a fake Azure CLI that rejects mutations and a stubbed command dispatcher; the PowerShell compatibility matrix runs it under Windows PowerShell 5.1 and PowerShell 7+.
 
 GitHub Actions runs the non-destructive `.github/workflows/quality-gate.yml` workflow on pull requests, pushes to `main`, and manual dispatch. It covers static audit, an explicit documentation-contract check, PowerShell and TUI compatibility, Linux shell syntax, package app-state archive contracts, workflow linting, and the non-live smoke-contract suite. The live Azure E2E script is never run in CI.
 For a release push, the job is not finished until the pushed `main` SHA completes this workflow green.

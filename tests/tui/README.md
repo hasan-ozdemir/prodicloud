@@ -8,6 +8,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\tui\run-tui-tests.ps
 
 The same suite is included in `tests/powershell-compatibility-check.ps1` and runs under Windows PowerShell 5.1 and PowerShell 7+.
 
+The suite contains 153 data-driven screen/action scenarios and one process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, and asserts the actual captured console output.
+
 ## Screen and action coverage
 
 | TUI area | Covered behavior |
@@ -26,6 +28,6 @@ The same suite is included in `tests/powershell-compatibility-check.ps1` and run
 
 ## Azure safety boundary
 
-The runner uses fixtures for Azure reads, a blocked `az` function, and a stubbed Clagnos command dispatcher. The VC mutations displayed in the menus are recorded as intended command/options only; they are never sent to `clagnos.ps1` or Azure. It does not read `.env`, spawn Azure CLI, or change local subscription state. Every test asserts that native Azure CLI calls and real dispatcher calls remain at zero.
+The screen/action scenarios use fixture Azure reads, a blocked `az` function, and a stubbed Clagnos command dispatcher. The process-level scenario uses a sanitized temporary `.env`, a fake `az.cmd` that returns fixture read data and rejects mutating verbs, and a fake `net.exe` for the launcher's elevation check. It captures output from the real `cg.cmd` process without reading the operator's `.env` or exposing local credentials. Every test asserts zero native Azure CLI calls and zero real dispatcher calls; the process scenario also checks its fake Azure log for mutation attempts.
 
-This suite validates TUI rendering, navigation, selection mapping, and command construction. It does not claim that a live Azure operation will succeed against a specific subscription or VM.
+This suite validates TUI rendering, navigation, selection mapping, command construction, and actual launcher output. It does not claim that a live Azure operation will succeed against a specific subscription or VM.
