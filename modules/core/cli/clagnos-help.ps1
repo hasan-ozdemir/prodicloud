@@ -382,7 +382,7 @@ function Show-ClagnosCommandHelpDetailed {
                 'Examples:'
                 '  clagnos set --group <resource-group> --vm-name <vm-name> --hibernation off'
                 '  clagnos set --group <resource-group> --vm-name <vm-name> --nested-virtualization off'
-                'Notes: hibernation is changed through Azure. Nested virtualization is governed by VM size and security type, so --nested-virtualization on validates guest readiness on a running VM and --nested-virtualization off saves the requested setting in .env because Azure does not expose a separate single-VM disable toggle.'
+                'Notes: hibernation is changed through Azure. The nested-virtualization option stores Clagnos intent in .env because this workflow has no separate per-VM Azure hardware-exposure toggle. Turning it on requires a running VM and validates guest CPU virtualization extensions; it does not install or configure Hyper-V inside the guest.'
             )
             return
         }

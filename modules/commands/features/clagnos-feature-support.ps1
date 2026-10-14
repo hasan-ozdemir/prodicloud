@@ -466,7 +466,7 @@ function Invoke-ClagnosPostDeployFeatureEnablement {
     $hibernationEnabled = $false
     $hibernationMessage = ''
     $nestedAttempted = $false
-    $nestedEnabled = $false
+    $nestedAvailableToGuest = $false
     $nestedMessage = ''
     $hibernationDesired = $true
     $nestedDesired = $true
@@ -574,7 +574,7 @@ function Invoke-ClagnosPostDeployFeatureEnablement {
         }
         else {
             $nestedAttempted = $true
-            Write-ClagnosFeatureIntentMessage -FeatureLabel 'Nested virtualization'
+            Write-Host 'Nested virtualization is requested for this VM.' -ForegroundColor DarkCyan
             if ([string]::Equals([string]$nestedSecurityState, 'TrustedLaunch', [System.StringComparison]::OrdinalIgnoreCase)) {
                 $nestedMessage = 'nested-requires-standard-security'
                 Throw-FriendlyError `
@@ -614,7 +614,7 @@ function Invoke-ClagnosPostDeployFeatureEnablement {
             }
 
             Write-ClagnosFeatureValidationMessage -FeatureLabel 'Nested virtualization'
-            Write-ClagnosFeatureActionMessage -FeatureLabel 'Nested virtualization'
+            Write-Host 'Checking guest CPU virtualization extensions...' -ForegroundColor Cyan
             $nestedValidation = Get-ClagnosNestedVirtualizationGuestValidation `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -622,10 +622,10 @@ function Invoke-ClagnosPostDeployFeatureEnablement {
                 -MaxAttempts 8 `
                 -RetryDelaySeconds 20
 
-            if ([bool]$nestedValidation.Known -and [bool]$nestedValidation.Enabled) {
-                $nestedEnabled = $true
+            if ([bool]$nestedValidation.Known -and [bool]$nestedValidation.AvailableToGuest) {
+                $nestedAvailableToGuest = $true
                 $nestedMessage = 'guest-validated'
-                Write-ClagnosFeatureSuccessMessage -FeatureLabel 'Nested virtualization'
+                Write-Host 'Guest CPU virtualization extensions are available.' -ForegroundColor Green
                 if (@($nestedValidation.Evidence).Count -gt 0) {
                     Write-Host ("Nested virtualization validation details: {0}" -f ((@($nestedValidation.Evidence) -join '; '))) -ForegroundColor DarkCyan
                 }
@@ -660,7 +660,7 @@ function Invoke-ClagnosPostDeployFeatureEnablement {
         HibernationEnabled = [bool]$hibernationEnabled
         HibernationMessage = [string]$hibernationMessage
         NestedAttempted = [bool]$nestedAttempted
-        NestedEnabled = [bool]$nestedEnabled
+        NestedAvailableToGuest = [bool]$nestedAvailableToGuest
         NestedMessage = [string]$nestedMessage
     }
 }

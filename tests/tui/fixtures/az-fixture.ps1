@@ -1,16 +1,23 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $AzArguments = @()
-$argumentMatches = [regex]::Matches([string]$env:CLAGNOS_TUI_AZ_ARGUMENT_LINE, '"([^"]*)"|''([^'']*)''|(\S+)')
-foreach ($argumentMatch in @($argumentMatches)) {
-    if ($argumentMatch.Groups[1].Success) { $AzArguments += [string]$argumentMatch.Groups[1].Value }
-    elseif ($argumentMatch.Groups[2].Success) { $AzArguments += [string]$argumentMatch.Groups[2].Value }
-    elseif ($argumentMatch.Groups[3].Success) { $AzArguments += [string]$argumentMatch.Groups[3].Value }
+if (-not [string]::IsNullOrWhiteSpace([string]$env:CLAGNOS_TUI_AZ_ARGUMENTS_BASE64)) {
+    $argumentBytes = [Convert]::FromBase64String([string]$env:CLAGNOS_TUI_AZ_ARGUMENTS_BASE64)
+    $argumentText = [System.Text.Encoding]::UTF8.GetString($argumentBytes)
+    $AzArguments = @($argumentText.Split([char]0))
+}
+else {
+    $argumentMatches = [regex]::Matches([string]$env:CLAGNOS_TUI_AZ_ARGUMENT_LINE, '"([^"]*)"|''([^'']*)''|(\S+)')
+    foreach ($argumentMatch in @($argumentMatches)) {
+        if ($argumentMatch.Groups[1].Success) { $AzArguments += [string]$argumentMatch.Groups[1].Value }
+        elseif ($argumentMatch.Groups[2].Success) { $AzArguments += [string]$argumentMatch.Groups[2].Value }
+        elseif ($argumentMatch.Groups[3].Success) { $AzArguments += [string]$argumentMatch.Groups[3].Value }
+    }
 }
 $subscriptionId = '00000000-0000-4000-8000-000000000000'
 $resourceGroup = 'rg-tui-fixture-eastus-g1'
 $vmName = 'tui-fixture-vc'
-$argumentsText = @($AzArguments) -join ' '
+$argumentsText = (@($AzArguments) -join ' ') -replace '[\r\n]+',' '
 $logPath = [string]$env:CLAGNOS_TUI_AZ_LOG
 if (-not [string]::IsNullOrWhiteSpace($logPath)) {
     Add-Content -LiteralPath $logPath -Value $argumentsText -Encoding UTF8
@@ -32,8 +39,34 @@ for ($index = 0; $index -lt ($AzArguments.Count - 1); $index++) {
     if ([string]$AzArguments[$index] -eq '--query') { $queryText = [string]$AzArguments[$index + 1] }
 }
 
+$readOnlyNestedGuestProbe = $false
+if ($commandGroup -eq 'vm' -and $commandVerb -eq 'run-command' -and @($AzArguments).Count -gt 2 -and [string]$AzArguments[2] -eq 'invoke') {
+    $scriptsIndex = [array]::IndexOf($AzArguments,'--scripts')
+    $outputIndex = [array]::IndexOf($AzArguments,'-o')
+    if ($scriptsIndex -ge 0 -and $outputIndex -gt $scriptsIndex) {
+        $guestScript = @($AzArguments[($scriptsIndex + 1)..($outputIndex - 1)]) -join "`n"
+        $requiredProbeTerms = @('Get-CimInstance','Win32_Processor','VMMonitorModeExtensions','VirtualizationFirmwareEnabled','SecondLevelAddressTranslationExtensions','Get-WindowsOptionalFeature','ConvertTo-Json')
+        $readOnlyNestedGuestProbe = $true
+        foreach ($requiredProbeTerm in @($requiredProbeTerms)) {
+            if ($guestScript -notmatch [regex]::Escape([string]$requiredProbeTerm)) { $readOnlyNestedGuestProbe = $false; break }
+        }
+        $parseTokens = $null
+        $parseErrors = $null
+        $guestAst = [System.Management.Automation.Language.Parser]::ParseInput($guestScript,[ref]$parseTokens,[ref]$parseErrors)
+        $allowedCommands = @('Get-WindowsOptionalFeature','Get-CimInstance','Get-ComputerInfo','Select-Object','bcdedit','Out-String','ConvertTo-Json')
+        $guestCommands = @($guestAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.CommandAst] },$true))
+        if (@($parseErrors).Count -gt 0 -or $guestCommands.Count -eq 0) { $readOnlyNestedGuestProbe = $false }
+        foreach ($guestCommand in @($guestCommands)) {
+            if ($guestCommand.CommandElements.Count -lt 1 -or $guestCommand.CommandElements[0] -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or $allowedCommands -notcontains [string]$guestCommand.CommandElements[0].Value) {
+                $readOnlyNestedGuestProbe = $false
+                break
+            }
+        }
+    }
+}
+
 $blockedVerbs = @('create','update','delete','set','start','stop','restart','deallocate','resize','reapply','redeploy','attach','detach','power-off','run-command','move')
-if ($blockedVerbs -contains $mutationVerb.ToLowerInvariant()) {
+if (($blockedVerbs -contains $mutationVerb.ToLowerInvariant()) -and -not $readOnlyNestedGuestProbe) {
     Write-Error ('Blocked Azure mutation attempted in TUI process test: {0}' -f $commandText)
     exit 97
 }
@@ -109,6 +142,26 @@ switch -Regex ($commandText) {
         break
     }
     '^vm show$' { $result = $vm; break }
+    '^vm run-command$' {
+        if (-not $readOnlyNestedGuestProbe) { Write-Error 'Unsupported guest command in read-only TUI process fixture.'; exit 98 }
+        $nestedGuest = [pscustomobject]@{
+            ProcessorName = 'Intel Xeon fixture processor'
+            VMMonitorModeExtensions = $true
+            VirtualizationFirmwareEnabled = $true
+            SecondLevelAddressTranslationExtensions = $true
+            HyperVisorPresent = $true
+            VirtualMachinePlatformState = 'Enabled'
+            HypervisorPlatformState = 'Disabled'
+            MicrosoftHyperVState = 'Disabled'
+            MicrosoftHyperVAllState = 'Disabled'
+            BcdHypervisorLaunchType = 'Auto'
+        }
+        $result = [pscustomobject]@{ value = @(
+            [pscustomobject]@{ code = 'ComponentStatus/StdOut/succeeded'; displayStatus = 'Provisioning succeeded'; message = (ConvertTo-Json -InputObject $nestedGuest -Depth 5 -Compress) },
+            [pscustomobject]@{ code = 'ComponentStatus/StdErr/succeeded'; displayStatus = 'Provisioning succeeded'; message = '' }
+        ) }
+        break
+    }
     '^vm list-sizes$' { $result = @([pscustomobject]@{ name = 'Standard_D2as_v5'; numberOfCores = 2; memoryInMb = 8192 }); break }
     '^vm list-ip-addresses$' {
         $result = @([pscustomobject]@{ virtualMachine = [pscustomobject]@{ name = $vmName; network = [pscustomobject]@{

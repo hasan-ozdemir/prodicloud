@@ -153,24 +153,30 @@ function Get-ClagnosVmInventoryDump {
         }
     }
 
+    $nestedAzureSetting = $null
+    if ($vmFull.additionalCapabilities -and $vmFull.additionalCapabilities.PSObject.Properties.Match('nestedVirtualization').Count -gt 0) {
+        $nestedAzureSetting = $vmFull.additionalCapabilities.nestedVirtualization
+    }
     $featureFlags = [ordered]@{
         HibernationEnabled = $vmFull.additionalCapabilities.hibernationEnabled
-        NestedVirtualizationEnabled = $null
+        NestedVirtualizationAvailableToGuest = $null
+        NestedVirtualizationAzureSetting = $nestedAzureSetting
         NestedVirtualizationValidationSource = ''
         NestedVirtualizationEvidence = @()
+        NestedVirtualizationValidationError = ''
         NestedVirtualizationCapabilities = @()
-    }
-    if ($vmFull.additionalCapabilities -and $vmFull.additionalCapabilities.PSObject.Properties.Match('nestedVirtualization').Count -gt 0) {
-        $featureFlags.NestedVirtualizationEnabled = $vmFull.additionalCapabilities.nestedVirtualization
-        $featureFlags.NestedVirtualizationValidationSource = 'azure-api'
     }
 
     $normalizedOsType = if ([string]$osType -match '(?i)linux') { 'linux' } else { 'windows' }
     if (-not [string]::IsNullOrWhiteSpace([string]$powerState) -and ([string]$powerState).ToLowerInvariant().Contains('running')) {
         $nestedValidation = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup $ResourceGroup -VmName $VmName -OsType $normalizedOsType -SuppressError
+        $featureFlags.NestedVirtualizationValidationSource = 'guest'
         if ([bool]$nestedValidation.Known) {
-            $featureFlags.NestedVirtualizationEnabled = [bool]$nestedValidation.Enabled
-            $featureFlags.NestedVirtualizationValidationSource = 'guest'
+            $featureFlags.NestedVirtualizationAvailableToGuest = [bool]$nestedValidation.AvailableToGuest
+            $featureFlags.NestedVirtualizationEvidence = @($nestedValidation.Evidence)
+        }
+        else {
+            $featureFlags.NestedVirtualizationValidationError = [string]$nestedValidation.ErrorMessage
             $featureFlags.NestedVirtualizationEvidence = @($nestedValidation.Evidence)
         }
     }
@@ -715,11 +721,17 @@ function Write-ClagnosShowReport {
             }
             Write-ClagnosShowKeyValueRow -Label "Hibernation enabled" -Value $hibernationEnabled -Indent 6
 
-            $nestedVirtualizationEnabled = $null
-            if ($vm.FeatureFlags -and $vm.FeatureFlags.Contains('NestedVirtualizationEnabled')) {
-                $nestedVirtualizationEnabled = $vm.FeatureFlags.NestedVirtualizationEnabled
+            $nestedAvailableToGuest = $null
+            if ($vm.FeatureFlags -and $vm.FeatureFlags.Contains('NestedVirtualizationAvailableToGuest')) {
+                $nestedAvailableToGuest = $vm.FeatureFlags.NestedVirtualizationAvailableToGuest
             }
-            Write-ClagnosShowKeyValueRow -Label "Nested virtualization enabled" -Value $nestedVirtualizationEnabled -Indent 6
+            Write-ClagnosShowKeyValueRow -Label "Nested virtualization available to guest" -Value $nestedAvailableToGuest -Indent 6
+
+            $nestedAzureSetting = $null
+            if ($vm.FeatureFlags -and $vm.FeatureFlags.Contains('NestedVirtualizationAzureSetting')) {
+                $nestedAzureSetting = $vm.FeatureFlags.NestedVirtualizationAzureSetting
+            }
+            Write-ClagnosShowKeyValueRow -Label "Nested virtualization Azure setting" -Value $nestedAzureSetting -Indent 6
 
             $nestedValidationSource = ''
             if ($vm.FeatureFlags -and $vm.FeatureFlags.Contains('NestedVirtualizationValidationSource')) {
@@ -731,7 +743,13 @@ function Write-ClagnosShowReport {
             if ($vm.FeatureFlags -and $vm.FeatureFlags.Contains('NestedVirtualizationEvidence')) {
                 $nestedValidationEvidence = @($vm.FeatureFlags.NestedVirtualizationEvidence)
             }
-            Write-ClagnosShowKeyValueRow -Label "Nested virtualization evidence" -Value $nestedValidationEvidence -Indent 6
+            Write-ClagnosShowKeyValueRow -Label "Nested virtualization guest evidence" -Value $nestedValidationEvidence -Indent 6
+
+            $nestedValidationError = ''
+            if ($vm.FeatureFlags -and $vm.FeatureFlags.Contains('NestedVirtualizationValidationError')) {
+                $nestedValidationError = [string]$vm.FeatureFlags.NestedVirtualizationValidationError
+            }
+            Write-ClagnosShowKeyValueRow -Label "Nested virtualization validation error" -Value $nestedValidationError -Indent 6
 
             $nestedCapabilityRows = @(
                 ConvertTo-ObjectArrayCompat -InputObject $vm.FocusedCapabilities |

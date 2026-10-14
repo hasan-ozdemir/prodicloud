@@ -117,6 +117,19 @@ function Invoke-ClagnosVmRunCommandJson {
     }
 }
 
+# Converts a guest probe field to a nullable Boolean without turning unknown values into false.
+function ConvertTo-ClagnosNullableBoolean {
+    param([AllowNull()][object]$Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [bool]) { return [bool]$Value }
+    switch (([string]$Value).Trim().ToLowerInvariant()) {
+        'true' { return $true }
+        'false' { return $false }
+        default { return $null }
+    }
+}
+
 # Handles Get-ClagnosNestedVirtualizationGuestValidation.
 function Get-ClagnosNestedVirtualizationGuestValidation {
     param(
@@ -137,9 +150,9 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
         '$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1 Name,VMMonitorModeExtensions,VirtualizationFirmwareEnabled,SecondLevelAddressTranslationExtensions',
         '[pscustomobject]@{',
         '  ProcessorName = [string]$cpu.Name',
-        '  VMMonitorModeExtensions = [bool]$cpu.VMMonitorModeExtensions',
-        '  VirtualizationFirmwareEnabled = [bool]$cpu.VirtualizationFirmwareEnabled',
-        '  SecondLevelAddressTranslationExtensions = [bool]$cpu.SecondLevelAddressTranslationExtensions',
+        '  VMMonitorModeExtensions = if ($null -ne $cpu) { $cpu.VMMonitorModeExtensions } else { $null }',
+        '  VirtualizationFirmwareEnabled = if ($null -ne $cpu) { $cpu.VirtualizationFirmwareEnabled } else { $null }',
+        '  SecondLevelAddressTranslationExtensions = if ($null -ne $cpu) { $cpu.SecondLevelAddressTranslationExtensions } else { $null }',
         '} | ConvertTo-Json -Compress'
     )
     $contextLabel = "nested virtualization guest validation"
@@ -147,7 +160,9 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
     if ($normalizedOsType -eq 'linux') {
         $commandId = 'RunShellScript'
         $scripts = @(
-            "if grep -Eq '(vmx|svm)' /proc/cpuinfo; then",
+            "if [ ! -r /proc/cpuinfo ]; then",
+            '  printf ''{"VirtualizationExtensionsVisible":null}\n''',
+            "elif grep -Eq '(vmx|svm)' /proc/cpuinfo; then",
             '  printf ''{"VirtualizationExtensionsVisible":true}\n''',
             "else",
             '  printf ''{"VirtualizationExtensionsVisible":false}\n''',
@@ -168,12 +183,12 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
             '}',
             '$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1 Name,VMMonitorModeExtensions,VirtualizationFirmwareEnabled,SecondLevelAddressTranslationExtensions',
             '$hyperVisorInfo = Get-ComputerInfo -Property HyperVisorPresent',
-            '$bcdText = [string](bcdedit /enum {current} | Out-String)',
+            '$bcdText = [string](bcdedit /enum ''{current}'' | Out-String)',
             '[pscustomobject]@{',
             '  ProcessorName = [string]$cpu.Name',
-            '  VMMonitorModeExtensions = [bool]$cpu.VMMonitorModeExtensions',
-            '  VirtualizationFirmwareEnabled = [bool]$cpu.VirtualizationFirmwareEnabled',
-            '  SecondLevelAddressTranslationExtensions = [bool]$cpu.SecondLevelAddressTranslationExtensions',
+            '  VMMonitorModeExtensions = if ($null -ne $cpu) { $cpu.VMMonitorModeExtensions } else { $null }',
+            '  VirtualizationFirmwareEnabled = if ($null -ne $cpu) { $cpu.VirtualizationFirmwareEnabled } else { $null }',
+            '  SecondLevelAddressTranslationExtensions = if ($null -ne $cpu) { $cpu.SecondLevelAddressTranslationExtensions } else { $null }',
             '  HyperVisorPresent = [bool]$hyperVisorInfo.HyperVisorPresent',
             '  VirtualMachinePlatformState = [string]$featureMap[''VirtualMachinePlatform'']',
             '  HypervisorPlatformState = [string]$featureMap[''HypervisorPlatform'']',
@@ -196,7 +211,7 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
     if (-not [bool]$runResult.Success) {
         $result = [pscustomobject]@{
             Known = $false
-            Enabled = $false
+            AvailableToGuest = $null
             Evidence = @()
             Data = $null
             ErrorMessage = [string]$runResult.ErrorMessage
@@ -210,30 +225,53 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
 
     $data = $runResult.OutputObject
     $evidence = @()
-    $enabled = $false
+    $availableToGuest = $false
 
     if ($normalizedOsType -eq 'linux') {
-        $visible = [bool]$data.VirtualizationExtensionsVisible
-        $enabled = [bool]$visible
+        $visibleValue = if ($null -ne $data) { ConvertTo-ClagnosNullableBoolean -Value $data.VirtualizationExtensionsVisible } else { $null }
+        if ($null -eq $visibleValue) {
+            return [pscustomobject]@{
+                Known = $false
+                AvailableToGuest = $null
+                Evidence = @('VirtualizationExtensionsVisible=(missing or invalid)')
+                Data = $data
+                ErrorMessage = 'The Linux guest probe did not return a valid virtualization-extension value.'
+            }
+        }
+        $availableToGuest = [bool]$visibleValue
         $evidence = @(
-            ("VirtualizationExtensionsVisible={0}" -f [bool]$visible)
+            ("VirtualizationExtensionsVisible={0}" -f [bool]$visibleValue)
         )
     }
     else {
-        $vmMonitorModeExtensions = [bool]$data.VMMonitorModeExtensions
-        $virtualizationFirmwareEnabled = [bool]$data.VirtualizationFirmwareEnabled
-        $slatEnabled = [bool]$data.SecondLevelAddressTranslationExtensions
-        $hyperVisorPresent = [bool]$data.HyperVisorPresent
-        $virtualMachinePlatformState = [string]$data.VirtualMachinePlatformState
-        $hypervisorPlatformState = [string]$data.HypervisorPlatformState
-        $microsoftHyperVState = [string]$data.MicrosoftHyperVState
-        $microsoftHyperVAllState = [string]$data.MicrosoftHyperVAllState
-        $bcdHypervisorLaunchType = [string]$data.BcdHypervisorLaunchType
-        $cpuFlagEnabled = ($vmMonitorModeExtensions -and $virtualizationFirmwareEnabled -and $slatEnabled)
+        $vmMonitorModeExtensions = if ($null -ne $data) { ConvertTo-ClagnosNullableBoolean -Value $data.VMMonitorModeExtensions } else { $null }
+        $virtualizationFirmwareEnabled = if ($null -ne $data) { ConvertTo-ClagnosNullableBoolean -Value $data.VirtualizationFirmwareEnabled } else { $null }
+        $slatEnabled = if ($null -ne $data) { ConvertTo-ClagnosNullableBoolean -Value $data.SecondLevelAddressTranslationExtensions } else { $null }
+        $hyperVisorPresent = if ($null -ne $data) { ConvertTo-ClagnosNullableBoolean -Value $data.HyperVisorPresent } else { $null }
+        $virtualMachinePlatformState = if ($null -ne $data) { [string]$data.VirtualMachinePlatformState } else { '' }
+        $hypervisorPlatformState = if ($null -ne $data) { [string]$data.HypervisorPlatformState } else { '' }
+        $microsoftHyperVState = if ($null -ne $data) { [string]$data.MicrosoftHyperVState } else { '' }
+        $microsoftHyperVAllState = if ($null -ne $data) { [string]$data.MicrosoftHyperVAllState } else { '' }
+        $bcdHypervisorLaunchType = if ($null -ne $data) { [string]$data.BcdHypervisorLaunchType } else { '' }
+        if ($null -eq $vmMonitorModeExtensions -or $null -eq $virtualizationFirmwareEnabled -or $null -eq $slatEnabled) {
+            $incompleteEvidence = @(
+                ("VMMonitorModeExtensions={0}" -f $(if ($null -eq $vmMonitorModeExtensions) { '(missing or invalid)' } else { [string]$vmMonitorModeExtensions })),
+                ("VirtualizationFirmwareEnabled={0}" -f $(if ($null -eq $virtualizationFirmwareEnabled) { '(missing or invalid)' } else { [string]$virtualizationFirmwareEnabled })),
+                ("SecondLevelAddressTranslationExtensions={0}" -f $(if ($null -eq $slatEnabled) { '(missing or invalid)' } else { [string]$slatEnabled }))
+            )
+            return [pscustomobject]@{
+                Known = $false
+                AvailableToGuest = $null
+                Evidence = @($incompleteEvidence)
+                Data = $data
+                ErrorMessage = 'The Windows guest probe did not return all required CPU virtualization flags.'
+            }
+        }
+        $cpuFlagsAvailable = ([bool]$vmMonitorModeExtensions -and [bool]$virtualizationFirmwareEnabled -and [bool]$slatEnabled)
         # HyperVisorPresent can describe Azure's outer hypervisor, and Windows
         # optional features can be enabled without exposed VMX/SLAT extensions.
         # Neither condition proves that this VM can run a nested hypervisor.
-        $enabled = $cpuFlagEnabled
+        $availableToGuest = $cpuFlagsAvailable
         if (-not [string]::IsNullOrWhiteSpace([string]$data.ProcessorName)) {
             $evidence += ("ProcessorName={0}" -f [string]$data.ProcessorName)
         }
@@ -241,7 +279,7 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
             ("VMMonitorModeExtensions={0}" -f [bool]$vmMonitorModeExtensions),
             ("VirtualizationFirmwareEnabled={0}" -f [bool]$virtualizationFirmwareEnabled),
             ("SecondLevelAddressTranslationExtensions={0}" -f [bool]$slatEnabled),
-            ("CpuVirtualizationExtensionsExposed={0}" -f [bool]$cpuFlagEnabled),
+            ("CpuVirtualizationExtensionsExposed={0}" -f [bool]$cpuFlagsAvailable),
             ("HyperVisorPresent={0}" -f [bool]$hyperVisorPresent),
             ("VirtualMachinePlatformState={0}" -f $virtualMachinePlatformState),
             ("HypervisorPlatformState={0}" -f $hypervisorPlatformState),
@@ -255,7 +293,7 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
 
     return [pscustomobject]@{
         Known = $true
-        Enabled = [bool]$enabled
+        AvailableToGuest = [bool]$availableToGuest
         Evidence = @($evidence)
         Data = $data
         ErrorMessage = ''

@@ -1070,6 +1070,43 @@ function Get-ClagnosUiPowerState {
     return 'Unknown'
 }
 
+function Get-ClagnosUiNestedVirtualizationGuestStatus {
+    param([psobject]$Vm, [string]$PowerState)
+
+    $resourceGroup = [string]$Vm.ClagnosResourceGroup
+    $vmName = [string]$Vm.name
+    if ([string]::IsNullOrWhiteSpace($resourceGroup) -or [string]::IsNullOrWhiteSpace($vmName)) {
+        return [pscustomobject]@{ Known = $false; Enabled = $false; Evidence = @(); ErrorMessage = 'VM target details are incomplete.' }
+    }
+    if ([string]$PowerState -notmatch '(?i)running') {
+        $powerStateKnownStopped = [string]$PowerState -match '(?i)(stopped|deallocated|hibernated|stopping|deallocating)'
+        $errorMessage = if ($powerStateKnownStopped) { 'Guest validation requires a running VM.' } else { 'VM power state is unknown; guest validation was not run.' }
+        return [pscustomobject]@{ Known = $false; AvailableToGuest = $null; Evidence = @(); ErrorMessage = $errorMessage }
+    }
+
+    if ($null -eq $script:ClagnosUiAzureReadCache) { $script:ClagnosUiAzureReadCache = @{} }
+    $subscriptionId = [string]$Vm.ClagnosSubscriptionId
+    $osType = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
+    $cacheKey = ('nested-guest|{0}|{1}|{2}|{3}' -f $subscriptionId.ToLowerInvariant(),$resourceGroup.ToLowerInvariant(),$vmName.ToLowerInvariant(),$osType)
+    if ($script:ClagnosUiAzureReadCache.ContainsKey($cacheKey)) {
+        $cacheEntry = $script:ClagnosUiAzureReadCache[$cacheKey]
+        $cacheAge = ([DateTime]::UtcNow - [DateTime]$cacheEntry.CreatedAtUtc).TotalSeconds
+        $cacheTtl = if ([bool]$cacheEntry.Value.Known) { 45 } else { 10 }
+        if ($cacheAge -lt $cacheTtl) { return $cacheEntry.Value }
+    }
+
+    $status = Get-ClagnosNestedVirtualizationGuestValidation `
+        -ResourceGroup $resourceGroup `
+        -VmName $vmName `
+        -OsType $osType `
+        -MaxAttempts 1 `
+        -RetryDelaySeconds 1 `
+        -SuppressError
+    if ($null -eq $status) { $status = [pscustomobject]@{ Known = $false; AvailableToGuest = $null; Evidence = @(); ErrorMessage = 'Guest validation returned no result.' } }
+    $script:ClagnosUiAzureReadCache[$cacheKey] = @{ CreatedAtUtc = [DateTime]::UtcNow; Value = $status }
+    return $status
+}
+
 function Get-ClagnosUiCachedVm {
     param([psobject]$Vm)
 
@@ -1154,6 +1191,7 @@ function Show-ClagnosUiVmDetails {
     $facts = Get-ClagnosUiVmSizeFacts -Location ([string]$full.location) -Size $sizeName
     $memoryGb = if ($facts.MemoryMb -match '^\d+$') { ('{0:N1} GB' -f ([double]$facts.MemoryMb / 1024)) } else { 'Unknown' }
     $power = Get-ClagnosUiPowerState -ResourceGroup $group -VmName $name -CachedPowerState ([string]$full.powerState)
+    $nestedStatus = Get-ClagnosUiNestedVirtualizationGuestStatus -Vm $Vm -PowerState $power
     $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
     $config = Read-DotEnvFile -Path $envPath
 
@@ -1350,7 +1388,17 @@ function Show-ClagnosUiVmDetails {
     if ([string]::IsNullOrWhiteSpace($nestedVirtualization)) { $nestedVirtualization = '(not configured)' }
     Write-Host 'Security and VM features:' -ForegroundColor Cyan
     Write-Host ('  Hibernation enabled: {0}' -f (Format-ClagnosUiDetailValue -Value $hibernationEnabled -EmptyText 'false'))
-    Write-Host ('  Nested virtualization setting (.env): {0}' -f $nestedVirtualization)
+    Write-Host ('  Nested virtualization request (.env): {0}' -f $nestedVirtualization)
+    $nestedStatusText = if ([string]$power -match '(?i)running') {
+        if (-not [bool]$nestedStatus.Known) { 'unknown' }
+        elseif ([bool]$nestedStatus.AvailableToGuest) { 'available' }
+        else { 'unavailable' }
+    }
+    elseif ([string]$power -match '(?i)(stopped|deallocated|hibernated|stopping|deallocating)') { 'not checked (VM is not running)' }
+    else { 'not checked (VM power state is unknown)' }
+    Write-Host ('  Nested virtualization available to guest: {0}' -f $nestedStatusText)
+    if (@($nestedStatus.Evidence).Count -gt 0) { Write-Host ('    Guest evidence: {0}' -f (@($nestedStatus.Evidence) -join '; ')) -ForegroundColor DarkGray }
+    elseif (-not [bool]$nestedStatus.Known -and -not [string]::IsNullOrWhiteSpace([string]$nestedStatus.ErrorMessage)) { Write-Host ('    Guest validation: {0}' -f [string]$nestedStatus.ErrorMessage) -ForegroundColor DarkGray }
     Write-Host ('  Security type: {0}' -f (Format-ClagnosUiDetailValue -Value $securityType))
     Write-Host ('  Secure Boot: {0} | vTPM: {1}' -f $secureBoot, $vTpm)
     Write-Host ('  Boot diagnostics: {0}' -f (Format-ClagnosUiDetailValue -Value $full.diagnosticsProfile.bootDiagnostics.enabled))
@@ -2529,7 +2577,7 @@ function Show-ClagnosUiCreateWizard {
         [pscustomobject]@{ Label = 'Storage SKU'; Value = [string]$storageSkuValue; Key = 'VM_STORAGE_SKU' },
         [pscustomobject]@{ Label = 'Security type'; Value = [string]$securityValue; Key = 'VM_SECURITY_TYPE' },
         [pscustomobject]@{ Label = 'Hibernation'; Value = [string]$hibernationValue; Key = 'VM_ENABLE_HIBERNATION' },
-        [pscustomobject]@{ Label = 'Nested virtualization'; Value = [string]$nestedValue; Key = 'VM_ENABLE_NESTED_VIRTUALIZATION' },
+        [pscustomobject]@{ Label = 'Nested virtualization requested'; Value = [string]$nestedValue; Key = 'VM_ENABLE_NESTED_VIRTUALIZATION' },
         [pscustomobject]@{ Label = 'Inbound TCP ports'; Value = [string]$wizardValues['TcpPorts']; Key = 'TCP_PORTS' }
     )
     if ($platform -eq 'windows') {

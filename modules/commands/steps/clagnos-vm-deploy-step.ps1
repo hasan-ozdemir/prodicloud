@@ -185,7 +185,7 @@ function Invoke-ClagnosVmCreateStep {
         HibernationEnabled = [bool]$featureEnablementResult.HibernationEnabled
         HibernationMessage = [string]$featureEnablementResult.HibernationMessage
         NestedAttempted = [bool]$featureEnablementResult.NestedAttempted
-        NestedEnabled = [bool]$featureEnablementResult.NestedEnabled
+        NestedAvailableToGuest = [bool]$featureEnablementResult.NestedAvailableToGuest
         NestedMessage = [string]$featureEnablementResult.NestedMessage
     }
 }

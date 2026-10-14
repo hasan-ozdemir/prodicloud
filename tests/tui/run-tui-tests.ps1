@@ -61,6 +61,13 @@ function Reset-TuiScenario {
     $script:TuiPackageStatusShouldThrow = $false
     $script:TuiVmDiscoveryShouldThrow = $false
     $script:TuiDetailsShouldThrow = $false
+    $script:TuiNestedVirtualizationGuestCalls = 0
+    $script:TuiNestedVirtualizationGuestResult = [pscustomobject]@{
+        Known = $true
+        AvailableToGuest = $false
+        Evidence = @('CpuVirtualizationExtensionsExposed=False','VirtualMachinePlatformState=Enabled')
+        ErrorMessage = ''
+    }
     $script:TuiAzOverride = $null
     $script:TuiDiscoveryMode = $false
     $script:TuiDotEnvOverrides = @{}
@@ -287,6 +294,11 @@ function Invoke-ClagnosCommandDispatcher {
     $script:TuiRealDispatcherCalls++
     $script:TuiTotalRealDispatcherCalls++
     throw 'The real command dispatcher is blocked in TUI tests.'
+}
+function Get-ClagnosNestedVirtualizationGuestValidation {
+    param([string]$ResourceGroup,[string]$VmName,[string]$OsType,[int]$MaxAttempts,[int]$RetryDelaySeconds,[switch]$SuppressError)
+    $script:TuiNestedVirtualizationGuestCalls++
+    return $script:TuiNestedVirtualizationGuestResult
 }
 
 function Write-Host {
@@ -647,6 +659,7 @@ Invoke-TuiTest -Name 'Create wizard applies validated defaults through the real 
     Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-new-vc'
     Assert-TuiOption -Call $call -Name 'vm-region' -Expected 'eastus'
     Assert-TuiOption -Call $call -Name 'vm-size' -Expected 'Standard_B2s_v2'
+    Assert-TuiOutputContains -Text 'Nested virtualization requested: true' -Message 'Create review must label the nested-virtualization value as an intent request.'
     Assert-Tui -Condition ([bool]$call.FrontendContext.CreateWizardMode) -Message 'The create route must carry wizard mode to the shared runtime.'
     Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.DiskSizeGb -eq '128') -Message 'The wizard must normalize disk text to whole GiB before dispatch.'
     Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.SshPort -eq '22222' -and [string]$call.FrontendContext.CreateWizardValues.RdpPort -eq '3390') -Message 'The wizard must dispatch validated connection ports.'
@@ -877,6 +890,14 @@ Invoke-TuiTest -Name 'Virtual computer list ignores invalid selection input' -Ac
 }
 
 Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, VM features, and both login roles' -Action {
+    $script:TuiWindowsVm | Add-Member -NotePropertyName 'powerState' -NotePropertyValue 'VM running' -Force
+    $script:TuiVmDetailRecord | Add-Member -NotePropertyName 'powerState' -NotePropertyValue 'VM running' -Force
+    $script:TuiNestedVirtualizationGuestResult = [pscustomobject]@{
+        Known = $true
+        AvailableToGuest = $false
+        Evidence = @('VMMonitorModeExtensions=False','VirtualizationFirmwareEnabled=False','SecondLevelAddressTranslationExtensions=False','CpuVirtualizationExtensionsExposed=False','HyperVisorPresent=True','VirtualMachinePlatformState=Enabled')
+        ErrorMessage = ''
+    }
     & $script:TuiOriginalVmDetails -Vm $script:TuiWindowsVm
     Assert-TuiOutputContains -Text 'Public IP: 203.0.113.8' -Message 'VC details must show the public IP.'
     Assert-TuiOutputContains -Text 'Public DNS: fixture.eastus.cloudapp.azure.com' -Message 'VC details must show the public DNS name.'
@@ -886,7 +907,11 @@ Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, V
     Assert-TuiOutputContains -Text 'disk-fixture-os' -Message 'VC details must show the OS disk.'
     Assert-TuiOutputContains -Text 'disk-fixture-data' -Message 'VC details must show data disks.'
     Assert-TuiOutputContains -Text 'Hibernation enabled: True' -Message 'VC details must show actual Azure hibernation state.'
-    Assert-TuiOutputContains -Text 'Nested virtualization setting (.env): true' -Message 'VC details must show configured nested virtualization intent.'
+    Assert-TuiOutputContains -Text 'Nested virtualization request (.env): true' -Message 'VC details must show configured nested virtualization intent.'
+    Assert-TuiOutputContains -Text 'Nested virtualization available to guest: unavailable' -Message 'VC details must show live guest capability separately from configured intent.'
+    Assert-TuiOutputContains -Text 'CpuVirtualizationExtensionsExposed=False' -Message 'VC details must show why guest nested virtualization is unavailable.'
+    & $script:TuiOriginalVmDetails -Vm $script:TuiWindowsVm
+    Assert-Tui -Condition ($script:TuiNestedVirtualizationGuestCalls -eq 1) -Message 'Repeated VM detail views must reuse the short-lived guest validation cache.'
     Assert-TuiOutputContains -Text 'SSH endpoint: fixture.eastus.cloudapp.azure.com:22222' -Message 'SSH endpoint must use configured port and the public DNS name.'
     Assert-TuiOutputContains -Text 'PowerShell remoting endpoint: fixture.eastus.cloudapp.azure.com:5985' -Message 'Windows VC details must show the WinRM endpoint.'
     Assert-TuiOutputContains -Text 'manager-fixture | password: <runtime-secret>' -Message 'Manager credentials must be shown.'
@@ -1555,7 +1580,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         foreach ($catalogRoot in @('packages\builtin\windows','packages\custom\windows','packages\builtin\linux','packages\custom\linux')) {
             New-Item -ItemType Directory -Path (Join-Path $sandboxRoot $catalogRoot) -Force | Out-Null
         }
-        foreach ($fixtureName in @('az.cmd','az-fixture.ps1')) {
+        foreach ($fixtureName in @('az.cmd','az-fixture.ps1','az-fixture.cs')) {
             Copy-Item -LiteralPath (Join-Path $RepoRoot (Join-Path 'tests\tui\fixtures' $fixtureName)) -Destination (Join-Path $fixtureBin $fixtureName) -Force
         }
         $netSourcePath = Join-Path $RepoRoot 'tests\tui\fixtures\net-fixture.cs'
@@ -1572,6 +1597,20 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             $encodedCompileCode = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($compileCode))
             $compileOutput = & $windowsPowerShell.Source -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCompileCode 2>&1
             if ($LASTEXITCODE -ne 0) { throw ('Could not build the temporary net.exe fixture: {0}' -f ((@($compileOutput) | ForEach-Object { [string]$_ }) -join ' ')) }
+        }
+        $azSourcePath = Join-Path $RepoRoot 'tests\tui\fixtures\az-fixture.cs'
+        $azExePath = Join-Path $fixtureBin 'az.exe'
+        if ([string]$PSVersionTable.PSEdition -eq 'Desktop') {
+            $azSource = [string](Get-Content -LiteralPath $azSourcePath -Raw)
+            Add-Type -TypeDefinition $azSource -Language CSharp -OutputType ConsoleApplication -OutputAssembly $azExePath -ErrorAction Stop | Out-Null
+        }
+        else {
+            $azSourceLiteral = "'" + ([string]$azSourcePath).Replace("'", "''") + "'"
+            $azOutputLiteral = "'" + ([string]$azExePath).Replace("'", "''") + "'"
+            $azCompileCode = '$ErrorActionPreference = ''Stop''; $sourceText = Get-Content -LiteralPath ' + $azSourceLiteral + ' -Raw; Add-Type -TypeDefinition $sourceText -Language CSharp -OutputType ConsoleApplication -OutputAssembly ' + $azOutputLiteral + ' | Out-Null'
+            $azEncodedCompileCode = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($azCompileCode))
+            $azCompileOutput = & $windowsPowerShell.Source -NoProfile -ExecutionPolicy Bypass -EncodedCommand $azEncodedCompileCode 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ('Could not build the temporary az.exe fixture: {0}' -f ((@($azCompileOutput) | ForEach-Object { [string]$_ }) -join ' ')) }
         }
         New-Item -ItemType Directory -Path (Join-Path $sandboxRoot '.azure-fixture') -Force | Out-Null
         $envLines = @(
@@ -1666,6 +1705,8 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Public DNS: tui-fixture.eastus.cloudapp.azure.com',
             'SSH endpoint: tui-fixture.eastus.cloudapp.azure.com:22222',
             'PowerShell remoting endpoint: tui-fixture.eastus.cloudapp.azure.com:5985',
+            'Nested virtualization request (.env): true',
+            'Nested virtualization available to guest: available',
             'fixture-manager | password: <runtime-secret>',
             'fixture-assistant | password: <runtime-secret>',
             'Manage programs on tui-fixture-vc',
@@ -1691,7 +1732,9 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         Assert-Tui -Condition ($vmInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must cache VM detail and power state once for repeated screens.'
         $script:TuiTotalFixtureAzureReads += $azLines.Count
         $mutationPattern = '(?i)(^|\s)(create|update|delete|set|start|stop|restart|deallocate|resize|reapply|redeploy|attach|detach|power-off|run-command)(\s|$)'
-        $mutatingFixtureCalls = @($azLines | Where-Object { $_ -match $mutationPattern })
+        $guestValidationReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)vm\s+run-command\s+invoke(\s|$)' })
+        Assert-Tui -Condition ($guestValidationReads.Count -eq 1 -and $guestValidationReads[0] -match 'Get-CimInstance' -and $guestValidationReads[0] -match 'SecondLevelAddressTranslationExtensions') -Message 'The real detail screen must run one fixture-only, read-only nested-virtualization guest check.'
+        $mutatingFixtureCalls = @($azLines | Where-Object { $_ -match $mutationPattern -and $_ -notmatch '(?i)(^|\s)vm\s+run-command\s+invoke(\s|$)' })
         Assert-Tui -Condition ($mutatingFixtureCalls.Count -eq 0) -Message ('The actual cg.cmd scenario attempted a blocked Azure mutation: {0}' -f ($mutatingFixtureCalls -join '; '))
         Assert-Tui -Condition ($stderr -notmatch 'Blocked Azure mutation attempted') -Message 'The Azure fixture must not report any attempted mutating command.'
 

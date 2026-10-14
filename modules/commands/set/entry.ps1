@@ -102,7 +102,7 @@ function Invoke-ClagnosSetCommand {
         if ($hasNested) {
             $nestedBool = if ([string]::Equals($nestedTarget, 'on', [System.StringComparison]::OrdinalIgnoreCase)) { 'true' } else { 'false' }
             if ($nestedBool -eq 'true') {
-                Write-Host 'Nested virtualization will be enabled.' -ForegroundColor DarkCyan
+                Write-Host 'Nested virtualization is requested for this VM.' -ForegroundColor DarkCyan
                 $lifecycleSnapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
                 if ([string]$lifecycleSnapshot.NormalizedState -ne 'started') {
                     Throw-FriendlyError `
@@ -123,22 +123,22 @@ function Invoke-ClagnosSetCommand {
                     if ([string]$vmOsType -match '(?i)linux') { 'linux' } else { 'windows' }
                 }
                 $nestedValidation = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup $resourceGroup -VmName $vmName -OsType $vmOsTypeNormalized
-                if (-not [bool]$nestedValidation.Enabled) {
+                if (-not [bool]$nestedValidation.AvailableToGuest) {
                     $nestedEvidenceText = if (@($nestedValidation.Evidence).Count -gt 0) { (@($nestedValidation.Evidence) -join '; ') } else { [string]$nestedValidation.ErrorMessage }
                     Throw-FriendlyError `
                         -Detail ("Nested virtualization guest validation failed for VM '{0}'. {1}" -f $vmName, [string]$nestedEvidenceText) `
                         -Code 62 `
-                        -Summary "Nested virtualization setting could not be applied." `
+                        -Summary "Nested virtualization is unavailable to the guest." `
                         -Hint "Check VM SKU, security type, and guest virtualization readiness, then retry."
                 }
 
-                Write-Host 'Nested virtualization was enabled successfully.' -ForegroundColor Green
+                Write-Host 'Guest virtualization extensions are available for nested virtualization.' -ForegroundColor Green
                 if (@($nestedValidation.Evidence).Count -gt 0) {
                     Write-Host ("Nested virtualization validation details: {0}" -f ((@($nestedValidation.Evidence) -join '; '))) -ForegroundColor DarkCyan
                 }
             }
             else {
-                Write-Host 'Nested virtualization will not be changed in Azure because this capability has no separate disable toggle on single VMs.' -ForegroundColor DarkCyan
+                Write-Host 'Azure VM hardware exposure will not be changed; the Clagnos nested-virtualization request will be saved as false.' -ForegroundColor DarkCyan
             }
             $persistMap['VM_ENABLE_NESTED_VIRTUALIZATION'] = $nestedBool
         }

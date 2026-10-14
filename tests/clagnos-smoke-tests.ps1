@@ -2524,7 +2524,7 @@ VM_ENABLE_NESTED_VIRTUALIZATION=true
             $script:SetCommandNestedValidationCalled = $true
             return [pscustomobject]@{
                 Known = $true
-                Enabled = $false
+                AvailableToGuest = $false
                 Evidence = @('VirtualizationFirmwareEnabled=False')
                 Data = $null
                 ErrorMessage = ''
@@ -2622,7 +2622,7 @@ Invoke-Test -Name "Post-deploy feature enablement verifies desired flags even on
             $script:FeatureEnablementGuestValidationCalled = $true
             return [pscustomobject]@{
                 Known = $true
-                Enabled = $true
+                AvailableToGuest = $true
                 Evidence = @('VMMonitorModeExtensions=True','VirtualizationFirmwareEnabled=True','SecondLevelAddressTranslationExtensions=True')
                 Data = $null
                 ErrorMessage = ''
@@ -2669,7 +2669,7 @@ Invoke-Test -Name "Post-deploy feature enablement verifies desired flags even on
         Assert-True -Condition ([bool]$result.HibernationAttempted) -Message 'Feature enablement must still evaluate hibernation on existing VMs.'
         Assert-True -Condition ([bool]$result.HibernationEnabled) -Message 'Feature enablement must verify hibernation.'
         Assert-True -Condition ([bool]$result.NestedAttempted) -Message 'Feature enablement must still evaluate nested virtualization on existing VMs.'
-        Assert-True -Condition ([bool]$result.NestedEnabled) -Message 'Feature enablement must verify nested virtualization.'
+        Assert-True -Condition ([bool]$result.NestedAvailableToGuest) -Message 'Feature enablement must verify nested virtualization availability to the guest.'
         Assert-True -Condition ([bool]$script:FeatureEnablementGuestValidationCalled) -Message 'Feature enablement must validate nested virtualization through guest checks.'
         Assert-True -Condition ((@($script:FeatureEnablementAzCalls) -join "`n") -match [regex]::Escape('--enable-hibernation true')) -Message 'Feature enablement must call the Azure hibernation update.'
         Assert-True -Condition (-not ((@($script:FeatureEnablementAzCalls) -join "`n") -match [regex]::Escape('additionalCapabilities.nestedVirtualization'))) -Message 'Feature enablement must not call the removed Azure nested virtualization property path.'
@@ -2696,6 +2696,7 @@ Invoke-Test -Name "Post-deploy feature enablement verifies desired flags even on
 Invoke-Test -Name "Windows nested virtualization guest validation requires exposed CPU virtualization extensions" -Action {
     try {
         $script:NestedGuestValidationFixture = $null
+        $script:NestedGuestValidationScripts = @()
         function Invoke-ClagnosVmRunCommandJson {
             param(
                 [string]$ResourceGroup,
@@ -2707,6 +2708,7 @@ Invoke-Test -Name "Windows nested virtualization guest validation requires expos
                 [int]$RetryDelaySeconds
             )
 
+            $script:NestedGuestValidationScripts = @($Scripts)
             return [pscustomobject]@{
                 Success = $true
                 ErrorMessage = ''
@@ -2728,7 +2730,11 @@ Invoke-Test -Name "Windows nested virtualization guest validation requires expos
         }
         $result = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm' -OsType 'windows'
         Assert-True -Condition ([bool]$result.Known) -Message 'Nested virtualization guest validation must return a known result when run-command succeeds.'
-        Assert-True -Condition ([bool]$result.Enabled) -Message 'Nested virtualization must be available when VMX, firmware virtualization, and SLAT are exposed to the guest.'
+        Assert-True -Condition ([bool]$result.AvailableToGuest) -Message 'Nested virtualization must be available when VMX, firmware virtualization, and SLAT are exposed to the guest.'
+        $scriptTokens = $null
+        $scriptParseErrors = $null
+        [void][System.Management.Automation.Language.Parser]::ParseInput((@($script:NestedGuestValidationScripts) -join "`n"),[ref]$scriptTokens,[ref]$scriptParseErrors)
+        Assert-True -Condition (@($scriptParseErrors).Count -eq 0) -Message ('The generated Windows nested-virtualization guest probe must parse under PowerShell 5.1 and 7+: {0}' -f ((@($scriptParseErrors) | ForEach-Object { [string]$_.Message }) -join '; '))
         Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('CpuVirtualizationExtensionsExposed=True')) -Message 'Guest evidence must explicitly report exposed CPU virtualization extensions.'
         Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('HyperVisorPresent=True')) -Message 'Nested virtualization guest validation must record active hypervisor evidence.'
         Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('VirtualMachinePlatformState=Enabled')) -Message 'Nested virtualization guest validation must record virtualization platform feature state.'
@@ -2740,12 +2746,18 @@ Invoke-Test -Name "Windows nested virtualization guest validation requires expos
         $script:NestedGuestValidationFixture.VirtualizationFirmwareEnabled = $false
         $script:NestedGuestValidationFixture.SecondLevelAddressTranslationExtensions = $false
         $result = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm' -OsType 'windows'
-        Assert-True -Condition ([bool]$result.Known -and -not [bool]$result.Enabled) -Message 'HyperVisorPresent plus an enabled VirtualMachinePlatform feature must not override missing nested CPU extensions.'
+        Assert-True -Condition ([bool]$result.Known -and -not [bool]$result.AvailableToGuest) -Message 'HyperVisorPresent plus an enabled VirtualMachinePlatform feature must not override missing nested CPU extensions.'
         Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('CpuVirtualizationExtensionsExposed=False')) -Message 'A negative guest validation must preserve the absent CPU extension evidence.'
+
+        $script:NestedGuestValidationFixture.PSObject.Properties.Remove('SecondLevelAddressTranslationExtensions')
+        $result = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm' -OsType 'windows'
+        Assert-True -Condition (-not [bool]$result.Known -and $null -eq $result.AvailableToGuest) -Message 'Missing CPU virtualization evidence must remain unknown rather than report disabled.'
+        Assert-True -Condition ([string]$result.ErrorMessage -like '*did not return all required CPU virtualization flags*') -Message 'Incomplete guest evidence must explain which validation failed.'
     }
     finally {
         Remove-Item Function:\Invoke-ClagnosVmRunCommandJson -ErrorAction SilentlyContinue
         Remove-Variable -Name NestedGuestValidationFixture -Scope Script -ErrorAction SilentlyContinue
+        Remove-Variable -Name NestedGuestValidationScripts -Scope Script -ErrorAction SilentlyContinue
     }
 }
 
@@ -2791,7 +2803,7 @@ Invoke-Test -Name "Post-deploy feature enablement fails when nested virtualizati
             param([string]$ResourceGroup, [string]$VmName, [string]$OsType, [int]$MaxAttempts, [int]$RetryDelaySeconds)
             return [pscustomobject]@{
                 Known = $true
-                Enabled = $false
+                AvailableToGuest = $false
                 Evidence = @('VirtualizationFirmwareEnabled=False')
                 Data = $null
                 ErrorMessage = ''
@@ -2895,7 +2907,7 @@ Invoke-Test -Name "VM create step tolerates a transient non-zero create when the
                 HibernationEnabled = $false
                 HibernationMessage = ''
                 NestedAttempted = $false
-                NestedEnabled = $false
+                NestedAvailableToGuest = $false
                 NestedMessage = ''
             }
         }
@@ -3517,7 +3529,7 @@ Invoke-Test -Name "VM create step redeploys existing VMs in update mode" -Action
                 HibernationEnabled = $false
                 HibernationMessage = ''
                 NestedAttempted = $false
-                NestedEnabled = $false
+                NestedAvailableToGuest = $false
                 NestedMessage = ''
             }
         }
@@ -5243,7 +5255,8 @@ Invoke-Test -Name "Show report redacts password-bearing config values and prints
                             NicIds = @()
                             FeatureFlags = [ordered]@{
                                 HibernationEnabled = $true
-                                NestedVirtualizationEnabled = $true
+                NestedVirtualizationAvailableToGuest = $true
+                NestedVirtualizationAzureSetting = $null
                                 NestedVirtualizationValidationSource = 'guest'
                                 NestedVirtualizationEvidence = @(
                                     'VMMonitorModeExtensions=True',
@@ -5266,7 +5279,7 @@ Invoke-Test -Name "Show report redacts password-bearing config values and prints
         Assert-True -Condition ($outputText -match [regex]::Escape('VM_ASSISTANT_PASS: [redacted]')) -Message 'Show report must redact the assistant password.'
         Assert-True -Condition (-not ($outputText -match [regex]::Escape('<runtime-secret>'))) -Message 'Show report must not print the raw admin password.'
         Assert-True -Condition (-not ($outputText -match [regex]::Escape('<runtime-secret>'))) -Message 'Show report must not print the raw assistant password.'
-        Assert-True -Condition ($outputText -match [regex]::Escape('Nested virtualization enabled: True')) -Message 'Show report must print the nested virtualization enabled state.'
+        Assert-True -Condition ($outputText -match [regex]::Escape('Nested virtualization available to guest: True')) -Message 'Show report must print guest capability separately from the requested setting.'
         Assert-True -Condition ($outputText -match [regex]::Escape('Nested virtualization validation source: guest')) -Message 'Show report must print the nested virtualization validation source.'
         Assert-True -Condition ($outputText -match [regex]::Escape('VirtualizationFirmwareEnabled=True')) -Message 'Show report must print nested virtualization guest evidence.'
         Assert-True -Condition ($outputText -match [regex]::Escape('VM_NAME: samplevm')) -Message 'Show report must keep non-secret config values visible.'

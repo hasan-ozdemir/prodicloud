@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.14.417 - 2026-10-14
+
+### Summary
+Nested-virtualization intent and actual guest capability are now reported as separate facts across creation, feature updates, VC details, and full reports.
+
+### Highlights
+- Create review labels the `.env` value as a request. Feature validation reports whether guest CPU virtualization extensions are available without claiming it installed Hyper-V or toggled Azure hardware exposure.
+- The selected-VC screen and `show` use the same guest validation result. `show` keeps an Azure-reported setting separate from `NestedVirtualizationAvailableToGuest` and includes probe evidence and errors.
+- Missing or malformed CPU-extension fields report unknown. Windows requires VMX, firmware virtualization, and SLAT to be present; outer-hypervisor presence and an enabled Windows optional feature do not override missing extensions.
+- The process-level `cg.cmd` fixture now safely transports and validates its read-only guest probe without permitting other Azure Run Command calls.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI checks, including real `cg.cmd` console output. Repository quality checks passed. No live Azure resources or settings were changed.
+
 ## Release 2026.10.14.416 - 2026-10-14
 
 ### Summary

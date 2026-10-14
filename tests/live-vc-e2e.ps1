@@ -386,7 +386,7 @@ try {
 
     if (-not $ResumeAfterUpdate) {
         $setOutput = Invoke-ClagnosE2eCommand -Label 'Verify nested virtualization in the guest' -Arguments @('set','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--nested-virtualization=on')
-        if ($setOutput -notmatch '(?i)Nested virtualization was enabled successfully') { throw 'Clagnos did not report a successful nested-virtualization guest validation.' }
+        if ($setOutput -notmatch '(?i)Guest virtualization extensions are available for nested virtualization') { throw 'Clagnos did not report available nested-virtualization guest extensions.' }
         $hibernationEnabled = Invoke-ClagnosE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName,'--query','additionalCapabilities.hibernationEnabled') -Description 'Azure hibernation feature state'
         if ($hibernationEnabled -notmatch '(?i)^true$') { throw 'Azure VM hibernation is not enabled.' }
     }
@@ -473,7 +473,7 @@ try {
     $null = Invoke-ClagnosE2eCommand -Label 'Verify JAWS app-state update files byte-for-byte on the target VM' -Arguments @('exec','--quiet','--file',$jawsVerifierPath,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
 
     $showOutput = Invoke-ClagnosE2eCommand -Label 'Inspect complete VM and attached-resource summary' -Arguments @('show','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
-    foreach ($requiredText in @('Azure VM Show Report','Resource types:','Resources:','VM details:','Size (SKU):','OS type:','Public IPs:','Private IPs:','OS disk:','Data disks:','NIC ids:','Hibernation enabled: True','VM_ADMIN_PASS: [redacted]','VM_ASSISTANT_PASS: [redacted]','Nested virtualization enabled: True')) {
+    foreach ($requiredText in @('Azure VM Show Report','Resource types:','Resources:','VM details:','Size (SKU):','OS type:','Public IPs:','Private IPs:','OS disk:','Data disks:','NIC ids:','Hibernation enabled: True','VM_ADMIN_PASS: [redacted]','VM_ASSISTANT_PASS: [redacted]','Nested virtualization available to guest: True')) {
         if ($showOutput -notmatch [regex]::Escape($requiredText)) { throw ("The complete show summary did not include required evidence: {0}" -f $requiredText) }
     }
     foreach ($secretKey in @('VM_ADMIN_PASS','VM_ASSISTANT_PASS')) {

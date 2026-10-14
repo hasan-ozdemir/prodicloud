@@ -5885,3 +5885,14 @@ Cross-check task: Please inspect the nested-virtualization status of the existin
 **Assistant Summary**
 
 Read the existing Bsv2 VM's size and power state from the selected subscription, then used Azure Run Command only for guest reads. Its Windows CPU reported `VMMonitorModeExtensions=false`, `VirtualizationFirmwareEnabled=false`, and `SecondLevelAddressTranslationExtensions=false`; `HyperVisorPresent=true` and `VirtualMachinePlatform=Enabled` were also observed. Microsoft's Bsv2 size table marks nested virtualization unsupported. This uncovered a Clagnos false-positive path: the Windows validator treated outer-hypervisor presence plus an enabled guest feature as success despite missing CPU extensions. Updated validation to require all three CPU virtualization flags and added regression coverage for positive and negative cases. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure configuration or resources were changed.
+
+### 2026-10-14 21:17 UTC
+**User Prompt**
+
+````text
+Correction task: Please make nested-virtualization management more consistent in the cg CLI across virtual-computer creation and VC property screens.
+````
+
+**Assistant Summary**
+
+Separated the Clagnos nested-virtualization request from Azure-reported VM settings and CPU virtualization extensions available to the guest. Create review, `set`, selected-VC details, and the full `show` report now use consistent labels; `show` exports `NestedVirtualizationAvailableToGuest` separately from the optional Azure property. Missing or malformed CPU evidence remains unknown instead of becoming a false disabled result. Updated success messages to describe validation rather than implying Clagnos changed Azure hardware exposure or installed Hyper-V in the guest. The real `cg.cmd` TUI process now uses an isolated, read-only Azure fixture that validates the guest probe AST. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 TUI scenarios; repository quality checks passed. No Azure resources or settings were changed.

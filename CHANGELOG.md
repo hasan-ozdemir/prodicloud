@@ -3,6 +3,16 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.14.417] - 2026-10-14
+
+### Fixed
+- Nested-virtualization intent, Azure-reported setting, and guest CPU-extension availability are now distinct in create review, `set`, the selected-VC screen, and `show` output. `show` uses the explicit `NestedVirtualizationAvailableToGuest` field and reports validation source, evidence, and probe errors separately.
+- Windows guest availability requires valid VMX, firmware virtualization, and SLAT values; Linux requires a valid extension-probe result. Missing or malformed guest evidence now reports unknown instead of disabled.
+- Updated feature-validation messages to say the request is checked and extensions are available, avoiding a claim that Clagnos toggled Azure hardware exposure or installed Hyper-V in the guest.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI checks, including the real `cg.cmd` process with an isolated Azure fixture. Repository quality checks passed. No Azure resource or setting was modified.
+
 ## [2026.10.14.416] - 2026-10-14
 
 ### Fixed

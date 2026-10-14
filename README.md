@@ -329,7 +329,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `exec` | Open direct remote shell path or run one remote command | Azure-touching and guest-touching | Interactive shell work or one-shot remote command execution | One direct shell or command result |
 | `move` | Move a managed VM to another region | Azure-mutating | Planned cutover or regional relocation | Health-gated regional move |
 | `resize` | Change VM SKU or expand OS disk | Azure-mutating | Compute sizing change or safe disk growth | Resized VM or grown OS disk |
-| `set` | Apply hibernation and validate or store nested virtualization settings | Azure-mutating plus guest validation | Feature-state management | Updated feature settings and VM state |
+| `set` | Apply hibernation and validate or store nested virtualization requests | Azure-mutating plus guest validation | Feature-state management | Updated hibernation state and validated guest capability |
 | `delete` | Delete a selected managed scope after showing its resource chain | Azure-mutating | Controlled cleanup | Deleted selected target scope, verified absent in Azure. |
 | `help` | Print the command catalog or one command's details | Local/read-only | Operator discovery and reference | Command documentation |
 
@@ -480,7 +480,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
 | `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --hibernation=off -s <subscription-guid>` | `--hibernation` | Changes hibernation state | Feature-state management | Syncs the successful change into `.env`. |
-| `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --nested-virtualization=off` | `--nested-virtualization` | Saves the requested nested virtualization setting | Repo setting sync | Azure single-VM APIs do not expose a separate nested-virtualization toggle |
+| `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --nested-virtualization=off` | `--nested-virtualization` | Saves the Clagnos nested-virtualization request | Repo setting sync | Does not change Azure hardware exposure; `on` requires a running VM and validates guest CPU virtualization extensions |
 | `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --hibernation=on --nested-virtualization=off` | both flags | Applies both feature controls | Coordinated feature changes | Partial success still updates local state for the successful part. |
 
 #### `delete`
@@ -695,7 +695,8 @@ Behavior notes:
 - good for support handoff, release verification, and environment auditing
 - password-bearing `.env` values are redacted
 - `--export-json <path>` writes a machine-readable report with sensitive config values redacted; existing files require `--overwrite`
-- when the VM is running, nested virtualization is shown from guest validation evidence; Windows validation requires VMX, firmware virtualization, and SLAT extensions to be exposed to the guest. `HyperVisorPresent` or an enabled `VirtualMachinePlatform` feature alone does not prove nested virtualization.
+- nested virtualization request (`VM_ENABLE_NESTED_VIRTUALIZATION`), any Azure-reported nested virtualization setting, and guest CPU-extension availability are shown separately; a request is not proof that Azure exposed virtualization extensions or that Hyper-V is installed inside the guest
+- when the VM is running, guest availability is determined by guest validation evidence. Windows validation requires VMX, firmware virtualization, and SLAT extensions to be exposed to the guest. `HyperVisorPresent` or an enabled `VirtualMachinePlatform` feature alone does not prove nested virtualization; missing probe fields remain unknown instead of being reported as disabled
 
 ### `do`
 Purpose: apply one VM lifecycle action or print the current VM lifecycle state.
@@ -772,8 +773,9 @@ Purpose: apply hibernation and validate or store nested-virtualization settings.
 
 Behavior notes:
 - Hibernation is changed through Azure.
-- Azure single-VM APIs do not expose a separate nested-virtualization toggle
-- successful changes are synchronized back into local `.env`
+- The nested-virtualization option stores Clagnos intent in `.env`; Azure single-VM APIs do not expose a separate nested-virtualization toggle in this workflow.
+- Turning nested virtualization on requires a running VM and checks whether all required CPU virtualization extensions are visible to the guest. This check does not install or configure Hyper-V inside the guest.
+- Successful hibernation changes and validated nested-virtualization requests are synchronized back into local `.env`.
 
 ### `delete`
 Purpose: delete a selected scope from a managed resource group.
