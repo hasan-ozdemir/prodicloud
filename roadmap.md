@@ -14,6 +14,7 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 - The TUI now reuses a subscription-scoped managed inventory snapshot, with ETag/content change detection, time-based validation, explicit refresh, and mutation/subscription invalidation.
 - A hidden read-only worker now keeps that inventory snapshot fresh across TUI screens and runs, and asynchronously warms per-VC package status; bounded retries, persisted refresh requests, and short-lived SSH bootstrap reuse reduce repeated Azure and remote calls.
 - Nested-virtualization precheck now uses documented unsupported B-series family data if Azure omits the feature from the SKU capability response, preventing a guaranteed post-deploy guest-validation failure.
+- Windows nested-virtualization inspection now treats guest CPU extension visibility as authoritative; outer-hypervisor presence and an enabled Windows feature no longer create false positives.
 - VC creation now uses a numbered, paged wizard with visible defaults and validated OS disk-size and TCP port-range inputs; task selection and inventory group filtering are also numbered and paged.
 - These pragmatic items were implemented and verified with fixture-backed tests only. No VC was provisioned or rebuilt.
 

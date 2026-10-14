@@ -695,7 +695,7 @@ Behavior notes:
 - good for support handoff, release verification, and environment auditing
 - password-bearing `.env` values are redacted
 - `--export-json <path>` writes a machine-readable report with sensitive config values redacted; existing files require `--overwrite`
-- when the VM is running, nested virtualization is shown from guest validation evidence
+- when the VM is running, nested virtualization is shown from guest validation evidence; Windows validation requires VMX, firmware virtualization, and SLAT extensions to be exposed to the guest. `HyperVisorPresent` or an enabled `VirtualMachinePlatform` feature alone does not prove nested virtualization.
 
 ### `do`
 Purpose: apply one VM lifecycle action or print the current VM lifecycle state.

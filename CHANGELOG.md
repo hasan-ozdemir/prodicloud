@@ -3,6 +3,16 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.14.416] - 2026-10-14
+
+### Fixed
+- When Azure omits nested-virtualization capability metadata, create/update uses the documented VM family to reject unsupported Bv1, Bsv2, Basv2, and Bpsv2 SKUs during configuration review, before resource-group or VM deployment.
+- Windows guest validation now requires the CPU virtualization extensions (VMX, firmware virtualization, and SLAT) to be visible before reporting nested virtualization as available. `HyperVisorPresent=true` and `VirtualMachinePlatform=Enabled` alone were a false-positive path for a VM running under Azure's outer hypervisor.
+- A read-only Bsv2 guest cross-check showed all three CPU-extension flags false even though the outer hypervisor was present and `VirtualMachinePlatform` was enabled. Clagnos now reports it as unavailable.
+
+### Validation
+- Regression fixtures cover unsupported and unknown families, the live false-positive pattern, and a supported CPU-extension case. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. The live diagnostic was read-only; no VM or related resource was changed.
+
 ## [2026.10.14.415] - 2026-10-14
 
 ### Fixed

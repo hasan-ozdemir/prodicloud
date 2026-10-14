@@ -2693,8 +2693,9 @@ Invoke-Test -Name "Post-deploy feature enablement verifies desired flags even on
     }
 }
 
-Invoke-Test -Name "Windows nested virtualization guest validation accepts an active nested runtime" -Action {
+Invoke-Test -Name "Windows nested virtualization guest validation requires exposed CPU virtualization extensions" -Action {
     try {
+        $script:NestedGuestValidationFixture = $null
         function Invoke-ClagnosVmRunCommandJson {
             param(
                 [string]$ResourceGroup,
@@ -2709,30 +2710,42 @@ Invoke-Test -Name "Windows nested virtualization guest validation accepts an act
             return [pscustomobject]@{
                 Success = $true
                 ErrorMessage = ''
-                OutputObject = [pscustomobject]@{
-                    ProcessorName = 'AMD EPYC 7763 64-Core Processor'
-                    VMMonitorModeExtensions = $false
-                    VirtualizationFirmwareEnabled = $true
-                    SecondLevelAddressTranslationExtensions = $false
-                    HyperVisorPresent = $true
-                    VirtualMachinePlatformState = 'Enabled'
-                    HypervisorPlatformState = 'Disabled'
-                    MicrosoftHyperVState = 'Disabled'
-                    MicrosoftHyperVAllState = 'Disabled'
-                    BcdHypervisorLaunchType = ''
-                }
+                OutputObject = $script:NestedGuestValidationFixture
             }
         }
 
+        $script:NestedGuestValidationFixture = [pscustomobject]@{
+            ProcessorName = 'Intel Xeon fixture processor'
+            VMMonitorModeExtensions = $true
+            VirtualizationFirmwareEnabled = $true
+            SecondLevelAddressTranslationExtensions = $true
+            HyperVisorPresent = $true
+            VirtualMachinePlatformState = 'Enabled'
+            HypervisorPlatformState = 'Disabled'
+            MicrosoftHyperVState = 'Disabled'
+            MicrosoftHyperVAllState = 'Disabled'
+            BcdHypervisorLaunchType = 'Auto'
+        }
         $result = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm' -OsType 'windows'
-
         Assert-True -Condition ([bool]$result.Known) -Message 'Nested virtualization guest validation must return a known result when run-command succeeds.'
-        Assert-True -Condition ([bool]$result.Enabled) -Message 'Nested virtualization guest validation must accept a running nested runtime on Windows guests.'
+        Assert-True -Condition ([bool]$result.Enabled) -Message 'Nested virtualization must be available when VMX, firmware virtualization, and SLAT are exposed to the guest.'
+        Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('CpuVirtualizationExtensionsExposed=True')) -Message 'Guest evidence must explicitly report exposed CPU virtualization extensions.'
         Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('HyperVisorPresent=True')) -Message 'Nested virtualization guest validation must record active hypervisor evidence.'
         Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('VirtualMachinePlatformState=Enabled')) -Message 'Nested virtualization guest validation must record virtualization platform feature state.'
+
+        # Mirrors the live vc1 check: Azure's outer hypervisor is present and
+        # VirtualMachinePlatform is enabled, but this B-series guest has no
+        # nested VMX/SLAT extensions exposed to it.
+        $script:NestedGuestValidationFixture.VMMonitorModeExtensions = $false
+        $script:NestedGuestValidationFixture.VirtualizationFirmwareEnabled = $false
+        $script:NestedGuestValidationFixture.SecondLevelAddressTranslationExtensions = $false
+        $result = Get-ClagnosNestedVirtualizationGuestValidation -ResourceGroup 'rg-samplevm-ate1-g1' -VmName 'samplevm' -OsType 'windows'
+        Assert-True -Condition ([bool]$result.Known -and -not [bool]$result.Enabled) -Message 'HyperVisorPresent plus an enabled VirtualMachinePlatform feature must not override missing nested CPU extensions.'
+        Assert-True -Condition ((@($result.Evidence) -join "`n") -match [regex]::Escape('CpuVirtualizationExtensionsExposed=False')) -Message 'A negative guest validation must preserve the absent CPU extension evidence.'
     }
     finally {
         Remove-Item Function:\Invoke-ClagnosVmRunCommandJson -ErrorAction SilentlyContinue
+        Remove-Variable -Name NestedGuestValidationFixture -Scope Script -ErrorAction SilentlyContinue
     }
 }
 

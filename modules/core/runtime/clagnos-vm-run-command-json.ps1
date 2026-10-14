@@ -230,11 +230,10 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
         $microsoftHyperVAllState = [string]$data.MicrosoftHyperVAllState
         $bcdHypervisorLaunchType = [string]$data.BcdHypervisorLaunchType
         $cpuFlagEnabled = ($vmMonitorModeExtensions -and $virtualizationFirmwareEnabled -and $slatEnabled)
-        $activeHypervisorEnabled = ($hyperVisorPresent -and $virtualizationFirmwareEnabled -and `
-            (@($virtualMachinePlatformState, $hypervisorPlatformState, $microsoftHyperVState, $microsoftHyperVAllState) | Where-Object {
-                [string]::Equals([string]$_, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)
-            }).Count -gt 0)
-        $enabled = ($cpuFlagEnabled -or $activeHypervisorEnabled)
+        # HyperVisorPresent can describe Azure's outer hypervisor, and Windows
+        # optional features can be enabled without exposed VMX/SLAT extensions.
+        # Neither condition proves that this VM can run a nested hypervisor.
+        $enabled = $cpuFlagEnabled
         if (-not [string]::IsNullOrWhiteSpace([string]$data.ProcessorName)) {
             $evidence += ("ProcessorName={0}" -f [string]$data.ProcessorName)
         }
@@ -242,6 +241,7 @@ function Get-ClagnosNestedVirtualizationGuestValidation {
             ("VMMonitorModeExtensions={0}" -f [bool]$vmMonitorModeExtensions),
             ("VirtualizationFirmwareEnabled={0}" -f [bool]$virtualizationFirmwareEnabled),
             ("SecondLevelAddressTranslationExtensions={0}" -f [bool]$slatEnabled),
+            ("CpuVirtualizationExtensionsExposed={0}" -f [bool]$cpuFlagEnabled),
             ("HyperVisorPresent={0}" -f [bool]$hyperVisorPresent),
             ("VirtualMachinePlatformState={0}" -f $virtualMachinePlatformState),
             ("HypervisorPlatformState={0}" -f $hypervisorPlatformState),

@@ -5874,3 +5874,14 @@ Correction task: Please inspect the virtual-computer creation process below, det
 **Assistant Summary**
 
 Microsoft's Bsv2 VM size table lists `Standard_B2s_v2` as not supporting nested virtualization. Azure's Compute SKU response omitted a nested capability row, so Clagnos treated support as inconclusive and deferred validation until after VM creation. Added a family-metadata fallback for documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families. With nested virtualization requested, configuration review now stops before resource-group, network, or VM creation and reports the affected SKU/family; undocumented families remain inconclusive rather than being rejected. Added regression coverage for all four unsupported families and the inconclusive fallback. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure operations were run during this fix. The submitted transcript shows that resources for the failed attempt had already been created; this task did not modify or delete them.
+
+### 2026-10-14 20:42 UTC
+**User Prompt**
+
+````text
+Cross-check task: Please inspect the nested-virtualization status of the existing target VM and compare it with the new B2s-type VM so we can decide whether that SKU really supports nested virtualization.
+````
+
+**Assistant Summary**
+
+Read the existing Bsv2 VM's size and power state from the selected subscription, then used Azure Run Command only for guest reads. Its Windows CPU reported `VMMonitorModeExtensions=false`, `VirtualizationFirmwareEnabled=false`, and `SecondLevelAddressTranslationExtensions=false`; `HyperVisorPresent=true` and `VirtualMachinePlatform=Enabled` were also observed. Microsoft's Bsv2 size table marks nested virtualization unsupported. This uncovered a Clagnos false-positive path: the Windows validator treated outer-hypervisor presence plus an enabled guest feature as success despite missing CPU extensions. Updated validation to require all three CPU virtualization flags and added regression coverage for positive and negative cases. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure configuration or resources were changed.

@@ -2,6 +2,19 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.14.416 - 2026-10-14
+
+### Summary
+Clagnos now rejects unsupported B-series nested-virtualization settings before deployment and no longer mistakes Azure's outer hypervisor plus an enabled Windows feature for nested CPU extensions exposed to the VM.
+
+### Highlights
+- Create/update prechecks use family metadata to reject documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families when the Azure SKU API omits nested capability rows.
+- `VMMonitorModeExtensions`, `VirtualizationFirmwareEnabled`, and `SecondLevelAddressTranslationExtensions` are authoritative for Windows nested-virtualization availability. `HyperVisorPresent` and Windows optional-feature state remain in evidence only.
+- A read-only Bsv2 guest check found all CPU extension flags false while the outer hypervisor was present and `VirtualMachinePlatform` was enabled. Clagnos now correctly reports nested virtualization unavailable.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios. Repository quality checks passed. Regression coverage includes supported and unsupported guest CPU evidence. The live Azure queries were read-only and changed no resources or settings.
+
 ## Release 2026.10.14.415 - 2026-10-14
 
 ### Summary
