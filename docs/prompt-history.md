@@ -5863,3 +5863,14 @@ Correction and update task: For every VM/VC/Azure operation, make unnecessary `a
 **Assistant Summary**
 
 Added a hidden, read-only worker that publishes subscription-scoped Azure group/resource/VM inventory snapshots every 60 seconds, uses an exclusive per-subscription lock, reuses local snapshots across TUI runs, carries pending refresh requests across restarts, rejects inventory older than five minutes, and backs off failed refreshes. Manage Programs now prewarms builtin/custom package status asynchronously and reuses complete per-VC status snapshots for 45 seconds. Package operations reuse resolved target/runtime and fresh VM endpoint data; successful SSH bootstrap probes are cached for 20 seconds without retaining passwords. Fixed Windows PowerShell 5.1 root-array handling and PowerShell 7 culture-dependent timestamp parsing. Windows PowerShell 5.1 and PowerShell 7+ each passed 190 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. All Azure test traffic used fixtures, with no live Azure mutations.
+
+### 2026-10-14 20:03 UTC
+**User Prompt**
+
+````text
+Correction task: Please inspect the virtual-computer creation process below, determine the cause of its error, and fix it realistically. The submitted `cg` transcript shows that `Standard_B2s_v2` was selected with nested virtualization enabled; the resource group, network, and VM were then created, hibernation was enabled, and guest validation failed because hardware virtualization extensions were unavailable.
+````
+
+**Assistant Summary**
+
+Microsoft's Bsv2 VM size table lists `Standard_B2s_v2` as not supporting nested virtualization. Azure's Compute SKU response omitted a nested capability row, so Clagnos treated support as inconclusive and deferred validation until after VM creation. Added a family-metadata fallback for documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families. With nested virtualization requested, configuration review now stops before resource-group, network, or VM creation and reports the affected SKU/family; undocumented families remain inconclusive rather than being rejected. Added regression coverage for all four unsupported families and the inconclusive fallback. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure operations were run during this fix. The submitted transcript shows that resources for the failed attempt had already been created; this task did not modify or delete them.

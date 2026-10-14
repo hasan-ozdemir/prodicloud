@@ -193,6 +193,10 @@ function Resolve-ClagnosFeatureSupportReasonText {
             if ([string]::IsNullOrWhiteSpace([string]$evidenceText)) { return 'Azure reported that nested virtualization is unsupported.' }
             return "Azure reported: $evidenceText."
         }
+        'nested-series-not-supported' {
+            if ([string]::IsNullOrWhiteSpace([string]$evidenceText)) { return 'Microsoft Azure VM size family documentation marks this family as not supporting nested virtualization.' }
+            return "Microsoft Azure VM size family documentation marks nested virtualization as unsupported: $evidenceText."
+        }
         'hibernation-supported' {
             if ([string]::IsNullOrWhiteSpace([string]$evidenceText)) { return 'Azure reported hibernation support.' }
             return "Azure reported: $evidenceText."
@@ -281,6 +285,23 @@ function Get-ClagnosNestedVirtualizationSupportInfo {
         }
     )
     if (@($capabilities).Count -eq 0) {
+        # Azure's Compute SKU endpoint may omit nested-virtualization
+        # capability rows even when Microsoft's per-family support table is
+        # definitive. Treat documented unsupported families as a known
+        # negative so create/update stops before it creates infrastructure.
+        $family = (Get-ClagnosSafeTrimmedText -Value $snapshot.Family) -replace '(?i)\s+series$',''
+        $family = $family -replace '\s+',''
+        $documentedUnsupportedFamilies = @('Bv1','Bsv2','Basv2','Bpsv2')
+        if (@($documentedUnsupportedFamilies | Where-Object { [string]::Equals([string]$_,$family,[System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) {
+            $result.Known = $true
+            $result.Message = 'nested-series-not-supported'
+            $result.Evidence = @(
+                ('VMSize={0}' -f [string]$VmSize),
+                ('Family={0}' -f [string]$snapshot.Family),
+                'NestedVirtualization=NotSupported (Microsoft Azure VM size family documentation)'
+            )
+            return [pscustomobject]$result
+        }
         $result.Known = $false
         $result.Message = 'nested-capability-inconclusive'
         return [pscustomobject]$result

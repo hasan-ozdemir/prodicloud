@@ -1747,6 +1747,62 @@ Invoke-Test -Name "Feature preconditions fail fast when nested virtualization re
     }
 }
 
+Invoke-Test -Name "Bsv2 nested virtualization is rejected before create when Azure omits the SKU capability" -Action {
+    try {
+        $script:NestedFamilyFixtures = @{
+            'Standard_B1s' = 'Bv1 Series'
+            'Standard_B2s_v2' = 'BSv2 Series'
+            'Standard_B2as_v2' = 'Basv2 Series'
+            'Standard_B2ps_v2' = 'Bpsv2 Series'
+            'Standard_D4as_v6' = 'DAsv6 Series'
+        }
+        function Get-ClagnosVmSkuCapabilitySnapshot {
+            param([string]$Location,[string]$VmSize)
+            return [pscustomobject]@{
+                Known = $true
+                Message = ''
+                Evidence = @()
+                CapabilityRows = @()
+                Family = [string]$script:NestedFamilyFixtures[[string]$VmSize]
+            }
+        }
+
+        foreach ($unsupportedSku in @('Standard_B1s','Standard_B2s_v2','Standard_B2as_v2','Standard_B2ps_v2')) {
+            $familySupport = Get-ClagnosNestedVirtualizationSupportInfo -Location 'fixture-region' -VmSize $unsupportedSku
+            Assert-True -Condition ([bool]$familySupport.Known -and -not [bool]$familySupport.Supported -and [string]$familySupport.Message -eq 'nested-series-not-supported') -Message ("A documented unsupported B family '{0}' must be a known negative when Compute SKU metadata omits the capability row." -f $unsupportedSku)
+        }
+        $unknownFamily = Get-ClagnosNestedVirtualizationSupportInfo -Location 'fixture-region' -VmSize 'Standard_D4as_v6'
+        Assert-True -Condition (-not [bool]$unknownFamily.Known -and [string]$unknownFamily.Message -eq 'nested-capability-inconclusive') -Message 'An undocumented family with no nested capability row must remain inconclusive instead of being falsely marked unsupported.'
+
+        $support = Get-ClagnosNestedVirtualizationSupportInfo -Location 'fixture-region' -VmSize 'Standard_B2s_v2'
+        Assert-True -Condition ([bool]$support.Known -and -not [bool]$support.Supported -and [string]$support.Message -eq 'nested-series-not-supported') -Message 'A documented unsupported Bsv2 family must be a known negative when Compute SKU metadata omits the capability row.'
+        Assert-True -Condition ((@($support.Evidence) -join '; ') -match 'VMSize=Standard_B2s_v2.*Family=BSv2 Series.*NestedVirtualization=NotSupported') -Message 'Bsv2 rejection must retain the SKU, family, and documentation evidence.'
+
+        $threw = $false
+        try {
+            Assert-ClagnosFeaturePreconditions -Context @{
+                VmName = 'vc-fixture'
+                AzLocation = 'fixture-region'
+                VmSize = 'Standard_B2s_v2'
+                VmSecurityType = 'Standard'
+                VmEnableHibernation = $false
+                VmEnableNestedVirtualization = $true
+            }
+        }
+        catch {
+            $threw = $true
+            Assert-True -Condition ([string]$_.Exception.Data['Summary'] -eq 'Nested virtualization precheck failed.') -Message 'Unsupported Bsv2 nested virtualization must stop in the feature precheck.'
+            Assert-True -Condition ([string]$_.Exception.Message -like '*Bsv2 Series*NotSupported*') -Message 'The precheck error must explain the documented family limitation.'
+            Assert-True -Condition ([string]$_.Exception.Data['Hint'] -like '*VM_ENABLE_NESTED_VIRTUALIZATION=false*') -Message 'The precheck must explain how to proceed when nested virtualization is optional.'
+        }
+        Assert-True -Condition $threw -Message 'Bsv2 creation with nested virtualization enabled must fail before resource-group or VM deployment.'
+    }
+    finally {
+        Remove-Item Function:\Get-ClagnosVmSkuCapabilitySnapshot -ErrorAction SilentlyContinue
+        Remove-Variable -Name NestedFamilyFixtures -Scope Script -ErrorAction SilentlyContinue
+    }
+}
+
 Invoke-Test -Name "Precheck step validates feature compatibility before deployment" -Action {
     $script:PrecheckCallOrder = @()
     try {

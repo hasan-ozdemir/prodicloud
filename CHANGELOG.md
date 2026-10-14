@@ -3,6 +3,14 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.14.415] - 2026-10-14
+
+### Fixed
+- When the Azure Compute SKU response omits nested-virtualization capability metadata, Clagnos now treats documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families as known negatives. With nested virtualization enabled, create/update stops during configuration review before resource-group or VM deployment and identifies the SKU/family plus the setting to change.
+
+### Validation
+- Added fixture coverage for `Standard_B2s_v2` with an omitted capability row and the other documented unsupported B families. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 TUI scenarios; repository quality checks passed. No live Azure operation was run.
+
 ## [2026.10.14.414] - 2026-10-14
 
 ### Improved

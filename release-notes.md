@@ -2,6 +2,18 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.14.415 - 2026-10-14
+
+### Summary
+Clagnos now rejects documented B-series nested-virtualization incompatibilities before creating Azure resources, even when Azure omits the relevant SKU capability row.
+
+### Highlights
+- The precheck reads the SKU family metadata as a fallback to the Compute capability list. Bv1, Bsv2, Basv2, and Bpsv2 are treated as known unsupported families, with SKU/family evidence and a corrective hint shown during configuration review. Unknown families remain inconclusive and are not falsely rejected.
+- Added a regression test for `Standard_B2s_v2` with no nested-virtualization capability row in the fixture. Unsupported settings stop before resource-group, network, or VM deployment.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios. Repository quality checks passed. Tests used fixture data only; no live Azure operations were performed.
+
 ## Release 2026.10.14.414 - 2026-10-14
 
 ### Summary
