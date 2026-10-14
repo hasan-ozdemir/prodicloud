@@ -183,7 +183,9 @@ function New-ClagnosCreateCommandRuntime {
         [hashtable]$Options,
         [switch]$WindowsFlag,
         [switch]$LinuxFlag,
-        [switch]$AutoMode
+        [switch]$AutoMode,
+        [hashtable]$WizardValues = @{},
+        [switch]$WizardMode
     )
 
     $actionPlan = Resolve-ClagnosActionPlan -CommandName 'create' -Options $Options
@@ -238,6 +240,39 @@ function New-ClagnosCreateCommandRuntime {
         Set-ClagnosConfigValueSource -Key 'VM_SIZE' -Source 'cli value'
     }
 
+    if ($WizardMode) {
+        $platform = if ($WindowsFlag) { 'windows' } elseif ($LinuxFlag) { 'linux' } else { [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_OS' -DefaultValue '') }
+        if ($platform -notin @('windows','linux')) {
+            Throw-FriendlyError -Detail 'The interactive create wizard did not provide a supported operating system.' -Code 2 -Summary 'Create wizard platform is missing.' -Hint 'Select Windows or Linux in the wizard and retry.'
+        }
+        $createOverrides['SELECTED_VM_OS'] = [string]$platform
+        $wizardOverrides = @{
+            'WIN_VM_IMAGE' = 'Image'
+            'LIN_VM_IMAGE' = 'Image'
+            'WIN_VM_DISK_SIZE_GB' = 'DiskSizeGb'
+            'LIN_VM_DISK_SIZE_GB' = 'DiskSizeGb'
+            'VM_STORAGE_SKU' = 'StorageSku'
+            'TCP_PORTS' = 'TcpPorts'
+            'VM_SECURITY_TYPE' = 'SecurityType'
+            'VM_ENABLE_HIBERNATION' = 'Hibernation'
+            'VM_ENABLE_NESTED_VIRTUALIZATION' = 'NestedVirtualization'
+            'VM_ENABLE_SECURE_BOOT' = 'SecureBoot'
+            'VM_ENABLE_VTPM' = 'Vtpm'
+            'VM_SSH_PORT' = 'SshPort'
+            'VM_RDP_PORT' = 'RdpPort'
+        }
+        foreach ($configKey in @($wizardOverrides.Keys)) {
+            if ([string]$configKey -like 'WIN_*' -and $platform -ne 'windows') { continue }
+            if ([string]$configKey -like 'LIN_*' -and $platform -ne 'linux') { continue }
+            if ([string]::Equals([string]$configKey, 'VM_RDP_PORT', [System.StringComparison]::OrdinalIgnoreCase) -and $platform -ne 'windows') { continue }
+            $answerKey = [string]$wizardOverrides[[string]$configKey]
+            if ($WizardValues.ContainsKey($answerKey)) {
+                $createOverrides[[string]$configKey] = [string]$WizardValues[$answerKey]
+                Set-ClagnosConfigValueSource -Key ([string]$configKey) -Source 'interactive wizard value'
+            }
+        }
+    }
+
     $step1OperationName = 'create'
     if (Test-ClagnosCreateResumeExistingTargetActionPlan -ActionPlan $actionPlan) {
         $resumeOverrides = New-ClagnosCreateResumeTargetOverrides -Options $Options -ConfigMap $configMap -VmName ([string]$createOverrides['SELECTED_VM_NAME'])
@@ -253,6 +288,7 @@ function New-ClagnosCreateCommandRuntime {
         WindowsFlag = [bool]$WindowsFlag
         LinuxFlag = [bool]$LinuxFlag
         AutoMode = [bool]$AutoMode
+        WizardMode = [bool]$WizardMode
         Step1OperationName = [string]$step1OperationName
     }
 }

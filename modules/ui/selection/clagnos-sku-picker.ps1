@@ -612,20 +612,6 @@ function Select-VmSkuInteractive {
         [int]$PriceHours
     )
 
-    $currentVmSku = ""
-    if (-not [string]::IsNullOrWhiteSpace($DefaultVmSize)) {
-        $currentVmSku = $DefaultVmSize.Trim()
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($currentVmSku)) {
-        Write-Host ""
-        Write-Host ("Current VM SKU for region '{0}': {1}" -f $Location, $currentVmSku) -ForegroundColor Cyan
-        $useCurrentSku = Read-StrictYesNo -PromptText ("Continue with VM SKU '{0}'?" -f $currentVmSku)
-        if ($useCurrentSku) {
-            return $currentVmSku
-        }
-    }
-
     while ($true) {
         $skuLikeRaw = Read-Host "Enter partial VM type (supports * and ?, examples: b2a, standard_a*, standard_b?a*v2). Leave empty to list all"
         if ($null -eq $skuLikeRaw) {
@@ -654,52 +640,28 @@ function Select-VmSkuInteractive {
 
         Write-Host ""
         Write-Host ("Available VM SKUs in region '{0}' (prices use {1} hours/month):" -f $Location, $PriceHours) -ForegroundColor Cyan
-        $rows = Build-VmSkuSelectionRows -Skus $skus -AvailabilityMap $availabilityMap -PriceMap $priceMap -PriceHours $PriceHours
-        $rows | Format-Table -AutoSize | Out-Host
-
-        $defaultIndex = 1
-        for ($i = 0; $i -lt $rows.Count; $i++) {
-            if ([string]::Equals($rows[$i].Sku, $DefaultVmSize, [System.StringComparison]::OrdinalIgnoreCase)) {
-                $defaultIndex = $i + 1
-                break
+        $rows = @(Build-VmSkuSelectionRows -Skus $skus -AvailabilityMap $availabilityMap -PriceMap $priceMap -PriceHours $PriceHours)
+        $linuxPriceProperty = 'Linux_{0}h' -f $PriceHours
+        $windowsPriceProperty = 'Windows_{0}h' -f $PriceHours
+        $pickerOptions = @(
+            $rows | ForEach-Object {
+                $detail = ('{0} vCPU | {1} GB RAM | {2} | {3}' -f [int]$_.vCPU, [double]$_.RAM_GB, [string]$_.$linuxPriceProperty, [string]$_.$windowsPriceProperty)
+                [pscustomobject]@{ Value = [string]$_.Sku; Label = [string]$_.Sku; Detail = $detail }
             }
+        )
+        $selection = Select-ClagnosNumberedOptionPage -Options $pickerOptions -Prompt ("Available VM SKUs in region '{0}' (prices use {1} hours/month)" -f $Location, $PriceHours) -DefaultValue $DefaultVmSize -PageSize 12 -ExtraKeys @('x','r')
+        if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'r') {
+            Write-Host 'Returning to region selection...' -ForegroundColor DarkGray
+            return (Get-ClagnosSkuPickerRegionBackToken)
         }
-
-        while ($true) {
-            $selection = Read-Host "Enter VM SKU number (default=$defaultIndex, f=change filter, r=change region)"
-            if ([string]::IsNullOrWhiteSpace($selection)) {
-                $selectedSku = [string]$rows[$defaultIndex - 1].Sku
-                $confirmSelected = Read-StrictYesNo -PromptText ("Selected VM SKU: '{0}'. Continue?" -f $selectedSku)
-                if ($confirmSelected) {
-                    return $selectedSku
-                }
-
-                Write-Host "Returning to VM SKU filter search..." -ForegroundColor DarkGray
-                break
-            }
-            if ($selection -match '^[fF]$') {
-                break
-            }
-            if ($selection -match '^[rR]$') {
-                Write-Host "Returning to region selection..." -ForegroundColor DarkGray
-                return (Get-ClagnosSkuPickerRegionBackToken)
-            }
-
-            if ($selection -match '^\d+$') {
-                $selectedNo = [int]$selection
-                if ($selectedNo -ge 1 -and $selectedNo -le $rows.Count) {
-                    $selectedSku = [string]$rows[$selectedNo - 1].Sku
-                    $confirmSelected = Read-StrictYesNo -PromptText ("Selected VM SKU: '{0}'. Continue?" -f $selectedSku)
-                    if ($confirmSelected) {
-                        return $selectedSku
-                    }
-
-                    Write-Host "Returning to VM SKU filter search..." -ForegroundColor DarkGray
-                    break
-                }
-            }
-
-            Write-Host "Invalid VM SKU selection. Please enter a valid number, or use 'f'/'r'." -ForegroundColor Yellow
+        if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'x') {
+            continue
         }
+        if ([string]$selection.Action -ne 'selected') { return (Get-ClagnosSkuPickerRegionBackToken) }
+
+        $selectedSku = [string]$selection.Value
+        $confirmSelected = Read-StrictYesNo -PromptText ("Selected VM SKU: '{0}'. Continue?" -f $selectedSku)
+        if ($confirmSelected) { return $selectedSku }
+        Write-Host 'Returning to VM SKU filter search...' -ForegroundColor DarkGray
     }
 }

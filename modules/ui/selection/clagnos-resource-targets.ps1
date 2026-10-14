@@ -66,34 +66,10 @@ function Select-ClagnosResourceGroupInteractive {
             -Hint "Create a resource group first, then retry."
     }
 
-    $defaultIndex = 1
-    for ($i = 0; $i -lt $groups.Count; $i++) {
-        if ([string]::Equals([string]$groups[$i], [string]$DefaultResourceGroup, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $defaultIndex = $i + 1
-            break
-        }
-    }
-
-    Write-Host ""
-    Write-Host "Available resource groups (select by number):" -ForegroundColor Cyan
-    for ($i = 0; $i -lt $groups.Count; $i++) {
-        $label = if (($i + 1) -eq $defaultIndex) { "*{0}-{1}." -f ($i + 1), [string]$groups[$i] } else { "{0}-{1}." -f ($i + 1), [string]$groups[$i] }
-        Write-Host $label
-    }
-
-    while ($true) {
-        $raw = Read-Host ("Enter resource group number (default={0})" -f $defaultIndex)
-        if ([string]::IsNullOrWhiteSpace($raw)) {
-            return [string]$groups[$defaultIndex - 1]
-        }
-        if ($raw -match '^\d+$') {
-            $index = [int]$raw
-            if ($index -ge 1 -and $index -le $groups.Count) {
-                return [string]$groups[$index - 1]
-            }
-        }
-        Write-Host "Invalid resource group selection. Please enter a valid number." -ForegroundColor Yellow
-    }
+    $options = @($groups | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = [string]$_; Detail = '' } })
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Available resource groups' -DefaultValue $DefaultResourceGroup -PageSize 12
+    if ([string]$selection.Action -eq 'selected') { return [string]$selection.Value }
+    Throw-FriendlyError -Detail 'Resource group selection was closed before a resource group was selected.' -Code 64 -Summary 'Resource group selection was canceled.' -Hint 'Select a managed resource group by number and retry.'
 }
 
 # Handles Resolve-ClagnosTargetResourceGroup.
@@ -205,34 +181,10 @@ function Select-ClagnosVmInteractive {
             -Hint "Create a VM first or choose another resource group."
     }
 
-    $defaultIndex = 1
-    for ($i = 0; $i -lt $vmNames.Count; $i++) {
-        if ([string]::Equals([string]$vmNames[$i], [string]$DefaultVmName, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $defaultIndex = $i + 1
-            break
-        }
-    }
-
-    Write-Host ""
-    Write-Host ("Available VM names in '{0}' (select by number):" -f $ResourceGroup) -ForegroundColor Cyan
-    for ($i = 0; $i -lt $vmNames.Count; $i++) {
-        $label = if (($i + 1) -eq $defaultIndex) { "*{0}-{1}." -f ($i + 1), [string]$vmNames[$i] } else { "{0}-{1}." -f ($i + 1), [string]$vmNames[$i] }
-        Write-Host $label
-    }
-
-    while ($true) {
-        $raw = Read-Host ("Enter VM number (default={0})" -f $defaultIndex)
-        if ([string]::IsNullOrWhiteSpace($raw)) {
-            return [string]$vmNames[$defaultIndex - 1]
-        }
-        if ($raw -match '^\d+$') {
-            $index = [int]$raw
-            if ($index -ge 1 -and $index -le $vmNames.Count) {
-                return [string]$vmNames[$index - 1]
-            }
-        }
-        Write-Host "Invalid VM selection. Please enter a valid number." -ForegroundColor Yellow
-    }
+    $options = @($vmNames | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = [string]$_; Detail = '' } })
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt ("Virtual machines in '{0}'" -f $ResourceGroup) -DefaultValue $DefaultVmName -PageSize 12
+    if ([string]$selection.Action -eq 'selected') { return [string]$selection.Value }
+    Throw-FriendlyError -Detail ("VM selection was closed before a VM was selected in resource group '{0}'." -f $ResourceGroup) -Code 65 -Summary 'VM selection was canceled.' -Hint 'Select a VM by number and retry.'
 }
 
 # Handles Resolve-ClagnosVmSelectionForResourceGroup.

@@ -3,6 +3,18 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.14.413] - 2026-10-14
+
+### Added
+- The interactive CLI now builds a subscription-scoped managed resource snapshot at startup, reuses it across inventory/component/VC screens, and reconciles after its 60-second freshness window, explicit refresh, subscription changes, and possible Azure mutations. Snapshot signatures compare group/resource ETags and use resource content when ETags are absent.
+- Added a numbered, paged create wizard with visible configured defaults, `p/n/g/f/t` page navigation, `s/k/a/l/c` step controls, and a review step before the shared create workflow.
+- Added validated OS disk-size text in `MB`, `GB`, or `TB` and inbound TCP port input with comma-separated ports and ranges such as `3000-3300`. Added numbered task and inventory-group selection, app-state username validation, and additional TUI typed-input checks.
+
+### Validation
+- Compatibility checks passed under Windows PowerShell 5.1 and PowerShell 7+: 189 smoke checks and 172 fixture-backed TUI scenarios per runtime. TUI coverage includes the real `cg.cmd` process test, cache command-count checks, change detection, wizard navigation, invalid defaults, invalid-entry retries, and canceled report-path input.
+- The suite blocked native Azure and the real dispatcher; no Azure resources were created or changed.
+- Repository quality checks passed, including documentation, sensitive-content, package app-state, release-package, and Python artifact audits.
+
 ## [2026.10.13.412] - 2026-10-13
 
 ### Fixed

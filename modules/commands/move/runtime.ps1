@@ -748,6 +748,7 @@ function Invoke-ClagnosChangeCommand {
                 PublicDnsLabel = (Resolve-ClagnosPublicDnsLabel -PublicIpName ([string]$targetIpName) -VmName ([string]$targetVmName))
                 NIC = $targetNicName
                 TcpPorts = @($context.TcpPorts)
+                TcpPortRanges = @($context.TcpPortRanges)
                 VmName = $targetVmName
             }
             Invoke-ClagnosNetworkStep -Context $targetContext -ExecutionMode "update"

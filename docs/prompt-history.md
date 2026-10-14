@@ -5839,3 +5839,16 @@ New task: On screens displaying virtual computer details, the VC status is shown
 **Assistant Summary**
 
 Microsoft's Azure CLI guide shows `az vm get-instance-view` power-state data under `instanceView.statuses`; the Compute REST instance-view response puts `statuses` at its root. Clagnos checked only the root field, so it missed the documented Azure CLI response. Updated the shared TUI status resolver to support both shapes and to derive a readable label from `PowerState/*` when `displayStatus` is missing. Opened the real parameterless `cg.cmd`; the `vc1` row then displayed `VM running`. The query was read-only and no Azure resources were changed.
+
+### 2026-10-14 12:55 UTC
+**User Prompt**
+
+````text
+Feature updates:
+1. On first opening the cg CLI, scan resource groups and resources and cache all Clagnos-owned items. Avoid unnecessary `az` commands on every screen; detect changes to groups, resources, and their properties quickly, and synchronize, validate, invalidate, or revalidate the cache only when appropriate. The goal is to call Azure CLI only when needed and avoid false positives.
+2. Make new virtual-computer creation a step-by-step wizard. Show all options, mark defaults with `>`, and offer `s: skip`, `k: skip all`, `a: apply`, `l: apply all`, and `c: close`. Page long option lists with `p: previous`, `n: next`, `g: go to page`, `f: first page`, and `t: last page`; selections must be numeric, with no arrow-key navigation. Ports should be validated text supporting comma-separated values and ranges such as `3000-3300`. Disk size should be validated text supporting `1MB`, `1GB`, and `1TB` forms within allowed limits. Audit other text, multi-select, and formatted inputs across the TUI and make them consistent, validated, and safe.
+````
+
+**Assistant Summary**
+
+Added a subscription-scoped startup inventory snapshot for managed resource groups, resources, and VM details. TUI screens reuse the snapshot; it revalidates on a 60-second freshness window and after explicit refresh, subscription changes, and operations that may mutate Azure. ETags and content fallback signatures detect actual changes while unchanged syncs preserve the existing snapshot. Added the numbered, paged create wizard with default markers, `p/n/g/f/t` navigation, `s/k/a/l/c` controls, input retry and validation, `MB/GB/TB` OS disk sizing, and comma-separated TCP ranges. Updated inventory filtering and task selection to use accessible numbered lists, validated app-state usernames and report paths, and prevented selecting disabled tasks for execution. Windows PowerShell 5.1 and PowerShell 7+ each passed 189 smoke checks and 172 fixture-backed TUI scenarios; repository quality checks passed. Tests blocked native Azure calls and real command dispatch; no Azure resources were created or changed.

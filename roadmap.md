@@ -11,6 +11,8 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 - The `cg.cmd` launcher preserves command-line arguments while loading the shared runtime.
 - VM SKU validation checks the active subscription's offered SKU list before lifecycle changes, so restricted sizes fail before deallocation.
 - The interactive power/status menu now sends only options accepted by the `do` command contract.
+- The TUI now reuses a subscription-scoped managed inventory snapshot, with ETag/content change detection, time-based validation, explicit refresh, and mutation/subscription invalidation.
+- VC creation now uses a numbered, paged wizard with visible defaults and validated OS disk-size and TCP port-range inputs; task selection and inventory group filtering are also numbered and paged.
 - These pragmatic items were implemented and verified with fixture-backed tests only. No VC was provisioned or rebuilt.
 
 ## Working Style

@@ -49,6 +49,7 @@ function Reset-TuiScenario {
     $script:TuiRealDispatcherCalls = 0
     $script:TuiSubscriptionRefreshCount = 0
     $script:TuiVmDetailsCount = 0
+    $script:TuiCreateWizardCount = 0
     $script:TuiPackageMenuCount = 0
     $script:TuiComponentMenuCount = 0
     $script:TuiOperationsMenuCount = 0
@@ -61,6 +62,7 @@ function Reset-TuiScenario {
     $script:TuiDetailsShouldThrow = $false
     $script:TuiAzOverride = $null
     $script:TuiDiscoveryMode = $false
+    $script:TuiDotEnvOverrides = @{}
     $script:TuiTaskCatalogByStage = @{
         init = @([pscustomobject]@{ TaskNumber = 1; Name = '01-fixture-init'; Enabled = $true; DisabledReason = '' })
         update = @([pscustomobject]@{ TaskNumber = 101; Name = '101-fixture-update'; Enabled = $false; DisabledReason = 'disabled catalog' })
@@ -69,7 +71,7 @@ function Reset-TuiScenario {
     $script:TuiLinuxVm = New-TuiVmFixture -Platform Linux
     $script:TuiVmDetailRecord = New-TuiVmDetailsFixture
     $script:TuiManagedGroups = @(
-        [pscustomobject]@{ name = 'rg-fixture-eastus-g1'; location = 'eastus'; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } }
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1'; etag = 'fixture-group-etag'; name = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' }; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } }
     )
     $script:TuiManagedGroupsByCall = @()
     $script:TuiVirtualComputers = @($script:TuiWindowsVm)
@@ -92,6 +94,33 @@ function Reset-TuiScenario {
     $script:TuiActiveSubscriptionId = 'sub-fixture-enabled'
     $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = 'sub-fixture-enabled'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
     $script:ClagnosUiSubscriptionError = ''
+    $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
+    $script:ClagnosUiSelectedResourceGroup = 'rg-fixture-eastus-g1'
+    $script:ClagnosUiSelectedVmName = 'fixture-vc'
+    $script:ClagnosUiResourceCacheError = ''
+    $script:ClagnosUiAzureReadCache = @{}
+    $script:ClagnosUiInventoryValidationSeconds = 60
+    $script:ClagnosUiReadCacheSeconds = 45
+    $script:ClagnosUiInventoryCache = $null
+    $fixtureResources = @(
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'; etag = 'fixture-vm-etag'; name = 'fixture-vc'; type = 'Microsoft.Compute/virtualMachines'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' } },
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/disks/disk-fixture-os'; etag = 'fixture-disk-etag'; name = 'disk-fixture-os'; type = 'Microsoft.Compute/disks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Premium_LRS' }; properties = [pscustomobject]@{ diskSizeGb = 128; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } } },
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture'; etag = 'fixture-vnet-etag'; name = 'vnet-fixture'; type = 'Microsoft.Network/virtualNetworks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ subnets = @([pscustomobject]@{ name = 'subnet-fixture'; id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }) } },
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkInterfaces/nic-fixture'; etag = 'fixture-nic-etag'; name = 'nic-fixture'; type = 'Microsoft.Network/networkInterfaces'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ primary = $true; enableAcceleratedNetworking = $true; enableIPForwarding = $false; networkSecurityGroup = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture' }; ipConfigurations = @([pscustomobject]@{ name = 'ipconfig-primary'; privateIPAddress = '10.1.0.4'; privateIPAllocationMethod = 'Dynamic'; primary = $true; subnet = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }; publicIPAddress = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture' } }) } },
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture'; etag = 'fixture-ip-etag'; name = 'pip-fixture'; type = 'Microsoft.Network/publicIPAddresses'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Standard' }; zones = @('1'); properties = [pscustomobject]@{ ipAddress = '203.0.113.8'; publicIPAllocationMethod = 'Static'; dnsSettings = [pscustomobject]@{ fqdn = 'fixture.eastus.cloudapp.azure.com'; domainNameLabel = 'fixture' } } },
+        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture'; etag = 'fixture-nsg-etag'; name = 'nsg-fixture'; type = 'Microsoft.Network/networkSecurityGroups'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ securityRules = @() } }
+    )
+    $script:ClagnosUiInventoryCache = @{
+        SubscriptionId = 'sub-fixture-enabled'
+        Groups = @($script:TuiManagedGroups)
+        Resources = @($fixtureResources)
+        VirtualMachines = @($script:TuiWindowsVm)
+        Signature = 'tui-fixture-signature'
+        LastValidatedAtUtc = [DateTime]::UtcNow
+        IsDirty = $false
+        DirtyReason = ''
+        DirtyResourceGroup = ''
+    }
     $script:TuiVmDetailRecord = New-TuiVmDetailsFixture
 }
 
@@ -117,6 +146,8 @@ function Invoke-TuiTest {
 function New-TuiVmFixture {
     param([ValidateSet('Windows','Linux')][string]$Platform = 'Windows')
     return [pscustomobject]@{
+        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'
+        etag = 'fixture-vm-etag'
         name = 'fixture-vc'
         location = 'eastus'
         ClagnosResourceGroup = 'rg-fixture-eastus-g1'
@@ -236,6 +267,8 @@ foreach ($tuiFunctionDefinition in @(Initialize-TuiProductFunctions)) {
     . ([scriptblock]::Create([string]$tuiFunctionDefinition))
 }
 $script:TuiOriginalVmDiscovery = (Get-Command Get-ClagnosUiVirtualComputers).ScriptBlock
+$script:TuiOriginalInventorySync = (Get-Command Sync-ClagnosUiResourceCache).ScriptBlock
+$script:TuiOriginalCreateWizard = (Get-Command Show-ClagnosUiCreateWizard).ScriptBlock
 $script:TuiOriginalVmDetails = (Get-Command Show-ClagnosUiVmDetails).ScriptBlock
 $script:TuiOriginalHeader = (Get-Command Write-ClagnosUiHeader).ScriptBlock
 $script:TuiOriginalPackageMenu = (Get-Command Show-ClagnosUiPackageMenu).ScriptBlock
@@ -248,7 +281,12 @@ $script:TuiOriginalOperationsMenu = (Get-Command Show-ClagnosUiOperationsMenu).S
 
 # The command dispatcher and Azure CLI are deliberately blocked for every test.
 function az { $script:TuiNativeAzureCalls++; $script:TuiTotalNativeAzureCalls++; throw 'Native Azure CLI is blocked in TUI tests.' }
-function Invoke-ClagnosCommandDispatcher { $script:TuiRealDispatcherCalls++; $script:TuiTotalRealDispatcherCalls++; throw 'The real command dispatcher is blocked in TUI tests.' }
+function Invoke-ClagnosCommandDispatcher {
+    param([string]$CommandName, [hashtable]$Options, [string]$HelpTopic = '', [hashtable]$FrontendContext = @{})
+    $script:TuiRealDispatcherCalls++
+    $script:TuiTotalRealDispatcherCalls++
+    throw 'The real command dispatcher is blocked in TUI tests.'
+}
 
 function Write-Host {
     [CmdletBinding()]
@@ -286,14 +324,14 @@ function Write-ClagnosUiError { param([object]$ErrorRecord) $script:TuiRenderedL
 function Update-ClagnosUiSubscription { $script:TuiSubscriptionRefreshCount++ }
 
 function Invoke-ClagnosUiCommand {
-    param([string]$CommandName, [hashtable]$Options = @{})
+    param([string]$CommandName, [hashtable]$Options = @{}, [hashtable]$FrontendContext = @{})
     $copy = @{}
     foreach ($key in @($Options.Keys)) { $copy[[string]$key] = $Options[$key] }
-    $script:TuiCommandInvocations.Add([pscustomobject]@{ CommandName = $CommandName; Options = $copy })
+    $script:TuiCommandInvocations.Add([pscustomobject]@{ CommandName = $CommandName; Options = $copy; FrontendContext = $FrontendContext })
 }
 
 function Invoke-ClagnosUiAzJson {
-    param([string[]]$Arguments)
+    param([string[]]$Arguments, [switch]$ForceRefresh, [int]$CacheTtlSeconds = 45)
     if ($null -ne $script:TuiAzOverride) { return (& $script:TuiAzOverride -Arguments $Arguments) }
     $query = @($Arguments) -join ' '
     $script:TuiAzureReadQueries.Add($query)
@@ -333,23 +371,63 @@ function Invoke-ClagnosUiAzJson {
     throw ('Unexpected simulated Azure read query: {0}' -f $query)
 }
 
-function Read-DotEnvFile { param([string]$Path) return @{
-    VM_ADMIN_USER = 'manager-fixture'
-    VM_ADMIN_PASS = '<runtime-secret>'
-    VM_ASSISTANT_USER = 'assistant-fixture'
-    VM_ASSISTANT_PASS = '<runtime-secret>'
-    VM_SSH_PORT = '22222'
-    VM_RDP_PORT = '3390'
-    VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
-} }
+function Read-DotEnvFile {
+    param([string]$Path)
+    $config = @{
+        VM_ADMIN_USER = 'manager-fixture'
+        VM_ADMIN_PASS = '<runtime-secret>'
+        VM_ASSISTANT_USER = 'assistant-fixture'
+        VM_ASSISTANT_PASS = '<runtime-secret>'
+        VM_SSH_PORT = '22222'
+        VM_RDP_PORT = '3390'
+        VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
+    }
+    if ($null -ne $script:TuiDotEnvOverrides) {
+        foreach ($key in $script:TuiDotEnvOverrides.Keys) { $config[[string]$key] = [string]$script:TuiDotEnvOverrides[$key] }
+    }
+    return $config
+}
 
 function Get-ClagnosUiVmSizeFacts { param([string]$Location, [string]$Size) return [pscustomobject]@{ Cores = '2'; MemoryMb = '8192' } }
+function Get-AzLocationCatalog {
+    return @(
+        [pscustomobject]@{ Name = 'eastus'; DisplayName = 'East US' }
+        [pscustomobject]@{ Name = 'westus'; DisplayName = 'West US' }
+    )
+}
+function Get-LocationSkusForSelection {
+    param([string]$Location, [string]$SkuLike = '')
+    $rows = @(
+        [pscustomobject]@{ name = 'Standard_B2s_v2'; numberOfCores = 2; memoryInMb = 8192 }
+        [pscustomobject]@{ name = 'Standard_B2as_v2'; numberOfCores = 2; memoryInMb = 8192 }
+        [pscustomobject]@{ name = 'Standard_B4as_v2'; numberOfCores = 4; memoryInMb = 16384 }
+        [pscustomobject]@{ name = 'Standard_D2as_v5'; numberOfCores = 2; memoryInMb = 8192 }
+        [pscustomobject]@{ name = 'Standard_D4as_v5'; numberOfCores = 4; memoryInMb = 16384 }
+        [pscustomobject]@{ name = 'Standard_E2as_v5'; numberOfCores = 2; memoryInMb = 16384 }
+        [pscustomobject]@{ name = 'Standard_E4as_v5'; numberOfCores = 4; memoryInMb = 32768 }
+        [pscustomobject]@{ name = 'Standard_F2s_v2'; numberOfCores = 2; memoryInMb = 4096 }
+        [pscustomobject]@{ name = 'Standard_F4s_v2'; numberOfCores = 4; memoryInMb = 8192 }
+        [pscustomobject]@{ name = 'Standard_A2_v2'; numberOfCores = 2; memoryInMb = 4096 }
+        [pscustomobject]@{ name = 'Standard_A4_v2'; numberOfCores = 4; memoryInMb = 8192 }
+        [pscustomobject]@{ name = 'Standard_D2s_v5'; numberOfCores = 2; memoryInMb = 8192 }
+        [pscustomobject]@{ name = 'Standard_D4s_v5'; numberOfCores = 4; memoryInMb = 16384 }
+    )
+    if ([string]::IsNullOrWhiteSpace([string]$SkuLike)) { return $rows }
+    return @($rows | Where-Object { [string]$_.name -like (Convert-ToSkuSearchPattern -FilterText $SkuLike) })
+}
+function Get-SkuAvailabilityMap {
+    param([string]$Location, [string[]]$SkuNames)
+    $result = @{}
+    foreach ($sku in @($SkuNames)) { $result[[string]$sku] = 'yes' }
+    return $result
+}
 function Get-ClagnosUiPowerState { param([string]$ResourceGroup, [string]$VmName) return 'VM running' }
 function Show-ClagnosUiVmDetails {
     param([psobject]$Vm)
     $script:TuiVmDetailsCount++
     if ($script:TuiDetailsShouldThrow) { throw 'fixture VC detail read error' }
 }
+function Show-ClagnosUiCreateWizard { $script:TuiCreateWizardCount++ }
 function Show-ClagnosUiPackageMenu { param([psobject]$Vm) $script:TuiPackageMenuCount++ }
 function Show-ClagnosUiComponentMenu { param([psobject]$Vm) $script:TuiComponentMenuCount++ }
 function Show-ClagnosUiOperationsMenu { param([psobject]$Vm) $script:TuiOperationsMenuCount++ }
@@ -437,6 +515,171 @@ Invoke-TuiTest -Name 'Main menu routes every visible item and exits on q' -Actio
     Assert-Tui -Condition ($script:TuiSubscriptionRefreshCount -ge 1) -Message 'Home navigation must refresh subscription context before rendering.'
 }
 
+Invoke-TuiTest -Name 'Paged numbered picker supports every page key and keeps selection on the visible page' -Action {
+    $options = @(1..25 | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = ('option-{0}' -f $_) } })
+    Set-TuiChoices -Choices @('p','n','g','3','f','t','p','13')
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Fixture choices' -DefaultValue '13' -PageSize 12
+    Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'The picker must return the selected option after navigating with p/n/g/f/t.'
+    Assert-TuiOutputContains -Text 'Page 2/3' -Message 'The default option must open on its page and show the current page.'
+    Assert-TuiOutputContains -Text 'p: previous page | n: next page | g: go to page | f: first page | t: last page' -Message 'Multi-page pickers must show all page controls.'
+
+    Reset-TuiScenario
+    $options = @(1..25 | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = ('option-{0}' -f $_) } })
+    Set-TuiChoices -Choices @('p','','n','')
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Visible default choices' -DefaultValue '13' -PageSize 12
+    Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'A default must only be selected when its marked row is visible on the current page.'
+    Assert-TuiOutputContains -Text 'The default is on page 2' -Message 'A blank input away from the default page must guide the operator to it.'
+
+    Reset-TuiScenario
+    $options = @(1..14 | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = ('option-{0}' -f $_) } })
+    Set-TuiChoices -Choices @('13','n','13')
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Visible page choices' -PageSize 12
+    Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'An option on another page must become selectable after navigating to its page.'
+    Assert-TuiOutputContains -Text 'Choose a number shown on the current page' -Message 'The picker must reject numbers that are not visible on the current page.'
+}
+
+Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state, and detects resource changes' -Action {
+    $script:TuiCacheFixtureCalls = 0
+    $script:TuiCacheGroup = [pscustomobject]@{
+        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-cache-fixture'
+        name = 'rg-cache-fixture'; etag = 'group-etag-1'; location = 'eastus'
+        properties = [pscustomobject]@{ provisioningState = 'Succeeded' }
+        tags = [pscustomobject]@{ 'managed-by' = 'clagnos' }
+    }
+    $script:TuiCacheResource = [pscustomobject]@{
+        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/disks/disk-cache'
+        etag = 'disk-etag-1'; name = 'disk-cache'; type = 'Microsoft.Compute/disks'; resourceGroup = 'rg-cache-fixture'
+        location = 'eastus'; properties = [pscustomobject]@{ diskSizeGb = 64 }
+    }
+    $script:TuiCacheVm = [pscustomobject]@{
+        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/virtualMachines/cache-vm'
+        etag = 'vm-etag-1'; name = 'cache-vm'; resourceGroup = 'rg-cache-fixture'; powerState = 'VM running'; provisioningState = 'Succeeded'
+        hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_B2s_v2' }; privateIps = '10.0.0.4'; publicIps = '203.0.113.4'; fqdns = 'cache.example.invalid'
+        storageProfile = [pscustomobject]@{ osDisk = [pscustomobject]@{ osType = 'Linux' } }
+    }
+    $script:TuiAzOverride = {
+        param([string[]]$Arguments)
+        $script:TuiCacheFixtureCalls++
+        $query = @($Arguments) -join ' '
+        if ($query -eq 'group list') { return @($script:TuiCacheGroup) }
+        if ($query -like 'resource list --resource-group *') { return @($script:TuiCacheResource) }
+        if ($query -eq 'vm list --show-details') { return @($script:TuiCacheVm) }
+        throw ('Unexpected cache fixture query: {0}' -f $query)
+    }
+    $script:ClagnosUiInventoryCache = $null
+    $first = & $script:TuiOriginalInventorySync -Force
+    Assert-Tui -Condition ($script:TuiCacheFixtureCalls -eq 3) -Message 'Initial sync must query groups, resources for the managed group, and VM detail rows once each.'
+    Assert-Tui -Condition (@($first.Groups).Count -eq 1 -and @($first.Resources).Count -eq 1 -and @($first.VirtualMachines).Count -eq 1) -Message 'The initial snapshot must retain every managed inventory layer.'
+
+    $before = $script:TuiCacheFixtureCalls
+    Ensure-ClagnosUiResourceCache | Out-Null
+    Assert-Tui -Condition ($script:TuiCacheFixtureCalls -eq $before) -Message 'A fresh cache must serve screens without repeat Azure reads.'
+    $same = & $script:TuiOriginalInventorySync -Force
+    Assert-Tui -Condition ([object]::ReferenceEquals($first, $same)) -Message 'An unchanged forced validation must preserve the existing snapshot object.'
+    Assert-Tui -Condition (-not [bool]$same.Changed) -Message 'An unchanged validation must clear its change marker.'
+
+    $script:TuiCacheResource.etag = 'disk-etag-2'
+    $changed = & $script:TuiOriginalInventorySync -Force
+    Assert-Tui -Condition ([bool]$changed.Changed -and $changed.Signature -ne $first.Signature) -Message 'An Azure resource ETag change must invalidate the snapshot signature.'
+    $before = $script:TuiCacheFixtureCalls
+    Invalidate-ClagnosUiResourceCache -Reason 'fixture mutation' -ResourceGroup 'rg-cache-fixture'
+    Ensure-ClagnosUiResourceCache | Out-Null
+    Assert-Tui -Condition ($script:TuiCacheFixtureCalls -eq ($before + 3)) -Message 'A mutation must trigger exactly one full reconciliation before the next cache read.'
+    Assert-Tui -Condition (-not [bool]$script:ClagnosUiInventoryCache.IsDirty) -Message 'A successful reconciliation must clear the dirty marker.'
+}
+
+Invoke-TuiTest -Name 'Create wizard applies validated defaults through the real TUI create route' -Action {
+    $script:TuiDotEnvOverrides = @{
+        SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'fixture-new-vc'; SELECTED_AZURE_REGION = 'eastus'
+        WIN_VM_SIZE = 'Standard_B2s_v2'; WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; WIN_VM_DISK_SIZE_GB = '128GB'
+        VM_STORAGE_SKU = 'StandardSSD_LRS'; VM_SECURITY_TYPE = 'Standard'; VM_ENABLE_HIBERNATION = 'true'; VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
+        VM_SSH_PORT = '22222'; VM_RDP_PORT = '3390'; TCP_PORTS = '80,3000-3300'
+    }
+    Set-TuiChoices -Choices @('a','a','a','a','a','a','a','a','a','a','a','a','a','a')
+    & $script:TuiOriginalCreateWizard
+    $call = Assert-TuiCommand -CommandName 'create'
+    Assert-TuiOption -Call $call -Name 'windows' -Expected 'True'
+    Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-new-vc'
+    Assert-TuiOption -Call $call -Name 'vm-region' -Expected 'eastus'
+    Assert-TuiOption -Call $call -Name 'vm-size' -Expected 'Standard_B2s_v2'
+    Assert-Tui -Condition ([bool]$call.FrontendContext.CreateWizardMode) -Message 'The create route must carry wizard mode to the shared runtime.'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.DiskSizeGb -eq '128') -Message 'The wizard must normalize disk text to whole GiB before dispatch.'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.SshPort -eq '22222' -and [string]$call.FrontendContext.CreateWizardValues.RdpPort -eq '3390') -Message 'The wizard must dispatch validated connection ports.'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.TcpPorts -match '3000-3300') -Message 'The wizard must preserve a validated TCP range in the dispatch context.'
+    Assert-TuiOutputContains -Text '>1. Windows' -Message 'The OS step must show the configured default with a greater-than marker.'
+    Assert-TuiOutputContains -Text 'p: previous page | n: next page | g: go to page | f: first page | t: last page' -Message 'The SKU step must expose paging when the region has more than one page.'
+    Assert-TuiNoRealCloudCalls
+}
+
+Invoke-TuiTest -Name 'Create wizard skip-all and apply-all controls use validated defaults' -Action {
+    $script:TuiDotEnvOverrides = @{
+        SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'fixture-default-vc'; SELECTED_AZURE_REGION = 'eastus'
+        WIN_VM_SIZE = 'Standard_B2s_v2'; WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; WIN_VM_DISK_SIZE_GB = '128GB'
+        VM_STORAGE_SKU = 'StandardSSD_LRS'; VM_SECURITY_TYPE = 'Standard'; VM_ENABLE_HIBERNATION = 'true'; VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
+        VM_SSH_PORT = '22222'; VM_RDP_PORT = '3390'; TCP_PORTS = '80,3000-3300'
+    }
+    Set-TuiChoices -Choices @('k','l')
+    & $script:TuiOriginalCreateWizard
+    $call = Assert-TuiCommand -CommandName 'create'
+    Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-default-vc'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.DiskSizeGb -eq '128') -Message 'Skipping remaining steps must retain and validate the configured disk default.'
+    Assert-TuiOutputContains -Text 'Create wizard — review' -Message 'Apply-all must lead to a complete review before create dispatch.'
+}
+
+Invoke-TuiTest -Name 'Create wizard s and c controls keep a default then close without dispatch' -Action {
+    $script:TuiDotEnvOverrides = @{ SELECTED_VM_OS = 'windows' }
+    Set-TuiChoices -Choices @('s','c')
+    & $script:TuiOriginalCreateWizard
+    Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Closing the create wizard must never dispatch create.'
+    Assert-TuiOutputContains -Text 's: skip | k: skip all remaining | a: apply default | l: apply all defaults | c: close wizard' -Message 'Each option step must show the wizard controls.'
+}
+
+Invoke-TuiTest -Name 'Create wizard recovers from invalid configured security and boolean defaults' -Action {
+    $script:TuiDotEnvOverrides = @{
+        SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'recover-vc'; SELECTED_AZURE_REGION = 'eastus'
+        WIN_VM_SIZE = 'Standard_B2s_v2'; WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; WIN_VM_DISK_SIZE_GB = '128GB'
+        VM_STORAGE_SKU = 'StandardSSD_LRS'; VM_SECURITY_TYPE = 'not-a-security-type'; VM_ENABLE_HIBERNATION = 'maybe'
+        VM_ENABLE_NESTED_VIRTUALIZATION = 'maybe'; VM_SSH_PORT = '22222'; VM_RDP_PORT = '3390'; TCP_PORTS = '80,3000-3300'
+    }
+    Set-TuiChoices -Choices @('a','a','a','a','a','a','1','2','1','a','a','a','a','a')
+    & $script:TuiOriginalCreateWizard
+    $call = Assert-TuiCommand -CommandName 'create'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.SecurityType -eq 'Standard') -Message 'The invalid security default must be replaced by a numbered choice.'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.Hibernation -eq 'false') -Message 'The invalid hibernation default must be replaced by a numbered choice.'
+    Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.NestedVirtualization -eq 'true') -Message 'The invalid nested virtualization default must be replaced by a numbered choice.'
+    Assert-TuiOutputContains -Text 'Configured VM_SECURITY_TYPE is invalid' -Message 'Invalid security defaults must be explained without aborting the wizard.'
+    Assert-TuiOutputContains -Text 'Configured default for VM_ENABLE_HIBERNATION is invalid' -Message 'Invalid feature defaults must be explained without aborting the wizard.'
+}
+
+Invoke-TuiTest -Name 'Wizard text fields warn and reprompt after invalid numeric input' -Action {
+    Set-TuiChoices -Choices @('70000','22222')
+    $value = Read-ClagnosUiWizardTextStep -Title 'Fixture SSH port' -DefaultValue '22' -Required -Validator {
+        param($candidate)
+        return (Resolve-ClagnosTcpPortNumber -Value ([string]$candidate) -Label 'SSH port')
+    }
+    Assert-Tui -Condition ([string]$value.Value -eq '22222') -Message 'The text step must return only a valid normalized value.'
+    Assert-TuiOutputContains -Text 'must be a whole number from 1 through 65535' -Message 'The text step must explain a rejected value before prompting again.'
+}
+
+Invoke-TuiTest -Name 'Disk and TCP text validators accept documented units and ranges and reject unsafe bounds' -Action {
+    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '1MB') -eq '1') -Message 'A 1MB disk request must round up to the minimum whole GiB.'
+    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '1GB') -eq '1') -Message 'A 1GB disk request must normalize to one GiB.'
+    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '1TB') -eq '1024') -Message 'A 1TB disk request must normalize to GiB.'
+    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '4095GB') -eq '4095') -Message 'The maximum OS disk size must be accepted.'
+    foreach ($badSize in @('0MB','4096GB','1PB','1,5GB')) {
+        $threw = $false
+        try { ConvertTo-ClagnosOsDiskSizeGb -Value $badSize | Out-Null } catch { $threw = $true }
+        Assert-Tui -Condition $threw -Message ("Invalid OS disk input '{0}' must be rejected." -f $badSize)
+    }
+    $ports = Resolve-ClagnosTcpPortSpecification -Text '80,3000-3300,3300-3310' -RequiredPorts @('22')
+    Assert-Tui -Condition ($ports.CanonicalText -eq '22,80,3000-3310') -Message 'TCP ranges must merge, sort, and include required connection ports.'
+    foreach ($badPorts in @('0','65536','500-300','1-65535','80,abc')) {
+        $threw = $false
+        try { Resolve-ClagnosTcpPortSpecification -Text $badPorts | Out-Null } catch { $threw = $true }
+        Assert-Tui -Condition $threw -Message ("Invalid TCP port input '{0}' must be rejected." -f $badPorts)
+    }
+}
+
 Invoke-TuiTest -Name 'Cloud subscriptions show selected and active state and select an enabled row' -Action {
     Set-TuiChoices -Choices @('1','b')
     Show-ClagnosUiCloudSubscriptions
@@ -450,9 +693,10 @@ Invoke-TuiTest -Name 'Cloud subscriptions show selected and active state and sel
 Invoke-TuiTest -Name 'Cloud subscriptions reject disabled rows without activating them' -Action {
     Set-TuiChoices -Choices @('2','b')
     Show-ClagnosUiCloudSubscriptions
-    Assert-TuiOutputContains -Text 'cannot become the active Azure subscription' -Message 'Disabled selection must display its reason.'
+    Assert-TuiOutputContains -Text '[unavailable]' -Message 'Disabled subscriptions must be visible as unavailable options.'
+    Assert-TuiOutputContains -Text 'not available for the active subscription' -Message 'Selecting a disabled subscription must explain why it cannot be activated.'
     Assert-Tui -Condition ($script:TuiSubscriptionSelections.Count -eq 0) -Message 'A disabled subscription must not be selected.'
-    Assert-Tui -Condition ($script:TuiWaitCount -eq 1) -Message 'Disabled-selection guidance must wait for the operator.'
+    Assert-Tui -Condition ($script:TuiWaitCount -eq 0) -Message 'Disabled-selection guidance stays in the numbered picker.'
 }
 
 Invoke-TuiTest -Name 'Cloud subscriptions ignore invalid numeric selections' -Action {
@@ -481,16 +725,11 @@ Invoke-TuiTest -Name 'Managed inventory routes all ten numbered resource filters
         Reset-TuiScenario
         $script:TuiCommandInvocations.Clear()
         $selection = [string]$number
-        Set-TuiChoices -Choices @($selection, 'rg-filter-fixture', 'b')
+        Set-TuiChoices -Choices @($selection, '2', 'b')
         Show-ClagnosUiInventoryMenu
-        $call = Assert-TuiCommand -CommandName 'list'
-        if ($number -eq 1) {
-            Assert-Tui -Condition (-not $call.Options.ContainsKey('type')) -Message 'Inventory option 1 must list all managed resource types.'
-        }
-        else {
-            Assert-TuiOption -Call $call -Name 'type' -Expected $types[$number - 1]
-        }
-        Assert-TuiOption -Call $call -Name 'group' -Expected 'rg-filter-fixture'
+        Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Cached inventory navigation must not dispatch another Azure inventory command.'
+        if ($number -eq 1) { Assert-TuiOutputContains -Text 'DISK:' -Message 'All-types inventory must render cached resource categories.' }
+        else { Assert-TuiOutputContains -Text ($types[$number - 1].ToUpperInvariant() + ':') -Message 'The selected inventory type must be rendered from the cache.' }
         Assert-TuiNoRealCloudCalls
     }
 }
@@ -509,10 +748,11 @@ Invoke-TuiTest -Name 'Managed inventory returns on q' -Action {
 }
 
 Invoke-TuiTest -Name 'Managed inventory ignores invalid input and supports an unfiltered inventory' -Action {
-    Set-TuiChoices -Choices @('invalid','1','','b')
+    Set-TuiChoices -Choices @('invalid','1','1','b')
     Show-ClagnosUiInventoryMenu
-    $call = Assert-TuiCommand -CommandName 'list'
-    Assert-Tui -Condition (-not $call.Options.ContainsKey('group')) -Message 'Pressing Enter at the optional group filter must keep inventory unfiltered.'
+    Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Invalid menu input and the all-groups filter must remain read-only cache operations.'
+    Assert-TuiOutputContains -Text 'All managed resource groups' -Message 'The group filter must offer an explicit all-groups choice.'
+    Assert-TuiOutputContains -Text '>1. All managed resource groups' -Message 'The inventory filter must mark all groups as the default selection.'
 }
 
 Invoke-TuiTest -Name 'Virtual computer discovery enriches rows with managed group and subscription' -Action {
@@ -523,7 +763,7 @@ Invoke-TuiTest -Name 'Virtual computer discovery enriches rows with managed grou
     Assert-Tui -Condition ($rows.Count -eq 1) -Message 'Discovery must return the fixture VM.'
     Assert-Tui -Condition ([string]$rows[0].ClagnosResourceGroup -eq 'rg-fixture-eastus-g1') -Message 'Discovery must attach its managed resource group.'
     Assert-Tui -Condition ([string]$rows[0].ClagnosSubscriptionId -eq 'sub-fixture-enabled') -Message 'Discovery must attach the selected subscription id.'
-    Assert-Tui -Condition ($script:TuiAzureReadQueries.Count -eq 1) -Message 'Discovery may issue only its mocked VM inventory read in this scenario.'
+    Assert-Tui -Condition ($script:TuiAzureReadQueries.Count -eq 0) -Message 'VM discovery must read the startup inventory snapshot without issuing screen-specific Azure reads.'
 }
 
 Invoke-TuiTest -Name 'Legacy managed-group discovery routes tag migration only through its mock' -Action {
@@ -544,7 +784,7 @@ Invoke-TuiTest -Name 'Virtual computers render the empty state and all list acti
     Show-ClagnosUiVirtualComputers
     Assert-TuiOutputContains -Text 'No managed virtual computers were found.' -Message 'Empty VC inventory must be explicit.'
     Assert-TuiOutputContains -Text 'c: create virtual computer' -Message 'VC list must show create.'
-    Assert-TuiOutputContains -Text 'r: refresh list' -Message 'VC list must show refresh.'
+    Assert-TuiOutputContains -Text 'r: refresh managed resource cache' -Message 'VC list must show an explicit cache refresh action.'
 }
 
 Invoke-TuiTest -Name 'Virtual computers show a readable error if inventory cannot load' -Action {
@@ -556,10 +796,18 @@ Invoke-TuiTest -Name 'Virtual computers show a readable error if inventory canno
 }
 
 Invoke-TuiTest -Name 'Virtual computers create, refresh, and return to the previous menu' -Action {
+    $script:TuiAzOverride = {
+        param([string[]]$Arguments)
+        $query = @($Arguments) -join ' '
+        if ($query -eq 'group list') { return @($script:TuiManagedGroups) }
+        if ($query -like 'resource list --resource-group *') { return @($script:ClagnosUiInventoryCache.Resources) }
+        if ($query -eq 'vm list --show-details') { return @($script:TuiVirtualComputers) }
+        throw ('Unexpected refresh fixture query: {0}' -f $query)
+    }
     Set-TuiChoices -Choices @('c','r','b')
     Show-ClagnosUiVirtualComputers
-    Assert-TuiCommand -CommandName 'create' | Out-Null
-    Assert-Tui -Condition ($script:TuiSubscriptionRefreshCount -eq 2) -Message 'Create and refresh must both refresh the active subscription context.'
+    Assert-Tui -Condition ($script:TuiCreateWizardCount -eq 1) -Message 'Create must open the interactive create wizard.'
+    Assert-Tui -Condition ($script:TuiSubscriptionRefreshCount -eq 1) -Message 'Manual cache refresh must revalidate the subscription context.'
 }
 
 Invoke-TuiTest -Name 'Virtual computer numeric selection opens that VC' -Action {
@@ -665,7 +913,7 @@ Invoke-TuiTest -Name 'Selected VC deletion cancellation never dispatches delete'
 }
 
 Invoke-TuiTest -Name 'Manage Programs routes to builtin and custom catalogs' -Action {
-    Set-TuiChoices -Choices @('1','b','2','b','b')
+    Set-TuiChoices -Choices @('1','1','b','b','2','1','b','b','b')
     & $script:TuiOriginalPackageMenu -Vm $script:TuiWindowsVm
     Assert-TuiOutputContains -Text '[builtin]' -Message 'Builtin catalog rows must carry their source label.'
     Assert-TuiOutputContains -Text '[custom]' -Message 'Custom catalog rows must carry their source label.'
@@ -835,12 +1083,22 @@ $componentActions = @(
 foreach ($componentTypeCase in $componentTypes) {
     foreach ($componentActionCase in $componentActions) {
         Invoke-TuiTest -Name ("Component '{0}' action '{1}' maps to the component command" -f $componentTypeCase.Id, $componentActionCase.Name) -Action {
-            Set-TuiChoices -Choices @([string]$componentTypeCase.Number, [string]$componentActionCase.Key, 'b')
+            $choices = @([string]$componentTypeCase.Number, [string]$componentActionCase.Key)
+            if ($componentActionCase.Name -eq 'show' -and $componentTypeCase.Id -ne 'nsg-rule') { $choices += '' }
+            $choices += 'b'
+            Set-TuiChoices -Choices $choices
             & $script:TuiOriginalComponentMenu -Vm $script:TuiWindowsVm
-            $call = Assert-TuiCommand -CommandName 'component'
-            Assert-TuiOption -Call $call -Name 'type' -Expected ([string]$componentTypeCase.Id)
-            Assert-TuiOption -Call $call -Name 'action' -Expected ([string]$componentActionCase.Name)
-            Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
+            if ($componentActionCase.Name -in @('list','show')) {
+                Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Component list and show must use the managed inventory cache.'
+                if ($componentTypeCase.Id -eq 'nsg-rule') { Assert-TuiOutputContains -Text 'No cached nsg-rule components' -Message 'An empty cached component type must be stated explicitly.' }
+                else { Assert-TuiOutputContains -Text 'Snapshot validated:' -Message 'Cached component output must identify its validation timestamp.' }
+            }
+            else {
+                $call = Assert-TuiCommand -CommandName 'component'
+                Assert-TuiOption -Call $call -Name 'type' -Expected ([string]$componentTypeCase.Id)
+                Assert-TuiOption -Call $call -Name 'action' -Expected ([string]$componentActionCase.Name)
+                Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
+            }
         }
     }
 }
@@ -897,7 +1155,7 @@ Invoke-TuiTest -Name 'Task menu opens local task run history without target sele
 }
 
 Invoke-TuiTest -Name 'Task menu runs a selected init task' -Action {
-    Set-TuiChoices -Choices @('2','01-fixture-init','b')
+    Set-TuiChoices -Choices @('2','1','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'run-vm-init' -Expected '01-fixture-init'
@@ -905,10 +1163,18 @@ Invoke-TuiTest -Name 'Task menu runs a selected init task' -Action {
 }
 
 Invoke-TuiTest -Name 'Task menu runs a selected update task' -Action {
-    Set-TuiChoices -Choices @('3','101-fixture-update','b')
+    $script:TuiTaskCatalogByStage.update[0].Enabled = $true
+    Set-TuiChoices -Choices @('3','1','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'run-vm-update' -Expected '101-fixture-update'
+}
+
+Invoke-TuiTest -Name 'Task menu prevents running a disabled task' -Action {
+    Set-TuiChoices -Choices @('3','b')
+    & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
+    Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Disabled tasks must not be dispatchable through the isolated run menu.'
+    Assert-TuiOutputContains -Text 'No selectable tasks are registered for this stage.' -Message 'An all-disabled stage must explain why it cannot run.'
 }
 
 Invoke-TuiTest -Name 'Task menu lists disabled tasks' -Action {
@@ -920,7 +1186,7 @@ Invoke-TuiTest -Name 'Task menu lists disabled tasks' -Action {
 }
 
 Invoke-TuiTest -Name 'Task menu saves VM app-state for an init task' -Action {
-    Set-TuiChoices -Choices @('4','i','01-fixture-init','v','.all.','b')
+    Set-TuiChoices -Choices @('4','i','1','v','.all.','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'save-app-state' -Expected 'True'
@@ -930,7 +1196,7 @@ Invoke-TuiTest -Name 'Task menu saves VM app-state for an init task' -Action {
 }
 
 Invoke-TuiTest -Name 'Task menu restores local app-state for an update task' -Action {
-    Set-TuiChoices -Choices @('5','u','101-fixture-update','l','manager','b')
+    Set-TuiChoices -Choices @('5','u','1','l','manager','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'restore-app-state' -Expected 'True'
@@ -940,7 +1206,7 @@ Invoke-TuiTest -Name 'Task menu restores local app-state for an update task' -Ac
 }
 
 Invoke-TuiTest -Name 'Task menu saves local app-state for an update task' -Action {
-    Set-TuiChoices -Choices @('4','u','101-fixture-update','l','.current.','b')
+    Set-TuiChoices -Choices @('4','u','1','l','.current.','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'save-app-state' -Expected 'True'
@@ -949,12 +1215,27 @@ Invoke-TuiTest -Name 'Task menu saves local app-state for an update task' -Actio
 }
 
 Invoke-TuiTest -Name 'Task menu restores VM app-state for an init task' -Action {
-    Set-TuiChoices -Choices @('5','i','01-fixture-init','v','assistant','b')
+    Set-TuiChoices -Choices @('5','i','1','v','assistant','b')
     & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'restore-app-state' -Expected 'True'
     Assert-TuiOption -Call $call -Name 'target' -Expected 'vm'
     Assert-TuiOption -Call $call -Name 'user' -Expected 'assistant'
+}
+
+Invoke-TuiTest -Name 'Task app-state validates and normalizes a comma-separated user selection' -Action {
+    Set-TuiChoices -Choices @('4','i','1','v','manager,assistant','b')
+    & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
+    $call = Assert-TuiCommand -CommandName 'task'
+    Assert-TuiOption -Call $call -Name 'user' -Expected 'manager,assistant'
+}
+
+Invoke-TuiTest -Name 'Task app-state rejects malformed usernames and prompts again' -Action {
+    Set-TuiChoices -Choices @('4','i','1','v','manager;invalid','assistant','b')
+    & $script:TuiOriginalTaskMenu -Vm $script:TuiWindowsVm
+    $call = Assert-TuiCommand -CommandName 'task'
+    Assert-TuiOption -Call $call -Name 'user' -Expected 'assistant'
+    Assert-TuiOutputContains -Text 'User selector value' -Message 'Malformed usernames must be rejected before command dispatch.'
 }
 
 Invoke-TuiTest -Name 'Task availability screen enables a selected init task' -Action {
@@ -1172,6 +1453,12 @@ Invoke-TuiTest -Name 'Operations report submenu maps a redacted JSON export path
     Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
 }
 
+Invoke-TuiTest -Name 'Operations report path accepts blank as a cancel action' -Action {
+    Set-TuiChoices -Choices @('9','j','','b')
+    & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
+    Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'A blank JSON path must return to the operations menu without dispatching.'
+}
+
 Invoke-TuiTest -Name 'Operations menu displays its complete action hierarchy and returns on q' -Action {
     Set-TuiChoices -Choices @('q')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
@@ -1325,6 +1612,12 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
 
         $azLines = @(Get-Content -LiteralPath $azLogPath -ErrorAction Stop)
         Assert-Tui -Condition ($azLines.Count -gt 0) -Message 'The process TUI scenario must exercise the isolated Azure CLI fixture.'
+        $groupInventoryReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)group\s+list(\s|$)' })
+        $resourceInventoryReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)resource\s+list\s+--resource-group(\s|$)' })
+        $vmInventoryReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)vm\s+list\s+--show-details(\s|$)' })
+        Assert-Tui -Condition ($groupInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must load the resource-group cache once at startup.'
+        Assert-Tui -Condition ($resourceInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must load each managed resource group once at startup.'
+        Assert-Tui -Condition ($vmInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must cache VM detail and power state once for repeated screens.'
         $script:TuiTotalFixtureAzureReads += $azLines.Count
         $mutationPattern = '(?i)(^|\s)(create|update|delete|set|start|stop|restart|deallocate|resize|reapply|redeploy|attach|detach|power-off|run-command)(\s|$)'
         $mutatingFixtureCalls = @($azLines | Where-Object { $_ -match $mutationPattern })

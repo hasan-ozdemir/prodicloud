@@ -4,7 +4,8 @@ function Invoke-ClagnosCommandDispatcher {
     param(
         [string]$CommandName,
         [hashtable]$Options,
-        [string]$HelpTopic = ''
+        [string]$HelpTopic = '',
+        [hashtable]$FrontendContext = @{}
     )
 
     Assert-ClagnosCommandOptions -CommandName $CommandName -Options $Options
@@ -78,7 +79,9 @@ function Invoke-ClagnosCommandDispatcher {
                 return
             }
             'create' {
-                Invoke-ClagnosCreateCommand -Options $Options -AutoMode:$script:AutoMode -WindowsFlag:$windowsFlag -LinuxFlag:$linuxFlag
+                $wizardValues = if ($FrontendContext.ContainsKey('CreateWizardValues')) { [hashtable]$FrontendContext['CreateWizardValues'] } else { @{} }
+                $wizardMode = [bool]($FrontendContext.ContainsKey('CreateWizardMode') -and $FrontendContext['CreateWizardMode'])
+                Invoke-ClagnosCreateCommand -Options $Options -AutoMode:$script:AutoMode -WindowsFlag:$windowsFlag -LinuxFlag:$linuxFlag -WizardValues $wizardValues -WizardMode:$wizardMode
                 return
             }
             'initialize' {

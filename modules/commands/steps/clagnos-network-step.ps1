@@ -56,6 +56,9 @@ function Invoke-ClagnosNetworkStep {
 
     $priority = 101
     $ports = @($Context.TcpPorts)
+    if ($Context.ContainsKey('TcpPortRanges') -and @($Context.TcpPortRanges).Count -gt 0) {
+        $ports = @($Context.TcpPortRanges)
+    }
     $createNsgRule = $alwaysCreate
     if (-not $alwaysCreate) {
         $createNsgRule = -not (Test-ClagnosNsgRuleExists -ResourceGroup ([string]$Context.ResourceGroup) -NsgName ([string]$Context.NSG) -RuleName ([string]$Context.NsgRule))

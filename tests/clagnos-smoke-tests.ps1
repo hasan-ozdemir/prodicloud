@@ -1286,8 +1286,10 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     Assert-True -Condition ((@(Get-ClagnosComponentTypeIds) -join ',') -eq 'group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule') -Message 'The component catalog must expose all managed VC resource types.'
 
     $uiPath = Join-Path $RepoRoot 'scripts\clagnos-cli.ps1'
+    $pagedPickerPath = Join-Path $RepoRoot 'modules\ui\selection\clagnos-paged-picker.ps1'
     $launcherPath = Join-Path $RepoRoot 'cg.cmd'
     $uiText = Get-Content -LiteralPath $uiPath -Raw
+    $pagedPickerText = Get-Content -LiteralPath $pagedPickerPath -Raw
     $launcherText = Get-Content -LiteralPath $launcherPath -Raw
     Assert-True -Condition ($launcherText -match [regex]::Escape('scripts\clagnos-cli.ps1')) -Message 'cg.cmd must launch scripts/clagnos-cli.ps1.'
     Assert-True -Condition ($uiText -match [regex]::Escape('one tool for all common cloud operations')) -Message 'The welcome screen must show the requested one-line product description.'
@@ -1297,12 +1299,17 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install or update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
-    Assert-True -Condition ($uiText -match [regex]::Escape("Invoke-ClagnosUiCommand -CommandName 'list'")) -Message 'The inventory submenu must route into the read-only list command.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('Get-ClagnosUiCachedInventoryRows -TypeName')) -Message 'The inventory submenu must render managed inventory from the validated snapshot.'
+    Assert-True -Condition ($uiText -match [regex]::Escape("@('vm','list','--show-details')")) -Message 'Startup inventory must cache VM details and power state.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('ClagnosUiInventoryValidationSeconds = 60')) -Message 'Inventory cache freshness must have an explicit bounded validation interval.'
+    Assert-True -Condition ($pagedPickerText -match [regex]::Escape('p: previous page | n: next page | g: go to page | f: first page | t: last page')) -Message 'Numbered pickers must expose page navigation instead of arrow-key selection.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('1MB, 128GB, or 1TB')) -Message 'The create wizard must document and validate disk-size text units.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('22,80,443,3000-3300')) -Message 'The create wizard must accept and validate comma-separated TCP ranges.'
     Assert-True -Condition ($uiText -match [regex]::Escape("'s' { 'show' }")) -Message 'The component submenu must expose property details for the selected resource.'
     Assert-True -Condition ($uiText -match [regex]::Escape('az account set --subscription')) -Message 'Cloud subscription selection must update the Azure CLI active subscription.'
     Assert-True -Condition ($uiText -match [regex]::Escape('Save-ClagnosSubscriptionIdToDotEnv')) -Message 'Cloud subscription selection must persist the Clagnos default subscription.'
     Assert-True -Condition ($uiText -match [regex]::Escape('az account list --all --refresh')) -Message 'Cloud subscriptions must refresh and list all Azure CLI subscriptions.'
-    Assert-True -Condition ($uiText -match [regex]::Escape('This subscription is not enabled and cannot become the active Azure subscription.')) -Message 'Cloud subscriptions must prevent selecting a disabled subscription.'
+    Assert-True -Condition ($pagedPickerText -match [regex]::Escape('This option is not available for the active subscription or selected context.')) -Message 'Cloud subscriptions must prevent selecting a disabled subscription.'
 }
 
 Invoke-Test -Name "Azure-touching commands accept subscription-id and local-only commands reject it" -Action {
@@ -3629,7 +3636,13 @@ Invoke-Test -Name "Resize target disk size parser validates units and values" -A
     $mbRequest = Resolve-ClagnosResizeTargetDiskSize -Options @{ 'disk-size' = '1537mb' }
     Assert-True -Condition ([int]$mbRequest.TargetDiskSizeGb -eq 2) -Message "MB disk-size request must round upward to the next whole GiB."
 
-    foreach ($invalidDiskSize in @('', '0gb', 'bad', '12tb')) {
+    $tbRequest = Resolve-ClagnosResizeTargetDiskSize -Options @{ 'disk-size' = '1TB' }
+    Assert-True -Condition ([int]$tbRequest.TargetDiskSizeGb -eq 1024) -Message "TB disk-size request must normalize to whole GiB."
+
+    $minimumRequest = Resolve-ClagnosResizeTargetDiskSize -Options @{ 'disk-size' = '1MB' }
+    Assert-True -Condition ([int]$minimumRequest.TargetDiskSizeGb -eq 1) -Message "The minimum 1MB text size must normalize to the minimum whole GiB."
+
+    foreach ($invalidDiskSize in @('', '0gb', 'bad', '12tb', '4096gb', '1pb', '1,5gb')) {
         $threw = $false
         try {
             Resolve-ClagnosResizeTargetDiskSize -Options @{ 'disk-size' = $invalidDiskSize } | Out-Null
@@ -3639,6 +3652,19 @@ Invoke-Test -Name "Resize target disk size parser validates units and values" -A
         }
 
         Assert-True -Condition $threw -Message ("Invalid disk-size value '{0}' must be rejected." -f $invalidDiskSize)
+    }
+}
+
+Invoke-Test -Name "TCP port specification accepts ranges and rejects malformed or oversized input" -Action {
+    $specification = Resolve-ClagnosTcpPortSpecification -Text '80,3000-3300,3300-3310' -RequiredPorts @('22')
+    Assert-True -Condition ($specification.CanonicalText -eq '22,80,3000-3310') -Message "TCP port ranges must sort, merge, and include required connection ports."
+    Assert-True -Condition (@($specification.PortRanges).Count -eq 3) -Message "Normalized TCP port ranges must remain compact."
+    Assert-True -Condition (@($specification.Ports).Count -eq 313) -Message "Expanded guest port targets must reflect the merged range and required port."
+
+    foreach ($invalidSpecification in @('0','65536','500-300','1-65535','80,abc','')) {
+        $threw = $false
+        try { Resolve-ClagnosTcpPortSpecification -Text $invalidSpecification | Out-Null } catch { $threw = $true }
+        Assert-True -Condition $threw -Message ("Invalid TCP port specification '{0}' must be rejected." -f $invalidSpecification)
     }
 }
 

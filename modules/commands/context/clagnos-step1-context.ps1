@@ -1,5 +1,122 @@
 # Shared Step-1 context builders and security-value helpers.
 
+function ConvertTo-ClagnosOsDiskSizeGb {
+    param(
+        [string]$Value,
+        [string]$FieldName = 'OS disk size'
+    )
+
+    $text = if ($null -eq $Value) { '' } else { [string]$Value.Trim() }
+    if ($text -notmatch '^(?<amount>\d+(?:\.\d+)?)\s*(?<unit>mb|gb|tb)?$') {
+        Throw-FriendlyError -Detail ("{0} '{1}' is not valid. Use a positive number with MB, GB, or TB, such as 1MB, 128GB, or 1TB." -f $FieldName, $text) -Code 25 -Summary 'OS disk size is invalid.' -Hint 'Enter a positive disk size such as 128GB or 1TB.'
+    }
+
+    $amount = 0.0
+    if (-not [double]::TryParse([string]$Matches.amount, [System.Globalization.NumberStyles]::AllowDecimalPoint, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$amount) -or $amount -le 0) {
+        Throw-FriendlyError -Detail ("{0} '{1}' must be greater than zero." -f $FieldName, $text) -Code 25 -Summary 'OS disk size is invalid.' -Hint 'Enter a positive disk size such as 128GB or 1TB.'
+    }
+    $unit = ([string]$Matches.unit).ToLowerInvariant()
+    $sizeGb = switch ($unit) {
+        'mb' { [Math]::Ceiling($amount / 1024.0) }
+        'tb' { [Math]::Ceiling($amount * 1024.0) }
+        default { [Math]::Ceiling($amount) }
+    }
+    if ($sizeGb -lt 1) { $sizeGb = 1 }
+    if ($sizeGb -gt 4095) {
+        Throw-FriendlyError -Detail ("{0} '{1}' resolves to {2} GB, exceeding the Azure OS disk limit of 4095 GiB." -f $FieldName, $text, [int]$sizeGb) -Code 25 -Summary 'OS disk size exceeds the Azure limit.' -Hint 'Enter an OS disk size no larger than 4095GB.'
+    }
+    return [string][int]$sizeGb
+}
+
+function Resolve-ClagnosTcpPortSpecification {
+    param(
+        [string]$Text,
+        [string[]]$RequiredPorts = @(),
+        [int]$MaximumExpandedPorts = 4096
+    )
+
+    $rawText = if ($null -eq $Text) { '' } else { [string]$Text.Trim() }
+    if ([string]::IsNullOrWhiteSpace($rawText)) {
+        Throw-FriendlyError -Detail 'TCP_PORTS must contain at least one port or port range.' -Code 25 -Summary 'Allowed port input is empty.' -Hint 'Enter comma-separated ports and ranges, such as 80,443,3000-3300.'
+    }
+
+    $intervals = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($rawToken in @($rawText -split ',')) {
+        $token = ([string]$rawToken).Trim()
+        if ($token -match '^(?<first>\d{1,5})\s*-\s*(?<last>\d{1,5})$') {
+            $first = [int]$Matches.first
+            $last = [int]$Matches.last
+        }
+        elseif ($token -match '^\d{1,5}$') {
+            $first = [int]$token
+            $last = $first
+        }
+        else {
+            Throw-FriendlyError -Detail ("TCP port token '{0}' is invalid." -f $token) -Code 25 -Summary 'Allowed port input is invalid.' -Hint 'Use comma-separated ports and ascending ranges, such as 80,443,3000-3300.'
+        }
+
+        if ($first -lt 1 -or $last -gt 65535 -or $last -lt $first) {
+            Throw-FriendlyError -Detail ("TCP port or range '{0}' must be between 1 and 65535 with the range start no greater than its end." -f $token) -Code 25 -Summary 'Allowed port input is outside the valid range.' -Hint 'Use ports from 1 through 65535 and ascending ranges.'
+        }
+        $intervals.Add([pscustomobject]@{ First = $first; Last = $last })
+    }
+
+    foreach ($requiredPortText in @($RequiredPorts)) {
+        $requiredPort = 0
+        if (-not [int]::TryParse([string]$requiredPortText, [ref]$requiredPort) -or $requiredPort -lt 1 -or $requiredPort -gt 65535) {
+            Throw-FriendlyError -Detail ("Required TCP port '{0}' is invalid." -f [string]$requiredPortText) -Code 25 -Summary 'A required VM connection port is invalid.' -Hint 'Set VM_SSH_PORT and VM_RDP_PORT to numbers from 1 through 65535.'
+        }
+        $intervals.Add([pscustomobject]@{ First = $requiredPort; Last = $requiredPort })
+    }
+
+    $sortedIntervals = @($intervals.ToArray() | Sort-Object First, Last)
+    $merged = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($interval in @($sortedIntervals)) {
+        if ($merged.Count -eq 0) {
+            $merged.Add([pscustomobject]@{ First = [int]$interval.First; Last = [int]$interval.Last })
+            continue
+        }
+        $current = $merged[$merged.Count - 1]
+        if ([int]$interval.First -le ([int]$current.Last + 1)) {
+            if ([int]$interval.Last -gt [int]$current.Last) { $current.Last = [int]$interval.Last }
+        }
+        else {
+            $merged.Add([pscustomobject]@{ First = [int]$interval.First; Last = [int]$interval.Last })
+        }
+    }
+
+    $expandedCount = 0
+    foreach ($interval in @($merged.ToArray())) { $expandedCount += ([int]$interval.Last - [int]$interval.First + 1) }
+    if ($expandedCount -gt $MaximumExpandedPorts) {
+        Throw-FriendlyError -Detail ("TCP port input expands to {0} ports; the maximum supported for guest initialization is {1}." -f $expandedCount, $MaximumExpandedPorts) -Code 25 -Summary 'Too many allowed TCP ports were entered.' -Hint 'Use a narrower range or separate only the required ports.'
+    }
+
+    $normalizedRanges = @()
+    $expandedPorts = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($interval in @($merged.ToArray())) {
+        if ([int]$interval.First -eq [int]$interval.Last) { $normalizedRanges += [string]$interval.First }
+        else { $normalizedRanges += ('{0}-{1}' -f [int]$interval.First, [int]$interval.Last) }
+        for ($port = [int]$interval.First; $port -le [int]$interval.Last; $port++) { $expandedPorts.Add([string]$port) }
+    }
+
+    return [pscustomobject]@{
+        CanonicalText = [string](@($normalizedRanges) -join ',')
+        PortRanges = @($normalizedRanges)
+        Ports = @($expandedPorts.ToArray())
+    }
+}
+
+function Resolve-ClagnosTcpPortNumber {
+    param([string]$Value, [string]$Label = 'TCP port')
+
+    $text = if ($null -eq $Value) { '' } else { [string]$Value.Trim() }
+    $port = 0
+    if ($text -notmatch '^\d{1,5}$' -or -not [int]::TryParse($text, [ref]$port) -or $port -lt 1 -or $port -gt 65535) {
+        Throw-FriendlyError -Detail ("{0} '{1}' must be a whole number from 1 through 65535." -f $Label, $text) -Code 25 -Summary 'TCP port value is invalid.' -Hint 'Enter a port number from 1 through 65535.'
+    }
+    return [string]$port
+}
+
 function Get-ClagnosStep1ContextPersistenceMap {
     param(
         [string]$Platform,
@@ -87,7 +204,7 @@ function New-ClagnosStep1ConfigDisplayMap {
         VM_ASSISTANT_USER = [string]$Context.VmAssistantUser
         VM_SSH_PORT = [string]$Context.SshPort
         VM_RDP_PORT = [string]$Context.RdpPort
-        TCP_PORTS = @($Context.TcpPorts)
+        TCP_PORTS = [string]$Context.TcpPortsConfiguredCsv
         $platformInitDirKey = [string]$Context.VmInitTaskDir
         $platformUpdateDirKey = [string]$Context.VmUpdateTaskDir
     }
@@ -296,7 +413,8 @@ function Invoke-ClagnosStep1Common {
         [ValidateSet('create','update','configure','generic')]
         [string]$OperationName = 'generic',
         [switch]$DeferEnvWrites,
-        [switch]$SkipInteractiveConfigEditor
+        [switch]$SkipInteractiveConfigEditor,
+        [switch]$WizardInputComplete
     )
 
     $pendingEnvUpdates = [ordered]@{}
@@ -325,6 +443,9 @@ function Invoke-ClagnosStep1Common {
             if ([string]::Equals([string]$OperationName, 'update', [System.StringComparison]::OrdinalIgnoreCase)) {
                 $userInput = $vmNameDefaultResolved
                 Write-Host ("Update target VM '{0}' is fixed by the selected managed VM target." -f [string]$userInput) -ForegroundColor Cyan
+            }
+            elseif ($WizardInputComplete) {
+                $userInput = $vmNameDefaultResolved
             }
             elseif ([string]::IsNullOrWhiteSpace([string]$vmNameDefaultResolved)) {
                 $userInput = Read-Host "Enter VM name (actual Azure VM name)"
@@ -429,7 +550,7 @@ function Invoke-ClagnosStep1Common {
         $azLocation = ([string]$azLocation).Trim().ToLowerInvariant()
     }
 
-    $shouldPromptLocationAndSku = (-not $AutoMode) -and -not ($hasForcedAzLocation -or $hasForcedVmSize) -and -not [string]::Equals([string]$OperationName, 'update', [System.StringComparison]::OrdinalIgnoreCase)
+    $shouldPromptLocationAndSku = (-not $AutoMode) -and (-not $WizardInputComplete) -and -not ($hasForcedAzLocation -or $hasForcedVmSize) -and -not [string]::Equals([string]$OperationName, 'update', [System.StringComparison]::OrdinalIgnoreCase)
     if ($shouldPromptLocationAndSku) {
         $priceHours = Get-PriceHoursFromConfig -Config $ConfigMap -DefaultHours 730
         $regionBackToken = Get-ClagnosSkuPickerRegionBackToken
@@ -678,10 +799,11 @@ function Invoke-ClagnosStep1Common {
         Assert-ClagnosVmNameConflictFree -VmName $vmName -TargetResourceGroup $resourceGroup
     }
 
-    $vmDiskSize = Resolve-ClagnosTemplate -Template (Get-ConfigValue -Config $ConfigMap -Key $vmDiskSizeConfigKey -DefaultValue $VmDiskSizeDefault) -Tokens $baseTokens
+    $vmDiskSizeRaw = Resolve-ClagnosTemplate -Template (Get-ConfigValue -Config $ConfigMap -Key $vmDiskSizeConfigKey -DefaultValue $VmDiskSizeDefault) -Tokens $baseTokens
     if (-not [string]::IsNullOrWhiteSpace([string]$forcedVmDiskSize)) {
-        $vmDiskSize = [string]$forcedVmDiskSize
+        $vmDiskSizeRaw = [string]$forcedVmDiskSize
     }
+    $vmDiskSize = ConvertTo-ClagnosOsDiskSizeGb -Value ([string]$vmDiskSizeRaw) -FieldName $vmDiskSizeConfigKey
 
     $companyName = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $ConfigMap -Key "SELECTED_COMPANY_NAME" -DefaultValue '')) -Tokens $baseTokens
     $companyWebAddress = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $ConfigMap -Key 'SELECTED_COMPANY_WEB_ADDRESS' -DefaultValue '')) -Tokens $baseTokens
@@ -721,27 +843,19 @@ function Invoke-ClagnosStep1Common {
     $publicDnsLabel = Resolve-ClagnosPublicDnsLabel -PublicIpName ([string]$IP) -VmName ([string]$vmName)
 
     $defaultPortsCsv = Get-ClagnosDefaultTcpPortsCsv
-    $tcpPortsConfiguredCsv = Get-ConfigValue -Config $ConfigMap -Key "TCP_PORTS" -DefaultValue $defaultPortsCsv
-    $tcpPorts = @($tcpPortsConfiguredCsv -split "," | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' })
+    $tcpPortsConfiguredCsv = [string](Get-ConfigValue -Config $ConfigMap -Key "TCP_PORTS" -DefaultValue $defaultPortsCsv)
+    if ([string]::IsNullOrWhiteSpace([string]$tcpPortsConfiguredCsv)) { $tcpPortsConfiguredCsv = [string]$defaultPortsCsv }
 
-    if (-not ($sshPort -match '^\d+$')) {
-        throw "Invalid SSH port '$sshPort'."
-    }
-    if ($tcpPorts -notcontains $sshPort) {
-        $tcpPorts += $sshPort
-    }
+    $sshPort = Resolve-ClagnosTcpPortNumber -Value ([string]$sshPort) -Label 'VM_SSH_PORT'
     $includeRdp = [bool]((Get-ClagnosPlatformDefaults -Platform $Platform).IncludeRdp)
     if ($includeRdp) {
-        if (-not ($rdpPort -match '^\d+$')) {
-            throw "Invalid RDP port '$rdpPort'."
-        }
-        if ($tcpPorts -notcontains $rdpPort) {
-            $tcpPorts += $rdpPort
-        }
+        $rdpPort = Resolve-ClagnosTcpPortNumber -Value ([string]$rdpPort) -Label 'VM_RDP_PORT'
     }
-    if (-not $tcpPorts -or $tcpPorts.Count -eq 0) {
-        throw "No valid TCP ports were found in TCP_PORTS."
-    }
+    $requiredPorts = @([string]$sshPort)
+    if ($includeRdp) { $requiredPorts += [string]$rdpPort }
+    $tcpPortSpecification = Resolve-ClagnosTcpPortSpecification -Text $tcpPortsConfiguredCsv -RequiredPorts $requiredPorts
+    $tcpPortsConfiguredCsv = [string]$tcpPortSpecification.CanonicalText
+    $tcpPorts = @($tcpPortSpecification.Ports)
 
     $context = [ordered]@{
         RegionCode = $regionCode
@@ -797,6 +911,7 @@ function Invoke-ClagnosStep1Common {
         SshPort = $sshPort
         RdpPort = $rdpPort
         TcpPorts = @($tcpPorts)
+        TcpPortRanges = @($tcpPortSpecification.PortRanges)
         TcpPortsConfiguredCsv = [string]$tcpPortsConfiguredCsv
         VmInitTaskDir = $vmInitTaskDir
         VmUpdateTaskDir = $vmUpdateTaskDir

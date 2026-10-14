@@ -9,6 +9,7 @@ function Initialize-ClagnosCommandRuntimeContext {
         [hashtable]$ConfigMapOverrides = @{},
         [string]$OperationName = 'generic',
         [switch]$UseInteractiveStep1,
+        [switch]$WizardMode,
         [switch]$PersistGeneratedResourceGroup,
         [switch]$DeferDotEnvWrites
     )
@@ -39,6 +40,9 @@ function Initialize-ClagnosCommandRuntimeContext {
 
     $step1AutoMode = $true
     if ($UseInteractiveStep1) {
+        # The frontend wizard supplies the create-critical fields, but the
+        # shared create workflow is still interactive (including its review
+        # steps and normal persistence behavior). Do not treat it as auto mode.
         $step1AutoMode = [bool]$AutoMode
     }
 
@@ -55,6 +59,8 @@ function Initialize-ClagnosCommandRuntimeContext {
         -VmDiskSizeDefault ([string]$platformDefaults.VmDiskSizeDefault) `
         -ConfigOverrides $script:ConfigOverrides `
         -OperationName $OperationName `
+        -WizardInputComplete:$WizardMode `
+        -SkipInteractiveConfigEditor:$WizardMode `
         -DeferEnvWrites:$DeferDotEnvWrites
 
     $step1Context['VmOsType'] = $platform
@@ -197,13 +203,13 @@ function Initialize-ClagnosTaskExecutionRuntimeContext {
 
     $defaultPortsCsv = Get-ClagnosDefaultTcpPortsCsv
     $tcpPortsConfiguredCsv = [string](Get-ConfigValue -Config $effectiveConfigMap -Key 'TCP_PORTS' -DefaultValue $defaultPortsCsv)
-    $tcpPorts = @($tcpPortsConfiguredCsv -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' })
-    if (-not [string]::IsNullOrWhiteSpace([string]$sshPort) -and ($sshPort -match '^\d+$') -and $tcpPorts -notcontains $sshPort) {
-        $tcpPorts += $sshPort
-    }
-    if ([bool]$platformDefaults.IncludeRdp -and -not [string]::IsNullOrWhiteSpace([string]$rdpPort) -and ($rdpPort -match '^\d+$') -and $tcpPorts -notcontains $rdpPort) {
-        $tcpPorts += $rdpPort
-    }
+    if ([string]::IsNullOrWhiteSpace([string]$tcpPortsConfiguredCsv)) { $tcpPortsConfiguredCsv = [string]$defaultPortsCsv }
+    $requiredPorts = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$sshPort)) { $requiredPorts += [string]$sshPort }
+    if ([bool]$platformDefaults.IncludeRdp -and -not [string]::IsNullOrWhiteSpace([string]$rdpPort)) { $requiredPorts += [string]$rdpPort }
+    $tcpPortSpecification = Resolve-ClagnosTcpPortSpecification -Text $tcpPortsConfiguredCsv -RequiredPorts $requiredPorts
+    $tcpPortsConfiguredCsv = [string]$tcpPortSpecification.CanonicalText
+    $tcpPorts = @($tcpPortSpecification.Ports)
 
     $taskOutcomeModeRaw = [string](Get-ConfigValue -Config $effectiveConfigMap -Key 'VM_TASK_OUTCOME_MODE' -DefaultValue 'continue')
     if ([string]::IsNullOrWhiteSpace($taskOutcomeModeRaw)) { $taskOutcomeModeRaw = 'continue' }
@@ -278,6 +284,7 @@ function Initialize-ClagnosTaskExecutionRuntimeContext {
         SshPort = [string]$sshPort
         RdpPort = [string]$rdpPort
         TcpPorts = @($tcpPorts)
+        TcpPortRanges = @($tcpPortSpecification.PortRanges)
         TcpPortsConfiguredCsv = [string]$tcpPortsConfiguredCsv
         VmInitTaskDir = [string]$vmInitTaskDir
         VmUpdateTaskDir = [string]$vmUpdateTaskDir

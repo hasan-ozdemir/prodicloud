@@ -119,6 +119,12 @@ Run `.\cg.cmd` to open the menu. The welcome screen shows the `one tool for all 
 
 The selected virtual computer opens with compute, CPU/RAM, OS image, disks, security/feature settings, NIC/VNet/subnet/NSG, private/public IP, public DNS, tags, and attached-resource details. It also shows SSH/RDP endpoints, the Windows PowerShell remoting endpoint, and the configured manager and assistant usernames/passwords read from local `.env`; passwords are not included in progress or operation log messages. Its menus expose initialization, maintenance, builtin/custom package status/install/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP/PowerShell remoting, remote commands, active and disabled tasks, package app-state, reports, and deletion. Select `o: operations` for numbered power actions (including graceful shutdown, hibernate/resume, immediate power-off, and force reset), feature toggles, resizing, and the other advanced operations.
 
+On the first signed-in launch, the TUI reads managed resource groups, each managed group's resources, and VM details into a subscription-scoped in-memory snapshot. Screens reuse that snapshot; it is checked again after 60 seconds, when `r: refresh managed resource cache` is selected, after a subscription change, or after a command that may mutate Azure state. A changed ETag or changed resource content replaces the snapshot; an unchanged read keeps the same snapshot. Inventory and component list/show screens render from the cache instead of issuing a fresh Azure list command each time.
+
+Creating a virtual computer opens a numbered wizard. The configured/default OS, name, region, VM size, image, storage tier, security options, feature toggles, ports, and disk size are marked with `>`. Long lists use `p`/`n` for previous/next, `g` for a page number, and `f`/`t` for first/last page; select only a number visible on the current page. Wizard controls are `s` to keep the configured default for this step, `k` to keep defaults for all remaining steps, `a` to accept the current default, `l` to accept remaining defaults, and `c` to close without creating. Menus use numbered or lettered choices and do not require arrow-key navigation.
+
+The wizard accepts inbound TCP ports as comma-separated numbers and ascending ranges such as `22,80,443,3000-3300`; it validates ports from 1 through 65535, merges overlapping ranges, and adds the required SSH/RDP ports. OS disk-size text accepts `MB`, `GB`, or `TB` (for example `1MB`, `128GB`, or `1TB`) and normalizes to whole GiB within the Azure OS disk limit of 1–4095 GiB. Invalid entries are explained and requested again before the create command is dispatched.
+
 ### Prerequisites
 - Windows host with PowerShell and the Azure CLI available.
 - Azure subscription access with permission to create, update, and delete compute and networking resources.
@@ -464,6 +470,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `.\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --vm-size=Standard_D4as_v5 --windows` | `--vm-size` | Changes the VM SKU in the same region | Compute sizing changes | Same-region only. |
 | `.\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=196gb --expand --windows` | `--disk-size`, `--expand` | Performs supported managed OS disk growth | Safe in-place disk growth | Deallocates the VM, updates disk size, and starts it again. |
 | `.\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=98304mb --expand` | `mb` units | Performs the same expand path with MB input | Operator convenience | The runtime normalizes to Azure-safe GB values. |
+| `.\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=1tb --expand` | `mb`, `gb`, or `tb` units | Normalizes the OS disk target to 1024 GiB | Operator convenience | OS disk text sizes must resolve to 1–4095 GiB. |
 | `.\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=64gb --shrink` | `--shrink` | Stops before mutation and explains supported alternatives | Operator guidance only | `--disk-size=... --shrink` is a non-mutating guidance path because Azure does not support shrinking an existing managed OS disk in place; the command prints supported rebuild and migration alternatives instead of risking disk integrity |
 
 #### `set`
@@ -556,6 +563,7 @@ Practical outcomes:
 .\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --vm-size=Standard_D4as_v5 --windows
 .\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=196gb --expand --windows
 .\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=98304mb --expand
+.\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=1tb --expand
 .\cg.cmd resize --group=<resource-group> --vm-name=<vm-name> --disk-size=64gb --shrink
 ```
 
@@ -751,6 +759,7 @@ Purpose: change the VM size or expand the managed OS disk in-place within the cu
 Behavior notes:
 - same-region only
 - `--vm-size` changes compute SKU
+- `--disk-size` accepts positive `MB`, `GB`, or `TB` text values that normalize to an OS disk size from 1 through 4095 GiB
 - `--disk-size=... --expand` performs the supported managed OS disk growth path
 - `--disk-size=... --shrink` is a non-mutating guidance path because Azure does not support shrinking an existing managed OS disk in place; the command prints supported rebuild and migration alternatives instead of risking disk integrity
 - both mutating resize paths print before/after lifecycle snapshots and verify the resulting VM SKU or OS disk size with Azure readbacks before saving the requested value into `.env`

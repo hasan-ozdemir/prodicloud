@@ -2,6 +2,23 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.14.413 - 2026-10-14
+
+### Summary
+The interactive CLI now reuses a validated Azure resource snapshot and creates virtual computers through a numbered, paged, input-validated wizard.
+
+### Highlights
+- The first signed-in TUI screen caches managed resource groups, their resources, and VM details for the selected subscription. Screens reuse that snapshot; it is revalidated every 60 seconds and invalidated by explicit refresh, subscription changes, and operations that may mutate Azure state.
+- Resource changes are detected by Azure ETags, with content signatures as a fallback when a resource does not expose an ETag. An unchanged validation preserves the existing snapshot.
+- The create wizard pages region, SKU, and other option lists; marks defaults with `>`; supports `p/n/g/f/t` page navigation and `s/k/a/l/c` step controls; and reviews validated values before calling the shared create workflow.
+- OS disk sizes accept `MB`, `GB`, or `TB` text up to the 4095 GiB Azure OS disk limit. Inbound TCP ports accept comma-separated values and ranges such as `3000-3300`; invalid values are rejected before command dispatch.
+- Task selection, inventory group filters, app-state user selectors, and report paths now use accessible numeric or validated input paths.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 189 smoke checks and 172 fixture-backed TUI scenarios, including the real `cg.cmd` process output, snapshot reuse/change checks, create wizard controls, invalid defaults, text-validation retry paths, and canceled report-path input.
+- Fixture tests made no native Azure calls and dispatched no real Clagnos commands; no Azure resources were changed.
+- Repository quality checks passed for PowerShell parsing, documentation, sensitive content, package app-state, release packaging, and Python artifact hygiene.
+
 ## Release 2026.10.13.412 - 2026-10-13
 
 ### Summary

@@ -42,15 +42,22 @@ $managedGroup = [pscustomobject]@{
     id = ("/subscriptions/{0}/resourceGroups/{1}" -f $subscriptionId,$resourceGroup)
     name = $resourceGroup
     location = 'eastus'
+    etag = 'fixture-group-etag-1'
+    properties = [pscustomobject]@{ provisioningState = 'Succeeded' }
     provisioningState = 'Succeeded'
     tags = [pscustomobject]@{ 'managed-by' = 'clagnos' }
 }
 $vm = [pscustomobject]@{
     id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Compute/virtualMachines/{2}" -f $subscriptionId,$resourceGroup,$vmName)
+    etag = 'fixture-vm-etag-1'
     vmId = 'tui-fixture-vm-id'
     name = $vmName
     resourceGroup = $resourceGroup
     location = 'eastus'
+    powerState = 'VM running'
+    privateIps = '10.20.0.4'
+    publicIps = '203.0.113.8'
+    fqdns = 'tui-fixture.eastus.cloudapp.azure.com'
     provisioningState = 'Succeeded'
     hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_D2as_v5' }
     storageProfile = [pscustomobject]@{
@@ -124,7 +131,17 @@ switch -Regex ($commandText) {
         break
     }
     '^disk show$' { $result = [pscustomobject]@{ name = 'disk-tui-fixture-os'; diskSizeGb = 128; sku = [pscustomobject]@{ name = 'StandardSSD_LRS' }; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } }; break }
-    '^resource list$' { $result = @([pscustomobject]@{ type = 'Microsoft.Compute/virtualMachines'; name = $vmName; location = 'eastus' }, [pscustomobject]@{ type = 'Microsoft.Compute/disks'; name = 'disk-tui-fixture-os'; location = 'eastus' }); break }
+    '^resource list$' {
+        $result = @(
+            [pscustomobject]@{ id = $vm.id; etag = 'fixture-vm-etag-1'; type = 'Microsoft.Compute/virtualMachines'; name = $vmName; resourceGroup = $resourceGroup; location = 'eastus'; properties = [pscustomobject]@{ hardwareProfile = $vm.hardwareProfile; storageProfile = $vm.storageProfile; provisioningState = 'Succeeded' } },
+            [pscustomobject]@{ id = $vm.storageProfile.osDisk.managedDisk.id; etag = 'fixture-disk-etag-1'; type = 'Microsoft.Compute/disks'; name = 'disk-tui-fixture-os'; resourceGroup = $resourceGroup; location = 'eastus'; sku = [pscustomobject]@{ name = 'StandardSSD_LRS' }; properties = [pscustomobject]@{ diskSizeGb = 128; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } } },
+            [pscustomobject]@{ id = $vm.networkProfile.networkInterfaces[0].id; etag = 'fixture-nic-etag-1'; type = 'Microsoft.Network/networkInterfaces'; name = 'nic-tui-fixture'; resourceGroup = $resourceGroup; location = 'eastus'; properties = [pscustomobject]@{ primary = $true; enableAcceleratedNetworking = $true; enableIPForwarding = $false; networkSecurityGroup = [pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/networkSecurityGroups/nsg-tui-fixture" -f $subscriptionId,$resourceGroup) }; ipConfigurations = @([pscustomobject]@{ name = 'ipconfig-primary'; primary = $true; privateIPAddress = '10.20.0.4'; privateIPAllocationMethod = 'Dynamic'; subnet = [pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/virtualNetworks/vnet-tui-fixture/subnets/subnet-tui-fixture" -f $subscriptionId,$resourceGroup) }; publicIPAddress = [pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/publicIPAddresses/pip-tui-fixture" -f $subscriptionId,$resourceGroup) } }) } },
+            [pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/publicIPAddresses/pip-tui-fixture" -f $subscriptionId,$resourceGroup); etag = 'fixture-ip-etag-1'; type = 'Microsoft.Network/publicIPAddresses'; name = 'pip-tui-fixture'; resourceGroup = $resourceGroup; location = 'eastus'; sku = [pscustomobject]@{ name = 'Standard' }; zones = @('1'); properties = [pscustomobject]@{ ipAddress = '203.0.113.8'; publicIPAllocationMethod = 'Static'; dnsSettings = [pscustomobject]@{ fqdn = 'tui-fixture.eastus.cloudapp.azure.com'; domainNameLabel = 'tui-fixture' } } },
+            [pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/virtualNetworks/vnet-tui-fixture" -f $subscriptionId,$resourceGroup); etag = 'fixture-vnet-etag-1'; type = 'Microsoft.Network/virtualNetworks'; name = 'vnet-tui-fixture'; resourceGroup = $resourceGroup; location = 'eastus'; properties = [pscustomobject]@{ subnets = @([pscustomobject]@{ name = 'subnet-tui-fixture'; id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/virtualNetworks/vnet-tui-fixture/subnets/subnet-tui-fixture" -f $subscriptionId,$resourceGroup) }) } },
+            [pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/networkSecurityGroups/nsg-tui-fixture" -f $subscriptionId,$resourceGroup); etag = 'fixture-nsg-etag-1'; type = 'Microsoft.Network/networkSecurityGroups'; name = 'nsg-tui-fixture'; resourceGroup = $resourceGroup; location = 'eastus'; properties = [pscustomobject]@{ securityRules = @() } }
+        )
+        break
+    }
     default {
         Write-Error ('Unsupported fake Azure read command: {0}' -f $commandText)
         exit 96

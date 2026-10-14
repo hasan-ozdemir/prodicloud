@@ -183,42 +183,17 @@ function Select-AzLocationInteractive {
         [string]$DefaultLocation
     )
 
-    $locations = Get-AzLocationCatalog
-    $defaultIndex = 1
-    for ($i = 0; $i -lt $locations.Count; $i++) {
-        if ([string]::Equals($locations[$i].Name, $DefaultLocation, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $defaultIndex = $i + 1
-            break
+    $locations = @(Get-AzLocationCatalog)
+    $options = @(
+        $locations | ForEach-Object {
+            $name = [string]$_.Name
+            $label = if ([string]::IsNullOrWhiteSpace([string]$_.DisplayName)) { $name } else { [string]$_.DisplayName }
+            [pscustomobject]@{ Value = $name; Label = $label; Detail = $name }
         }
-    }
-
-    Write-Host ""
-    Write-Host "Available Azure regions (select by number):" -ForegroundColor Cyan
-    Write-RegionSelectionGrid -Locations $locations -DefaultIndex $defaultIndex -Columns 9
-
-    while ($true) {
-        $inputValue = Read-Host "Enter region number (default=$defaultIndex)"
-        if ([string]::IsNullOrWhiteSpace($inputValue)) {
-            $selectedLocation = Resolve-ClagnosLocationNameFromEntry -Entry $locations[$defaultIndex - 1] -Catalog $locations -DefaultLocation $DefaultLocation
-            if (-not [string]::IsNullOrWhiteSpace([string]$selectedLocation)) {
-                return $selectedLocation
-            }
-            Write-Host "Default region resolution returned empty value. Please select a region number explicitly." -ForegroundColor Yellow
-            continue
-        }
-
-        if ($inputValue -match '^\d+$') {
-            $selectedNo = [int]$inputValue
-            if ($selectedNo -ge 1 -and $selectedNo -le $locations.Count) {
-                $selectedLocation = Resolve-ClagnosLocationNameFromEntry -Entry $locations[$selectedNo - 1] -Catalog $locations -DefaultLocation $DefaultLocation
-                if (-not [string]::IsNullOrWhiteSpace([string]$selectedLocation)) {
-                    return $selectedLocation
-                }
-                Write-Host "Selected region could not be resolved. Please choose another region number." -ForegroundColor Yellow
-                continue
-            }
-        }
-
-        Write-Host "Invalid region selection. Please enter a valid number." -ForegroundColor Yellow
-    }
+    )
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Available Azure regions' -DefaultValue $DefaultLocation -PageSize 12
+    if ([string]$selection.Action -eq 'selected') { return [string]$selection.Value }
+    if (-not [string]::IsNullOrWhiteSpace([string]$DefaultLocation)) { return [string]$DefaultLocation }
+    if (@($options).Count -gt 0) { return [string]$options[0].Value }
+    return ''
 }

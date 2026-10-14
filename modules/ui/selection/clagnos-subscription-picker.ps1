@@ -253,38 +253,16 @@ function Select-ClagnosSubscriptionInteractive {
     )
 
     $subscriptionRows = @(Get-ClagnosAccessibleSubscriptionRows)
-    $defaultIndex = 1
-    for ($i = 0; $i -lt @($subscriptionRows).Count; $i++) {
-        $rowId = [string]$subscriptionRows[$i].id
-        if ([string]::Equals($rowId, [string]$DefaultSubscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $defaultIndex = $i + 1
-            break
+    $options = @(
+        $subscriptionRows | ForEach-Object {
+            $defaultText = if ([bool]$_.isDefault) { 'Azure CLI active default' } else { [string]$_.state }
+            [pscustomobject]@{ Value = [string]$_.id; Label = ('{0} ({1})' -f [string]$_.name, [string]$_.id); Detail = $defaultText }
         }
+    )
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Available Azure subscriptions' -DefaultValue $DefaultSubscriptionId -PageSize 12
+    if ([string]$selection.Action -eq 'selected') {
+        $match = @($subscriptionRows | Where-Object { [string]::Equals([string]$_.id, [string]$selection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($match).Count -gt 0) { return [object]$match[0] }
     }
-
-    Write-Host ''
-    Write-Host 'Available Azure subscriptions (select by number):' -ForegroundColor Cyan
-    for ($i = 0; $i -lt @($subscriptionRows).Count; $i++) {
-        $row = $subscriptionRows[$i]
-        $prefix = if (($i + 1) -eq $defaultIndex) { '*' } else { '' }
-        $nameText = [string]$row.name
-        $idText = [string]$row.id
-        $defaultText = if ([bool]$row.isDefault) { ' [active default]' } else { '' }
-        Write-Host ("{0}{1}-{2} ({3}){4}" -f $prefix, ($i + 1), $nameText, $idText, $defaultText)
-    }
-
-    while ($true) {
-        $raw = Read-Host ("Enter subscription number (default={0})" -f $defaultIndex)
-        if ([string]::IsNullOrWhiteSpace([string]$raw)) {
-            return [object]$subscriptionRows[$defaultIndex - 1]
-        }
-        if ($raw -match '^\d+$') {
-            $index = [int]$raw
-            if ($index -ge 1 -and $index -le @($subscriptionRows).Count) {
-                return [object]$subscriptionRows[$index - 1]
-            }
-        }
-
-        Write-Host 'Invalid subscription selection. Please enter a valid number.' -ForegroundColor Yellow
-    }
+    Throw-FriendlyError -Detail 'Azure subscription selection was closed before a subscription was selected.' -Code 24 -Summary 'Azure subscription selection was canceled.' -Hint 'Select an enabled subscription by number and retry.'
 }

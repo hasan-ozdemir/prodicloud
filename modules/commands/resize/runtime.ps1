@@ -148,7 +148,7 @@ function Resolve-ClagnosResizeOperationRequest {
             -Detail "Option '--disk-size' is required when using '--expand' or '--shrink'." `
             -Code 62 `
             -Summary "Resize command is missing the target disk size." `
-            -Hint "Use --disk-size=<number>gb|mb together with --expand or --shrink."
+            -Hint "Use --disk-size=<size>MB|GB|TB together with --expand or --shrink, for example 128GB or 1TB."
     }
 
     if ($hasDiskSize -and -not ($hasExpand -or $hasShrink)) {
@@ -156,7 +156,7 @@ function Resolve-ClagnosResizeOperationRequest {
             -Detail "Option '--disk-size' requires exactly one disk intent flag." `
             -Code 62 `
             -Summary "Resize command does not know whether to expand or shrink the disk." `
-            -Hint "Use --disk-size=<number>gb|mb with either --expand or --shrink."
+            -Hint "Use --disk-size=<size>MB|GB|TB with either --expand or --shrink."
     }
 
     if ($hasDiskSize) {
@@ -167,7 +167,7 @@ function Resolve-ClagnosResizeOperationRequest {
             TargetDiskSizeGb = [int]$diskRequest.TargetDiskSizeGb
             RawText = [string]$diskRequest.RawText
             Unit = [string]$diskRequest.Unit
-            RequestedAmount = [int]$diskRequest.RequestedAmount
+            RequestedAmount = [double]$diskRequest.RequestedAmount
         }
     }
 
@@ -192,28 +192,23 @@ function Resolve-ClagnosResizeTargetDiskSize {
             -Detail "Option '--disk-size' requires a value." `
             -Code 62 `
             -Summary "Resize command is missing the target disk size." `
-            -Hint "Use --disk-size=<number>gb|mb."
+            -Hint "Use --disk-size=<size>MB|GB|TB, such as 128GB or 1TB."
     }
 
-    if ($rawText -notmatch '^\s*(\d+)\s*(gb|mb)\s*$') {
+    try {
+        $targetDiskSizeGb = [int](ConvertTo-ClagnosOsDiskSizeGb -Value $rawText -FieldName 'OS disk size')
+    }
+    catch {
         Throw-FriendlyError `
             -Detail ("Option '--disk-size' received invalid value '{0}'." -f $rawText) `
             -Code 62 `
             -Summary "Resize command received an invalid disk size value." `
-            -Hint "Use --disk-size=<number>gb or --disk-size=<number>mb."
+            -Hint "Use --disk-size=<size>MB|GB|TB from 1MB through 4095GB."
     }
 
-    $requestedAmount = [int]$Matches[1]
-    $unit = ([string]$Matches[2]).Trim().ToLowerInvariant()
-    if ($requestedAmount -lt 1) {
-        Throw-FriendlyError `
-            -Detail ("Option '--disk-size' must be greater than zero, actual '{0}'." -f $rawText) `
-            -Code 62 `
-            -Summary "Resize command received an invalid disk size value." `
-            -Hint "Use a positive integer with gb or mb."
-    }
-
-    $targetDiskSizeGb = if ($unit -eq 'gb') { $requestedAmount } else { [int][Math]::Ceiling(($requestedAmount / 1024.0)) }
+    $amountMatch = [regex]::Match($rawText.Trim(), '^(?<amount>\d+(?:\.\d+)?)\s*(?<unit>mb|gb|tb)?$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $requestedAmount = if ($amountMatch.Success) { [double]::Parse($amountMatch.Groups['amount'].Value, [System.Globalization.CultureInfo]::InvariantCulture) } else { [double]$targetDiskSizeGb }
+    $unit = if ($amountMatch.Success -and -not [string]::IsNullOrWhiteSpace($amountMatch.Groups['unit'].Value)) { $amountMatch.Groups['unit'].Value.ToLowerInvariant() } else { 'gb' }
     return [pscustomobject]@{
         RawText = $rawText.Trim()
         RequestedAmount = $requestedAmount

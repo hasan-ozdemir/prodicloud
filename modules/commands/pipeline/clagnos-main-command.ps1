@@ -89,7 +89,8 @@ function Invoke-ClagnosMain {
         [ValidateSet('create','update','configure','generic')]
         [string]$Step1OperationName = '',
         [hashtable]$InitialConfigOverrides = @{},
-        [psobject]$ActionPlan = $null
+        [psobject]$ActionPlan = $null,
+        [switch]$WizardMode
     )
 
     try {
@@ -122,6 +123,7 @@ function Invoke-ClagnosMain {
             -ConfigMapOverrides $InitialConfigOverrides `
             -OperationName $effectiveStep1OperationName `
             -UseInteractiveStep1 `
+            -WizardMode:$WizardMode `
             -PersistGeneratedResourceGroup `
             -DeferDotEnvWrites
 

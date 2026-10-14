@@ -37,6 +37,7 @@
     'modules/tasks/ssh/protocol.ps1'
     'modules/tasks/ssh/runner.ps1'
     'modules/ui/selection/clagnos-location-picker.ps1'
+    'modules/ui/selection/clagnos-paged-picker.ps1'
     'modules/ui/selection/clagnos-sku-picker.ps1'
     'modules/ui/selection/clagnos-subscription-picker.ps1'
     'modules/ui/selection/clagnos-resource-targets.ps1'

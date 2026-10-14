@@ -16,6 +16,14 @@ if ($null -ne $CliTokens) {
 }
 $script:ClagnosUiSubscription = $null
 $script:ClagnosUiSubscriptionError = ''
+$script:ClagnosUiSelectedResourceGroup = ''
+$script:ClagnosUiSelectedVmName = ''
+$script:ClagnosUiResourceCacheError = ''
+$script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::MinValue
+$script:ClagnosUiInventoryCache = $null
+$script:ClagnosUiAzureReadCache = @{}
+$script:ClagnosUiInventoryValidationSeconds = 60
+$script:ClagnosUiReadCacheSeconds = 45
 
 if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
     throw "Clagnos runtime was not found: $script:ClagnosUiBackendPath"
@@ -45,6 +53,14 @@ if ($null -ne $CliTokens -and @($CliTokens).Count -gt 0) {
 }
 
 function Update-ClagnosUiSubscription {
+    param([switch]$Force)
+
+    if (-not $Force -and $null -ne $script:ClagnosUiSubscription -and $script:ClagnosUiSubscriptionValidatedAtUtc -ne [DateTime]::MinValue) {
+        $subscriptionAge = ([DateTime]::UtcNow - $script:ClagnosUiSubscriptionValidatedAtUtc).TotalSeconds
+        if ($subscriptionAge -lt 60) { return }
+    }
+
+    $previousSubscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
     try {
         $script:ClagnosUiSubscription = Initialize-ClagnosCommandSubscriptionState -CommandName 'list' -Options @{}
         $script:ClagnosUiSubscriptionError = ''
@@ -54,9 +70,11 @@ function Update-ClagnosUiSubscription {
         $script:ClagnosUiSubscriptionError = [string]$_.Exception.Message
     }
 
+    $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
+    $config = Read-DotEnvFile -Path $envPath
+    $script:ClagnosUiSelectedResourceGroup = [string](Get-ConfigValue -Config $config -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
+    $script:ClagnosUiSelectedVmName = [string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_NAME' -DefaultValue '')
     if ($null -eq $script:ClagnosUiSubscription) {
-        $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
-        $config = Read-DotEnvFile -Path $envPath
         $configuredId = [string](Get-ConfigValue -Config $config -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -DefaultValue '')
         if (-not [string]::IsNullOrWhiteSpace($configuredId)) {
             $script:ClagnosUiSubscription = [pscustomobject]@{
@@ -66,6 +84,291 @@ function Update-ClagnosUiSubscription {
             }
         }
     }
+
+    $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
+    $currentSubscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
+    if (-not [string]::Equals($previousSubscriptionId, $currentSubscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Reset-ClagnosUiResourceCache -Reason 'subscription changed'
+    }
+}
+
+function Reset-ClagnosUiResourceCache {
+    param([string]$Reason = 'explicit refresh')
+
+    $script:ClagnosUiInventoryCache = $null
+    $script:ClagnosUiAzureReadCache = @{}
+}
+
+function Invalidate-ClagnosUiResourceCache {
+    param(
+        [string]$Reason = 'resource mutation',
+        [string]$ResourceGroup = ''
+    )
+
+    if ($null -eq $script:ClagnosUiInventoryCache) { return }
+    $script:ClagnosUiInventoryCache.IsDirty = $true
+    $script:ClagnosUiInventoryCache.DirtyReason = [string]$Reason
+    if (-not [string]::IsNullOrWhiteSpace([string]$ResourceGroup)) {
+        $script:ClagnosUiInventoryCache.DirtyResourceGroup = [string]$ResourceGroup
+    }
+    $script:ClagnosUiAzureReadCache = @{}
+}
+
+function Get-ClagnosUiManagedTagValue {
+    param([psobject]$ResourceGroup)
+
+    if ($null -eq $ResourceGroup -or $null -eq $ResourceGroup.tags) { return '' }
+    $tag = @($ResourceGroup.tags.PSObject.Properties | Where-Object { [string]::Equals([string]$_.Name, 'managed-by', [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    if (@($tag).Count -eq 0) { return '' }
+    return [string]$tag[0].Value
+}
+
+function Get-ClagnosUiResourceGroupNameFromResource {
+    param([psobject]$Resource)
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$Resource.resourceGroup)) { return [string]$Resource.resourceGroup }
+    $resourceId = [string]$Resource.id
+    if ($resourceId -match '(?i)/resourceGroups/([^/]+)') { return [string]$Matches[1] }
+    return ''
+}
+
+function Get-ClagnosUiInventorySignature {
+    param(
+        [object[]]$Groups,
+        [object[]]$Resources,
+        [object[]]$VirtualMachines
+    )
+
+    $signatureLines = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($group in @(ConvertTo-ObjectArrayCompat -InputObject $Groups | Sort-Object { [string]$_.id })) {
+        $tagText = if ($null -ne $group.tags) { @($group.tags.PSObject.Properties | Sort-Object Name | ForEach-Object { '{0}={1}' -f [string]$_.Name, [string]$_.Value }) -join ';' } else { '' }
+        $groupEtag = [string]$group.etag
+        $groupFallback = if ([string]::IsNullOrWhiteSpace($groupEtag)) { ConvertTo-Json -InputObject $group -Depth 100 -Compress } else { '' }
+        $signatureLines.Add(('group|{0}|{1}|{2}|{3}|{4}|{5}|{6}' -f [string]$group.id, [string]$group.name, $groupEtag, [string]$group.location, [string]$group.properties.provisioningState, $tagText, $groupFallback))
+    }
+    foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $Resources | Sort-Object { [string]$_.id })) {
+        $resourceGroup = Get-ClagnosUiResourceGroupNameFromResource -Resource $resource
+        $resourceState = [string]$resource.properties.provisioningState
+        $resourceEtag = [string]$resource.etag
+        $fallback = if ([string]::IsNullOrWhiteSpace([string]$resourceEtag)) { ConvertTo-Json -InputObject $resource -Depth 100 -Compress } else { '' }
+        $signatureLines.Add(('resource|{0}|{1}|{2}|{3}|{4}|{5}' -f [string]$resource.id, [string]$resource.type, [string]$resourceEtag, $resourceGroup, $resourceState, $fallback))
+    }
+    foreach ($vm in @(ConvertTo-ObjectArrayCompat -InputObject $VirtualMachines | Sort-Object { [string]$_.id })) {
+        $vmGroup = Get-ClagnosUiResourceGroupNameFromResource -Resource $vm
+        $vmEtag = [string]$vm.etag
+        $vmFallback = if ([string]::IsNullOrWhiteSpace($vmEtag)) { ConvertTo-Json -InputObject $vm -Depth 100 -Compress } else { '' }
+        $signatureLines.Add(('vm|{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|{8}|{9}' -f [string]$vm.id, $vmEtag, $vmGroup, [string]$vm.hardwareProfile.vmSize, [string]$vm.powerState, [string]$vm.provisioningState, [string]$vm.privateIps, [string]$vm.publicIps, [string]$vm.fqdns, $vmFallback))
+    }
+
+    $payload = [System.Text.Encoding]::UTF8.GetBytes(($signatureLines.ToArray() -join "`n"))
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($payload))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
+function Sync-ClagnosUiResourceCache {
+    param([switch]$Force)
+
+    $subscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
+    if ([string]::IsNullOrWhiteSpace([string]$subscriptionId)) {
+        throw "Azure CLI sign-in is required to cache managed resources. Run 'az login' and retry."
+    }
+
+    if (-not $Force -and $null -ne $script:ClagnosUiInventoryCache) {
+        $sameSubscription = [string]::Equals([string]$script:ClagnosUiInventoryCache.SubscriptionId, $subscriptionId, [System.StringComparison]::OrdinalIgnoreCase)
+        $cacheAge = ([DateTime]::UtcNow - [DateTime]$script:ClagnosUiInventoryCache.LastValidatedAtUtc).TotalSeconds
+        if ($sameSubscription -and -not [bool]$script:ClagnosUiInventoryCache.IsDirty -and $cacheAge -lt [int]$script:ClagnosUiInventoryValidationSeconds) {
+            return $script:ClagnosUiInventoryCache
+        }
+    }
+
+    $groupRows = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('group','list') -ForceRefresh))
+    $managedGroups = @($groupRows | Where-Object {
+        $tagValue = Get-ClagnosUiManagedTagValue -ResourceGroup $_
+        [string]::Equals($tagValue, 'clagnos', [System.StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($tagValue, 'az-vm', [System.StringComparison]::OrdinalIgnoreCase)
+    } | Sort-Object { [string]$_.name })
+    $managedGroupMap = @{}
+    foreach ($group in @($managedGroups)) { $managedGroupMap[[string]$group.name.ToLowerInvariant()] = $group }
+
+    $managedResources = @()
+    foreach ($group in @($managedGroups)) {
+        $groupName = [string]$group.name
+        $groupResources = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('resource','list','--resource-group',$groupName) -ForceRefresh))
+        $managedResources += @($groupResources | Where-Object {
+            $resourceGroupName = Get-ClagnosUiResourceGroupNameFromResource -Resource $_
+            [string]::IsNullOrWhiteSpace([string]$resourceGroupName) -or [string]::Equals([string]$resourceGroupName, $groupName, [System.StringComparison]::OrdinalIgnoreCase)
+        })
+    }
+    $managedResources = @($managedResources | Sort-Object { [string]$_.id })
+
+    $allVms = @()
+    if (@($managedGroups).Count -gt 0) {
+        $allVms = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('vm','list','--show-details') -ForceRefresh))
+    }
+    $managedVms = @($allVms | Where-Object {
+        $groupName = Get-ClagnosUiResourceGroupNameFromResource -Resource $_
+        -not [string]::IsNullOrWhiteSpace([string]$groupName) -and $managedGroupMap.ContainsKey([string]$groupName.ToLowerInvariant())
+    } | Sort-Object { [string]$_.name }, { Get-ClagnosUiResourceGroupNameFromResource -Resource $_ })
+    foreach ($vm in @($managedVms)) {
+        $groupName = Get-ClagnosUiResourceGroupNameFromResource -Resource $vm
+        $vm | Add-Member -NotePropertyName 'ClagnosResourceGroup' -NotePropertyValue $groupName -Force
+        $vm | Add-Member -NotePropertyName 'ClagnosSubscriptionId' -NotePropertyValue $subscriptionId -Force
+    }
+
+    $signature = Get-ClagnosUiInventorySignature -Groups $managedGroups -Resources $managedResources -VirtualMachines $managedVms
+    $previousSignature = if ($null -ne $script:ClagnosUiInventoryCache -and [string]::Equals([string]$script:ClagnosUiInventoryCache.SubscriptionId, $subscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) { [string]$script:ClagnosUiInventoryCache.Signature } else { '' }
+    $snapshotChanged = -not [string]::Equals($previousSignature, $signature, [System.StringComparison]::Ordinal)
+    if (-not $snapshotChanged -and $null -ne $script:ClagnosUiInventoryCache) {
+        $script:ClagnosUiInventoryCache.LastValidatedAtUtc = [DateTime]::UtcNow
+        $script:ClagnosUiInventoryCache.IsDirty = $false
+        $script:ClagnosUiInventoryCache.DirtyReason = ''
+        $script:ClagnosUiInventoryCache.DirtyResourceGroup = ''
+        $script:ClagnosUiInventoryCache.Changed = $false
+        return $script:ClagnosUiInventoryCache
+    }
+    $script:ClagnosUiAzureReadCache = @{}
+
+    $script:ClagnosUiInventoryCache = @{
+        SubscriptionId = $subscriptionId
+        Groups = @($managedGroups)
+        Resources = @($managedResources)
+        VirtualMachines = @($managedVms)
+        Signature = $signature
+        LastValidatedAtUtc = [DateTime]::UtcNow
+        IsDirty = $false
+        DirtyReason = ''
+        DirtyResourceGroup = ''
+        Changed = $snapshotChanged
+    }
+    return $script:ClagnosUiInventoryCache
+}
+
+function Ensure-ClagnosUiResourceCache {
+    return (Sync-ClagnosUiResourceCache)
+}
+
+function Get-ClagnosUiResourcesForGroup {
+    param([string]$ResourceGroup)
+
+    $snapshot = Ensure-ClagnosUiResourceCache
+    return @($snapshot.Resources | Where-Object { [string]::Equals((Get-ClagnosUiResourceGroupNameFromResource -Resource $_), $ResourceGroup, [System.StringComparison]::OrdinalIgnoreCase) })
+}
+
+function Get-ClagnosUiCachedResourceById {
+    param([string]$ResourceId)
+
+    if ([string]::IsNullOrWhiteSpace([string]$ResourceId)) { return $null }
+    $snapshot = Ensure-ClagnosUiResourceCache
+    $match = @($snapshot.Resources | Where-Object { [string]::Equals([string]$_.id, $ResourceId, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    if (@($match).Count -gt 0) { return $match[0] }
+    return $null
+}
+
+function Get-ClagnosUiCachedResourcesForType {
+    param(
+        [string]$Type,
+        [string]$ResourceGroup = ''
+    )
+
+    $snapshot = Ensure-ClagnosUiResourceCache
+    $typeMap = @{
+        disk = 'Microsoft.Compute/disks'
+        vnet = 'Microsoft.Network/virtualNetworks'
+        subnet = 'Microsoft.Network/virtualNetworks/subnets'
+        nic = 'Microsoft.Network/networkInterfaces'
+        ip = 'Microsoft.Network/publicIPAddresses'
+        nsg = 'Microsoft.Network/networkSecurityGroups'
+        'nsg-rule' = 'Microsoft.Network/networkSecurityGroups/securityRules'
+    }
+    if (-not $typeMap.ContainsKey([string]$Type)) { return @() }
+    $resourceType = [string]$typeMap[[string]$Type]
+    return @(
+        $snapshot.Resources | Where-Object {
+            [string]::Equals([string]$_.type, $resourceType, [System.StringComparison]::OrdinalIgnoreCase) -and
+            ([string]::IsNullOrWhiteSpace([string]$ResourceGroup) -or [string]::Equals((Get-ClagnosUiResourceGroupNameFromResource -Resource $_), $ResourceGroup, [System.StringComparison]::OrdinalIgnoreCase))
+        }
+    )
+}
+
+function Get-ClagnosUiCachedComponentRows {
+    param(
+        [string]$Type,
+        [string]$ResourceGroup = ''
+    )
+
+    $snapshot = Ensure-ClagnosUiResourceCache
+    $rows = New-Object 'System.Collections.Generic.List[object]'
+    switch ([string]$Type) {
+        'group' {
+            foreach ($group in @($snapshot.Groups | Where-Object { [string]::IsNullOrWhiteSpace([string]$ResourceGroup) -or [string]::Equals([string]$_.name, $ResourceGroup, [System.StringComparison]::OrdinalIgnoreCase) })) {
+                $rows.Add([pscustomobject]@{ Name = [string]$group.name; Parent = ''; Id = [string]$group.id; ResourceGroup = [string]$group.name; Type = 'Microsoft.Resources/resourceGroups'; Resource = $group })
+            }
+        }
+        'vm' {
+            foreach ($vm in @($snapshot.VirtualMachines | Where-Object { [string]::IsNullOrWhiteSpace([string]$ResourceGroup) -or [string]::Equals([string]$_.ClagnosResourceGroup, $ResourceGroup, [System.StringComparison]::OrdinalIgnoreCase) })) {
+                $rows.Add([pscustomobject]@{ Name = [string]$vm.name; Parent = ''; Id = [string]$vm.id; ResourceGroup = [string]$vm.ClagnosResourceGroup; Type = 'Microsoft.Compute/virtualMachines'; Resource = $vm })
+            }
+        }
+        'subnet' {
+            foreach ($vnet in @(Get-ClagnosUiCachedResourcesForType -Type 'vnet' -ResourceGroup $ResourceGroup)) {
+                $vnetProperties = if ($null -ne $vnet.properties) { $vnet.properties } else { $vnet }
+                foreach ($subnet in @(ConvertTo-ObjectArrayCompat -InputObject $vnetProperties.subnets)) {
+                    $rows.Add([pscustomobject]@{ Name = [string]$subnet.name; Parent = [string]$vnet.name; Id = [string]$subnet.id; ResourceGroup = (Get-ClagnosUiResourceGroupNameFromResource -Resource $vnet); Type = 'Microsoft.Network/virtualNetworks/subnets'; Resource = $subnet })
+                }
+            }
+        }
+        'nsg-rule' {
+            foreach ($nsg in @(Get-ClagnosUiCachedResourcesForType -Type 'nsg' -ResourceGroup $ResourceGroup)) {
+                $nsgProperties = if ($null -ne $nsg.properties) { $nsg.properties } else { $nsg }
+                foreach ($rule in @(ConvertTo-ObjectArrayCompat -InputObject $nsgProperties.securityRules)) {
+                    $rows.Add([pscustomobject]@{ Name = [string]$rule.name; Parent = [string]$nsg.name; Id = [string]$rule.id; ResourceGroup = (Get-ClagnosUiResourceGroupNameFromResource -Resource $nsg); Type = 'Microsoft.Network/networkSecurityGroups/securityRules'; Resource = $rule })
+                }
+            }
+        }
+        default {
+            foreach ($resource in @(Get-ClagnosUiCachedResourcesForType -Type $Type -ResourceGroup $ResourceGroup)) {
+                $rows.Add([pscustomobject]@{ Name = [string]$resource.name; Parent = ''; Id = [string]$resource.id; ResourceGroup = (Get-ClagnosUiResourceGroupNameFromResource -Resource $resource); Type = [string]$resource.type; Resource = $resource })
+            }
+        }
+    }
+    return @($rows.ToArray() | Sort-Object { [string]$_.ResourceGroup }, { [string]$_.Parent }, { [string]$_.Name })
+}
+
+function Get-ClagnosUiCachedInventoryRows {
+    param(
+        [string]$TypeName,
+        [string]$ResourceGroup = ''
+    )
+
+    $snapshot = Ensure-ClagnosUiResourceCache
+    $activeGroup = [string]$script:ClagnosUiSelectedResourceGroup
+    if ($TypeName -eq 'group') {
+        return @(
+            $snapshot.Groups |
+                Where-Object { [string]::IsNullOrWhiteSpace([string]$ResourceGroup) -or [string]::Equals([string]$_.name, $ResourceGroup, [System.StringComparison]::OrdinalIgnoreCase) } |
+                ForEach-Object {
+                    $activeLabel = if ([string]::Equals([string]$_.name, $activeGroup, [System.StringComparison]::OrdinalIgnoreCase)) { ' [active]' } else { '' }
+                    $location = if ([string]::IsNullOrWhiteSpace([string]$_.location)) { '(unknown)' } else { [string]$_.location }
+                    $state = if ([string]::IsNullOrWhiteSpace([string]$_.properties.provisioningState)) { '(unknown)' } else { [string]$_.properties.provisioningState }
+                    '{0}{1} | location={2} | provisioning={3}' -f [string]$_.name, $activeLabel, $location, $state
+                } |
+                Sort-Object -Unique
+        )
+    }
+
+    $componentType = if ($TypeName -eq 'vm') { 'vm' } else { [string]$TypeName }
+    $rows = @(Get-ClagnosUiCachedComponentRows -Type $componentType -ResourceGroup $ResourceGroup)
+    if ($TypeName -eq 'vm') {
+        return @($rows | ForEach-Object { '{0} | {1}' -f [string]$_.ResourceGroup, [string]$_.Name } | Sort-Object -Unique)
+    }
+    if ($TypeName -eq 'subnet') {
+        return @($rows | ForEach-Object { '{0} | {1} | {2}' -f [string]$_.ResourceGroup, [string]$_.Parent, [string]$_.Name } | Sort-Object -Unique)
+    }
+    if ($TypeName -eq 'nsg-rule') {
+        return @($rows | ForEach-Object { '{0} | {1} | {2}' -f [string]$_.ResourceGroup, [string]$_.Parent, [string]$_.Name } | Sort-Object -Unique)
+    }
+    return @($rows | ForEach-Object { '{0} | {1}' -f [string]$_.ResourceGroup, [string]$_.Name } | Sort-Object -Unique)
 }
 
 function Get-ClagnosUiAzureCliActiveSubscriptionId {
@@ -156,6 +459,8 @@ function Set-ClagnosUiActiveSubscription {
         TenantId = [string]$Subscription.tenantId
         ResolutionSource = 'interactive'
     }
+    $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
+    Reset-ClagnosUiResourceCache -Reason 'subscription selected'
     Write-Host ('Active Azure subscription: {0} ({1})' -f [string]$Subscription.name, $subscriptionId) -ForegroundColor Green
 }
 
@@ -172,28 +477,23 @@ function Show-ClagnosUiCloudSubscriptions {
             $activeName = if (@($activeRow).Count -gt 0) { [string]$activeRow[0].name } else { $activeId }
             Write-Host ('Clagnos selected: {0}' -f $selectedName)
             Write-Host ('Azure CLI active: {0}' -f $activeName)
-            Write-Host ''
-            for ($index = 0; $index -lt $rows.Count; $index++) {
-                $markers = @()
-                if ($null -ne $selectedContext -and [string]::Equals([string]$rows[$index].id, [string]$selectedContext.SubscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) { $markers += 'Clagnos selected' }
-                if ([string]::Equals([string]$rows[$index].id, $activeId, [System.StringComparison]::OrdinalIgnoreCase)) { $markers += 'Azure CLI active' }
-                $markerText = if ($markers.Count -gt 0) { ' [' + ($markers -join '; ') + ']' } else { '' }
-                $stateText = if ([string]::Equals([string]$rows[$index].state, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)) { '' } else { ' [not enabled]' }
-                Write-Host ('{0}. {1} ({2}){3}{4}' -f ($index + 1), [string]$rows[$index].name, [string]$rows[$index].id, $markerText, $stateText)
-            }
-            Write-Host 'b: back'
-            Write-Host 'q: exit'
-            $choice = (Read-ClagnosUiChoice 'Select active cloud subscription').ToLowerInvariant()
-            if ($choice -eq 'b') { return }
-            if ($choice -eq 'q') { exit }
-            $number = 0
-            if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $rows.Count) { continue }
-            if (-not [string]::Equals([string]$rows[$number - 1].state, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)) {
-                Write-Host 'This subscription is not enabled and cannot become the active Azure subscription.' -ForegroundColor Yellow
-                Wait-ClagnosUiContinue
-                continue
-            }
-            Set-ClagnosUiActiveSubscription -Subscription $rows[$number - 1]
+            $subscriptionOptions = @(
+                $rows | ForEach-Object {
+                    $markers = @()
+                    if ($null -ne $selectedContext -and [string]::Equals([string]$_.id, [string]$selectedContext.SubscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) { $markers += 'Clagnos selected' }
+                    if ([string]::Equals([string]$_.id, $activeId, [System.StringComparison]::OrdinalIgnoreCase)) { $markers += 'Azure CLI active' }
+                    $markerText = if ($markers.Count -gt 0) { ' [' + ($markers -join '; ') + ']' } else { '' }
+                    $enabled = [string]::Equals([string]$_.state, 'Enabled', [System.StringComparison]::OrdinalIgnoreCase)
+                    $stateText = if ($enabled) { 'Enabled' } else { 'not enabled' }
+                    [pscustomobject]@{ Value = [string]$_.id; Label = ('{0} ({1})' -f [string]$_.name, [string]$_.id); Detail = (($markerText.Trim() + ' ' + $stateText).Trim()); Enabled = $enabled }
+                }
+            )
+            $selection = Select-ClagnosNumberedOptionPage -Options $subscriptionOptions -Prompt 'Select active cloud subscription' -DefaultValue ([string]$selectedContext.SubscriptionId) -PageSize 12
+            if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { exit }; return }
+            if ([string]$selection.Action -ne 'selected') { continue }
+            $selectedRow = @($rows | Where-Object { [string]::Equals([string]$_.id, [string]$selection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+            if (@($selectedRow).Count -eq 0) { continue }
+            Set-ClagnosUiActiveSubscription -Subscription $selectedRow[0]
             Wait-ClagnosUiContinue
         }
         catch {
@@ -228,6 +528,26 @@ function Read-ClagnosUiChoice {
     return ([string](Read-Host $Prompt)).Trim()
 }
 
+function Read-ClagnosUiValidatedText {
+    param(
+        [string]$Prompt,
+        [scriptblock]$Validator,
+        [switch]$AllowBlank
+    )
+
+    while ($true) {
+        $raw = Read-ClagnosUiChoice -Prompt $Prompt
+        if ([string]::IsNullOrWhiteSpace([string]$raw) -and $AllowBlank) { return '' }
+        try {
+            if ($Validator) { return [string](& $Validator ([string]$raw)) }
+            return ([string]$raw).Trim()
+        }
+        catch {
+            Write-Host ([string]$_.Exception.Message) -ForegroundColor Yellow
+        }
+    }
+}
+
 function Wait-ClagnosUiContinue {
     [void](Read-Host 'Press Enter to return')
 }
@@ -249,55 +569,83 @@ function Write-ClagnosUiError {
 function Invoke-ClagnosUiCommand {
     param(
         [Parameter(Mandatory = $true)][string]$CommandName,
-        [hashtable]$Options = @{}
+        [hashtable]$Options = @{},
+        [hashtable]$FrontendContext = @{}
     )
 
     try {
-        Invoke-ClagnosCommandDispatcher -CommandName $CommandName -Options $Options | Out-Null
+        Invoke-ClagnosCommandDispatcher -CommandName $CommandName -Options $Options -FrontendContext $FrontendContext | Out-Null
     }
     catch {
         Write-ClagnosUiError -ErrorRecord $_
+    }
+
+    $mutatesAzureInventory = $CommandName -in @('create','initialize','update','do','component','move','resize','set','delete','task')
+    if ($CommandName -eq 'do' -and [string]::Equals([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-action'), 'status', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $mutatesAzureInventory = $false
+    }
+    if ($CommandName -eq 'component' -and (Get-ClagnosCliOptionText -Options $Options -Name 'action') -in @('list','show')) {
+        $mutatesAzureInventory = $false
+    }
+    if ($CommandName -eq 'task' -and (
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'list') -or
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'history') -or
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'enable') -or
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'disable')
+    )) { $mutatesAzureInventory = $false }
+    if ($mutatesAzureInventory) {
+        # A failed Azure mutation can be partial, so invalidate after any such
+        # command attempt and let the next screen reconcile against Azure.
+        Invalidate-ClagnosUiResourceCache -Reason ("TUI {0} operation" -f $CommandName) -ResourceGroup ([string](Get-ClagnosCliOptionText -Options $Options -Name 'group'))
     }
     Wait-ClagnosUiContinue
     Update-ClagnosUiSubscription
 }
 
 function Invoke-ClagnosUiAzJson {
-    param([string[]]$Arguments)
+    param(
+        [string[]]$Arguments,
+        [switch]$ForceRefresh,
+        [int]$CacheTtlSeconds = 45
+    )
 
     $subscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
     if ([string]::IsNullOrWhiteSpace($subscriptionId)) {
         throw "Azure CLI sign-in is required. Run 'az login' and retry."
     }
+    $cacheKey = $subscriptionId.ToLowerInvariant() + '|' + (@($Arguments | ForEach-Object { ([string]$_).Trim() }) -join [char]31)
+    if (-not $ForceRefresh -and $CacheTtlSeconds -gt 0 -and $script:ClagnosUiAzureReadCache.ContainsKey($cacheKey)) {
+        $cachedEntry = $script:ClagnosUiAzureReadCache[$cacheKey]
+        $cachedAge = ([DateTime]::UtcNow - [DateTime]$cachedEntry.CreatedAtUtc).TotalSeconds
+        if ($cachedAge -lt $CacheTtlSeconds) { return $cachedEntry.Value }
+    }
     $azArguments = @($Arguments) + @('--subscription', $subscriptionId, '-o', 'json', '--only-show-errors')
+    Write-ClagnosActionProgress -Action ('read Azure data for the TUI: az {0}' -f (@($Arguments | ForEach-Object { [string]$_ }) -join ' '))
     $json = & az @azArguments 2>$null
     if ($LASTEXITCODE -ne 0) {
         throw "Azure CLI could not complete the read request. Run 'az login' and verify the selected subscription."
     }
     if ([string]::IsNullOrWhiteSpace([string]$json)) {
-        return @()
+        $result = @()
     }
-    return (ConvertFrom-JsonCompat -InputObject ([string]$json))
+    else {
+        $result = ConvertFrom-JsonCompat -InputObject ([string]$json)
+    }
+    if ($CacheTtlSeconds -gt 0) {
+        $script:ClagnosUiAzureReadCache[$cacheKey] = @{ CreatedAtUtc = [DateTime]::UtcNow; Value = $result }
+    }
+    return $result
 }
 
 function Get-ClagnosUiManagedGroups {
     param([switch]$IncludeLegacy)
 
-    $rows = @()
-    $current = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('group', 'list', '--tag', 'managed-by=clagnos')))
-    $rows += @($current)
-    if ($IncludeLegacy) {
-        $legacy = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('group', 'list', '--tag', 'managed-by=az-vm')))
-        $rows += @($legacy)
+    $snapshot = Ensure-ClagnosUiResourceCache
+    $groups = @($snapshot.Groups)
+    if (-not $IncludeLegacy) {
+        $groups = @($groups | Where-Object { [string]::Equals((Get-ClagnosUiManagedTagValue -ResourceGroup $_), 'clagnos', [System.StringComparison]::OrdinalIgnoreCase) })
     }
-    $unique = @{}
-    foreach ($row in @($rows)) {
-        $name = [string]$row.name
-        if (-not [string]::IsNullOrWhiteSpace($name)) {
-            $unique[$name.ToLowerInvariant()] = $row
-        }
-    }
-    return @($unique.Values | Sort-Object { [string]$_.name })
+    return @($groups | Sort-Object { [string]$_.name })
 }
 
 function Invoke-ClagnosUiLegacyTagMigration {
@@ -338,6 +686,7 @@ function Invoke-ClagnosUiLegacyTagMigration {
             if ($LASTEXITCODE -ne 0) {
                 throw 'Azure rejected the resource group tag update.'
             }
+            Invalidate-ClagnosUiResourceCache -Reason 'legacy group tag migration' -ResourceGroup $groupName
             Write-Host ('Migrated management tag: {0}' -f $groupName) -ForegroundColor Green
         }
         catch {
@@ -358,24 +707,23 @@ function Get-ClagnosUiVirtualComputers {
         $groups = @(Get-ClagnosUiManagedGroups -IncludeLegacy)
     }
 
-    $vms = @()
-    foreach ($group in @($groups)) {
-        $groupName = [string]$group.name
-        $vmRows = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('vm', 'list', '--resource-group', $groupName)))
-        foreach ($vm in @($vmRows)) {
-            $vm | Add-Member -NotePropertyName 'ClagnosResourceGroup' -NotePropertyValue $groupName -Force
-            $vm | Add-Member -NotePropertyName 'ClagnosSubscriptionId' -NotePropertyValue ([string]$script:ClagnosUiSubscription.SubscriptionId) -Force
-            $vms += $vm
-        }
-    }
-    return @($vms | Sort-Object { [string]$_.name }, { [string]$_.ClagnosResourceGroup })
+    $snapshot = Ensure-ClagnosUiResourceCache
+    return @($snapshot.VirtualMachines | Sort-Object { [string]$_.name }, { [string]$_.ClagnosResourceGroup })
 }
 
 function Get-ClagnosUiPowerState {
-    param([string]$ResourceGroup, [string]$VmName)
+    param(
+        [string]$ResourceGroup,
+        [string]$VmName,
+        [string]$CachedPowerState = ''
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace([string]$CachedPowerState)) {
+        return [string]$CachedPowerState
+    }
 
     try {
-        $instance = Invoke-ClagnosUiAzJson -Arguments @('vm', 'get-instance-view', '--resource-group', $ResourceGroup, '--name', $VmName)
+        $instance = Invoke-ClagnosUiAzJson -Arguments @('vm', 'get-instance-view', '--resource-group', $ResourceGroup, '--name', $VmName) -CacheTtlSeconds 15
 
         # Azure CLI wraps the Compute instance view under instanceView, while
         # the direct Compute Instance View REST response exposes statuses at
@@ -416,6 +764,25 @@ function Get-ClagnosUiPowerState {
     return 'Unknown'
 }
 
+function Get-ClagnosUiCachedVm {
+    param([psobject]$Vm)
+
+    if ($null -eq $Vm) { return $null }
+    $snapshot = Ensure-ClagnosUiResourceCache
+    $resourceGroup = [string]$Vm.ClagnosResourceGroup
+    $vmName = [string]$Vm.name
+    $match = @(
+        $snapshot.VirtualMachines |
+            Where-Object {
+                [string]::Equals([string]$_.name, $vmName, [System.StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals([string]$_.ClagnosResourceGroup, $resourceGroup, [System.StringComparison]::OrdinalIgnoreCase)
+            } |
+            Select-Object -First 1
+    )
+    if (@($match).Count -gt 0) { return $match[0] }
+    return $null
+}
+
 function Get-ClagnosUiVmSizeFacts {
     param([string]$Location, [string]$Size)
 
@@ -428,6 +795,14 @@ function Get-ClagnosUiVmSizeFacts {
     }
     catch { }
     return [pscustomobject]@{ Cores = 'Unknown'; MemoryMb = 'Unknown' }
+}
+
+function Get-ClagnosUiCachedResourceModel {
+    param([psobject]$Resource)
+
+    if ($null -eq $Resource) { return $null }
+    if ($null -ne $Resource.properties) { return $Resource.properties }
+    return $Resource
 }
 
 function Format-ClagnosUiDetailValue {
@@ -460,55 +835,78 @@ function Get-ClagnosUiAzureResourceIdSegment {
 function Show-ClagnosUiVmDetails {
     param([psobject]$Vm)
 
+    $resourceSnapshot = Ensure-ClagnosUiResourceCache
     $group = [string]$Vm.ClagnosResourceGroup
     $name = [string]$Vm.name
-    $full = Invoke-ClagnosUiAzJson -Arguments @('vm', 'show', '--resource-group', $group, '--name', $name)
+    $full = Get-ClagnosUiCachedVm -Vm $Vm
+    $hasDetailedStorage = $null -ne $full -and $null -ne $full.storageProfile -and $null -ne $full.storageProfile.osDisk
+    $hasDetailedNetwork = $null -ne $full -and $null -ne $full.networkProfile -and @((ConvertTo-ObjectArrayCompat -InputObject $full.networkProfile.networkInterfaces)).Count -gt 0
+    if (-not $hasDetailedStorage -or -not $hasDetailedNetwork) {
+        $full = Invoke-ClagnosUiAzJson -Arguments @('vm', 'show', '--resource-group', $group, '--name', $name)
+    }
     $sizeName = [string]$full.hardwareProfile.vmSize
     $facts = Get-ClagnosUiVmSizeFacts -Location ([string]$full.location) -Size $sizeName
     $memoryGb = if ($facts.MemoryMb -match '^\d+$') { ('{0:N1} GB' -f ([double]$facts.MemoryMb / 1024)) } else { 'Unknown' }
-    $power = Get-ClagnosUiPowerState -ResourceGroup $group -VmName $name
+    $power = Get-ClagnosUiPowerState -ResourceGroup $group -VmName $name -CachedPowerState ([string]$full.powerState)
     $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
     $config = Read-DotEnvFile -Path $envPath
 
     $privateAddresses = @()
     $publicAddresses = @()
-    try {
-        $ipRows = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('vm', 'list-ip-addresses', '--resource-group', $group, '--name', $name)))
-        $ipVm = @($ipRows | Where-Object { [string]::Equals([string]$_.virtualMachine.name, $name, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
-        if ($ipVm.Count -gt 0) {
-            $privateAddresses = @($ipVm[0].virtualMachine.network.privateIpAddresses | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-            foreach ($publicAddress in @($ipVm[0].virtualMachine.network.publicIpAddresses)) {
-                $publicDetail = $null
-                $publicName = [string]$publicAddress.name
-                $publicGroup = [string]$publicAddress.resourceGroup
-                if ([string]::IsNullOrWhiteSpace($publicGroup)) { $publicGroup = $group }
-                if (-not [string]::IsNullOrWhiteSpace($publicName)) {
-                    try {
-                        $publicDetail = Invoke-ClagnosUiAzJson -Arguments @('network', 'public-ip', 'show', '--resource-group', $publicGroup, '--name', $publicName)
-                    }
-                    catch { }
-                }
-                $publicAddresses += [pscustomobject]@{
-                    Name = $publicName
-                    IpAddress = [string]$publicAddress.ipAddress
-                    Fqdn = if ($null -ne $publicDetail) { [string]$publicDetail.dnsSettings.fqdn } else { '' }
-                    DnsLabel = if ($null -ne $publicDetail) { [string]$publicDetail.dnsSettings.domainNameLabel } else { '' }
-                    Allocation = if ($null -ne $publicDetail) { [string]$publicDetail.publicIPAllocationMethod } else { [string]$publicAddress.ipAllocationMethod }
-                    Sku = if ($null -ne $publicDetail) { [string]$publicDetail.sku.name } else { '' }
-                    Zone = if ($null -ne $publicDetail) { (@($publicDetail.zones) -join ', ') } else { '' }
-                }
-            }
+    $privateAddresses = @(([string]$full.privateIps -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $publicIpValues = @(([string]$full.publicIps -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $publicFqdns = @(([string]$full.fqdns -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $cachedPublicIpResources = @(Get-ClagnosUiCachedResourcesForType -Type 'ip' -ResourceGroup $group)
+    for ($ipIndex = 0; $ipIndex -lt $publicIpValues.Count; $ipIndex++) {
+        $ipValue = [string]$publicIpValues[$ipIndex]
+        $ipResource = @(
+            $cachedPublicIpResources | Where-Object {
+                $ipProperties = Get-ClagnosUiCachedResourceModel -Resource $_
+                [string]::Equals([string]$ipProperties.ipAddress, $ipValue, [System.StringComparison]::OrdinalIgnoreCase)
+            } | Select-Object -First 1
+        )
+        $ipObject = if (@($ipResource).Count -gt 0) { $ipResource[0] } else { $null }
+        $ipProperties = Get-ClagnosUiCachedResourceModel -Resource $ipObject
+        $publicAddresses += [pscustomobject]@{
+            Name = if ($null -ne $ipObject) { [string]$ipObject.name } else { '' }
+            IpAddress = $ipValue
+            Fqdn = if ($null -ne $ipProperties -and -not [string]::IsNullOrWhiteSpace([string]$ipProperties.dnsSettings.fqdn)) { [string]$ipProperties.dnsSettings.fqdn } elseif ($ipIndex -lt $publicFqdns.Count) { [string]$publicFqdns[$ipIndex] } else { '' }
+            DnsLabel = if ($null -ne $ipProperties) { [string]$ipProperties.dnsSettings.domainNameLabel } else { '' }
+            Allocation = if ($null -ne $ipProperties) { [string]$ipProperties.publicIPAllocationMethod } else { '' }
+            Sku = if ($null -ne $ipObject -and $null -ne $ipObject.sku) { [string]$ipObject.sku.name } elseif ($null -ne $ipProperties.sku) { [string]$ipProperties.sku.name } else { '' }
+            Zone = if ($null -ne $ipObject) { (@($ipObject.zones) -join ', ') } else { '' }
         }
     }
-    catch { }
 
-    if ($privateAddresses.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$Vm.privateIps)) {
-        $privateAddresses = @(([string]$Vm.privateIps -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($privateAddresses.Count -eq 0) {
+        foreach ($nicReference in @(ConvertTo-ObjectArrayCompat -InputObject $full.networkProfile.networkInterfaces)) {
+            $nicResource = Get-ClagnosUiCachedResourceById -ResourceId ([string]$nicReference.id)
+            $nicProperties = Get-ClagnosUiCachedResourceModel -Resource $nicResource
+            foreach ($ipConfig in @(ConvertTo-ObjectArrayCompat -InputObject $nicProperties.ipConfigurations)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$ipConfig.privateIPAddress)) { $privateAddresses += [string]$ipConfig.privateIPAddress }
+            }
+        }
+        $privateAddresses = @($privateAddresses | Select-Object -Unique)
     }
-    if ($publicAddresses.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$Vm.publicIps)) {
-        $fallbackPublicIps = @(([string]$Vm.publicIps -split ',') | ForEach-Object { $_.Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-        foreach ($fallbackPublicIp in @($fallbackPublicIps)) {
-            $publicAddresses += [pscustomobject]@{ Name = ''; IpAddress = [string]$fallbackPublicIp; Fqdn = [string]$Vm.fqdns; DnsLabel = ''; Allocation = ''; Sku = ''; Zone = '' }
+    if ($publicAddresses.Count -eq 0) {
+        foreach ($nicReference in @(ConvertTo-ObjectArrayCompat -InputObject $full.networkProfile.networkInterfaces)) {
+            $nicResource = Get-ClagnosUiCachedResourceById -ResourceId ([string]$nicReference.id)
+            $nicProperties = Get-ClagnosUiCachedResourceModel -Resource $nicResource
+            foreach ($ipConfig in @(ConvertTo-ObjectArrayCompat -InputObject $nicProperties.ipConfigurations)) {
+                $publicIpId = [string]$ipConfig.publicIPAddress.id
+                if ([string]::IsNullOrWhiteSpace($publicIpId)) { continue }
+                $publicIpResource = Get-ClagnosUiCachedResourceById -ResourceId $publicIpId
+                $publicIpProperties = Get-ClagnosUiCachedResourceModel -Resource $publicIpResource
+                $publicAddresses += [pscustomobject]@{
+                    Name = if ($null -ne $publicIpResource) { [string]$publicIpResource.name } else { Get-ClagnosUiAzureResourceIdSegment -ResourceId $publicIpId -SegmentName 'publicIPAddresses' }
+                    IpAddress = [string]$publicIpProperties.ipAddress
+                    Fqdn = [string]$publicIpProperties.dnsSettings.fqdn
+                    DnsLabel = [string]$publicIpProperties.dnsSettings.domainNameLabel
+                    Allocation = [string]$publicIpProperties.publicIPAllocationMethod
+                    Sku = if ($null -ne $publicIpResource.sku) { [string]$publicIpResource.sku.name } else { [string]$publicIpProperties.sku.name }
+                    Zone = if ($null -ne $publicIpResource) { (@($publicIpResource.zones) -join ', ') } else { '' }
+                }
+            }
         }
     }
 
@@ -522,6 +920,7 @@ function Show-ClagnosUiVmDetails {
     Write-Host ('Operating system: {0}' -f [string]$full.storageProfile.osDisk.osType)
     Write-Host ('State: {0} | Provisioning: {1}' -f $power, [string]$full.provisioningState)
     Write-Host ('Region: {0} | Size: {1}' -f [string]$full.location, $sizeName)
+    Write-Host ('Resource snapshot validated: {0} UTC' -f ([DateTime]$resourceSnapshot.LastValidatedAtUtc).ToString('u')) -ForegroundColor DarkGray
     Write-Host ('CPU: {0} vCPU | RAM: {1}' -f [string]$facts.Cores, $memoryGb)
     $image = $full.storageProfile.imageReference
     if ($null -ne $image) {
@@ -543,6 +942,7 @@ function Show-ClagnosUiVmDetails {
         $diskReferences += [pscustomobject]@{
             Kind = 'OS disk'
             Name = [string]$full.storageProfile.osDisk.name
+            Id = [string]$full.storageProfile.osDisk.managedDisk.id
             ResourceGroup = [string]$full.storageProfile.osDisk.managedDisk.resourceGroup
             SizeGb = [string]$full.storageProfile.osDisk.diskSizeGb
             Caching = [string]$full.storageProfile.osDisk.caching
@@ -556,6 +956,7 @@ function Show-ClagnosUiVmDetails {
         $diskReferences += [pscustomobject]@{
             Kind = 'Data disk'
             Name = [string]$dataDisk.name
+            Id = [string]$dataDisk.managedDisk.id
             ResourceGroup = [string]$dataDisk.managedDisk.resourceGroup
             SizeGb = [string]$dataDisk.diskSizeGb
             Caching = [string]$dataDisk.caching
@@ -571,13 +972,21 @@ function Show-ClagnosUiVmDetails {
         $diskGroup = [string]$diskReference.ResourceGroup
         if ([string]::IsNullOrWhiteSpace($diskGroup)) { $diskGroup = $group }
         try {
-            $disk = Invoke-ClagnosUiAzJson -Arguments @('disk', 'show', '--resource-group', $diskGroup, '--name', $diskName)
-            $sizeGb = if ([string]::IsNullOrWhiteSpace([string]$diskReference.SizeGb)) { [string]$disk.diskSizeGb } else { [string]$diskReference.SizeGb }
-            $detail = ('  {0}: {1} | {2} GB | {3} | caching {4} | create {5}' -f [string]$diskReference.Kind, [string]$disk.name, $sizeGb, [string]$disk.sku.name, (Format-ClagnosUiDetailValue -Value $diskReference.Caching), (Format-ClagnosUiDetailValue -Value $diskReference.CreateOption))
+            $disk = Get-ClagnosUiCachedResourceById -ResourceId ([string]$diskReference.Id)
+            if ($null -eq $disk) {
+                $diskMatches = @((Get-ClagnosUiCachedResourcesForType -Type 'disk' -ResourceGroup $diskGroup) | Where-Object { [string]::Equals([string]$_.name, $diskName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+                if (@($diskMatches).Count -gt 0) { $disk = $diskMatches[0] }
+            }
+            if ($null -eq $disk) { $disk = Invoke-ClagnosUiAzJson -Arguments @('disk', 'show', '--resource-group', $diskGroup, '--name', $diskName) }
+            $diskModel = Get-ClagnosUiCachedResourceModel -Resource $disk
+            $diskDisplayName = if (-not [string]::IsNullOrWhiteSpace([string]$disk.name)) { [string]$disk.name } else { $diskName }
+            $diskSku = if ($null -ne $disk.sku) { [string]$disk.sku.name } elseif ($null -ne $diskModel.sku) { [string]$diskModel.sku.name } else { [string]$diskReference.StorageType }
+            $sizeGb = if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.SizeGb)) { [string]$diskReference.SizeGb } else { [string]$diskModel.diskSizeGb }
+            $detail = ('  {0}: {1} | {2} GB | {3} | caching {4} | create {5}' -f [string]$diskReference.Kind, $diskDisplayName, $sizeGb, $diskSku, (Format-ClagnosUiDetailValue -Value $diskReference.Caching), (Format-ClagnosUiDetailValue -Value $diskReference.CreateOption))
             if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.Lun)) { $detail += (' | LUN {0}' -f [string]$diskReference.Lun) }
             if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.DeleteOption)) { $detail += (' | delete {0}' -f [string]$diskReference.DeleteOption) }
             if (-not [string]::IsNullOrWhiteSpace([string]$diskReference.StorageType)) { $detail += (' | storage {0}' -f [string]$diskReference.StorageType) }
-            if (-not [string]::IsNullOrWhiteSpace([string]$disk.encryption.type)) { $detail += (' | encryption {0}' -f [string]$disk.encryption.type) }
+            if (-not [string]::IsNullOrWhiteSpace([string]$diskModel.encryption.type)) { $detail += (' | encryption {0}' -f [string]$diskModel.encryption.type) }
             Write-Host $detail
         }
         catch { Write-Host ('  {0}: {1} | details unavailable' -f [string]$diskReference.Kind, $diskName) -ForegroundColor Yellow }
@@ -590,10 +999,17 @@ function Show-ClagnosUiVmDetails {
     foreach ($nicReference in @($nicReferences)) {
         $nicName = Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$nicReference.id) -SegmentName 'networkInterfaces'
         if ([string]::IsNullOrWhiteSpace($nicName)) { continue }
-        $nicGroup = [string]$nicReference.resourceGroup
-        if ([string]::IsNullOrWhiteSpace($nicGroup)) { $nicGroup = $group }
         try {
-            $nic = Invoke-ClagnosUiAzJson -Arguments @('network', 'nic', 'show', '--resource-group', $nicGroup, '--name', $nicName)
+            $nicResource = Get-ClagnosUiCachedResourceById -ResourceId ([string]$nicReference.id)
+            if ($null -ne $nicResource) {
+                $nic = Get-ClagnosUiCachedResourceModel -Resource $nicResource
+                $nic | Add-Member -NotePropertyName 'name' -NotePropertyValue ([string]$nicResource.name) -Force
+            }
+            else {
+                $nicGroup = [string]$nicReference.resourceGroup
+                if ([string]::IsNullOrWhiteSpace($nicGroup)) { $nicGroup = $group }
+                $nic = Invoke-ClagnosUiAzJson -Arguments @('network', 'nic', 'show', '--resource-group', $nicGroup, '--name', $nicName)
+            }
             Write-Host ('  NIC: {0} | primary {1} | accelerated networking {2} | IP forwarding {3}' -f [string]$nic.name, [bool]$nic.primary, [bool]$nic.enableAcceleratedNetworking, [bool]$nic.enableIPForwarding)
             $nsgName = Get-ClagnosUiAzureResourceIdSegment -ResourceId ([string]$nic.networkSecurityGroup.id) -SegmentName 'networkSecurityGroups'
             if (-not [string]::IsNullOrWhiteSpace($nsgName)) { Write-Host ('    Network security group: {0}' -f $nsgName) }
@@ -666,7 +1082,7 @@ function Show-ClagnosUiVmDetails {
     Write-Host ''
 
     Write-Host 'Attached resources:' -ForegroundColor Cyan
-    $resources = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('resource', 'list', '--resource-group', $group)))
+    $resources = @(Get-ClagnosUiResourcesForGroup -ResourceGroup $group)
     foreach ($resource in @($resources | Sort-Object { [string]$_.type }, { [string]$_.name })) {
         Write-Host ('  {0} | {1} | {2}' -f [string]$resource.type, [string]$resource.name, (Format-ClagnosUiDetailValue -Value $resource.location))
     }
@@ -719,7 +1135,10 @@ function Show-ClagnosUiPackageAppStateMenu {
     $options['package-catalog'] = $Catalog
     $options[$(if ($save) { 'save-app-state' } else { 'restore-app-state' })] = $true
     $options[$(if ($save) { 'source' } else { 'target' })] = $surface
-    $options['user'] = Read-ClagnosUiChoice 'User (.all., .current., manager, or assistant)'
+    $options['user'] = Read-ClagnosUiValidatedText -Prompt 'User selector (.all., .current., a username, or comma-separated usernames)' -Validator {
+        param($value)
+        return (Resolve-ClagnosUiAppStateUserSelection -Value ([string]$value))
+    }
     Invoke-ClagnosUiCommand -CommandName 'task' -Options $options
 }
 
@@ -742,23 +1161,33 @@ function Show-ClagnosUiPackageCatalogMenu {
         }
         if ($packages.Count -eq 0) {
             Write-Host ('No packages are registered in the {0} catalog for {1}.' -f $Catalog, $platform) -ForegroundColor Yellow
+            Write-Host 'b: back'
+            Write-Host 'q: exit'
+            $emptyChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
+            if ($emptyChoice -eq 'b') { return }
+            if ($emptyChoice -eq 'q') { exit }
+            continue
         }
-        else {
+        $packageOptions = @()
+        if ($packages.Count -gt 0) {
             for ($index = 0; $index -lt $packages.Count; $index++) {
                 $status = if ($statusMap.ContainsKey([string]$packages[$index].Id)) { [string]$statusMap[[string]$packages[$index].Id] } else { 'unavailable' }
                 $disabledLabel = if ([bool]$packages[$index].Enabled) { '' } else { ' (disabled)' }
                 $catalogLabel = if ($Catalog -eq 'builtin') { '[builtin]' } else { '[custom]' }
-                Write-Host ('{0}. {1} {2}{3} [{4}]' -f ($index + 1), [string]$packages[$index].DisplayName, $catalogLabel, $disabledLabel, $status)
+                $packageOptions += [pscustomobject]@{
+                    Value = [string]$packages[$index].Id
+                    Label = ('{0} {1}{2}' -f [string]$packages[$index].DisplayName, $catalogLabel, $disabledLabel)
+                    Detail = ('[{0}]' -f $status)
+                    Enabled = $true
+                }
             }
         }
-        Write-Host 'b: back'
-        Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
-        $number = 0
-        if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $packages.Count) { continue }
-        $package = $packages[$number - 1]
+        $packageSelection = Select-ClagnosNumberedOptionPage -Options $packageOptions -Prompt ("{0} packages on {1}" -f $Catalog, $platform) -PageSize 12
+        if ([string]$packageSelection.Action -eq 'back') { if ([string]$packageSelection.Input -eq 'q') { exit }; return }
+        if ([string]$packageSelection.Action -ne 'selected') { continue }
+        $selectedPackage = @($packages | Where-Object { [string]::Equals([string]$_.Id, [string]$packageSelection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($selectedPackage).Count -eq 0) { continue }
+        $package = $selectedPackage[0]
         Write-ClagnosUiHeader -Title ([string]$package.DisplayName)
         Write-Host ('Catalog: [{0}]' -f $Catalog)
         if (@($package.PackageTask.PackageSpec.DependsOn).Count -gt 0) {
@@ -817,6 +1246,58 @@ function Show-ClagnosUiPackageMenu {
     }
 }
 
+function Show-ClagnosUiCachedComponentAction {
+    param(
+        [psobject]$Vm,
+        [string]$Type,
+        [ValidateSet('list','show')][string]$Action
+    )
+
+    try {
+        $resourceGroup = [string]$Vm.ClagnosResourceGroup
+        $rows = @(Get-ClagnosUiCachedComponentRows -Type $Type -ResourceGroup $resourceGroup)
+        Write-ClagnosUiHeader -Title (('{0} components in {1}' -f $Type, $resourceGroup))
+        if ($rows.Count -eq 0) {
+            Write-Host ('No cached {0} components were found in {1}.' -f $Type, $resourceGroup) -ForegroundColor Yellow
+            Wait-ClagnosUiContinue
+            return
+        }
+        if ($Action -eq 'list') {
+            for ($index = 0; $index -lt $rows.Count; $index++) {
+                $parent = if (-not [string]::IsNullOrWhiteSpace([string]$rows[$index].Parent)) { (' | parent={0}' -f [string]$rows[$index].Parent) } else { '' }
+                $location = [string]$rows[$index].Resource.location
+                if ([string]::IsNullOrWhiteSpace([string]$location)) { $location = [string]$Vm.location }
+                Write-Host ('{0}. {1}{2} | {3}' -f ($index + 1), [string]$rows[$index].Name, $parent, $location)
+            }
+            Write-Host ('Snapshot validated: {0} UTC' -f ([DateTime]$script:ClagnosUiInventoryCache.LastValidatedAtUtc).ToString('u')) -ForegroundColor DarkGray
+            Wait-ClagnosUiContinue
+            return
+        }
+
+        $pickerOptions = @(
+            $rows | ForEach-Object {
+                $detailText = if (-not [string]::IsNullOrWhiteSpace([string]$_.Parent)) { [string]$_.Parent } else { [string]$_.ResourceGroup }
+                [pscustomobject]@{ Value = [string]$_.Id; Label = [string]$_.Name; Detail = $detailText }
+            }
+        )
+        $selection = Select-ClagnosNumberedOptionPage -Options $pickerOptions -Prompt ('Select {0} to show' -f $Type) -DefaultValue $(if ($rows.Count -eq 1) { [string]$rows[0].Id } else { '' })
+        if ([string]$selection.Action -ne 'selected') { return }
+        $selected = @($rows | Where-Object { [string]::Equals([string]$_.Id, [string]$selection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($selected).Count -eq 0) { return }
+        Write-Host ''
+        Write-Host ('{0}: {1}' -f $Type, [string]$selected[0].Name) -ForegroundColor Cyan
+        $resource = $selected[0].Resource
+        if ($null -eq $resource) { Write-Host '(properties are not included in this resource snapshot)' -ForegroundColor Yellow }
+        else { ConvertTo-Json -InputObject $resource -Depth 20 | Write-Host }
+        Write-Host ('Snapshot validated: {0} UTC' -f ([DateTime]$script:ClagnosUiInventoryCache.LastValidatedAtUtc).ToString('u')) -ForegroundColor DarkGray
+        Wait-ClagnosUiContinue
+    }
+    catch {
+        Write-ClagnosUiError -ErrorRecord $_
+        Wait-ClagnosUiContinue
+    }
+}
+
 function Show-ClagnosUiComponentMenu {
     param([psobject]$Vm)
 
@@ -868,6 +1349,10 @@ function Show-ClagnosUiComponentMenu {
         }
         $action = switch ($actionChoice) { 'l' { 'list' } 's' { 'show' } 'c' { 'create' } 'u' { 'update' } 'd' { 'delete' } default { '' } }
         if ([string]::IsNullOrWhiteSpace($action)) { continue }
+        if ($action -in @('list','show')) {
+            Show-ClagnosUiCachedComponentAction -Vm $Vm -Type ([string]$type.Id) -Action $action
+            continue
+        }
         $options = New-ClagnosUiTargetOptions -Vm $Vm
         $options['type'] = [string]$type.Id
         $options['action'] = $action
@@ -875,8 +1360,8 @@ function Show-ClagnosUiComponentMenu {
     }
 }
 
-function Show-ClagnosUiTaskAvailabilityMenu {
-    param([psobject]$Vm)
+function Get-ClagnosUiTaskRowsForStage {
+    param([psobject]$Vm, [ValidateSet('init','update')][string]$Stage)
 
     $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
     $runtime = if ($platform -eq 'windows') {
@@ -885,6 +1370,68 @@ function Show-ClagnosUiTaskAvailabilityMenu {
     else {
         Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -LinuxFlag
     }
+    $stageRoot = if ($Stage -eq 'init') { [string]$runtime.VmInitTaskDir } else { [string]$runtime.VmUpdateTaskDir }
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $platform -Stage $Stage -SuppressSkipMessages
+    return @($catalog.InventoryTasks)
+}
+
+function Select-ClagnosUiTaskName {
+    param(
+        [psobject]$Vm,
+        [ValidateSet('init','update')][string]$Stage,
+        [switch]$EnabledOnly,
+        [switch]$AllowDisabledSelection
+    )
+
+    $tasks = @(Get-ClagnosUiTaskRowsForStage -Vm $Vm -Stage $Stage)
+    if ($EnabledOnly) { $tasks = @($tasks | Where-Object { [bool]$_.Enabled }) }
+    if ($tasks.Count -eq 0) {
+        Write-Host 'No selectable tasks are registered for this stage.' -ForegroundColor Yellow
+        Wait-ClagnosUiContinue
+        return ''
+    }
+
+    $taskOptions = @(
+        $tasks | ForEach-Object {
+            $state = if ([bool]$_.Enabled) { 'enabled' } else { 'disabled: ' + [string]$_.DisabledReason }
+            [pscustomobject]@{
+                Value = [string]$_.Name
+                Label = ('#{0} {1}' -f [int]$_.TaskNumber, [string]$_.Name)
+                Detail = $state
+                Enabled = ([bool]$_.Enabled -or $AllowDisabledSelection -or -not $EnabledOnly)
+            }
+        }
+    )
+    $selection = Select-ClagnosNumberedOptionPage -Options $taskOptions -Prompt (('{0} tasks' -f $Stage)) -PageSize 12
+    if ([string]$selection.Action -eq 'back') {
+        if ([string]$selection.Input -eq 'q') { exit }
+        return ''
+    }
+    if ([string]$selection.Action -ne 'selected') { return '' }
+    return [string]$selection.Value
+}
+
+function Resolve-ClagnosUiAppStateUserSelection {
+    param([string]$Value)
+
+    $tokens = @(Resolve-ClagnosTaskAppStateRequestedUsers -UserOptionValue ([string]$Value))
+    if ($tokens.Count -eq 0) { return '.all.' }
+    if (@($tokens | Where-Object { $_ -in @('.all.','.current.') }).Count -gt 0 -and $tokens.Count -gt 1) {
+        throw 'Use .all. or .current. alone, or enter a comma-separated list of usernames.'
+    }
+    foreach ($token in @($tokens)) {
+        if ([string]$token -in @('.all.','.current.')) { continue }
+        if ([string]$token -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$') {
+            throw ('User selector value "{0}" is invalid. Use letters, numbers, period, underscore, or hyphen.' -f [string]$token)
+        }
+    }
+    return (@($tokens | ForEach-Object { [string]$_ }) -join ',')
+}
+
+function Show-ClagnosUiTaskAvailabilityMenu {
+    param([psobject]$Vm)
+
+    $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
 
     while ($true) {
         Write-ClagnosUiHeader -Title ('Task availability for {0}' -f [string]$Vm.name)
@@ -899,29 +1446,26 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         if ($stageChoice -notin @('1','2')) { continue }
 
         $stage = if ($stageChoice -eq '1') { 'init' } else { 'update' }
-        $stageRoot = if ($stage -eq 'init') { [string]$runtime.VmInitTaskDir } else { [string]$runtime.VmUpdateTaskDir }
-        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $platform -Stage $stage -SuppressSkipMessages
-        $tasks = @($catalog.InventoryTasks)
+        $tasks = @(Get-ClagnosUiTaskRowsForStage -Vm $Vm -Stage $stage)
         if ($tasks.Count -eq 0) {
             Write-Host 'No tasks are registered for this stage.' -ForegroundColor Yellow
             Wait-ClagnosUiContinue
             continue
         }
 
-        Write-ClagnosUiHeader -Title ('{0} tasks' -f $(if ($stage -eq 'init') { 'Initialization' } else { 'Maintenance' }))
-        for ($index = 0; $index -lt $tasks.Count; $index++) {
-            $state = if ([bool]$tasks[$index].Enabled) { 'enabled' } else { ('disabled: ' + [string]$tasks[$index].DisabledReason) }
-            Write-Host ('{0}. #{1} {2} [{3}]' -f ($index + 1), [int]$tasks[$index].TaskNumber, [string]$tasks[$index].Name, $state)
+        $taskOptions = @($tasks | ForEach-Object {
+            $state = if ([bool]$_.Enabled) { 'enabled' } else { 'disabled: ' + [string]$_.DisabledReason }
+            [pscustomobject]@{ Value = [string]$_.Name; Label = ('#{0} {1}' -f [int]$_.TaskNumber, [string]$_.Name); Detail = $state; Enabled = $true }
+        })
+        $taskSelection = Select-ClagnosNumberedOptionPage -Options $taskOptions -Prompt ('{0} tasks' -f $(if ($stage -eq 'init') { 'Initialization' } else { 'Maintenance' })) -PageSize 12
+        if ([string]$taskSelection.Action -eq 'back') {
+            if ([string]$taskSelection.Input -eq 'q') { exit }
+            continue
         }
-        Write-Host 'b: back'
-        Write-Host 'q: exit'
-        $taskChoice = (Read-ClagnosUiChoice 'Task number from this list').ToLowerInvariant()
-        if ($taskChoice -eq 'b') { continue }
-        if ($taskChoice -eq 'q') { exit }
-        $taskIndex = 0
-        if (-not [int]::TryParse($taskChoice, [ref]$taskIndex) -or $taskIndex -lt 1 -or $taskIndex -gt $tasks.Count) { continue }
-
-        $selectedTask = $tasks[$taskIndex - 1]
+        if ([string]$taskSelection.Action -ne 'selected') { continue }
+        $selectedTask = @($tasks | Where-Object { [string]::Equals([string]$_.Name, [string]$taskSelection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($selectedTask).Count -eq 0) { continue }
+        $selectedTask = $selectedTask[0]
         Write-ClagnosUiHeader -Title ([string]$selectedTask.Name)
         Write-Host 'e: enable'
         Write-Host 'd: disable'
@@ -961,8 +1505,14 @@ function Show-ClagnosUiTaskMenu {
         $target = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
             '1' { $target['list'] = $true; $target['vm-init'] = $true; $target['vm-update'] = $true; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
-            '2' { $taskNumber = Read-ClagnosUiChoice 'Task number'; $target['run-vm-init'] = $taskNumber; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
-            '3' { $taskNumber = Read-ClagnosUiChoice 'Task number'; $target['run-vm-update'] = $taskNumber; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
+            '2' {
+                $taskName = Select-ClagnosUiTaskName -Vm $Vm -Stage 'init' -EnabledOnly
+                if (-not [string]::IsNullOrWhiteSpace([string]$taskName)) { $target['run-vm-init'] = $taskName; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
+            }
+            '3' {
+                $taskName = Select-ClagnosUiTaskName -Vm $Vm -Stage 'update' -EnabledOnly
+                if (-not [string]::IsNullOrWhiteSpace([string]$taskName)) { $target['run-vm-update'] = $taskName; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
+            }
             { $_ -in @('4','5','6') } {
                 if ($choice -eq '6') {
                     $target['list'] = $true
@@ -975,16 +1525,20 @@ function Show-ClagnosUiTaskMenu {
                 Write-Host 'i: init | u: update'
                 $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
                 $stage = switch ($stageChoice) { 'i' { 'init' } 'u' { 'update' } default { '' } }
-                $number = Read-ClagnosUiChoice 'Task number'
                 if ([string]::IsNullOrWhiteSpace($stage)) { continue }
-                $target[('vm-{0}-task' -f $stage)] = $number
+                $taskName = Select-ClagnosUiTaskName -Vm $Vm -Stage $stage
+                if ([string]::IsNullOrWhiteSpace([string]$taskName)) { continue }
+                $target[('vm-{0}-task' -f $stage)] = [string]$taskName
                 $target[$(if ($choice -eq '4') { 'save-app-state' } else { 'restore-app-state' })] = $true
                 Write-Host 'v: virtual computer | l: local Windows host'
                 $surfaceChoice = (Read-ClagnosUiChoice 'App-state target').ToLowerInvariant()
                 $surface = switch ($surfaceChoice) { 'v' { 'vm' } 'l' { 'lm' } default { '' } }
                 if ($surface -in @('vm','lm')) { $target[$(if ($choice -eq '4') { 'source' } else { 'target' })] = $surface }
                 else { continue }
-                $target['user'] = Read-ClagnosUiChoice 'User (.all., .current., or name)'
+                $target['user'] = Read-ClagnosUiValidatedText -Prompt 'User selector (.all., .current., a username, or comma-separated usernames)' -Validator {
+                    param($value)
+                    return (Resolve-ClagnosUiAppStateUserSelection -Value ([string]$value))
+                }
                 Invoke-ClagnosUiCommand -CommandName 'task' -Options $target
             }
             '7' { Show-ClagnosUiTaskAvailabilityMenu -Vm $Vm }
@@ -1054,7 +1608,11 @@ function Show-ClagnosUiOperationsMenu {
                     # The resize runtime opens the region-aware Azure SKU picker.
                 }
                 elseif ($resizeChoice -in @('2','3')) {
-                    $options['disk-size'] = Read-ClagnosUiChoice 'Target disk size (for example 128GB)'
+                    $options['disk-size'] = Read-ClagnosUiValidatedText -Prompt 'Target OS disk size (for example 128GB, 1TB; maximum 4095GB)' -Validator {
+                        param($value)
+                        [void](ConvertTo-ClagnosOsDiskSizeGb -Value ([string]$value) -FieldName 'OS disk size')
+                        return ([string]$value).Trim()
+                    }
                     $options[$(if ($resizeChoice -eq '2') { 'expand' } else { 'shrink' })] = $true
                 }
                 else { continue }
@@ -1104,7 +1662,15 @@ function Show-ClagnosUiOperationsMenu {
                 Write-Host 't: show report on screen | j: export redacted JSON'
                 $reportMode = (Read-ClagnosUiChoice 'Report output').ToLowerInvariant()
                 if ($reportMode -eq 'j') {
-                    $exportPath = Read-ClagnosUiChoice 'JSON export path'
+                    $exportPath = Read-ClagnosUiValidatedText -Prompt 'JSON export path (press Enter to cancel)' -AllowBlank -Validator {
+                        param($value)
+                        $candidate = ([string]$value).Trim()
+                        if ([string]::IsNullOrWhiteSpace($candidate)) { throw 'Enter a file path for the JSON export.' }
+                        try { $fullPath = [System.IO.Path]::GetFullPath($candidate) }
+                        catch { throw 'Enter a valid file path for the JSON export.' }
+                        if ([string]::IsNullOrWhiteSpace([System.IO.Path]::GetFileName($fullPath))) { throw 'The JSON export path must include a file name.' }
+                        return $candidate
+                    }
                     if ([string]::IsNullOrWhiteSpace([string]$exportPath)) { continue }
                     $options['export-json'] = $exportPath
                     if (Test-Path -LiteralPath $exportPath -PathType Leaf) {
@@ -1148,7 +1714,7 @@ function Show-ClagnosUiVmMenu {
             'o' { Show-ClagnosUiOperationsMenu -Vm $Vm }
             'd' {
                 try {
-                    $resources = @(ConvertTo-ObjectArrayCompat -InputObject (Invoke-ClagnosUiAzJson -Arguments @('resource', 'list', '--resource-group', [string]$Vm.ClagnosResourceGroup)))
+                    $resources = @(Get-ClagnosUiResourcesForGroup -ResourceGroup ([string]$Vm.ClagnosResourceGroup))
                     Write-Host 'The following Azure resources will be removed:' -ForegroundColor Yellow
                     foreach ($resource in @($resources | Sort-Object { [string]$_.type }, { [string]$_.name })) { Write-Host ('  - {0}: {1}' -f [string]$resource.type, [string]$resource.name) }
                     $confirm = Read-ClagnosUiChoice "Type DELETE ALL to remove this VC's complete resource group"
@@ -1165,34 +1731,556 @@ function Show-ClagnosUiVmMenu {
     }
 }
 
+function Resolve-ClagnosUiWizardPageStep {
+    param(
+        [object[]]$Options,
+        [string]$Prompt,
+        [string]$DefaultValue = '',
+        [string[]]$ExtraKeys = @(),
+        [switch]$Required
+    )
+
+    while ($true) {
+        $selection = Select-ClagnosNumberedOptionPage -Options $Options -Prompt $Prompt -DefaultValue $DefaultValue -PageSize 12 -WizardControls -ExtraKeys $ExtraKeys
+        if ([string]$selection.Action -eq 'close') { return [pscustomobject]@{ Action = 'close'; Value = '' } }
+        if ([string]$selection.Action -eq 'extra') { return $selection }
+        if ([string]$selection.Action -in @('skip-all','apply-all')) {
+            if ($Required -and [string]::IsNullOrWhiteSpace([string]$selection.Value)) {
+                Write-Host 'This required step has no default; choose a numbered option first.' -ForegroundColor Yellow
+                continue
+            }
+            return [pscustomobject]@{ Action = [string]$selection.Action; Value = [string]$selection.Value }
+        }
+        if ([string]$selection.Action -eq 'skip') {
+            if ($Required -and [string]::IsNullOrWhiteSpace([string]$selection.Value)) {
+                Write-Host 'This required step has no default; choose a numbered option first.' -ForegroundColor Yellow
+                continue
+            }
+            return [pscustomobject]@{ Action = 'skip'; Value = [string]$selection.Value }
+        }
+        if ([string]$selection.Action -in @('selected','apply-default')) {
+            return [pscustomobject]@{ Action = [string]$selection.Action; Value = [string]$selection.Value }
+        }
+        Write-Host 'This step has no selectable options. Review the displayed choices or close the wizard.' -ForegroundColor Yellow
+    }
+}
+
+function Get-ClagnosUiWizardBooleanDefault {
+    param([hashtable]$Config, [string]$Key, [bool]$DefaultValue)
+
+    try {
+        return ([string](Resolve-ClagnosBooleanConfigValue -RawValue ([string](Get-ConfigValue -Config $Config -Key $Key -DefaultValue ([string]$DefaultValue))) -KeyName $Key -DefaultValue $DefaultValue -TreatEmptyAsDefault)).ToLowerInvariant()
+    }
+    catch {
+        Write-Host ("Configured default for {0} is invalid: {1}. Select a value in the wizard." -f $Key, [string]$_.Exception.Message) -ForegroundColor Yellow
+        return ''
+    }
+}
+
+function Read-ClagnosUiWizardTextStep {
+    param(
+        [string]$Title,
+        [string]$DefaultValue = '',
+        [string]$Example = '',
+        [switch]$Required,
+        [scriptblock]$Validator
+    )
+
+    while ($true) {
+        Write-ClagnosUiHeader -Title $Title
+        if (-not [string]::IsNullOrWhiteSpace([string]$DefaultValue)) { Write-Host ('> Current/default value: {0}' -f $DefaultValue) -ForegroundColor Green }
+        elseif ($Required) { Write-Host 'Required value: no default is configured.' -ForegroundColor Yellow }
+        if (-not [string]::IsNullOrWhiteSpace([string]$Example)) { Write-Host ('Example: {0}' -f $Example) -ForegroundColor Gray }
+        Write-Host 's: skip (keep default) | k: skip all remaining | a: apply default | l: apply all defaults | c: close wizard'
+        $raw = Read-ClagnosUiChoice 'Enter value'
+        $command = $raw.ToLowerInvariant()
+        if ($command -eq 'c') { return [pscustomobject]@{ Action = 'close'; Value = '' } }
+        if ($command -in @('s','a','k','l')) {
+            if ([string]::IsNullOrWhiteSpace([string]$DefaultValue)) {
+                if ($Required) { Write-Host 'This required step has no default; enter a value.' -ForegroundColor Yellow; continue }
+                if ($command -in @('k','l')) { return [pscustomobject]@{ Action = $(if ($command -eq 'k') { 'skip-all' } else { 'apply-all' }); Value = '' } }
+                return [pscustomobject]@{ Action = 'skip'; Value = '' }
+            }
+            try {
+                $normalizedDefault = if ($Validator) { [string](& $Validator $DefaultValue) } else { [string]$DefaultValue }
+                $action = switch ($command) { 's' { 'skip' } 'a' { 'apply-default' } 'k' { 'skip-all' } 'l' { 'apply-all' } }
+                return [pscustomobject]@{ Action = $action; Value = $normalizedDefault }
+            }
+            catch {
+                Write-Host ('Configured default is invalid: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow
+                if ($command -in @('k','l')) { Write-Host 'Enter a valid value before skipping the remaining required setup.' -ForegroundColor Yellow }
+                continue
+            }
+        }
+
+        $candidate = if ([string]::IsNullOrWhiteSpace([string]$raw)) { [string]$DefaultValue } else { [string]$raw }
+        if ($Required -and [string]::IsNullOrWhiteSpace([string]$candidate)) {
+            Write-Host 'A value is required for this step.' -ForegroundColor Yellow
+            continue
+        }
+        try {
+            $normalizedValue = if ($Validator) { [string](& $Validator $candidate) } else { [string]$candidate.Trim() }
+            return [pscustomobject]@{ Action = 'value'; Value = $normalizedValue }
+        }
+        catch {
+            Write-Host ([string]$_.Exception.Message) -ForegroundColor Yellow
+        }
+    }
+}
+
+function Show-ClagnosUiCreateWizard {
+    $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
+    $config = Read-DotEnvFile -Path $envPath
+    $subscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
+    if ([string]::IsNullOrWhiteSpace([string]$subscriptionId)) {
+        Write-ClagnosUiError -ErrorRecord ([System.Exception]::new("Select an active Azure subscription and run 'az login' before creating a virtual computer."))
+        Wait-ClagnosUiContinue
+        return
+    }
+
+    $platformDefault = ([string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_OS' -DefaultValue '')).Trim().ToLowerInvariant()
+    if ($platformDefault -notin @('windows','linux')) { $platformDefault = '' }
+    $wizardValues = @{}
+    $wizardSources = @{}
+    $skipRemaining = $false
+
+    $platformOptions = @(
+        [pscustomobject]@{ Value = 'windows'; Label = 'Windows'; Detail = 'Windows Server or Windows client image' },
+        [pscustomobject]@{ Value = 'linux'; Label = 'Linux'; Detail = 'Linux server image' }
+    )
+    $platformResult = Resolve-ClagnosUiWizardPageStep -Options $platformOptions -Prompt 'Operating system' -DefaultValue $platformDefault -Required
+    if ($platformResult.Action -eq 'close') { return }
+    $platform = [string]$platformResult.Value
+    $wizardSources['SELECTED_VM_OS'] = if ($platformResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+    if ($platformResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+
+    $platformDefaults = Get-ClagnosPlatformDefaults -Platform $platform
+    $vmNameDefault = [string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_NAME' -DefaultValue '')
+    $regionDefault = [string](Get-ConfigValue -Config $config -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+    $vmSizeKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_SIZE'
+    $imageKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_IMAGE'
+    $diskKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_DISK_SIZE_GB'
+    $vmSizeDefault = [string](Get-ConfigValue -Config $config -Key $vmSizeKey -DefaultValue ([string]$platformDefaults.VmSizeDefault))
+    $imageRawDefault = [string](Get-ConfigValue -Config $config -Key $imageKey -DefaultValue ([string]$platformDefaults.VmImageDefault))
+    $storageSkuDefault = [string](Get-ConfigValue -Config $config -Key 'VM_STORAGE_SKU' -DefaultValue 'StandardSSD_LRS')
+    if ([string]::IsNullOrWhiteSpace([string]$storageSkuDefault)) { $storageSkuDefault = 'StandardSSD_LRS' }
+    $securityDefault = ''
+    try { $securityDefault = [string](Resolve-ClagnosSecurityTypeValue -RawValue ([string](Get-ConfigValue -Config $config -Key 'VM_SECURITY_TYPE' -DefaultValue 'Standard'))) }
+    catch { Write-Host ('Configured VM_SECURITY_TYPE is invalid: {0}. Select a security type in the wizard.' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
+    if ([string]::IsNullOrWhiteSpace([string]$securityDefault) -and [string]::IsNullOrWhiteSpace([string](Get-ConfigValue -Config $config -Key 'VM_SECURITY_TYPE' -DefaultValue 'Standard'))) { $securityDefault = 'Standard' }
+    $hibernationDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_HIBERNATION' -DefaultValue $true
+    $nestedDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_NESTED_VIRTUALIZATION' -DefaultValue $true
+    $secureBootDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_SECURE_BOOT' -DefaultValue $true
+    $vtpmDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_VTPM' -DefaultValue $true
+    $diskDefaultRaw = [string](Get-ConfigValue -Config $config -Key $diskKey -DefaultValue ([string]$platformDefaults.VmDiskSizeDefault))
+    $diskDefault = ''
+    try { $diskDefault = ConvertTo-ClagnosOsDiskSizeGb -Value $diskDefaultRaw -FieldName $diskKey }
+    catch { Write-Host ('Disk default will need an entered value: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
+    $imageDefault = Resolve-ClagnosTemplate -Template $imageRawDefault -Tokens @{ SELECTED_VM_NAME = $vmNameDefault }
+    $sshPortDefaultRaw = [string](Get-ConfigValue -Config $config -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))
+    $sshPortDefault = ''
+    try { $sshPortDefault = Resolve-ClagnosTcpPortNumber -Value $sshPortDefaultRaw -Label 'VM_SSH_PORT' }
+    catch { Write-Host ('SSH port default will need correction: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
+    $rdpPortDefaultRaw = [string](Get-ConfigValue -Config $config -Key 'VM_RDP_PORT' -DefaultValue (Get-ClagnosDefaultRdpPortText))
+    $rdpPortDefault = ''
+    if ($platform -eq 'windows') {
+        try { $rdpPortDefault = Resolve-ClagnosTcpPortNumber -Value $rdpPortDefaultRaw -Label 'VM_RDP_PORT' }
+        catch { Write-Host ('RDP port default will need correction: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
+    }
+    $requiredPorts = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$sshPortDefault)) { $requiredPorts += $sshPortDefault }
+    if (-not [string]::IsNullOrWhiteSpace([string]$rdpPortDefault)) { $requiredPorts += $rdpPortDefault }
+    $wizardValues['SshPort'] = [string]$sshPortDefault
+    if ($platform -eq 'windows') { $wizardValues['RdpPort'] = [string]$rdpPortDefault }
+    $portsDefaultRaw = [string](Get-ConfigValue -Config $config -Key 'TCP_PORTS' -DefaultValue (Get-ClagnosDefaultTcpPortsCsv))
+    $portsDefault = ''
+    try { $portsDefault = [string](Resolve-ClagnosTcpPortSpecification -Text $portsDefaultRaw -RequiredPorts $requiredPorts).CanonicalText }
+    catch { Write-Host ('Port default will need correction: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
+    if (-not [string]::IsNullOrWhiteSpace([string]$vmNameDefault)) { $wizardSources['SELECTED_VM_NAME'] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$regionDefault)) { $wizardSources['SELECTED_AZURE_REGION'] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$vmSizeDefault)) { $wizardSources[$vmSizeKey] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$imageDefault)) { $wizardSources[$imageKey] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$diskDefault)) { $wizardSources[$diskKey] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$storageSkuDefault)) { $wizardSources['VM_STORAGE_SKU'] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$securityDefault)) { $wizardSources['VM_SECURITY_TYPE'] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$hibernationDefault)) { $wizardSources['VM_ENABLE_HIBERNATION'] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$nestedDefault)) { $wizardSources['VM_ENABLE_NESTED_VIRTUALIZATION'] = 'default' }
+    if ($securityDefault -eq 'TrustedLaunch') {
+        $wizardSources['VM_ENABLE_SECURE_BOOT'] = 'default'
+        $wizardSources['VM_ENABLE_VTPM'] = 'default'
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$sshPortDefault)) { $wizardSources['VM_SSH_PORT'] = 'default' }
+    if ($platform -eq 'windows' -and -not [string]::IsNullOrWhiteSpace([string]$rdpPortDefault)) { $wizardSources['VM_RDP_PORT'] = 'default' }
+    if (-not [string]::IsNullOrWhiteSpace([string]$portsDefault)) { $wizardSources['TCP_PORTS'] = 'default' }
+
+    if (-not $skipRemaining) {
+        $nameResult = Read-ClagnosUiWizardTextStep -Title 'Virtual computer name' -DefaultValue $vmNameDefault -Example '3-16 characters, starts with a letter' -Required -Validator {
+            param($value)
+            $candidate = ([string]$value).Trim()
+            if (-not (Test-ClagnosVmNameFormat -VmName $candidate)) { throw 'VM name must contain 3-16 characters, start with a letter, and use only letters, numbers, or hyphens.' }
+            return $candidate
+        }
+        if ($nameResult.Action -eq 'close') { return }
+        $wizardValues['VmName'] = [string]$nameResult.Value
+        $wizardSources['SELECTED_VM_NAME'] = if ($nameResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($nameResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+    else { $wizardValues['VmName'] = $vmNameDefault }
+
+    $vmNameForTokens = if (-not [string]::IsNullOrWhiteSpace([string]$wizardValues['VmName'])) { [string]$wizardValues['VmName'] } else { [string]$vmNameDefault }
+    $imageDefault = Resolve-ClagnosTemplate -Template $imageRawDefault -Tokens @{ SELECTED_VM_NAME = $vmNameForTokens }
+    $diskDefaultValue = $diskDefault
+    $portDefaultValue = $portsDefault
+    $regionValue = $regionDefault
+    $sizeValue = $vmSizeDefault
+
+    if (-not $skipRemaining) {
+        try { $locations = @(Get-AzLocationCatalog) }
+        catch {
+            Write-ClagnosUiError -ErrorRecord $_
+            Wait-ClagnosUiContinue
+            return
+        }
+        $locationOptions = @($locations | ForEach-Object {
+            $locationName = [string]$_.Name
+            $displayName = if ([string]::IsNullOrWhiteSpace([string]$_.DisplayName)) { $locationName } else { [string]$_.DisplayName }
+            [pscustomobject]@{ Value = $locationName; Label = $displayName; Detail = $locationName }
+        })
+        if (@($locationOptions).Count -eq 0) {
+            Write-ClagnosUiError -ErrorRecord ([System.Exception]::new('Azure returned no selectable regions for the active subscription.'))
+            Wait-ClagnosUiContinue
+            return
+        }
+        $regionResult = Resolve-ClagnosUiWizardPageStep -Options $locationOptions -Prompt 'Azure region' -DefaultValue $regionDefault -Required
+        if ($regionResult.Action -eq 'close') { return }
+        $regionValue = [string]$regionResult.Value
+        $wizardSources['SELECTED_AZURE_REGION'] = if ($regionResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($regionResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining) {
+        $skuFilter = ''
+        $skuChosen = $false
+        while (-not $skuChosen) {
+            try { $skuRows = @(Get-LocationSkusForSelection -Location $regionValue -SkuLike $skuFilter) }
+            catch {
+                Write-ClagnosUiError -ErrorRecord $_
+                Wait-ClagnosUiContinue
+                return
+            }
+            if (@($skuRows).Count -eq 0) {
+                Write-ClagnosUiHeader -Title ("VM size/SKU in {0}" -f $regionValue)
+                Write-Host ('No VM sizes matched the current filter "{0}".' -f $skuFilter) -ForegroundColor Yellow
+                Write-Host 'x: change or clear SKU filter'
+                Write-Host 'r: restart wizard and choose another region'
+                Write-Host 'c: close wizard'
+                $emptySkuChoice = (Read-ClagnosUiChoice 'SKU list action').ToLowerInvariant()
+                if ($emptySkuChoice -eq 'x') {
+                    $skuFilter = Read-ClagnosUiValidatedText -Prompt 'Filter SKU names (letters, numbers, _, -, ., *, ?; Enter clears filter)' -AllowBlank -Validator {
+                        param($value)
+                        $candidate = ([string]$value).Trim()
+                        if ($candidate.Length -gt 80 -or $candidate -notmatch '^[a-zA-Z0-9_*?.-]*$') { throw 'SKU filter may use only letters, numbers, period, underscore, hyphen, * and ? (maximum 80 characters).' }
+                        return $candidate
+                    }
+                    continue
+                }
+                if ($emptySkuChoice -eq 'r') { return (Show-ClagnosUiCreateWizard) }
+                return
+            }
+            $skuAvailability = @{}
+            try {
+                $skuAvailability = Get-SkuAvailabilityMap -Location $regionValue -SkuNames @($skuRows | ForEach-Object { [string]$_.name })
+            }
+            catch {
+                Write-Host ('VM-size availability could not be read: {0}. The create workflow will revalidate before Azure mutation.' -f [string]$_.Exception.Message) -ForegroundColor Yellow
+                foreach ($sku in @($skuRows)) { $skuAvailability[[string]$sku.name] = 'unknown' }
+            }
+            $skuOptions = @($skuRows | ForEach-Object {
+                $availability = if ($skuAvailability.ContainsKey([string]$_.name)) { [string]$skuAvailability[[string]$_.name] } else { 'unknown' }
+                $ramGb = [Math]::Round(([double]$_.memoryInMb / 1024.0), 2)
+                [pscustomobject]@{ Value = [string]$_.name; Label = [string]$_.name; Detail = ('{0} vCPU | {1} GB RAM | {2}' -f [int]$_.numberOfCores, $ramGb, $availability); Enabled = ($availability -ne 'no') }
+            })
+            $skuResult = Resolve-ClagnosUiWizardPageStep -Options $skuOptions -Prompt ("VM size/SKU in {0}" -f $regionValue) -DefaultValue $vmSizeDefault -ExtraKeys @('x') -Required
+            if ($skuResult.Action -eq 'close') { return }
+            if ($skuResult.Action -eq 'extra' -and [string]$skuResult.ExtraKey -eq 'x') {
+                $skuFilter = Read-ClagnosUiValidatedText -Prompt 'Filter SKU names (letters, numbers, _, -, ., *, ?; Enter clears filter)' -AllowBlank -Validator {
+                    param($value)
+                    $candidate = ([string]$value).Trim()
+                    if ($candidate.Length -gt 80 -or $candidate -notmatch '^[a-zA-Z0-9_*?.-]*$') { throw 'SKU filter may use only letters, numbers, period, underscore, hyphen, * and ? (maximum 80 characters).' }
+                    return $candidate
+                }
+                if ($skuFilter -eq '*') { $skuFilter = '' }
+                continue
+            }
+            $sizeValue = [string]$skuResult.Value
+            $wizardSources[$vmSizeKey] = if ($skuResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+            if ($skuResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+            $skuChosen = -not [string]::IsNullOrWhiteSpace([string]$sizeValue)
+        }
+    }
+
+    $imageValue = $imageDefault
+    $storageSkuValue = $storageSkuDefault
+    $securityValue = $securityDefault
+    $hibernationValue = $hibernationDefault
+    $nestedValue = $nestedDefault
+    $secureBootValue = $secureBootDefault
+    $vtpmValue = $vtpmDefault
+    if (-not $skipRemaining) {
+        $imageChoiceOptions = @(
+            [pscustomobject]@{ Value = 'default'; Label = 'Use configured image'; Detail = $imageDefault },
+            [pscustomobject]@{ Value = 'custom'; Label = 'Enter a custom image URN'; Detail = 'publisher:offer:sku:version' }
+        )
+        $imageChoice = Resolve-ClagnosUiWizardPageStep -Options $imageChoiceOptions -Prompt 'OS image' -DefaultValue 'default' -Required
+        if ($imageChoice.Action -eq 'close') { return }
+        if ($imageChoice.Value -eq 'custom') {
+            $imageResult = Read-ClagnosUiWizardTextStep -Title 'Custom OS image' -DefaultValue '' -Example 'publisher:offer:sku:latest or a full Azure image resource ID' -Required -Validator {
+                param($value)
+                $candidate = ([string]$value).Trim()
+                if ($candidate -notmatch '^[^:\s]+:[^:\s]+:[^:\s]+:[^:\s]+$' -and $candidate -notmatch '^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\.Compute/images/[^/]+$') { throw 'Image must be a four-part marketplace URN or a Compute image resource ID.' }
+                return $candidate
+            }
+            if ($imageResult.Action -eq 'close') { return }
+            $imageValue = [string]$imageResult.Value
+            $wizardSources[$imageKey] = 'selected'
+            if ($imageResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+        }
+        else { $wizardSources[$imageKey] = 'default' }
+    }
+
+    if (-not $skipRemaining) {
+        $storageOptions = @(
+            [pscustomobject]@{ Value = 'Standard_LRS'; Label = 'Standard HDD'; Detail = 'Standard_LRS' },
+            [pscustomobject]@{ Value = 'StandardSSD_LRS'; Label = 'Standard SSD'; Detail = 'StandardSSD_LRS' },
+            [pscustomobject]@{ Value = 'Premium_LRS'; Label = 'Premium SSD'; Detail = 'Premium_LRS' }
+        )
+        if ($storageSkuDefault -notin @($storageOptions | ForEach-Object { [string]$_.Value })) { $storageOptions = @([pscustomobject]@{ Value = $storageSkuDefault; Label = ('Configured: {0}' -f $storageSkuDefault); Detail = 'current .env default' }) + @($storageOptions) }
+        $storageResult = Resolve-ClagnosUiWizardPageStep -Options $storageOptions -Prompt 'OS disk storage performance tier' -DefaultValue $storageSkuDefault -Required
+        if ($storageResult.Action -eq 'close') { return }
+        $storageSkuValue = [string]$storageResult.Value
+        $wizardSources['VM_STORAGE_SKU'] = if ($storageResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($storageResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining) {
+        $securityOptions = @(
+            [pscustomobject]@{ Value = 'Standard'; Label = 'Standard'; Detail = 'Standard security profile' },
+            [pscustomobject]@{ Value = 'TrustedLaunch'; Label = 'Trusted Launch'; Detail = 'Secure Boot and vTPM settings apply' }
+        )
+        $securityResult = Resolve-ClagnosUiWizardPageStep -Options $securityOptions -Prompt 'VM security type' -DefaultValue $securityDefault -Required
+        if ($securityResult.Action -eq 'close') { return }
+        $securityValue = [string]$securityResult.Value
+        $wizardSources['VM_SECURITY_TYPE'] = if ($securityResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($securityValue -eq 'TrustedLaunch') {
+            if (-not [string]::IsNullOrWhiteSpace([string]$secureBootDefault)) { $wizardSources['VM_ENABLE_SECURE_BOOT'] = 'default' }
+            if (-not [string]::IsNullOrWhiteSpace([string]$vtpmDefault)) { $wizardSources['VM_ENABLE_VTPM'] = 'default' }
+        }
+        if ($securityResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining) {
+        $toggleOptions = @([pscustomobject]@{ Value = 'true'; Label = 'Enabled'; Detail = '' }, [pscustomobject]@{ Value = 'false'; Label = 'Disabled'; Detail = '' })
+        $hibernationResult = Resolve-ClagnosUiWizardPageStep -Options $toggleOptions -Prompt 'Hibernation' -DefaultValue $hibernationDefault -Required
+        if ($hibernationResult.Action -eq 'close') { return }
+        $hibernationValue = [string]$hibernationResult.Value
+        $wizardSources['VM_ENABLE_HIBERNATION'] = if ($hibernationResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($hibernationResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining) {
+        $toggleOptions = @([pscustomobject]@{ Value = 'true'; Label = 'Enabled'; Detail = '' }, [pscustomobject]@{ Value = 'false'; Label = 'Disabled'; Detail = '' })
+        $nestedResult = Resolve-ClagnosUiWizardPageStep -Options $toggleOptions -Prompt 'Nested virtualization' -DefaultValue $nestedDefault -Required
+        if ($nestedResult.Action -eq 'close') { return }
+        $nestedValue = [string]$nestedResult.Value
+        $wizardSources['VM_ENABLE_NESTED_VIRTUALIZATION'] = if ($nestedResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($nestedResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining -and $securityValue -eq 'TrustedLaunch') {
+        $toggleOptions = @([pscustomobject]@{ Value = 'true'; Label = 'Enabled'; Detail = '' }, [pscustomobject]@{ Value = 'false'; Label = 'Disabled'; Detail = '' })
+        $secureBootResult = Resolve-ClagnosUiWizardPageStep -Options $toggleOptions -Prompt 'Secure Boot (Trusted Launch)' -DefaultValue $secureBootDefault -Required
+        if ($secureBootResult.Action -eq 'close') { return }
+        $secureBootValue = [string]$secureBootResult.Value
+        $wizardSources['VM_ENABLE_SECURE_BOOT'] = if ($secureBootResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($secureBootResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+        if (-not $skipRemaining) {
+            $vtpmResult = Resolve-ClagnosUiWizardPageStep -Options $toggleOptions -Prompt 'vTPM (Trusted Launch)' -DefaultValue $vtpmDefault -Required
+            if ($vtpmResult.Action -eq 'close') { return }
+            $vtpmValue = [string]$vtpmResult.Value
+            $wizardSources['VM_ENABLE_VTPM'] = if ($vtpmResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+            if ($vtpmResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+        }
+    }
+
+    if (-not $skipRemaining) {
+        $sshPortResult = Read-ClagnosUiWizardTextStep -Title 'SSH connection port' -DefaultValue $sshPortDefault -Example '22 or 2222' -Required -Validator {
+            param($value)
+            return (Resolve-ClagnosTcpPortNumber -Value ([string]$value) -Label 'SSH port')
+        }
+        if ($sshPortResult.Action -eq 'close') { return }
+        $wizardValues['SshPort'] = [string]$sshPortResult.Value
+        $wizardSources['VM_SSH_PORT'] = if ($sshPortResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($sshPortResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+    if (-not $skipRemaining -and $platform -eq 'windows') {
+        $rdpPortResult = Read-ClagnosUiWizardTextStep -Title 'RDP connection port' -DefaultValue $rdpPortDefault -Example '3389 or 3390' -Required -Validator {
+            param($value)
+            return (Resolve-ClagnosTcpPortNumber -Value ([string]$value) -Label 'RDP port')
+        }
+        if ($rdpPortResult.Action -eq 'close') { return }
+        $wizardValues['RdpPort'] = [string]$rdpPortResult.Value
+        $wizardSources['VM_RDP_PORT'] = if ($rdpPortResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($rdpPortResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining) {
+        $diskResult = Read-ClagnosUiWizardTextStep -Title 'OS disk size' -DefaultValue $diskDefaultValue -Example '1MB, 128GB, or 1TB (Azure maximum: 4095GB)' -Required -Validator {
+            param($value)
+            return (ConvertTo-ClagnosOsDiskSizeGb -Value ([string]$value) -FieldName 'OS disk size')
+        }
+        if ($diskResult.Action -eq 'close') { return }
+        $wizardValues['DiskSizeGb'] = [string]$diskResult.Value
+        $wizardSources[$diskKey] = if ($diskResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+        if ($diskResult.Action -in @('skip-all','apply-all')) { $skipRemaining = $true }
+    }
+
+    if (-not $skipRemaining) {
+        $portsResult = Read-ClagnosUiWizardTextStep -Title 'Inbound TCP ports' -DefaultValue $portDefaultValue -Example '22,80,443,3000-3300' -Required -Validator {
+            param($value)
+            $required = @([string]$wizardValues['SshPort'])
+            if ($platform -eq 'windows') { $required += [string]$wizardValues['RdpPort'] }
+            return [string](Resolve-ClagnosTcpPortSpecification -Text ([string]$value) -RequiredPorts $required).CanonicalText
+        }
+        if ($portsResult.Action -eq 'close') { return }
+        $wizardValues['TcpPorts'] = [string]$portsResult.Value
+        $wizardSources['TCP_PORTS'] = if ($portsResult.Action -in @('skip','apply-default','skip-all','apply-all')) { 'default' } else { 'selected' }
+    }
+
+    if (-not $wizardValues.ContainsKey('DiskSizeGb')) { $wizardValues['DiskSizeGb'] = [string]$diskDefaultValue }
+    if (-not $wizardValues.ContainsKey('TcpPorts')) { $wizardValues['TcpPorts'] = [string]$portDefaultValue }
+    $finalRequiredPorts = @([string]$wizardValues['SshPort'])
+    if ($platform -eq 'windows') { $finalRequiredPorts += [string]$wizardValues['RdpPort'] }
+    try { $wizardValues['TcpPorts'] = [string](Resolve-ClagnosTcpPortSpecification -Text ([string]$wizardValues['TcpPorts']) -RequiredPorts $finalRequiredPorts).CanonicalText }
+    catch { $wizardValues['TcpPorts'] = '' }
+
+    $missingValues = @()
+    if ([string]::IsNullOrWhiteSpace([string]$wizardValues['VmName'])) { $missingValues += 'VM name' }
+    if ([string]::IsNullOrWhiteSpace([string]$regionValue)) { $missingValues += 'Azure region' }
+    if ([string]::IsNullOrWhiteSpace([string]$sizeValue)) { $missingValues += 'VM size/SKU' }
+    if ([string]::IsNullOrWhiteSpace([string]$imageValue)) { $missingValues += 'OS image' }
+    if ([string]::IsNullOrWhiteSpace([string]$wizardValues['DiskSizeGb'])) { $missingValues += 'OS disk size' }
+    if ([string]::IsNullOrWhiteSpace([string]$wizardValues['TcpPorts'])) { $missingValues += 'TCP ports' }
+    if ([string]::IsNullOrWhiteSpace([string]$wizardValues['SshPort'])) { $missingValues += 'SSH port' }
+    if ($platform -eq 'windows' -and [string]::IsNullOrWhiteSpace([string]$wizardValues['RdpPort'])) { $missingValues += 'RDP port' }
+    if ($securityValue -eq 'TrustedLaunch' -and [string]::IsNullOrWhiteSpace([string]$secureBootValue)) { $missingValues += 'Secure Boot state' }
+    if ($securityValue -eq 'TrustedLaunch' -and [string]::IsNullOrWhiteSpace([string]$vtpmValue)) { $missingValues += 'vTPM state' }
+    if (@($missingValues).Count -gt 0) {
+        Write-ClagnosUiHeader -Title 'Create wizard — incomplete configuration'
+        Write-Host ('Required defaults or selections are missing: {0}.' -f ($missingValues -join ', ')) -ForegroundColor Yellow
+        Write-Host 'r: restart wizard'
+        Write-Host 'c: close'
+        if ((Read-ClagnosUiChoice 'Create wizard action').ToLowerInvariant() -eq 'r') { return (Show-ClagnosUiCreateWizard) }
+        return
+    }
+
+    $reviewRows = @(
+        [pscustomobject]@{ Label = 'Operating system'; Value = $platform; Key = 'SELECTED_VM_OS' },
+        [pscustomobject]@{ Label = 'VM name'; Value = [string]$wizardValues['VmName']; Key = 'SELECTED_VM_NAME' },
+        [pscustomobject]@{ Label = 'Azure region'; Value = [string]$regionValue; Key = 'SELECTED_AZURE_REGION' },
+        [pscustomobject]@{ Label = 'VM size'; Value = [string]$sizeValue; Key = $vmSizeKey },
+        [pscustomobject]@{ Label = 'OS image'; Value = [string]$imageValue; Key = $imageKey },
+        [pscustomobject]@{ Label = 'OS disk size'; Value = ('{0} GB' -f [string]$wizardValues['DiskSizeGb']); Key = $diskKey },
+        [pscustomobject]@{ Label = 'SSH port'; Value = [string]$wizardValues['SshPort']; Key = 'VM_SSH_PORT' },
+        [pscustomobject]@{ Label = 'Storage SKU'; Value = [string]$storageSkuValue; Key = 'VM_STORAGE_SKU' },
+        [pscustomobject]@{ Label = 'Security type'; Value = [string]$securityValue; Key = 'VM_SECURITY_TYPE' },
+        [pscustomobject]@{ Label = 'Hibernation'; Value = [string]$hibernationValue; Key = 'VM_ENABLE_HIBERNATION' },
+        [pscustomobject]@{ Label = 'Nested virtualization'; Value = [string]$nestedValue; Key = 'VM_ENABLE_NESTED_VIRTUALIZATION' },
+        [pscustomobject]@{ Label = 'Inbound TCP ports'; Value = [string]$wizardValues['TcpPorts']; Key = 'TCP_PORTS' }
+    )
+    if ($platform -eq 'windows') {
+        $reviewRows += [pscustomobject]@{ Label = 'RDP port'; Value = [string]$wizardValues['RdpPort']; Key = 'VM_RDP_PORT' }
+    }
+    if ($securityValue -eq 'TrustedLaunch') {
+        $reviewRows += @([pscustomobject]@{ Label = 'Secure Boot'; Value = [string]$secureBootValue; Key = 'VM_ENABLE_SECURE_BOOT' }, [pscustomobject]@{ Label = 'vTPM'; Value = [string]$vtpmValue; Key = 'VM_ENABLE_VTPM' })
+    }
+
+    Write-ClagnosUiHeader -Title 'Create wizard — review'
+    Write-Host ('Azure subscription: {0} ({1})' -f [string]$script:ClagnosUiSubscription.SubscriptionName, [string]$script:ClagnosUiSubscription.SubscriptionId)
+    foreach ($reviewRow in @($reviewRows)) {
+        $marker = if ($wizardSources.ContainsKey([string]$reviewRow.Key) -and [string]$wizardSources[[string]$reviewRow.Key] -eq 'default') { '>' } else { ' ' }
+        Write-Host ('{0} {1}: {2}' -f $marker, [string]$reviewRow.Label, [string]$reviewRow.Value)
+    }
+    Write-Host 'a: apply selected setup'
+    Write-Host 'l: apply all (keep all remaining configured defaults)'
+    Write-Host 'c: close without creating'
+    $finalChoice = (Read-ClagnosUiChoice 'Create virtual computer').ToLowerInvariant()
+    if ($finalChoice -notin @('a','l')) { return }
+
+    $options = @{
+        'subscription-id' = $subscriptionId
+        'vm-name' = [string]$wizardValues['VmName']
+        'vm-region' = [string]$regionValue
+        'vm-size' = [string]$sizeValue
+    }
+    $options[$platform] = $true
+    $wizardAnswers = @{
+        Image = [string]$imageValue
+        DiskSizeGb = [string]$wizardValues['DiskSizeGb']
+        TcpPorts = [string]$wizardValues['TcpPorts']
+        StorageSku = [string]$storageSkuValue
+        SecurityType = [string]$securityValue
+        Hibernation = [string]$hibernationValue
+        NestedVirtualization = [string]$nestedValue
+        SecureBoot = [string]$secureBootValue
+        Vtpm = [string]$vtpmValue
+        SshPort = [string]$wizardValues['SshPort']
+    }
+    if ($platform -eq 'windows') { $wizardAnswers['RdpPort'] = [string]$wizardValues['RdpPort'] }
+    Invoke-ClagnosUiCommand -CommandName 'create' -Options $options -FrontendContext @{ CreateWizardMode = $true; CreateWizardValues = $wizardAnswers }
+}
+
 function Show-ClagnosUiVirtualComputers {
     while ($true) {
         Write-ClagnosUiHeader -Title 'Virtual computers'
-        try { $vms = @(Get-ClagnosUiVirtualComputers) }
+        try {
+            $vms = @(Get-ClagnosUiVirtualComputers)
+            $resourceSnapshot = Ensure-ClagnosUiResourceCache
+        }
         catch { Write-ClagnosUiError -ErrorRecord $_; $vms = @() }
         if ($vms.Count -eq 0) {
             Write-Host 'No managed virtual computers were found.' -ForegroundColor Yellow
+            Write-Host 'c: create virtual computer'
+            Write-Host 'r: refresh managed resource cache'
+            Write-Host 'b: back'
+            Write-Host 'q: exit'
+            $emptyChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
+            if ($emptyChoice -eq 'b') { return }
+            if ($emptyChoice -eq 'q') { exit }
+            if ($emptyChoice -eq 'c') { Show-ClagnosUiCreateWizard; continue }
+            if ($emptyChoice -eq 'r') { Update-ClagnosUiSubscription -Force; Sync-ClagnosUiResourceCache -Force | Out-Null; continue }
+            continue
         }
-        else {
-            for ($index = 0; $index -lt $vms.Count; $index++) {
-                $vm = $vms[$index]
-                $power = Get-ClagnosUiPowerState -ResourceGroup ([string]$vm.ClagnosResourceGroup) -VmName ([string]$vm.name)
-                Write-Host ('{0}. {1} | {2} | {3} | {4} | {5}' -f ($index + 1), [string]$vm.name, [string]$vm.storageProfile.osDisk.osType, [string]$vm.hardwareProfile.vmSize, [string]$vm.location, $power)
+
+        $vmOptions = @(
+            $vms | ForEach-Object {
+                $power = Get-ClagnosUiPowerState -ResourceGroup ([string]$_.ClagnosResourceGroup) -VmName ([string]$_.name) -CachedPowerState ([string]$_.powerState)
+                $vmOs = [string]$_.storageProfile.osDisk.osType
+                $value = '{0}|{1}' -f [string]$_.ClagnosResourceGroup, [string]$_.name
+                [pscustomobject]@{ Value = $value; Label = [string]$_.name; Detail = ('{0} | {1} | {2} | {3}' -f $vmOs, [string]$_.hardwareProfile.vmSize, [string]$_.location, $power) }
             }
-        }
-        Write-Host 'c: create virtual computer'
-        Write-Host 'r: refresh list'
-        Write-Host 'b: back'
-        Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
-        if ($choice -eq 'c') { Invoke-ClagnosUiCommand -CommandName 'create' -Options @{}; Update-ClagnosUiSubscription; continue }
-        if ($choice -eq 'r') { Update-ClagnosUiSubscription; continue }
-        $number = 0
-        if ([int]::TryParse($choice, [ref]$number) -and $number -ge 1 -and $number -le $vms.Count) {
-            Show-ClagnosUiVmMenu -Vm $vms[$number - 1]
-        }
+        )
+        $defaultVm = '{0}|{1}' -f [string]$script:ClagnosUiSelectedResourceGroup, [string]$script:ClagnosUiSelectedVmName
+        $selection = Select-ClagnosNumberedOptionPage -Options $vmOptions -Prompt 'Virtual computers' -DefaultValue $defaultVm -PageSize 12 -ExtraKeys @('c','r') -ExtraKeyLabels @{ c = 'create virtual computer'; r = 'refresh managed resource cache' }
+        if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { exit }; return }
+        if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'c') { Show-ClagnosUiCreateWizard; continue }
+        if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'r') { Update-ClagnosUiSubscription -Force; Sync-ClagnosUiResourceCache -Force | Out-Null; continue }
+        if ([string]$selection.Action -ne 'selected') { continue }
+        $selectedParts = @(([string]$selection.Value -split '\|', 2))
+        $selectedVm = @($vms | Where-Object {
+            [string]::Equals([string]$_.ClagnosResourceGroup, [string]$selectedParts[0], [System.StringComparison]::OrdinalIgnoreCase) -and
+            [string]::Equals([string]$_.name, [string]$selectedParts[1], [System.StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1)
+        if (@($selectedVm).Count -gt 0) { Show-ClagnosUiVmMenu -Vm $selectedVm[0] }
     }
 }
 
@@ -1216,25 +2304,85 @@ function Show-ClagnosUiInventoryMenu {
             Write-Host ('{0}. {1}' -f ($index + 2), [string]$types[$index].Label)
         }
         Write-Host 'b: back'
+        Write-Host 'r: refresh managed resource cache'
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
         if ($choice -eq 'q') { exit }
+        if ($choice -eq 'r') {
+            Update-ClagnosUiSubscription -Force
+            Sync-ClagnosUiResourceCache -Force | Out-Null
+            continue
+        }
 
         $number = 0
         if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt ($types.Count + 1)) { continue }
-        $options = @{}
-        if ($number -gt 1) { $options['type'] = [string]$types[$number - 2].Id }
-        $group = Read-ClagnosUiChoice 'Exact resource group filter (press Enter for all managed groups)'
-        if (-not [string]::IsNullOrWhiteSpace($group)) { $options['group'] = $group }
-        Invoke-ClagnosUiCommand -CommandName 'list' -Options $options
+        $group = ''
+        try {
+            $groupSnapshot = Ensure-ClagnosUiResourceCache
+            $groupOptions = @([pscustomobject]@{ Value = '__all__'; Label = 'All managed resource groups'; Detail = '' })
+            $groupOptions += @($groupSnapshot.Groups | Sort-Object { [string]$_.name } | ForEach-Object {
+                [pscustomobject]@{ Value = [string]$_.name; Label = [string]$_.name; Detail = [string]$_.location }
+            })
+            $groupDefault = '__all__'
+            $groupSelection = Select-ClagnosNumberedOptionPage -Options $groupOptions -Prompt 'Filter by resource group' -DefaultValue $groupDefault -PageSize 12
+            if ([string]$groupSelection.Action -eq 'back') { continue }
+            if ([string]$groupSelection.Action -ne 'selected') { continue }
+            if ([string]$groupSelection.Value -ne '__all__') { $group = [string]$groupSelection.Value }
+        }
+        catch {
+            Write-ClagnosUiError -ErrorRecord $_
+            Wait-ClagnosUiContinue
+            continue
+        }
+        $typeName = if ($number -gt 1) { [string]$types[$number - 2].Id } else { '' }
+        try {
+            if (-not [string]::IsNullOrWhiteSpace([string]$group)) {
+                $snapshot = Ensure-ClagnosUiResourceCache
+                $groupMatch = @($snapshot.Groups | Where-Object { [string]::Equals([string]$_.name, [string]$group, [System.StringComparison]::OrdinalIgnoreCase) })
+                if (@($groupMatch).Count -eq 0) {
+                    Write-Host ('No managed resource group named {0} exists in the current cache.' -f $group) -ForegroundColor Yellow
+                    Wait-ClagnosUiContinue
+                    continue
+                }
+            }
+            $rows = @(Get-ClagnosUiCachedInventoryRows -TypeName $typeName -ResourceGroup $group)
+            Write-Host ''
+            Write-Host 'Managed Clagnos inventory (cached snapshot):' -ForegroundColor Cyan
+            if ([string]::IsNullOrWhiteSpace([string]$typeName)) { $displayTypes = @($types | ForEach-Object { [string]$_.Id }) }
+            else { $displayTypes = @($typeName) }
+            foreach ($displayType in @($displayTypes)) {
+                $displayRows = if ([string]::IsNullOrWhiteSpace([string]$typeName)) { @(Get-ClagnosUiCachedInventoryRows -TypeName $displayType -ResourceGroup $group) } else { @($rows) }
+                Write-Host ''
+                Write-Host ($displayType.ToUpperInvariant() + ':') -ForegroundColor Cyan
+                if (@($displayRows).Count -eq 0) { Write-Host '- (none)' }
+                else { foreach ($row in @($displayRows)) { Write-Host ('- {0}' -f [string]$row) } }
+            }
+            Write-Host ''
+            Write-Host ('Snapshot validated: {0} UTC | resources cached: {1}' -f ([DateTime]$snapshot.LastValidatedAtUtc).ToString('u'), @($snapshot.Resources).Count) -ForegroundColor DarkGray
+            Wait-ClagnosUiContinue
+        }
+        catch {
+            Write-ClagnosUiError -ErrorRecord $_
+            Wait-ClagnosUiContinue
+        }
     }
 }
 
 function Show-ClagnosUiHome {
     while ($true) {
         Update-ClagnosUiSubscription
+        try {
+            Ensure-ClagnosUiResourceCache | Out-Null
+            $script:ClagnosUiResourceCacheError = ''
+        }
+        catch {
+            $script:ClagnosUiResourceCacheError = [string]$_.Exception.Message
+        }
         Write-ClagnosUiHeader -Title 'Main menu'
+        if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiResourceCacheError)) {
+            Write-Host ('Managed resource cache unavailable: {0}' -f [string]$script:ClagnosUiResourceCacheError) -ForegroundColor Yellow
+        }
         Write-Host '1. Virtual computers'
         Write-Host '2. Managed resource inventory'
         Write-Host '3. Cloud subscriptions'
