@@ -8,7 +8,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\tui\run-tui-tests.ps
 
 The same suite is included in `tests/powershell-compatibility-check.ps1` and runs under Windows PowerShell 5.1 and PowerShell 7+.
 
-The suite contains 172 fixture-backed scenarios, including a process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, asserts the actual captured console output, and invokes `cg.cmd help resize` to verify command arguments survive backend loading.
+The suite contains 173 fixture-backed scenarios, including a process-level launcher scenario. The latter copies the real `cg.cmd`, `scripts/clagnos-cli.ps1`, `scripts/clagnos-cache-worker.ps1`, and runtime modules into an isolated temporary directory, launches that `cg.cmd` through `cmd.exe`, feeds menu choices through stdin, asserts the actual captured console output, verifies the background worker publishes flat group/resource/VM rows using only fixture Azure reads, and invokes `cg.cmd help resize` to verify command arguments survive backend loading.
 
 ## Screen and action coverage
 
@@ -16,7 +16,7 @@ The suite contains 172 fixture-backed scenarios, including a process-level launc
 | --- | --- |
 | Launcher and shared header | `cg.cmd` target and argument forwarding, tagline, selected subscription, offline header |
 | Main menu | Virtual computers, inventory, cloud subscriptions, configure, help, and exit |
-| Inventory snapshot | Startup inventory command counts, in-memory reuse, unchanged-snapshot identity, ETag-based change detection, mutation invalidation, and reconciliation |
+| Inventory snapshot | Startup/background inventory command counts, real worker cache import, in-memory and disk reuse, unchanged-snapshot identity, ETag-based change detection, mutation invalidation, and reconciliation |
 | Numbered selection and create wizard | Default markers, page navigation (`p/n/g/f/t`), rejecting numbers outside the visible page, all create steps, wizard controls, disk/port validation, and the create dispatch context |
 | Cloud subscriptions | Active/selected markers, enabled selection, disabled selection, invalid selection, inventory errors, and exit |
 | Virtual computers | Empty inventory, numeric selection, create, refresh, legacy group migration flow, inventory errors, and exit |
@@ -30,6 +30,6 @@ The suite contains 172 fixture-backed scenarios, including a process-level launc
 
 ## Azure safety boundary
 
-The screen/action scenarios use fixture Azure reads, a blocked `az` function, and a stubbed Clagnos command dispatcher. The process-level scenario uses a sanitized temporary `.env`, a fake `az.cmd` that returns fixture read data and rejects mutating verbs, and a fake `net.exe` for the launcher's elevation check. It captures output from the real `cg.cmd` process without reading the operator's `.env` or exposing local credentials. Every test asserts zero native Azure CLI calls and zero real dispatcher calls; the process scenario also checks its fake Azure log for mutation attempts.
+The screen/action scenarios use fixture Azure reads, a blocked `az` function, and a stubbed Clagnos command dispatcher. The process-level scenario uses a sanitized temporary `.env`, a fake `az.cmd` that returns fixture read data and rejects mutating verbs, and a fake `net.exe` for the launcher's elevation check. It captures output from the real `cg.cmd` process without reading the operator's `.env` or exposing local credentials. The same fixture process runs the hidden inventory worker and checks its Azure command counts and cache shape. Every test asserts zero native Azure CLI calls and zero real dispatcher calls; the process scenario also checks its fake Azure log for mutation attempts.
 
 This suite validates TUI rendering, navigation, selection mapping, command construction, and actual launcher output. It does not claim that a live Azure operation will succeed against a specific subscription or VM.

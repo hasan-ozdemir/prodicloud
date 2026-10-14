@@ -139,8 +139,77 @@ function Get-ClagnosPackageCatalog {
 
 function Get-ClagnosPackageStatusCacheKey {
     param([object[]]$Packages, [hashtable]$Options, [string]$Platform)
-    $catalogIdentity = @($Packages | ForEach-Object { '{0}:{1}' -f [string]$_.Catalog,[string]$_.Id } | Sort-Object) -join ','
+    $catalogIdentity = @($Packages | ForEach-Object {
+        $statusCheck = ConvertTo-Json -InputObject $_.StatusCheck -Depth 20 -Compress
+        '{0}:{1}:{2}' -f [string]$_.Catalog,[string]$_.Id,[string]$statusCheck
+    } | Sort-Object) -join ','
     return ('{0}|{1}|{2}|{3}|{4}' -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'group'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name'), [string]$Platform, $catalogIdentity).ToLowerInvariant()
+}
+
+function Get-ClagnosPackageStatusDiskCachePath {
+    param([string]$Key)
+
+    $root = [string]$env:LOCALAPPDATA
+    if ([string]::IsNullOrWhiteSpace($root)) { $root = [System.IO.Path]::GetTempPath() }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes([string]$Key)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $digest = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    return (Join-Path (Join-Path $root 'Clagnos\cache\package-status') ($digest + '.json'))
+}
+
+function ConvertTo-ClagnosPackageStatusUtcDateTime {
+    param([Parameter(Mandatory = $true)][object]$Value)
+
+    if ($Value -is [DateTime]) { return ([DateTime]$Value).ToUniversalTime() }
+    return [DateTime]::Parse([string]$Value,[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
+
+function Save-ClagnosPackageStatusCacheEntry {
+    param([string]$Key, [hashtable]$Entry)
+
+    if ([string]$env:CLAGNOS_PACKAGE_STATUS_CACHE_NO_DISK_WRITE -match '^(?i)(1|true|yes|on)$') { return }
+    $path = Get-ClagnosPackageStatusDiskCachePath -Key $Key
+    $directory = Split-Path -Parent $path
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $temporaryPath = '{0}.{1}.{2}.tmp' -f $path,$PID,[Guid]::NewGuid().ToString('N')
+    try {
+        $json = ConvertTo-Json -InputObject ([ordered]@{ CacheKey = [string]$Key; CreatedAtUtc = ([DateTime]$Entry.CreatedAtUtc).ToString('o'); Complete = [bool]$Entry.Complete; StatusByPackage = $Entry.StatusByPackage }) -Depth 30 -Compress
+        Set-Content -LiteralPath $temporaryPath -Value $json -Encoding UTF8
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            try { [System.IO.File]::Replace($temporaryPath,$path,$null) }
+            catch { Move-Item -LiteralPath $temporaryPath -Destination $path -Force }
+        }
+        else { Move-Item -LiteralPath $temporaryPath -Destination $path -Force }
+    }
+    finally { if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue } }
+}
+
+function Get-ClagnosPackageStatusCacheEntry {
+    param([object[]]$Packages, [hashtable]$Options, [string]$Platform)
+
+    $key = Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
+    if ($null -eq $script:ClagnosPackageStatusCache) { $script:ClagnosPackageStatusCache = @{} }
+    $entry = if ($script:ClagnosPackageStatusCache.ContainsKey($key)) { $script:ClagnosPackageStatusCache[$key] } else { $null }
+    $path = Get-ClagnosPackageStatusDiskCachePath -Key $key
+    if (Test-Path -LiteralPath $path -PathType Leaf) {
+        try {
+            $diskEntry = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $path -Raw -ErrorAction Stop))
+            if ([string]::Equals([string]$diskEntry.CacheKey,$key,[System.StringComparison]::Ordinal)) {
+                $diskCreatedAt = ConvertTo-ClagnosPackageStatusUtcDateTime -Value $diskEntry.CreatedAtUtc
+                if ($null -eq $entry -or $diskCreatedAt -gt [DateTime]$entry.CreatedAtUtc) {
+                    $entry = @{ CreatedAtUtc = $diskCreatedAt; Complete = [bool]$diskEntry.Complete; StatusByPackage = @{} }
+                    foreach ($property in @($diskEntry.StatusByPackage.PSObject.Properties)) { $entry.StatusByPackage[[string]$property.Name] = [string]$property.Value }
+                    $script:ClagnosPackageStatusCache[$key] = $entry
+                }
+            }
+        }
+        catch { if ($null -eq $entry) { $entry = $null } }
+    }
+    if ($null -eq $entry) { return $null }
+    $ttlSeconds = if ([int]$script:ClagnosPackageStatusCacheTtlSeconds -gt 0) { [int]$script:ClagnosPackageStatusCacheTtlSeconds } else { 45 }
+    $age = ([DateTime]::UtcNow - [DateTime]$entry.CreatedAtUtc).TotalSeconds
+    return [pscustomobject]@{ Key = $key; Entry = $entry; IsFresh = ($age -lt $ttlSeconds -and [bool]$entry.Complete); AgeSeconds = [double]$age }
 }
 
 function New-ClagnosPackageGuestScript {
@@ -340,18 +409,24 @@ function Invoke-ClagnosPackageGuestScript {
         [hashtable]$Options,
         [string]$Platform,
         [string]$ScriptText,
-        [string]$TaskLabel
+        [string]$TaskLabel,
+        [psobject]$Runtime = $null,
+        [psobject]$Target = $null
     )
 
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux')
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
-    $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
-    $runtime.Context.VmName = [string]$target.VmName
-    $vmDetails = Get-ClagnosVmDetails -Context $runtime.Context
+    if ($null -eq $Runtime) {
+        $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux')
+    }
+    if ($null -eq $Target) {
+        $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package'
+    }
+    $Runtime.Context.ResourceGroup = [string]$Target.ResourceGroup
+    $Runtime.Context.VmName = [string]$Target.VmName
+    $vmDetails = Get-ClagnosVmDetails -Context $Runtime.Context -AllowCachedInventory
     $sshHost = [string]$vmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($sshHost)) { $sshHost = [string]$vmDetails.PublicIP }
     if ([string]::IsNullOrWhiteSpace($sshHost)) { throw 'Package management could not resolve the VM SSH host.' }
-    $pySsh = Ensure-ClagnosPySshTools -RepoRoot (Get-ClagnosRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
+    $pySsh = Ensure-ClagnosPySshTools -RepoRoot (Get-ClagnosRepoRoot) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
     $block = [pscustomobject]@{
         Name = [string]$TaskLabel
         Script = [string]$ScriptText
@@ -375,35 +450,40 @@ function Invoke-ClagnosPackageGuestScript {
         -Platform $Platform `
         -RepoRoot (Get-ClagnosRepoRoot) `
         -SshHost $sshHost `
-        -SshUser ([string]$runtime.Context.VmUser) `
-        -SshPassword ([string]$runtime.Context.VmPass) `
-        -SshPort ([string]$runtime.Context.SshPort) `
-        -AssistantUser ([string]$runtime.Context.VmAssistantUser) `
-        -ResourceGroup ([string]$target.ResourceGroup) `
-        -VmName ([string]$target.VmName) `
+        -SshUser ([string]$Runtime.Context.VmUser) `
+        -SshPassword ([string]$Runtime.Context.VmPass) `
+        -SshPort ([string]$Runtime.Context.SshPort) `
+        -AssistantUser ([string]$Runtime.Context.VmAssistantUser) `
+        -ResourceGroup ([string]$Target.ResourceGroup) `
+        -VmName ([string]$Target.VmName) `
         -TaskBlocks @($resolvedBlock) `
         -TaskOutcomeMode 'strict' `
         -PerfTaskCategory 'task-run' `
         -SshMaxRetries 1 `
         -SshTaskTimeoutSeconds 300 `
-        -SshConnectTimeoutSeconds ([int]$runtime.SshConnectTimeoutSeconds) `
-        -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath))
+        -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) `
+        -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath))
 }
 
 function Get-ClagnosPackageStatusSnapshot {
     param(
         [object[]]$Packages,
         [hashtable]$Options,
-        [string]$Platform
+        [string]$Platform,
+        [switch]$Force,
+        [psobject]$Runtime = $null,
+        [psobject]$Target = $null
     )
 
-    $key = Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
-    if ($null -eq $script:ClagnosPackageStatusCache) { $script:ClagnosPackageStatusCache = @{} }
-    if ($script:ClagnosPackageStatusCache -and $script:ClagnosPackageStatusCache.ContainsKey($key)) {
-        return $script:ClagnosPackageStatusCache[$key]
-    }
+    $cacheInfo = Get-ClagnosPackageStatusCacheEntry -Packages $Packages -Options $Options -Platform $Platform
+    $key = if ($null -ne $cacheInfo) { [string]$cacheInfo.Key } else { Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform }
+    if (-not $Force -and $null -ne $cacheInfo -and [bool]$cacheInfo.IsFresh) { return $cacheInfo.Entry.StatusByPackage }
+    if ($null -eq $Runtime) { $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') }
+    if ($null -eq $Target) { $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package' }
+    $Runtime.Context.ResourceGroup = [string]$Target.ResourceGroup
+    $Runtime.Context.VmName = [string]$Target.VmName
     $scriptText = New-ClagnosPackageGuestScript -Action 'status' -Packages $Packages -Platform $Platform
-    $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status'
+    $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status' -Runtime $Runtime -Target $Target
     $output = ''
     if ($result.TaskOutputs.Count -gt 0) { $output = [string]$result.TaskOutputs[0].Output }
     $match = [regex]::Match($output,'(?m)^CLAGNOS_PACKAGE_RESULTS:(?<json>\[.*\])\s*$')
@@ -411,7 +491,9 @@ function Get-ClagnosPackageStatusSnapshot {
     $rows = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject ([string]$match.Groups['json'].Value)))
     $map = @{}
     foreach ($row in @($rows)) { $map[[string]$row.id] = [string]$row.status }
-    $script:ClagnosPackageStatusCache[$key] = $map
+    $entry = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $true; StatusByPackage = $map }
+    $script:ClagnosPackageStatusCache[$key] = $entry
+    Save-ClagnosPackageStatusCacheEntry -Key $key -Entry $entry
     return $map
 }
 
@@ -427,6 +509,36 @@ function Get-ClagnosPackageStatus {
     $snapshot = Get-ClagnosPackageStatusSnapshot -Packages $catalog -Options $options -Platform $platform
     if ($snapshot.ContainsKey([string]$Package.Id)) { return [string]$snapshot[[string]$Package.Id] }
     return 'unknown'
+}
+
+function Set-ClagnosPackageStatusCacheValue {
+    param(
+        [object[]]$Packages,
+        [hashtable]$Options,
+        [string]$Platform,
+        [string]$PackageId,
+        [string]$Status,
+        [switch]$RefreshTimestamp,
+        [switch]$MarkIncomplete
+    )
+
+    $key = Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
+    if ($null -eq $script:ClagnosPackageStatusCache) { $script:ClagnosPackageStatusCache = @{} }
+    if (-not $script:ClagnosPackageStatusCache.ContainsKey($key)) {
+        $initialStatuses = @{}
+        foreach ($candidatePackage in @($Packages)) { $initialStatuses[[string]$candidatePackage.Id] = 'unknown' }
+        $script:ClagnosPackageStatusCache[$key] = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $false; StatusByPackage = $initialStatuses }
+    }
+    $entry = $script:ClagnosPackageStatusCache[$key]
+    if ($null -eq $entry.StatusByPackage) { return }
+    $entry.StatusByPackage[[string]$PackageId] = [string]$Status
+    if ($RefreshTimestamp) { $entry.CreatedAtUtc = [DateTime]::UtcNow }
+    if ($MarkIncomplete) { $entry.Complete = $false }
+    Save-ClagnosPackageStatusCacheEntry -Key $key -Entry $entry
+}
+
+function Clear-ClagnosPackageStatusCache {
+    $script:ClagnosPackageStatusCache = @{}
 }
 
 function Set-ClagnosPackageManifestEnabled {
@@ -503,7 +615,7 @@ function Invoke-ClagnosPackageOperation {
         $Options['group'] = [string]$target.ResourceGroup
         $Options['vm-name'] = [string]$target.VmName
         $Options['subscription-id'] = [string](Get-ClagnosResolvedSubscriptionContext).SubscriptionId
-        $packageList = Get-ClagnosPackageStatusSnapshot -Packages $catalogRuntime -Options $Options -Platform $platform
+        $packageList = Get-ClagnosPackageStatusSnapshot -Packages $catalogRuntime -Options $Options -Platform $platform -Runtime $runtime -Target $target
         foreach ($package in @($catalogRuntime)) {
             $availability = if ([bool]$package.Enabled) { 'enabled' } else { ('disabled: ' + [string]$package.DisabledReason) }
             Write-Host ("{0} [{1}] | {2} | {3} | {4}" -f [string]$package.DisplayName,$Catalog,[string]$package.Category,$availability,[string]$packageList[[string]$package.Id])
@@ -521,10 +633,12 @@ function Invoke-ClagnosPackageOperation {
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $runtime.Context.VmName = [string]$target.VmName
-    $script:ClagnosPackageStatusCache = @{}
+    $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+    if ($null -ne $resolvedSubscription) { $Options['subscription-id'] = [string]$resolvedSubscription.SubscriptionId }
     if ($Action -eq 'status') {
-        $snapshot = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform
+        $snapshot = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
         Write-Host ("{0}: {1}" -f [string]$package.DisplayName,[string]$snapshot[[string]$package.Id])
+        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status ([string]$snapshot[[string]$package.Id])
         return
     }
     if ($Action -eq 'install') {
@@ -536,6 +650,7 @@ function Invoke-ClagnosPackageOperation {
             Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
         }
         $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock ([psobject]$package.PackageTask) -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
+        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status 'installed' -RefreshTimestamp -MarkIncomplete
         Write-Host ("Installed or updated {0}." -f [string]$package.DisplayName) -ForegroundColor Green
         return $run
     }
@@ -550,9 +665,9 @@ function Invoke-ClagnosPackageOperation {
         }
         if (-not $approved) { Write-Host 'Uninstall canceled.' -ForegroundColor Yellow; return }
         $scriptText = New-ClagnosPackageUninstallScript -Package $package -Platform $platform
-        $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $scriptText -TaskLabel ('package-uninstall-' + [string]$package.Id)
-        $script:ClagnosPackageStatusCache = @{}
-        $verify = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform
+        $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $scriptText -TaskLabel ('package-uninstall-' + [string]$package.Id) -Runtime $runtime -Target $target
+        $verify = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
+        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status ([string]$verify[[string]$package.Id])
         if ([string]$verify[[string]$package.Id] -eq 'installed') {
             throw ("The uninstall command completed but {0} is still detected on the VM." -f [string]$package.DisplayName)
         }

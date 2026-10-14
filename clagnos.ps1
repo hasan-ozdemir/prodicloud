@@ -40,6 +40,11 @@ $script:ManagedByTagKey = 'managed-by'
 $script:ManagedByTagValue = 'clagnos'
 $script:LegacyManagedByTagValue = 'az-vm'
 $script:ClagnosPackageStatusCache = @{}
+$script:ClagnosPackageStatusCacheTtlSeconds = 45
+$script:ClagnosSshBootstrapCache = @{}
+$script:ClagnosSshBootstrapCacheTtlSeconds = 20
+$script:ClagnosAccessibleSubscriptionRowsCache = $null
+$script:ClagnosAccessibleSubscriptionRowsValidatedAtUtc = [DateTime]::MinValue
 $script:ClagnosRepoRoot = $PSScriptRoot
 $env:PYTHONDONTWRITEBYTECODE = '1'
 

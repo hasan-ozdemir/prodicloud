@@ -101,17 +101,34 @@ function Resolve-ClagnosTargetResourceGroup {
         $resourceGroup = Select-ClagnosResourceGroupInteractive -DefaultResourceGroup $DefaultResourceGroup -VmName $VmName
     }
 
-    $groupExists = az group exists -n $resourceGroup --only-show-errors
-    Assert-LastExitCode ("az group exists ({0})" -f $OperationName)
-    if (-not [string]::Equals([string]$groupExists, "true", [System.StringComparison]::OrdinalIgnoreCase)) {
-        Throw-FriendlyError `
-            -Detail ("Resource group '{0}' was not found." -f $resourceGroup) `
-            -Code 66 `
-            -Summary ("{0} command cannot continue because resource group was not found." -f $OperationName) `
-            -Hint "Provide a valid --group value or select an existing managed resource group."
+    $cachedPackageGroup = $false
+    if ([string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase) -and $null -ne (Get-Command Get-ClagnosUiInventorySnapshotForSharedRuntime -ErrorAction SilentlyContinue)) {
+        $subscriptionId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id')
+        if ([string]::IsNullOrWhiteSpace($subscriptionId)) {
+            $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+            if ($null -ne $resolvedSubscription) { $subscriptionId = [string]$resolvedSubscription.SubscriptionId }
+        }
+        $inventorySnapshot = Get-ClagnosUiInventorySnapshotForSharedRuntime -MaximumAgeSeconds 60 -SubscriptionId $subscriptionId
+        if ($null -ne $inventorySnapshot) {
+            $cachedPackageGroup = @($inventorySnapshot.Groups | Where-Object { [string]::Equals([string]$_.name,$resourceGroup,[System.StringComparison]::OrdinalIgnoreCase) -and (Get-ClagnosUiManagedTagValue -ResourceGroup $_) -in @('clagnos','az-vm') }).Count -gt 0
+            if (-not $cachedPackageGroup) {
+                Throw-FriendlyError -Detail ("Resource group '{0}' was not found in the fresh managed inventory." -f $resourceGroup) -Code 66 -Summary 'Package command cannot resolve the target resource group.' -Hint 'Refresh managed inventory and select an existing Clagnos-managed resource group.'
+            }
+        }
     }
+    if (-not $cachedPackageGroup) {
+        $groupExists = az group exists -n $resourceGroup --only-show-errors
+        Assert-LastExitCode ("az group exists ({0})" -f $OperationName)
+        if (-not [string]::Equals([string]$groupExists, "true", [System.StringComparison]::OrdinalIgnoreCase)) {
+            Throw-FriendlyError `
+                -Detail ("Resource group '{0}' was not found." -f $resourceGroup) `
+                -Code 66 `
+                -Summary ("{0} command cannot continue because resource group was not found." -f $OperationName) `
+                -Hint "Provide a valid --group value or select an existing managed resource group."
+        }
 
-    Assert-ClagnosManagedResourceGroup -ResourceGroup $resourceGroup -OperationName $OperationName
+        Assert-ClagnosManagedResourceGroup -ResourceGroup $resourceGroup -OperationName $OperationName
+    }
     return $resourceGroup
 }
 
@@ -144,8 +161,18 @@ function Get-ClagnosResourceGroupLocation {
 # Handles Get-ClagnosVmNamesForResourceGroup.
 function Get-ClagnosVmNamesForResourceGroup {
     param(
-        [string]$ResourceGroup
+        [string]$ResourceGroup,
+        [switch]$UseInventoryCache
     )
+
+    if ($UseInventoryCache -and $null -ne (Get-Command Get-ClagnosUiInventorySnapshotForSharedRuntime -ErrorAction SilentlyContinue)) {
+        $subscription = Get-ClagnosResolvedSubscriptionContext
+        $subscriptionId = if ($null -ne $subscription) { [string]$subscription.SubscriptionId } else { '' }
+        $snapshot = Get-ClagnosUiInventorySnapshotForSharedRuntime -MaximumAgeSeconds 60 -SubscriptionId $subscriptionId
+        if ($null -ne $snapshot) {
+            return @($snapshot.VirtualMachines | Where-Object { [string]::Equals([string]$_.ClagnosResourceGroup,[string]$ResourceGroup,[System.StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { [string]$_.name } | Sort-Object -Unique)
+        }
+    }
 
     $raw = az vm list -g $ResourceGroup --query "[].name" -o json --only-show-errors
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$raw)) {
@@ -172,7 +199,7 @@ function Select-ClagnosVmInteractive {
         [string]$DefaultVmName
     )
 
-    $vmNames = @(Get-ClagnosVmNamesForResourceGroup -ResourceGroup $ResourceGroup)
+    $vmNames = @(Get-ClagnosVmNamesForResourceGroup -ResourceGroup $ResourceGroup -UseInventoryCache:([string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase)))
     if ($vmNames.Count -eq 0) {
         Throw-FriendlyError `
             -Detail ("Resource group '{0}' does not contain any VM." -f $ResourceGroup) `

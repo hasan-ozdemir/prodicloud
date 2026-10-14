@@ -30,7 +30,18 @@ function Assert-ClagnosSubscriptionIdFormat {
         -Hint "Use a GUID-form Azure subscription id, for example '--subscription-id=<subscription-guid>'."
 }
 
+function Reset-ClagnosAccessibleSubscriptionRowsCache {
+    $script:ClagnosAccessibleSubscriptionRowsCache = $null
+    $script:ClagnosAccessibleSubscriptionRowsValidatedAtUtc = [DateTime]::MinValue
+}
+
 function Get-ClagnosAccessibleSubscriptionRows {
+    param([switch]$ForceRefresh)
+
+    if (-not $ForceRefresh -and $null -ne $script:ClagnosAccessibleSubscriptionRowsCache -and $script:ClagnosAccessibleSubscriptionRowsValidatedAtUtc -ne [DateTime]::MinValue) {
+        $cacheAge = ([DateTime]::UtcNow - [DateTime]$script:ClagnosAccessibleSubscriptionRowsValidatedAtUtc).TotalSeconds
+        if ($cacheAge -lt 30) { return @($script:ClagnosAccessibleSubscriptionRowsCache) }
+    }
     $raw = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
         az account list -o json --only-show-errors 2>$null
     }
@@ -55,10 +66,13 @@ function Get-ClagnosAccessibleSubscriptionRows {
             -Hint "Run 'az login' and ensure at least one subscription is accessible."
     }
 
-    return @(
+    $resolvedRows = @(
         @($rows) |
             Sort-Object @{ Expression = { if ($_.isDefault) { 0 } else { 1 } } }, @{ Expression = { [string]$_.name } }, @{ Expression = { [string]$_.id } }
     )
+    $script:ClagnosAccessibleSubscriptionRowsCache = @($resolvedRows)
+    $script:ClagnosAccessibleSubscriptionRowsValidatedAtUtc = [DateTime]::UtcNow
+    return @($resolvedRows)
 }
 
 function Find-ClagnosSubscriptionRowById {

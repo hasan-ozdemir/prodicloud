@@ -20,10 +20,21 @@ $script:ClagnosUiSelectedResourceGroup = ''
 $script:ClagnosUiSelectedVmName = ''
 $script:ClagnosUiResourceCacheError = ''
 $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::MinValue
+$script:ClagnosUiCloudSubscriptionRows = $null
+$script:ClagnosUiCloudSubscriptionRowsValidatedAtUtc = [DateTime]::MinValue
+$script:ClagnosUiAzureCliActiveSubscriptionId = ''
+$script:ClagnosUiAzureCliActiveSubscriptionValidatedAtUtc = [DateTime]::MinValue
 $script:ClagnosUiInventoryCache = $null
 $script:ClagnosUiAzureReadCache = @{}
 $script:ClagnosUiInventoryValidationSeconds = 60
 $script:ClagnosUiReadCacheSeconds = 45
+$script:ClagnosUiInventoryMaximumStaleSeconds = 300
+$script:ClagnosUiCacheWorkerProcess = $null
+$script:ClagnosUiCacheWorkerSubscriptionId = ''
+$script:ClagnosUiCacheWorkerStopPath = ''
+$script:ClagnosUiInventoryCacheFilePath = ''
+$script:ClagnosUiInventoryCacheFileLastWriteUtc = [DateTime]::MinValue
+$script:ClagnosUiCacheRootPath = ''
 
 if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
     throw "Clagnos runtime was not found: $script:ClagnosUiBackendPath"
@@ -97,6 +108,210 @@ function Reset-ClagnosUiResourceCache {
 
     $script:ClagnosUiInventoryCache = $null
     $script:ClagnosUiAzureReadCache = @{}
+    $script:ClagnosUiInventoryCacheFilePath = ''
+    $script:ClagnosUiInventoryCacheFileLastWriteUtc = [DateTime]::MinValue
+}
+
+function Test-ClagnosUiBackgroundCacheWorkerDisabled {
+    return ([string]$env:CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER).Trim().ToLowerInvariant() -in @('1','true','yes','on')
+}
+
+function Get-ClagnosUiInventoryCachePaths {
+    param([string]$SubscriptionId)
+
+    $root = [string]$env:CLAGNOS_TUI_CACHE_ROOT
+    if ([string]::IsNullOrWhiteSpace($root)) { $root = [string]$env:LOCALAPPDATA }
+    if ([string]::IsNullOrWhiteSpace($root)) { $root = [System.IO.Path]::GetTempPath() }
+    $cacheRoot = Join-Path $root 'Clagnos\cache'
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(([string]$SubscriptionId).ToLowerInvariant())
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $key = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+    return [pscustomobject]@{
+        Root = $cacheRoot
+        Cache = Join-Path $cacheRoot ('azure-inventory-{0}.json' -f $key)
+        Status = Join-Path $cacheRoot ('azure-inventory-{0}.status.json' -f $key)
+        Request = Join-Path $cacheRoot ('azure-inventory-{0}.refresh' -f $key)
+        PackageRequest = Join-Path $cacheRoot ('azure-inventory-{0}.package-refresh.json' -f $key)
+        Stop = Join-Path $cacheRoot ('azure-inventory-{0}.stop' -f $key)
+    }
+}
+
+function ConvertTo-ClagnosUiUtcDateTime {
+    param([Parameter(Mandatory = $true)][object]$Value)
+
+    if ($Value -is [DateTime]) { return ([DateTime]$Value).ToUniversalTime() }
+    return [DateTime]::Parse([string]$Value,[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
+
+function Import-ClagnosUiInventoryCacheFromDisk {
+    param([switch]$Force)
+
+    if ($null -eq $script:ClagnosUiSubscription) { return $script:ClagnosUiInventoryCache }
+    $subscriptionId = [string]$script:ClagnosUiSubscription.SubscriptionId
+    $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId $subscriptionId
+    if (-not (Test-Path -LiteralPath $paths.Cache -PathType Leaf)) { return $script:ClagnosUiInventoryCache }
+    try {
+        $file = Get-Item -LiteralPath $paths.Cache -ErrorAction Stop
+        if (-not $Force -and [string]::Equals([string]$script:ClagnosUiInventoryCacheFilePath,[string]$paths.Cache,[System.StringComparison]::OrdinalIgnoreCase) -and $file.LastWriteTimeUtc -eq $script:ClagnosUiInventoryCacheFileLastWriteUtc) {
+            return $script:ClagnosUiInventoryCache
+        }
+        $loaded = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $paths.Cache -Raw -ErrorAction Stop))
+        if ($null -eq $loaded -or -not [string]::Equals([string]$loaded.SubscriptionId,$subscriptionId,[System.StringComparison]::OrdinalIgnoreCase)) { return $null }
+        $validatedAt = ConvertTo-ClagnosUiUtcDateTime -Value $loaded.LastValidatedAtUtc
+        if (Test-Path -LiteralPath $paths.Request -PathType Leaf) {
+            try {
+                $requestText = [string](Get-Content -LiteralPath $paths.Request -Raw -ErrorAction Stop)
+                $requestedAt = [DateTime]::MinValue
+                if ([DateTime]::TryParse($requestText,[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::RoundtripKind,[ref]$requestedAt)) {
+                    $requestedAt = $requestedAt.ToUniversalTime()
+                    if ($requestedAt -gt $validatedAt) {
+                        $loaded.IsDirty = $true
+                        $loaded.DirtyReason = 'a persisted inventory refresh is pending'
+                        if ($null -ne $loaded.PSObject.Properties['DirtySinceUtc']) { $loaded.DirtySinceUtc = $requestedAt }
+                        else { $loaded | Add-Member -NotePropertyName 'DirtySinceUtc' -NotePropertyValue $requestedAt }
+                    }
+                }
+            }
+            catch { }
+        }
+        $snapshotAge = ([DateTime]::UtcNow - $validatedAt).TotalSeconds
+        if ($snapshotAge -gt [int]$script:ClagnosUiInventoryMaximumStaleSeconds) { return $script:ClagnosUiInventoryCache }
+        if ($null -ne $script:ClagnosUiInventoryCache -and [bool]$script:ClagnosUiInventoryCache.IsDirty) {
+            $dirtySince = if ($null -ne $script:ClagnosUiInventoryCache.DirtySinceUtc) { [DateTime]$script:ClagnosUiInventoryCache.DirtySinceUtc } else { [DateTime]::MinValue }
+            if ($validatedAt -le $dirtySince) { return $script:ClagnosUiInventoryCache }
+        }
+        if ($null -eq $script:ClagnosUiInventoryCache -or $validatedAt -ge [DateTime]$script:ClagnosUiInventoryCache.LastValidatedAtUtc -or [bool]$script:ClagnosUiInventoryCache.IsDirty) {
+            $script:ClagnosUiInventoryCache = $loaded
+            $script:ClagnosUiInventoryCache.LastValidatedAtUtc = $validatedAt
+            if ($null -eq $script:ClagnosUiInventoryCache.IsDirty) { $script:ClagnosUiInventoryCache.IsDirty = $false }
+            if ($null -eq $script:ClagnosUiInventoryCache.PSObject.Properties['DirtySinceUtc']) {
+                $script:ClagnosUiInventoryCache | Add-Member -NotePropertyName 'DirtySinceUtc' -NotePropertyValue ([DateTime]::MinValue)
+            }
+            elseif ($null -eq $script:ClagnosUiInventoryCache.DirtySinceUtc) { $script:ClagnosUiInventoryCache.DirtySinceUtc = [DateTime]::MinValue }
+        }
+        $script:ClagnosUiInventoryCacheFilePath = [string]$paths.Cache
+        $script:ClagnosUiInventoryCacheFileLastWriteUtc = [DateTime]$file.LastWriteTimeUtc
+        return $script:ClagnosUiInventoryCache
+    }
+    catch {
+        $script:ClagnosUiResourceCacheError = ('Cached inventory could not be read: {0}' -f [string]$_.Exception.Message)
+        return $script:ClagnosUiInventoryCache
+    }
+}
+
+function Get-ClagnosUiBackgroundCacheStatus {
+    if ($null -eq $script:ClagnosUiSubscription) { return $null }
+    $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId ([string]$script:ClagnosUiSubscription.SubscriptionId)
+    if (-not (Test-Path -LiteralPath $paths.Status -PathType Leaf)) { return $null }
+    try { return (ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $paths.Status -Raw -ErrorAction Stop))) }
+    catch { return $null }
+}
+
+function Request-ClagnosUiInventoryRefresh {
+    param([switch]$Force)
+
+    if ($null -eq $script:ClagnosUiSubscription) { return $false }
+    if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {
+        Sync-ClagnosUiResourceCache -Force:$Force | Out-Null
+        return $true
+    }
+    $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId ([string]$script:ClagnosUiSubscription.SubscriptionId)
+    if (-not (Test-Path -LiteralPath $paths.Root -PathType Container)) { New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null }
+    Set-Content -LiteralPath $paths.Request -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ASCII
+    Start-ClagnosUiBackgroundCacheWorker | Out-Null
+    return $true
+}
+
+function Start-ClagnosUiBackgroundCacheWorker {
+    if (Test-ClagnosUiBackgroundCacheWorkerDisabled) { return $false }
+    if ($null -eq $script:ClagnosUiSubscription -or [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiSubscription.SubscriptionId)) { return $false }
+    $subscriptionId = [string]$script:ClagnosUiSubscription.SubscriptionId
+    if ($null -ne $script:ClagnosUiCacheWorkerProcess -and [string]::Equals([string]$script:ClagnosUiCacheWorkerSubscriptionId,$subscriptionId,[System.StringComparison]::OrdinalIgnoreCase)) {
+        try { if (-not $script:ClagnosUiCacheWorkerProcess.HasExited) { return $true } } catch { }
+    }
+
+    $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId $subscriptionId
+    if (-not (Test-Path -LiteralPath $paths.Root -PathType Container)) { New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null }
+    if ($null -ne $script:ClagnosUiCacheWorkerProcess -and -not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCacheWorkerStopPath)) {
+        try { Set-Content -LiteralPath $script:ClagnosUiCacheWorkerStopPath -Value 'stop' -Encoding ASCII } catch { }
+        try { if (-not $script:ClagnosUiCacheWorkerProcess.HasExited) { [void]$script:ClagnosUiCacheWorkerProcess.WaitForExit(500) } } catch { }
+        try { $script:ClagnosUiCacheWorkerProcess.Dispose() } catch { }
+    }
+    if (Test-Path -LiteralPath $paths.Stop) { Remove-Item -LiteralPath $paths.Stop -Force -ErrorAction SilentlyContinue }
+
+    $workerPath = Join-Path $script:ClagnosUiRepoRoot 'scripts\clagnos-cache-worker.ps1'
+    if (-not (Test-Path -LiteralPath $workerPath -PathType Leaf)) {
+        $script:ClagnosUiResourceCacheError = ('Background cache worker was not found: {0}' -f $workerPath)
+        return $false
+    }
+    $hostName = if ([string]$PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' }
+    $hostCommand = Get-Command $hostName -ErrorAction SilentlyContinue
+    if ($null -eq $hostCommand) {
+        $script:ClagnosUiResourceCacheError = ('Background cache worker host is unavailable: {0}' -f $hostName)
+        return $false
+    }
+    $arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$workerPath,'-SubscriptionId',$subscriptionId,'-CachePath',$paths.Cache,'-StatusPath',$paths.Status,'-RequestPath',$paths.Request,'-PackageRequestPath',$paths.PackageRequest,'-StopPath',$paths.Stop,'-OwnerProcessId',[string]$PID,'-RepositoryRoot',$script:ClagnosUiRepoRoot,'-RefreshIntervalSeconds',[string]$script:ClagnosUiInventoryValidationSeconds)
+    $argumentText = (@($arguments | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
+    try {
+        $script:ClagnosUiCacheWorkerProcess = Start-Process -FilePath $hostCommand.Source -ArgumentList $argumentText -WorkingDirectory ([System.IO.Path]::GetTempPath()) -WindowStyle Hidden -PassThru -ErrorAction Stop
+        $script:ClagnosUiCacheWorkerSubscriptionId = $subscriptionId
+        $script:ClagnosUiCacheWorkerStopPath = [string]$paths.Stop
+        return $true
+    }
+    catch {
+        $script:ClagnosUiResourceCacheError = ('Background inventory worker could not start: {0}' -f [string]$_.Exception.Message)
+        return $false
+    }
+}
+
+function Stop-ClagnosUiBackgroundCacheWorker {
+    if ($null -eq $script:ClagnosUiCacheWorkerProcess -or [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCacheWorkerStopPath)) { return }
+    try { Set-Content -LiteralPath $script:ClagnosUiCacheWorkerStopPath -Value 'stop' -Encoding ASCII } catch { }
+    try {
+        if (-not $script:ClagnosUiCacheWorkerProcess.HasExited -and -not $script:ClagnosUiCacheWorkerProcess.WaitForExit(5000)) {
+            Stop-Process -Id $script:ClagnosUiCacheWorkerProcess.Id -Force -ErrorAction SilentlyContinue
+            [void]$script:ClagnosUiCacheWorkerProcess.WaitForExit(1000)
+        }
+    }
+    catch { }
+    try { $script:ClagnosUiCacheWorkerProcess.Dispose() } catch { }
+    $script:ClagnosUiCacheWorkerProcess = $null
+}
+
+function Request-ClagnosUiPackageStatusRefresh {
+    param(
+        [psobject]$Vm,
+        [string[]]$Catalogs = @('builtin'),
+        [switch]$Force
+    )
+
+    if ($null -eq $Vm -or (Test-ClagnosUiBackgroundCacheWorkerDisabled)) { return $false }
+    $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
+    $options = New-ClagnosUiTargetOptions -Vm $Vm
+    $staleCatalogs = @()
+    foreach ($catalog in @($Catalogs | Select-Object -Unique)) {
+        $packages = if ([string]::Equals([string]$catalog,[string]$Catalogs[0],[System.StringComparison]::OrdinalIgnoreCase)) { @($statusRuntime) } else { @(Get-ClagnosPackageCatalog -Platform $platform -Catalog ([string]$catalog)) }
+        if (@($packages).Count -eq 0) { continue }
+        $entry = Get-ClagnosPackageStatusCacheEntry -Packages $packages -Options $options -Platform $platform
+        if ($Force -or $null -eq $entry -or -not [bool]$entry.IsFresh) { $staleCatalogs += [string]$catalog }
+    }
+    if (@($staleCatalogs).Count -eq 0) { return $false }
+    $subscriptionId = [string]$script:ClagnosUiSubscription.SubscriptionId
+    $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId $subscriptionId
+    if (-not (Test-Path -LiteralPath $paths.Root -PathType Container)) { New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null }
+    $request = [ordered]@{
+        SubscriptionId = $subscriptionId
+        ResourceGroup = [string]$Vm.ClagnosResourceGroup
+        VmName = [string]$Vm.name
+        Platform = $platform
+        Catalogs = @($staleCatalogs)
+        RequestedAtUtc = [DateTime]::UtcNow.ToString('o')
+    }
+    $temporaryPath = '{0}.{1}.tmp' -f $paths.PackageRequest,$PID
+    Set-Content -LiteralPath $temporaryPath -Value (ConvertTo-Json -InputObject $request -Depth 10 -Compress) -Encoding UTF8
+    Move-Item -LiteralPath $temporaryPath -Destination $paths.PackageRequest -Force
+    return (Start-ClagnosUiBackgroundCacheWorker)
 }
 
 function Invalidate-ClagnosUiResourceCache {
@@ -108,10 +323,12 @@ function Invalidate-ClagnosUiResourceCache {
     if ($null -eq $script:ClagnosUiInventoryCache) { return }
     $script:ClagnosUiInventoryCache.IsDirty = $true
     $script:ClagnosUiInventoryCache.DirtyReason = [string]$Reason
+    $script:ClagnosUiInventoryCache.DirtySinceUtc = [DateTime]::UtcNow
     if (-not [string]::IsNullOrWhiteSpace([string]$ResourceGroup)) {
         $script:ClagnosUiInventoryCache.DirtyResourceGroup = [string]$ResourceGroup
     }
     $script:ClagnosUiAzureReadCache = @{}
+    Request-ClagnosUiInventoryRefresh -Force | Out-Null
 }
 
 function Get-ClagnosUiManagedTagValue {
@@ -224,6 +441,7 @@ function Sync-ClagnosUiResourceCache {
         $script:ClagnosUiInventoryCache.IsDirty = $false
         $script:ClagnosUiInventoryCache.DirtyReason = ''
         $script:ClagnosUiInventoryCache.DirtyResourceGroup = ''
+        $script:ClagnosUiInventoryCache.DirtySinceUtc = [DateTime]::MinValue
         $script:ClagnosUiInventoryCache.Changed = $false
         return $script:ClagnosUiInventoryCache
     }
@@ -239,13 +457,61 @@ function Sync-ClagnosUiResourceCache {
         IsDirty = $false
         DirtyReason = ''
         DirtyResourceGroup = ''
+        DirtySinceUtc = [DateTime]::MinValue
         Changed = $snapshotChanged
     }
     return $script:ClagnosUiInventoryCache
 }
 
 function Ensure-ClagnosUiResourceCache {
-    return (Sync-ClagnosUiResourceCache)
+    $snapshot = Import-ClagnosUiInventoryCacheFromDisk
+    if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {
+        if ($null -eq $snapshot -or [bool]$snapshot.IsDirty) { return (Sync-ClagnosUiResourceCache -Force) }
+        $cacheAge = ([DateTime]::UtcNow - [DateTime]$snapshot.LastValidatedAtUtc).TotalSeconds
+        if ($cacheAge -ge [int]$script:ClagnosUiInventoryValidationSeconds) { return (Sync-ClagnosUiResourceCache -Force) }
+        return $snapshot
+    }
+
+    if ($null -eq $snapshot) {
+        $workerStarted = Start-ClagnosUiBackgroundCacheWorker
+        if (-not $workerStarted -and -not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiResourceCacheError)) { throw [string]$script:ClagnosUiResourceCacheError }
+        $status = Get-ClagnosUiBackgroundCacheStatus
+        if ($null -ne $status -and [string]$status.State -eq 'error') { throw [string]$status.Message }
+        throw 'Managed inventory is warming in the background. Return to this screen or request refresh in a moment.'
+    }
+    if ([bool]$snapshot.IsDirty) {
+        Start-ClagnosUiBackgroundCacheWorker | Out-Null
+        Request-ClagnosUiInventoryRefresh -Force | Out-Null
+        $status = Get-ClagnosUiBackgroundCacheStatus
+        if ($null -ne $status -and [string]$status.State -eq 'error') { throw ('Managed inventory refresh failed: {0}' -f [string]$status.Message) }
+        throw ('Managed inventory is revalidating after {0}. Return to this screen in a moment.' -f [string]$snapshot.DirtyReason)
+    }
+
+    $cacheAge = ([DateTime]::UtcNow - [DateTime]$snapshot.LastValidatedAtUtc).TotalSeconds
+    if ($cacheAge -ge [int]$script:ClagnosUiInventoryValidationSeconds) {
+        Request-ClagnosUiInventoryRefresh -Force | Out-Null
+        if ($cacheAge -gt [int]$script:ClagnosUiInventoryMaximumStaleSeconds) {
+            throw 'Managed inventory snapshot is too old to use while its background refresh runs.'
+        }
+    }
+    return $snapshot
+}
+
+function Get-ClagnosUiInventorySnapshotForSharedRuntime {
+    param(
+        [int]$MaximumAgeSeconds = 60,
+        [string]$SubscriptionId = ''
+    )
+
+    $snapshot = $script:ClagnosUiInventoryCache
+    if ($null -eq $snapshot -or [bool]$snapshot.IsDirty) { return $null }
+    if (-not [string]::IsNullOrWhiteSpace([string]$SubscriptionId) -and -not [string]::Equals([string]$snapshot.SubscriptionId,[string]$SubscriptionId,[System.StringComparison]::OrdinalIgnoreCase)) { return $null }
+    try {
+        $age = ([DateTime]::UtcNow - [DateTime]$snapshot.LastValidatedAtUtc).TotalSeconds
+        if ($age -gt [Math]::Max([int]$MaximumAgeSeconds,0)) { return $null }
+    }
+    catch { return $null }
+    return $snapshot
 }
 
 function Get-ClagnosUiResourcesForGroup {
@@ -372,16 +638,26 @@ function Get-ClagnosUiCachedInventoryRows {
 }
 
 function Get-ClagnosUiAzureCliActiveSubscriptionId {
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiAzureCliActiveSubscriptionId) -and $script:ClagnosUiAzureCliActiveSubscriptionValidatedAtUtc -ne [DateTime]::MinValue) {
+        $activeAge = ([DateTime]::UtcNow - [DateTime]$script:ClagnosUiAzureCliActiveSubscriptionValidatedAtUtc).TotalSeconds
+        if ($activeAge -lt 15) { return [string]$script:ClagnosUiAzureCliActiveSubscriptionId }
+    }
     $activeId = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
         az account show --query id -o tsv --only-show-errors 2>$null
     }
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$activeId)) {
         throw "Azure CLI could not resolve its active subscription. Run 'az login' and retry."
     }
-    return ([string]$activeId).Trim()
+    $script:ClagnosUiAzureCliActiveSubscriptionId = ([string]$activeId).Trim()
+    $script:ClagnosUiAzureCliActiveSubscriptionValidatedAtUtc = [DateTime]::UtcNow
+    return [string]$script:ClagnosUiAzureCliActiveSubscriptionId
 }
 
 function Get-ClagnosUiCloudSubscriptionRows {
+    if ($null -ne $script:ClagnosUiCloudSubscriptionRows -and $script:ClagnosUiCloudSubscriptionRowsValidatedAtUtc -ne [DateTime]::MinValue) {
+        $cacheAge = ([DateTime]::UtcNow - [DateTime]$script:ClagnosUiCloudSubscriptionRowsValidatedAtUtc).TotalSeconds
+        if ($cacheAge -lt 30) { return @($script:ClagnosUiCloudSubscriptionRows) }
+    }
     $raw = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
         az account list --all --refresh -o json --only-show-errors 2>$null
     }
@@ -391,7 +667,9 @@ function Get-ClagnosUiCloudSubscriptionRows {
     $rows = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject $raw) | Where-Object {
         $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_.id)
     })
-    return @($rows | Sort-Object @{ Expression = { if ([bool]$_.isDefault) { 0 } else { 1 } } }, @{ Expression = { [string]$_.name } }, @{ Expression = { [string]$_.id } })
+    $script:ClagnosUiCloudSubscriptionRows = @($rows | Sort-Object @{ Expression = { if ([bool]$_.isDefault) { 0 } else { 1 } } }, @{ Expression = { [string]$_.name } }, @{ Expression = { [string]$_.id } })
+    $script:ClagnosUiCloudSubscriptionRowsValidatedAtUtc = [DateTime]::UtcNow
+    return @($script:ClagnosUiCloudSubscriptionRows)
 }
 
 function Set-ClagnosUiActiveSubscription {
@@ -418,6 +696,11 @@ function Set-ClagnosUiActiveSubscription {
         }
         throw
     }
+    if (Get-Command Reset-ClagnosAccessibleSubscriptionRowsCache -ErrorAction SilentlyContinue) { Reset-ClagnosAccessibleSubscriptionRowsCache }
+    $script:ClagnosUiCloudSubscriptionRows = $null
+    $script:ClagnosUiCloudSubscriptionRowsValidatedAtUtc = [DateTime]::MinValue
+    $script:ClagnosUiAzureCliActiveSubscriptionId = $subscriptionId
+    $script:ClagnosUiAzureCliActiveSubscriptionValidatedAtUtc = [DateTime]::UtcNow
 
     $verifiedId = Get-ClagnosUiAzureCliActiveSubscriptionId
     if (-not [string]::Equals($verifiedId, $subscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -489,7 +772,7 @@ function Show-ClagnosUiCloudSubscriptions {
                 }
             )
             $selection = Select-ClagnosNumberedOptionPage -Options $subscriptionOptions -Prompt 'Select active cloud subscription' -DefaultValue ([string]$selectedContext.SubscriptionId) -PageSize 12
-            if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { exit }; return }
+            if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }; return }
             if ([string]$selection.Action -ne 'selected') { continue }
             $selectedRow = @($rows | Where-Object { [string]::Equals([string]$_.id, [string]$selection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
             if (@($selectedRow).Count -eq 0) { continue }
@@ -516,6 +799,13 @@ function Write-ClagnosUiHeader {
     else {
         Write-Host 'Azure subscription: not signed in' -ForegroundColor Yellow
     }
+    $cacheStatus = Get-ClagnosUiBackgroundCacheStatus
+    if ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'refreshing') {
+        Write-Host ([string]$cacheStatus.Message) -ForegroundColor DarkGray
+    }
+    elseif ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'error') {
+        Write-Host ('Background inventory cache: {0}' -f [string]$cacheStatus.Message) -ForegroundColor Yellow
+    }
     if (-not [string]::IsNullOrWhiteSpace([string]$Title)) {
         Write-Host ''
         Write-Host $Title -ForegroundColor White
@@ -525,6 +815,7 @@ function Write-ClagnosUiHeader {
 
 function Read-ClagnosUiChoice {
     param([string]$Prompt = 'Select an option')
+    if (-not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) { Import-ClagnosUiInventoryCacheFromDisk | Out-Null }
     return ([string](Read-Host $Prompt)).Trim()
 }
 
@@ -573,11 +864,26 @@ function Invoke-ClagnosUiCommand {
         [hashtable]$FrontendContext = @{}
     )
 
+    $commandFailed = $false
     try {
         Invoke-ClagnosCommandDispatcher -CommandName $CommandName -Options $Options -FrontendContext $FrontendContext | Out-Null
     }
     catch {
+        $commandFailed = $true
         Write-ClagnosUiError -ErrorRecord $_
+    }
+
+    $packageAction = ([string](Get-ClagnosCliOptionText -Options $Options -Name 'action')).ToLowerInvariant()
+    $packageStateMayHaveChanged = ($CommandName -eq 'package' -and $packageAction -in @('install','uninstall') -and $commandFailed)
+    if ($CommandName -in @('initialize','update')) { $packageStateMayHaveChanged = $true }
+    if ($CommandName -eq 'task' -and -not (
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'list') -or
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'history') -or
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'enable') -or
+        (Test-ClagnosCliOptionPresent -Options $Options -Name 'disable')
+    )) { $packageStateMayHaveChanged = $true }
+    if ($packageStateMayHaveChanged -and (Get-Command Clear-ClagnosPackageStatusCache -ErrorAction SilentlyContinue)) {
+        Clear-ClagnosPackageStatusCache
     }
 
     $mutatesAzureInventory = $CommandName -in @('create','initialize','update','do','component','move','resize','set','delete','task')
@@ -1150,10 +1456,25 @@ function Show-ClagnosUiPackageCatalogMenu {
         Write-ClagnosUiHeader -Title (('{0} package catalog on {1}' -f $Catalog, [string]$Vm.name))
         $packages = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog)
         $statusMap = @{}
+        $statusChecking = $false
+        $statusIsStale = $false
         if ($packages.Count -gt 0) {
             try {
                 $statusOptions = New-ClagnosUiTargetOptions -Vm $Vm
-                $statusMap = Get-ClagnosPackageStatusSnapshot -Packages $packages -Options $statusOptions -Platform $platform
+                if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {
+                    $statusMap = Get-ClagnosPackageStatusSnapshot -Packages $packages -Options $statusOptions -Platform $platform
+                }
+                else {
+                    $cacheEntry = Get-ClagnosPackageStatusCacheEntry -Packages $packages -Options $statusOptions -Platform $platform
+                    if ($null -ne $cacheEntry) {
+                        $statusMap = $cacheEntry.Entry.StatusByPackage
+                        $statusIsStale = -not [bool]$cacheEntry.IsFresh
+                    }
+                    if ($null -eq $cacheEntry -or $statusIsStale) {
+                        Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) | Out-Null
+                        $statusChecking = $true
+                    }
+                }
             }
             catch {
                 Write-Host ('Package status could not be read: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
@@ -1165,13 +1486,14 @@ function Show-ClagnosUiPackageCatalogMenu {
             Write-Host 'q: exit'
             $emptyChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
             if ($emptyChoice -eq 'b') { return }
-            if ($emptyChoice -eq 'q') { exit }
+            if ($emptyChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             continue
         }
         $packageOptions = @()
         if ($packages.Count -gt 0) {
             for ($index = 0; $index -lt $packages.Count; $index++) {
-                $status = if ($statusMap.ContainsKey([string]$packages[$index].Id)) { [string]$statusMap[[string]$packages[$index].Id] } else { 'unavailable' }
+                $status = if ($statusMap.ContainsKey([string]$packages[$index].Id)) { [string]$statusMap[[string]$packages[$index].Id] } elseif ($statusChecking) { 'checking' } else { 'unavailable' }
+                if ($statusIsStale -and $statusMap.ContainsKey([string]$packages[$index].Id)) { $status += ' (last cached)' }
                 $disabledLabel = if ([bool]$packages[$index].Enabled) { '' } else { ' (disabled)' }
                 $catalogLabel = if ($Catalog -eq 'builtin') { '[builtin]' } else { '[custom]' }
                 $packageOptions += [pscustomobject]@{
@@ -1182,8 +1504,12 @@ function Show-ClagnosUiPackageCatalogMenu {
                 }
             }
         }
-        $packageSelection = Select-ClagnosNumberedOptionPage -Options $packageOptions -Prompt ("{0} packages on {1}" -f $Catalog, $platform) -PageSize 12
-        if ([string]$packageSelection.Action -eq 'back') { if ([string]$packageSelection.Input -eq 'q') { exit }; return }
+        $packageSelection = Select-ClagnosNumberedOptionPage -Options $packageOptions -Prompt ("{0} packages on {1}" -f $Catalog, $platform) -PageSize 12 -ExtraKeys @('r') -ExtraKeyLabels @{ r = 'refresh package status' }
+        if ([string]$packageSelection.Action -eq 'back') { if ([string]$packageSelection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }; return }
+        if ([string]$packageSelection.Action -eq 'extra' -and [string]$packageSelection.ExtraKey -eq 'r') {
+            Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
+            continue
+        }
         if ([string]$packageSelection.Action -ne 'selected') { continue }
         $selectedPackage = @($packages | Where-Object { [string]::Equals([string]$_.Id, [string]$packageSelection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
         if (@($selectedPackage).Count -eq 0) { continue }
@@ -1203,13 +1529,18 @@ function Show-ClagnosUiPackageCatalogMenu {
         Write-Host 'q: exit'
         $action = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($action -eq 'b') { continue }
-        if ($action -eq 'q') { exit }
+        if ($action -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($action -eq 'a' -and $null -ne $package.PackageTask.AppStateSpec) {
             Show-ClagnosUiPackageAppStateMenu -Vm $Vm -Package $package -Catalog $Catalog -Platform $platform
             continue
         }
         if ($action -notin @('e','d','u','i','s')) { continue }
         $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 's' { 'status' } default { '' } }
+        if ($packageAction -eq 'status' -and -not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) {
+            Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
+            Write-Host ('Status check requested for {0}; the catalog will show the result when the background check finishes.' -f [string]$package.DisplayName) -ForegroundColor DarkGray
+            continue
+        }
         $options = @{ catalog = $Catalog; package = [string]$package.Id }
         $options[$platform] = $true
         if ($packageAction -notin @('enable','disable')) {
@@ -1230,6 +1561,10 @@ function Show-ClagnosUiPackageCatalogMenu {
 function Show-ClagnosUiPackageMenu {
     param([psobject]$Vm)
 
+    if (-not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) {
+        Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @('builtin','custom') | Out-Null
+    }
+
     while ($true) {
         Write-ClagnosUiHeader -Title ('Manage programs on {0}' -f [string]$Vm.name)
         Write-Host '1. Builtin package catalog'
@@ -1238,7 +1573,7 @@ function Show-ClagnosUiPackageMenu {
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         switch ($choice) {
             '1' { Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'builtin' }
             '2' { Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'custom' }
@@ -1321,7 +1656,7 @@ function Show-ClagnosUiComponentMenu {
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $number = 0
         if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $types.Count) { continue }
         $type = $types[$number - 1]
@@ -1339,7 +1674,7 @@ function Show-ClagnosUiComponentMenu {
         Write-Host 'q: exit'
         $actionChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($actionChoice -eq 'b') { continue }
-        if ($actionChoice -eq 'q') { exit }
+        if ($actionChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($actionChoice -in @('a','t') -and $type.Id -in @('disk','nic')) {
             $options = New-ClagnosUiTargetOptions -Vm $Vm
             $options['type'] = [string]$type.Id
@@ -1404,7 +1739,7 @@ function Select-ClagnosUiTaskName {
     )
     $selection = Select-ClagnosNumberedOptionPage -Options $taskOptions -Prompt (('{0} tasks' -f $Stage)) -PageSize 12
     if ([string]$selection.Action -eq 'back') {
-        if ([string]$selection.Input -eq 'q') { exit }
+        if ([string]$selection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         return ''
     }
     if ([string]$selection.Action -ne 'selected') { return '' }
@@ -1442,7 +1777,7 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         Write-Host 'q: exit'
         $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
         if ($stageChoice -eq 'b') { return }
-        if ($stageChoice -eq 'q') { exit }
+        if ($stageChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($stageChoice -notin @('1','2')) { continue }
 
         $stage = if ($stageChoice -eq '1') { 'init' } else { 'update' }
@@ -1459,7 +1794,7 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         })
         $taskSelection = Select-ClagnosNumberedOptionPage -Options $taskOptions -Prompt ('{0} tasks' -f $(if ($stage -eq 'init') { 'Initialization' } else { 'Maintenance' })) -PageSize 12
         if ([string]$taskSelection.Action -eq 'back') {
-            if ([string]$taskSelection.Input -eq 'q') { exit }
+            if ([string]$taskSelection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             continue
         }
         if ([string]$taskSelection.Action -ne 'selected') { continue }
@@ -1473,7 +1808,7 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         Write-Host 'q: exit'
         $action = (Read-ClagnosUiChoice 'Availability action').ToLowerInvariant()
         if ($action -eq 'b') { continue }
-        if ($action -eq 'q') { exit }
+        if ($action -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($action -notin @('e','d')) { continue }
 
         $options = @{}
@@ -1501,7 +1836,7 @@ function Show-ClagnosUiTaskMenu {
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $target = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
             '1' { $target['list'] = $true; $target['vm-init'] = $true; $target['vm-update'] = $true; Invoke-ClagnosUiCommand -CommandName 'task' -Options $target }
@@ -1565,7 +1900,7 @@ function Show-ClagnosUiOperationsMenu {
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $options = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
             '1' {
@@ -1704,7 +2039,7 @@ function Show-ClagnosUiVmMenu {
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $target = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
             'p' { Show-ClagnosUiPackageMenu -Vm $Vm }
@@ -2248,16 +2583,18 @@ function Show-ClagnosUiVirtualComputers {
         }
         catch { Write-ClagnosUiError -ErrorRecord $_; $vms = @() }
         if ($vms.Count -eq 0) {
-            Write-Host 'No managed virtual computers were found.' -ForegroundColor Yellow
+            $cacheUnavailable = $null -eq $script:ClagnosUiInventoryCache -or [bool]$script:ClagnosUiInventoryCache.IsDirty
+            if ($cacheUnavailable) { Write-Host 'Managed inventory is loading or refreshing in the background.' -ForegroundColor Yellow }
+            else { Write-Host 'No managed virtual computers were found.' -ForegroundColor Yellow }
             Write-Host 'c: create virtual computer'
-            Write-Host 'r: refresh managed resource cache'
+            Write-Host 'r: check or refresh managed resource cache'
             Write-Host 'b: back'
             Write-Host 'q: exit'
             $emptyChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
             if ($emptyChoice -eq 'b') { return }
-            if ($emptyChoice -eq 'q') { exit }
+            if ($emptyChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             if ($emptyChoice -eq 'c') { Show-ClagnosUiCreateWizard; continue }
-            if ($emptyChoice -eq 'r') { Update-ClagnosUiSubscription -Force; Sync-ClagnosUiResourceCache -Force | Out-Null; continue }
+            if ($emptyChoice -eq 'r') { Update-ClagnosUiSubscription; Request-ClagnosUiInventoryRefresh -Force | Out-Null; continue }
             continue
         }
 
@@ -2271,9 +2608,9 @@ function Show-ClagnosUiVirtualComputers {
         )
         $defaultVm = '{0}|{1}' -f [string]$script:ClagnosUiSelectedResourceGroup, [string]$script:ClagnosUiSelectedVmName
         $selection = Select-ClagnosNumberedOptionPage -Options $vmOptions -Prompt 'Virtual computers' -DefaultValue $defaultVm -PageSize 12 -ExtraKeys @('c','r') -ExtraKeyLabels @{ c = 'create virtual computer'; r = 'refresh managed resource cache' }
-        if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { exit }; return }
+        if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }; return }
         if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'c') { Show-ClagnosUiCreateWizard; continue }
-        if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'r') { Update-ClagnosUiSubscription -Force; Sync-ClagnosUiResourceCache -Force | Out-Null; continue }
+        if ([string]$selection.Action -eq 'extra' -and [string]$selection.ExtraKey -eq 'r') { Update-ClagnosUiSubscription; Request-ClagnosUiInventoryRefresh -Force | Out-Null; continue }
         if ([string]$selection.Action -ne 'selected') { continue }
         $selectedParts = @(([string]$selection.Value -split '\|', 2))
         $selectedVm = @($vms | Where-Object {
@@ -2299,6 +2636,17 @@ function Show-ClagnosUiInventoryMenu {
 
     while ($true) {
         Write-ClagnosUiHeader -Title 'Managed resource inventory'
+        if ($null -eq $script:ClagnosUiInventoryCache -or [bool]$script:ClagnosUiInventoryCache.IsDirty) {
+            Write-Host 'Managed inventory is loading or refreshing in the background.' -ForegroundColor Yellow
+            Write-Host 'r: request cache refresh'
+            Write-Host 'b: back'
+            Write-Host 'q: exit'
+            $warmingChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
+            if ($warmingChoice -eq 'b') { return }
+            if ($warmingChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
+            if ($warmingChoice -eq 'r') { Request-ClagnosUiInventoryRefresh -Force | Out-Null }
+            continue
+        }
         Write-Host '1. All managed resource types'
         for ($index = 0; $index -lt $types.Count; $index++) {
             Write-Host ('{0}. {1}' -f ($index + 2), [string]$types[$index].Label)
@@ -2308,10 +2656,10 @@ function Show-ClagnosUiInventoryMenu {
         Write-Host 'q: exit'
         $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
         if ($choice -eq 'b') { return }
-        if ($choice -eq 'q') { exit }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($choice -eq 'r') {
-            Update-ClagnosUiSubscription -Force
-            Sync-ClagnosUiResourceCache -Force | Out-Null
+            Update-ClagnosUiSubscription
+            Request-ClagnosUiInventoryRefresh -Force | Out-Null
             continue
         }
 
@@ -2373,7 +2721,15 @@ function Show-ClagnosUiHome {
     while ($true) {
         Update-ClagnosUiSubscription
         try {
-            Ensure-ClagnosUiResourceCache | Out-Null
+            if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {
+                Ensure-ClagnosUiResourceCache | Out-Null
+            }
+            else {
+                Import-ClagnosUiInventoryCacheFromDisk | Out-Null
+                Start-ClagnosUiBackgroundCacheWorker | Out-Null
+                if ($null -ne $script:ClagnosUiInventoryCache) { Ensure-ClagnosUiResourceCache | Out-Null }
+                else { throw 'Managed inventory is warming in the background.' }
+            }
             $script:ClagnosUiResourceCacheError = ''
         }
         catch {
@@ -2401,4 +2757,5 @@ function Show-ClagnosUiHome {
     }
 }
 
-Show-ClagnosUiHome
+try { Show-ClagnosUiHome }
+finally { Stop-ClagnosUiBackgroundCacheWorker }

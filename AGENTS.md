@@ -30,6 +30,7 @@ Use these sources in this order when maintaining the repo:
 ## Repository Map
 - `cg.cmd`: elevated interactive launcher for Windows operators.
 - `scripts/clagnos-cli.ps1`: numbered and lettered Clagnos menu frontend.
+- `scripts/clagnos-cache-worker.ps1`: read-only background refresher for subscription-scoped Azure inventory and requested package-status snapshots.
 - `clagnos.ps1`: unified orchestration and direct-command entrypoint used by the menu.
 - `modules/`: runtime modules grouped by domain.
 - `packages/builtin/<platform>/` and `packages/custom/<platform>/`: isolated standard and operator-authored package catalogs with `package.json` manifests and per-package installers.

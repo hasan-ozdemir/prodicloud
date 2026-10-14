@@ -5852,3 +5852,14 @@ Feature updates:
 **Assistant Summary**
 
 Added a subscription-scoped startup inventory snapshot for managed resource groups, resources, and VM details. TUI screens reuse the snapshot; it revalidates on a 60-second freshness window and after explicit refresh, subscription changes, and operations that may mutate Azure. ETags and content fallback signatures detect actual changes while unchanged syncs preserve the existing snapshot. Added the numbered, paged create wizard with default markers, `p/n/g/f/t` navigation, `s/k/a/l/c` controls, input retry and validation, `MB/GB/TB` OS disk sizing, and comma-separated TCP ranges. Updated inventory filtering and task selection to use accessible numbered lists, validated app-state usernames and report paths, and prevented selecting disabled tasks for execution. Windows PowerShell 5.1 and PowerShell 7+ each passed 189 smoke checks and 172 fixture-backed TUI scenarios; repository quality checks passed. Tests blocked native Azure calls and real command dispatch; no Azure resources were created or changed.
+
+### 2026-10-14 14:58 UTC
+**User Prompt**
+
+````text
+Correction and update task: For every VM/VC/Azure operation, make unnecessary `az group`, `az resource`, `az vm`, `az show`, Python SSH, and other tool calls as efficient and low-latency as possible. Use caching wherever suitable. While the cg CLI is running, keep a background cache worker active to refresh frequently used Azure data on appropriate intervals and intelligently validate, invalidate, and revalidate caches without slowing the foreground workflow. Make package/program status checks and enable/disable/install/update/uninstall actions in Manage Programs responsive on both the local operator side and the remote VC. Apply these efficiency improvements across all application areas, menus, and operations.
+````
+
+**Assistant Summary**
+
+Added a hidden, read-only worker that publishes subscription-scoped Azure group/resource/VM inventory snapshots every 60 seconds, uses an exclusive per-subscription lock, reuses local snapshots across TUI runs, carries pending refresh requests across restarts, rejects inventory older than five minutes, and backs off failed refreshes. Manage Programs now prewarms builtin/custom package status asynchronously and reuses complete per-VC status snapshots for 45 seconds. Package operations reuse resolved target/runtime and fresh VM endpoint data; successful SSH bootstrap probes are cached for 20 seconds without retaining passwords. Fixed Windows PowerShell 5.1 root-array handling and PowerShell 7 culture-dependent timestamp parsing. Windows PowerShell 5.1 and PowerShell 7+ each passed 190 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. All Azure test traffic used fixtures, with no live Azure mutations.

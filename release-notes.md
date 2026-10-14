@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.14.414 - 2026-10-14
+
+### Summary
+The interactive CLI now keeps Azure inventory and package status snapshots warm in the background, reducing repeated Azure list calls and remote status probes.
+
+### Highlights
+- A hidden worker atomically refreshes subscription-scoped groups, resources, and detailed VM rows without blocking TUI startup. An exclusive per-subscription lock avoids duplicate scans across concurrent TUI instances. It revalidates every 60 seconds, carries pending refreshes across CLI restarts, rejects snapshots older than five minutes, and uses bounded backoff after Azure failures.
+- Manage Programs shows the latest package status from a per-VC local cache while builtin/custom catalog checks run asynchronously. Complete status snapshots are reused for 45 seconds; explicit `r`/`s` actions request refreshes.
+- Package operations reuse an already resolved runtime/target and fresh VM endpoint data. A successful SSH bootstrap is reused for 20 seconds. The worker explicitly flattens JSON root arrays for Windows PowerShell 5.1 compatibility.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 190 smoke checks and 173 fixture-backed TUI scenarios, including real `cg.cmd` process output, background-worker inventory publication, and persisted-refresh recovery.
+- Repository quality checks passed for parsing, docs, sensitive content, package app-state, release packaging, Python hygiene, and CLI help. Tests used fixture Azure reads only; no live Azure operations were performed.
+
 ## Release 2026.10.14.413 - 2026-10-14
 
 ### Summary

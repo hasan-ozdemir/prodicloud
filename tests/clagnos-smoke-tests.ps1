@@ -869,6 +869,74 @@ Invoke-Test -Name "Package status catalog payloads flatten Windows PowerShell 5.
     Assert-True -Condition ($flattenedPackages.Count -eq 2 -and [string]$flattenedPackages[0].id -eq 'first-package' -and [string]$flattenedPackages[1].id -eq 'second-package') -Message 'Package status normalization must preserve every JSON package row under Windows PowerShell.'
 }
 
+Invoke-Test -Name "Package status cache persists fresh results and SSH bootstrap reuses a successful probe" -Action {
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-read-cache-' + [guid]::NewGuid().ToString('N'))
+    $resolvedTempRoot = [System.IO.Path]::GetFullPath($tempRoot)
+    $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([char[]]@('\','/')) + [System.IO.Path]::DirectorySeparatorChar
+    Assert-True -Condition ($resolvedTempRoot.StartsWith($tempPrefix,[System.StringComparison]::OrdinalIgnoreCase)) -Message 'Read-cache fixture must stay under the system temporary directory.'
+    $previousLocalAppData = [string]$env:LOCALAPPDATA
+    $previousPackageCache = $script:ClagnosPackageStatusCache
+    $previousPackageTtl = [int]$script:ClagnosPackageStatusCacheTtlSeconds
+    $previousSshCache = $script:ClagnosSshBootstrapCache
+    $previousSshTtl = [int]$script:ClagnosSshBootstrapCacheTtlSeconds
+    $originalProcessRunner = (Get-Command Invoke-ClagnosProcessWithRetry -CommandType Function -ErrorAction Stop).ScriptBlock
+    $sshPythonPath = Join-Path $tempRoot 'python-fixture.exe'
+    $sshClientPath = Join-Path $tempRoot 'ssh-client-fixture.py'
+
+    try {
+        New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+        Set-Content -LiteralPath $sshPythonPath -Value 'fixture' -Encoding ASCII
+        Set-Content -LiteralPath $sshClientPath -Value 'fixture' -Encoding ASCII
+        $env:LOCALAPPDATA = $tempRoot
+        $script:ClagnosPackageStatusCache = @{}
+        $script:ClagnosPackageStatusCacheTtlSeconds = 45
+        $script:ClagnosSshBootstrapCache = @{}
+        $script:ClagnosSshBootstrapCacheTtlSeconds = 20
+
+        $packages = @([pscustomobject]@{ Catalog = 'builtin'; Id = 'cache-fixture'; StatusCheck = [pscustomobject]@{ kind = 'command'; value = 'cache-fixture-command' } })
+        $options = @{ 'subscription-id' = 'sub-cache-fixture'; group = 'rg-cache-fixture'; 'vm-name' = 'vm-cache-fixture' }
+        $cacheKey = Get-ClagnosPackageStatusCacheKey -Packages $packages -Options $options -Platform 'windows'
+        $cacheEntry = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $true; StatusByPackage = @{ 'cache-fixture' = 'installed' } }
+        Save-ClagnosPackageStatusCacheEntry -Key $cacheKey -Entry $cacheEntry
+        $freshCache = Get-ClagnosPackageStatusCacheEntry -Packages $packages -Options $options -Platform 'windows'
+        Assert-True -Condition ($null -ne $freshCache -and [bool]$freshCache.IsFresh -and [string]$freshCache.Entry.StatusByPackage['cache-fixture'] -eq 'installed') -Message ('A complete package status snapshot must persist and be reusable within its freshness window. Path={0}; Exists={1}; Fresh={2}; Status={3}; DiskWritesDisabled={4}' -f (Get-ClagnosPackageStatusDiskCachePath -Key $cacheKey),(Test-Path -LiteralPath (Get-ClagnosPackageStatusDiskCachePath -Key $cacheKey)),[bool]$freshCache.IsFresh,[string]$freshCache.Entry.StatusByPackage['cache-fixture'],[string]$env:CLAGNOS_PACKAGE_STATUS_CACHE_NO_DISK_WRITE)
+
+        $freshCache.Entry.CreatedAtUtc = [DateTime]::UtcNow.AddSeconds(-46)
+        Save-ClagnosPackageStatusCacheEntry -Key $cacheKey -Entry $freshCache.Entry
+        $expiredCache = Get-ClagnosPackageStatusCacheEntry -Packages $packages -Options $options -Platform 'windows'
+        Assert-True -Condition ($null -ne $expiredCache -and -not [bool]$expiredCache.IsFresh -and [string]$expiredCache.Entry.StatusByPackage['cache-fixture'] -eq 'installed') -Message 'Expired status may be displayed as cached but must be marked stale for background revalidation.'
+
+        $changedPackages = @([pscustomobject]@{ Catalog = 'builtin'; Id = 'cache-fixture'; StatusCheck = [pscustomobject]@{ kind = 'command'; value = 'changed-cache-fixture-command' } })
+        $changedKey = Get-ClagnosPackageStatusCacheKey -Packages $changedPackages -Options $options -Platform 'windows'
+        Assert-True -Condition ($changedKey -cne $cacheKey) -Message 'Changing the package status-check definition must invalidate its previous status snapshot.'
+
+        $script:ClagnosSshProbeCount = 0
+        Set-Item -Path Function:\Invoke-ClagnosProcessWithRetry -Value {
+            param([string]$FilePath,[string[]]$Arguments,[string]$Label,[int]$MaxAttempts,[switch]$AllowFailure)
+            $script:ClagnosSshProbeCount++
+            return [pscustomobject]@{ ExitCode = 0; Output = 'manager-fixture' }
+        }
+        $probeArgs = @{ PySshPythonPath = $sshPythonPath; PySshClientPath = $sshClientPath; HostName = 'host-fixture'; UserName = 'manager-fixture'; Password = 'transient-fixture-secret'; Port = '22222'; ConnectTimeoutSeconds = 10 }
+        $firstProbe = Initialize-ClagnosSshHostKey @probeArgs
+        $secondProbe = Initialize-ClagnosSshHostKey @probeArgs
+        $forcedProbe = Initialize-ClagnosSshHostKey @probeArgs -Force
+        Assert-True -Condition ($script:ClagnosSshProbeCount -eq 2 -and -not [bool]$firstProbe.Cached -and [bool]$secondProbe.Cached -and -not [bool]$forcedProbe.Cached) -Message 'A successful SSH probe must be reused briefly and an explicit forced probe must reconnect.'
+        $sshCacheText = ConvertTo-Json -InputObject $script:ClagnosSshBootstrapCache -Depth 8 -Compress
+        Assert-True -Condition ($sshCacheText -notmatch [regex]::Escape('transient-fixture-secret')) -Message 'SSH bootstrap cache contents must not retain the password.'
+    }
+    finally {
+        Set-Item -Path Function:\Invoke-ClagnosProcessWithRetry -Value $originalProcessRunner
+        $script:ClagnosPackageStatusCache = $previousPackageCache
+        $script:ClagnosPackageStatusCacheTtlSeconds = $previousPackageTtl
+        $script:ClagnosSshBootstrapCache = $previousSshCache
+        $script:ClagnosSshBootstrapCacheTtlSeconds = $previousSshTtl
+        $script:ClagnosSshProbeCount = 0
+        if ([string]::IsNullOrWhiteSpace($previousLocalAppData)) { Remove-Item Env:\LOCALAPPDATA -ErrorAction SilentlyContinue }
+        else { $env:LOCALAPPDATA = $previousLocalAppData }
+        if ($resolvedTempRoot.StartsWith($tempPrefix,[System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTempRoot)) { Remove-Item -LiteralPath $resolvedTempRoot -Recurse -Force }
+    }
+}
+
 Invoke-Test -Name "Package status reads the same ProgramData stores used by installers" -Action {
     $packageRuntimeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\package\runtime.ps1') -Raw -ErrorAction Stop)
     Assert-True -Condition ($packageRuntimeText.IndexOf('clagnos\state\store-installs',[System.StringComparison]::Ordinal) -ge 0) -Message 'Store package status must read the shared ProgramData install-state root.'

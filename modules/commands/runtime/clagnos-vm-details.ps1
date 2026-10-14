@@ -102,8 +102,26 @@ function Get-ClagnosVmPublicDnsSettings {
 # Handles Get-ClagnosVmDetails.
 function Get-ClagnosVmDetails {
     param(
-        [hashtable]$Context
+        [hashtable]$Context,
+        [switch]$AllowCachedInventory
     )
+
+    if ($AllowCachedInventory -and $null -ne (Get-Command Get-ClagnosUiInventorySnapshotForSharedRuntime -ErrorAction SilentlyContinue)) {
+        $inventorySnapshot = Get-ClagnosUiInventorySnapshotForSharedRuntime -MaximumAgeSeconds 60 -SubscriptionId ([string]$Context.AzureSubscriptionId)
+        if ($null -ne $inventorySnapshot) {
+            $cachedVm = @($inventorySnapshot.VirtualMachines | Where-Object {
+                [string]::Equals([string]$_.ClagnosResourceGroup,[string]$Context.ResourceGroup,[System.StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals([string]$_.name,[string]$Context.VmName,[System.StringComparison]::OrdinalIgnoreCase)
+            } | Select-Object -First 1)
+            if (@($cachedVm).Count -gt 0) {
+                $publicIp = [string]$cachedVm[0].publicIps
+                $vmFqdn = [string]$cachedVm[0].fqdns
+                if (-not [string]::IsNullOrWhiteSpace($publicIp) -or -not [string]::IsNullOrWhiteSpace($vmFqdn)) {
+                    return [ordered]@{ VmDetails = $cachedVm[0]; PublicIP = $publicIp; VmFqdn = $vmFqdn }
+                }
+            }
+        }
+    }
 
     Show-ClagnosStepFirstUseValues `
         -StepLabel "VM details lookup" `

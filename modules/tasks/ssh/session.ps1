@@ -9,13 +9,31 @@ function Initialize-ClagnosSshHostKey {
         [string]$UserName,
         [string]$Password,
         [string]$Port,
-        [int]$ConnectTimeoutSeconds = 30
+        [int]$ConnectTimeoutSeconds = 30,
+        [switch]$Force
     )
 
     if ($ConnectTimeoutSeconds -lt 5) { $ConnectTimeoutSeconds = 5 }
     if ($ConnectTimeoutSeconds -gt 300) { $ConnectTimeoutSeconds = 300 }
     if ([string]::IsNullOrWhiteSpace([string]$PySshPythonPath) -or -not (Test-Path -LiteralPath $PySshPythonPath)) {
         throw "Python executable for pyssh was not found."
+    }
+
+    if ($null -eq $script:ClagnosSshBootstrapCache) { $script:ClagnosSshBootstrapCache = @{} }
+    $passwordBytes = [System.Text.Encoding]::UTF8.GetBytes([string]$Password)
+    $passwordSha = [System.Security.Cryptography.SHA256]::Create()
+    try { $passwordFingerprint = ([BitConverter]::ToString($passwordSha.ComputeHash($passwordBytes))).Replace('-', '').ToLowerInvariant() }
+    finally { $passwordSha.Dispose() }
+    $cacheKey = ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string]$HostName.ToLowerInvariant(),[string]$Port,[string]$UserName.ToLowerInvariant(),[string]$PySshPythonPath,[string]$PySshClientPath,$passwordFingerprint)
+    $cacheTtlSeconds = if ([int]$script:ClagnosSshBootstrapCacheTtlSeconds -gt 0) { [int]$script:ClagnosSshBootstrapCacheTtlSeconds } else { 20 }
+    foreach ($staleKey in @($script:ClagnosSshBootstrapCache.Keys)) {
+        if (([DateTime]::UtcNow - [DateTime]$script:ClagnosSshBootstrapCache[$staleKey].CreatedAtUtc).TotalSeconds -ge $cacheTtlSeconds) {
+            $script:ClagnosSshBootstrapCache.Remove([string]$staleKey)
+        }
+    }
+    if (-not $Force -and $script:ClagnosSshBootstrapCache.ContainsKey($cacheKey)) {
+        $cached = $script:ClagnosSshBootstrapCache[$cacheKey]
+        return [pscustomobject]@{ ExitCode = 0; Output = ''; HostKey = [string]$cached.HostKey; Cached = $true }
     }
 
     $result = Invoke-ClagnosProcessWithRetry `
@@ -37,11 +55,15 @@ function Initialize-ClagnosSshHostKey {
     if ($result.ExitCode -ne 0) {
         Write-Warning "Python SSH bootstrap returned non-zero exit code. Continuing and allowing retry flow."
     }
+    else {
+        $script:ClagnosSshBootstrapCache[$cacheKey] = @{ CreatedAtUtc = [DateTime]::UtcNow; HostKey = 'auto-add' }
+    }
 
     return [pscustomobject]@{
         ExitCode = [int]$result.ExitCode
         Output = [string]$result.Output
         HostKey = "auto-add"
+        Cached = $false
     }
 }
 

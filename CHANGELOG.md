@@ -3,6 +3,17 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.14.414] - 2026-10-14
+
+### Improved
+- Added a hidden, read-only cache worker that refreshes subscription-scoped resource groups, resource rows, and detailed VM state every 60 seconds without blocking the TUI welcome screen. An exclusive per-subscription lock avoids duplicate scans across concurrent TUI instances. It publishes atomic snapshots, honors refresh requests across CLI restarts, refuses snapshots older than five minutes, and backs off failed Azure reads.
+- Manage Programs now warms builtin/custom package status asynchronously, reuses complete local/disk snapshots for 45 seconds, and shares VM target/endpoint data from a fresh inventory snapshot. Package install/uninstall reuse the resolved target/runtime, and successful SSH bootstraps are cached for 20 seconds to avoid an extra probe connection.
+- Flattened Azure JSON root arrays explicitly in the worker so Windows PowerShell 5.1 publishes usable group, resource, and VM arrays.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 190 smoke checks and 173 fixture-backed TUI scenarios, including actual `cg.cmd` output, worker snapshot publication, persisted-refresh recovery, package-cache TTL, and SSH bootstrap reuse.
+- Repository quality checks passed for PowerShell parsing, documentation, sensitive content, package app-state, release packaging, Python syntax/artifact hygiene, and CLI help. Fixture logs showed no native Azure calls, mutations, or real Clagnos dispatches; no live Azure operations were performed.
+
 ## [2026.10.14.413] - 2026-10-14
 
 ### Added

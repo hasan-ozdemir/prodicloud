@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$env:CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER = '1'
 if ([string]::IsNullOrWhiteSpace([string]$RepoRoot)) { $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
 $script:TuiTestResults = New-Object 'System.Collections.Generic.List[object]'
 $script:TuiRenderedLines = New-Object 'System.Collections.Generic.List[string]'
@@ -588,6 +589,50 @@ Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state
     Assert-Tui -Condition (-not [bool]$script:ClagnosUiInventoryCache.IsDirty) -Message 'A successful reconciliation must clear the dirty marker.'
 }
 
+Invoke-TuiTest -Name 'Persisted inventory refresh requests remain dirty until a newer cache snapshot is published' -Action {
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-persisted-inventory-' + [guid]::NewGuid().ToString('N'))
+    $previousCacheRoot = [string]$env:CLAGNOS_TUI_CACHE_ROOT
+    $previousSnapshot = $script:ClagnosUiInventoryCache
+    $previousCachePath = [string]$script:ClagnosUiInventoryCacheFilePath
+    $previousCacheWriteUtc = if ($null -ne $script:ClagnosUiInventoryCacheFileLastWriteUtc) { [DateTime]$script:ClagnosUiInventoryCacheFileLastWriteUtc } else { [DateTime]::MinValue }
+    $previousMaximumStaleSeconds = if ($null -ne $script:ClagnosUiInventoryMaximumStaleSeconds) { [int]$script:ClagnosUiInventoryMaximumStaleSeconds } else { 300 }
+    $previousSubscription = $script:ClagnosUiSubscription
+    try {
+        $env:CLAGNOS_TUI_CACHE_ROOT = $tempRoot
+        $script:ClagnosUiInventoryMaximumStaleSeconds = 300
+        $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = 'sub-fixture-enabled'; SubscriptionName = 'Fixture Enabled' }
+        $script:ClagnosUiInventoryCache = $null
+        $script:ClagnosUiInventoryCacheFilePath = ''
+        $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId 'sub-fixture-enabled'
+        New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null
+        $validatedAt = [DateTime]::UtcNow.AddSeconds(-5)
+        $snapshot = [ordered]@{ SubscriptionId = 'sub-fixture-enabled'; Groups = @(); Resources = @(); VirtualMachines = @(); Signature = 'fixture-signature'; LastValidatedAtUtc = $validatedAt.ToString('o'); IsDirty = $false; DirtyReason = ''; DirtyResourceGroup = ''; Changed = $false }
+        Set-Content -LiteralPath $paths.Cache -Value (ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress) -Encoding UTF8
+        Set-Content -LiteralPath $paths.Request -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ASCII
+
+        $pending = Import-ClagnosUiInventoryCacheFromDisk -Force
+        $diagnosticSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $paths.Cache -Raw))
+        Assert-Tui -Condition ($null -ne $pending -and [bool]$pending.IsDirty -and [string]$pending.DirtyReason -eq 'a persisted inventory refresh is pending') -Message ('A cache written before a persisted refresh request must not be trusted as current after a CLI restart. Null={0}; ImportedSubscription={1}; ConfiguredSubscription={2}; Validated={3}; Request={4}; FileExists={5}; Error={6}' -f ($null -eq $pending),[string]$diagnosticSnapshot.SubscriptionId,[string]$script:ClagnosUiSubscription.SubscriptionId,[string]$diagnosticSnapshot.LastValidatedAtUtc,[string](Get-Content -LiteralPath $paths.Request -Raw),(Test-Path -LiteralPath $paths.Cache),[string]$script:ClagnosUiResourceCacheError)
+
+        $snapshot.LastValidatedAtUtc = [DateTime]::UtcNow.AddSeconds(2).ToString('o')
+        Set-Content -LiteralPath $paths.Cache -Value (ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress) -Encoding UTF8
+        $revalidated = Import-ClagnosUiInventoryCacheFromDisk -Force
+        Assert-Tui -Condition ($null -ne $revalidated -and -not [bool]$revalidated.IsDirty) -Message 'A worker snapshot newer than the persisted refresh request must clear the dirty marker.'
+    }
+    finally {
+        $script:ClagnosUiInventoryCache = $previousSnapshot
+        $script:ClagnosUiInventoryCacheFilePath = $previousCachePath
+        $script:ClagnosUiInventoryCacheFileLastWriteUtc = $previousCacheWriteUtc
+        $script:ClagnosUiInventoryMaximumStaleSeconds = $previousMaximumStaleSeconds
+        $script:ClagnosUiSubscription = $previousSubscription
+        if ([string]::IsNullOrWhiteSpace($previousCacheRoot)) { Remove-Item Env:\CLAGNOS_TUI_CACHE_ROOT -ErrorAction SilentlyContinue }
+        else { $env:CLAGNOS_TUI_CACHE_ROOT = $previousCacheRoot }
+        $resolvedTemp = [System.IO.Path]::GetFullPath($tempRoot)
+        $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([char[]]@('\','/')) + [System.IO.Path]::DirectorySeparatorChar
+        if ($resolvedTemp.StartsWith($tempPrefix,[System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTemp)) { Remove-Item -LiteralPath $resolvedTemp -Recurse -Force }
+    }
+}
+
 Invoke-TuiTest -Name 'Create wizard applies validated defaults through the real TUI create route' -Action {
     $script:TuiDotEnvOverrides = @{
         SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'fixture-new-vc'; SELECTED_AZURE_REGION = 'eastus'
@@ -784,7 +829,7 @@ Invoke-TuiTest -Name 'Virtual computers render the empty state and all list acti
     Show-ClagnosUiVirtualComputers
     Assert-TuiOutputContains -Text 'No managed virtual computers were found.' -Message 'Empty VC inventory must be explicit.'
     Assert-TuiOutputContains -Text 'c: create virtual computer' -Message 'VC list must show create.'
-    Assert-TuiOutputContains -Text 'r: refresh managed resource cache' -Message 'VC list must show an explicit cache refresh action.'
+    Assert-TuiOutputContains -Text 'r: check or refresh managed resource cache' -Message 'VC list must show an explicit cache refresh action.'
 }
 
 Invoke-TuiTest -Name 'Virtual computers show a readable error if inventory cannot load' -Action {
@@ -1506,6 +1551,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'modules') -Destination (Join-Path $sandboxRoot 'modules') -Recurse -Force
         New-Item -ItemType Directory -Path (Join-Path $sandboxRoot 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cli.ps1') -Force
+        Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cache-worker.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cache-worker.ps1') -Force
         foreach ($catalogRoot in @('packages\builtin\windows','packages\custom\windows','packages\builtin\linux','packages\custom\linux')) {
             New-Item -ItemType Directory -Path (Join-Path $sandboxRoot $catalogRoot) -Force | Out-Null
         }
@@ -1560,6 +1606,8 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $processInfo.RedirectStandardError = $true
         $processInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
         $processInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
+        $processInfo.EnvironmentVariables['CLAGNOS_TUI_CACHE_ROOT'] = Join-Path $sandboxRoot '.clagnos-cache'
+        $processInfo.EnvironmentVariables['CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER'] = '0'
         $processInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $azLogPath
         $processInfo.EnvironmentVariables['CLAGNOS_TUI_NET_LOG'] = $netLogPath
         $process = New-Object System.Diagnostics.Process
@@ -1567,6 +1615,29 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         [void]$process.Start()
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
+
+        $workerCacheDirectory = Join-Path (Join-Path $sandboxRoot '.clagnos-cache') 'Clagnos\cache'
+        $cacheDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        $workerCacheFiles = @()
+        while ([DateTime]::UtcNow -lt $cacheDeadline -and $workerCacheFiles.Count -eq 0 -and -not $process.HasExited) {
+            if (Test-Path -LiteralPath $workerCacheDirectory -PathType Container) {
+                $workerCacheFiles = @(Get-ChildItem -LiteralPath $workerCacheDirectory -Filter 'azure-inventory-*.json' -File -ErrorAction SilentlyContinue | Where-Object { [string]$_.Name -match '^azure-inventory-[a-f0-9]+\.json$' })
+            }
+            if ($workerCacheFiles.Count -eq 0) { Start-Sleep -Milliseconds 100 }
+        }
+        $workerStatusFileForStartup = @(Get-ChildItem -LiteralPath $workerCacheDirectory -Filter 'azure-inventory-*.status.json' -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+        $workerStartupStatus = if ($workerStatusFileForStartup.Count -gt 0) { [string](Get-Content -LiteralPath $workerStatusFileForStartup[0].FullName -Raw) } else { '(no worker status file)' }
+        $workerStartupLog = if (Test-Path -LiteralPath $azLogPath) { (@(Get-Content -LiteralPath $azLogPath) -join '; ') } else { '(no Azure fixture calls)' }
+        if ($workerCacheFiles.Count -ne 1) {
+            $process.StandardInput.WriteLine('q')
+            $process.StandardInput.Close()
+            [void]$process.WaitForExit(10000)
+            $stdoutTask.Wait()
+            $stderrTask.Wait()
+            throw ("The interactive cg.cmd background worker must publish a subscription-scoped inventory cache without blocking the welcome screen. Status={0}; az={1}; stdout={2}; stderr={3}" -f $workerStartupStatus,$workerStartupLog,[string]$stdoutTask.Result,[string]$stderrTask.Result)
+        }
+        $uiWorkerSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerCacheFiles[0].FullName -Raw -ErrorAction Stop))
+        Assert-Tui -Condition ([string]$uiWorkerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$uiWorkerSnapshot.VirtualMachines[0].ClagnosResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message ("The live TUI must import complete worker VM identity data. Snapshot={0}" -f (ConvertTo-Json -InputObject $uiWorkerSnapshot.VirtualMachines[0] -Depth 6 -Compress))
 
         foreach ($choice in @('1','1','p','1','b','b','m','3','b','b','o','1','b','5','q','b','b','2','b','3','b','q')) {
             $process.StandardInput.WriteLine([string]$choice)
@@ -1624,6 +1695,59 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         Assert-Tui -Condition ($mutatingFixtureCalls.Count -eq 0) -Message ('The actual cg.cmd scenario attempted a blocked Azure mutation: {0}' -f ($mutatingFixtureCalls -join '; '))
         Assert-Tui -Condition ($stderr -notmatch 'Blocked Azure mutation attempted') -Message 'The Azure fixture must not report any attempted mutating command.'
 
+        $workerCacheRoot = Join-Path $sandboxRoot 'worker-cache'
+        New-Item -ItemType Directory -Path $workerCacheRoot -Force | Out-Null
+        $workerCachePath = Join-Path $workerCacheRoot 'inventory.json'
+        $workerStatusPath = Join-Path $workerCacheRoot 'status.json'
+        $workerRequestPath = Join-Path $workerCacheRoot 'refresh.request'
+        $workerPackageRequestPath = Join-Path $workerCacheRoot 'package-refresh.json'
+        $workerStopPath = Join-Path $workerCacheRoot 'stop.request'
+        $workerAzLogPath = Join-Path $workerCacheRoot 'az-worker.log'
+        $workerInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $workerInfo.FileName = (Get-Command powershell.exe -ErrorAction Stop).Source
+        $workerInfo.UseShellExecute = $false
+        $workerInfo.CreateNoWindow = $true
+        $workerInfo.RedirectStandardInput = $true
+        $workerInfo.RedirectStandardOutput = $true
+        $workerInfo.RedirectStandardError = $true
+        $workerInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
+        $workerInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
+        $workerInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $workerAzLogPath
+        $workerArguments = @(
+            '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $RepoRoot 'scripts\clagnos-cache-worker.ps1'),
+            '-SubscriptionId','00000000-0000-4000-8000-000000000000','-CachePath',$workerCachePath,'-StatusPath',$workerStatusPath,
+            '-RequestPath',$workerRequestPath,'-PackageRequestPath',$workerPackageRequestPath,'-StopPath',$workerStopPath,
+            '-OwnerProcessId',[string]$PID,'-RepositoryRoot',$RepoRoot,'-Once'
+        )
+        $workerInfo.Arguments = (@($workerArguments | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
+        $workerProcess = New-Object System.Diagnostics.Process
+        $workerProcess.StartInfo = $workerInfo
+        [void]$workerProcess.Start()
+        $workerStdoutTask = $workerProcess.StandardOutput.ReadToEndAsync()
+        $workerStderrTask = $workerProcess.StandardError.ReadToEndAsync()
+        $workerProcess.StandardInput.Close()
+        if (-not $workerProcess.WaitForExit(30000)) {
+            $workerProcess.Kill()
+            throw 'The fixture background inventory worker exceeded its 30-second timeout.'
+        }
+        $workerProcess.WaitForExit()
+        $workerStdoutTask.Wait()
+        $workerStderrTask.Wait()
+        Assert-Tui -Condition ($workerProcess.ExitCode -eq 0) -Message ("The background cache worker returned {0}. stdout={1}; stderr={2}" -f $workerProcess.ExitCode,[string]$workerStdoutTask.Result,[string]$workerStderrTask.Result)
+        $workerSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerCachePath -Raw -ErrorAction Stop))
+        Assert-Tui -Condition (@($workerSnapshot.Groups).Count -eq 1 -and @($workerSnapshot.VirtualMachines).Count -eq 1 -and @($workerSnapshot.Resources).Count -ge 5) -Message ("The background worker must atomically publish the managed inventory snapshot. Groups={0}; VMs={1}; Resources={2}; Snapshot={3}" -f @($workerSnapshot.Groups).Count,@($workerSnapshot.VirtualMachines).Count,@($workerSnapshot.Resources).Count,(ConvertTo-Json -InputObject $workerSnapshot -Depth 4 -Compress))
+        Assert-Tui -Condition ([string]$workerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$workerSnapshot.VirtualMachines[0].ClagnosResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message 'The background worker snapshot must preserve usable VM identity fields.'
+        $workerStatus = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerStatusPath -Raw -ErrorAction Stop))
+        Assert-Tui -Condition ([string]$workerStatus.State -eq 'ready') -Message 'The background worker must publish its completion state.'
+        $workerAzLines = @(Get-Content -LiteralPath $workerAzLogPath -ErrorAction Stop)
+        Assert-Tui -Condition (@($workerAzLines | Where-Object { $_ -match '(?i)(^|\s)group\s+list(\s|$)' }).Count -eq 1) -Message 'The worker must scan resource groups once per refresh.'
+        Assert-Tui -Condition (@($workerAzLines | Where-Object { $_ -match '(?i)(^|\s)resource\s+list\s+--resource-group(\s|$)' }).Count -eq 1) -Message 'The worker must scan the managed group resource list once.'
+        Assert-Tui -Condition (@($workerAzLines | Where-Object { $_ -match '(?i)(^|\s)vm\s+list\s+--show-details(\s|$)' }).Count -eq 1) -Message 'The worker must scan detailed VM status once.'
+        $workerMutations = @($workerAzLines | Where-Object { $_ -match $mutationPattern })
+        Assert-Tui -Condition ($workerMutations.Count -eq 0) -Message ('The background worker attempted an Azure mutation: {0}' -f ($workerMutations -join '; '))
+        $script:TuiTotalFixtureAzureReads += $workerAzLines.Count
+        $workerProcess.Dispose()
+
         $helpProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $helpProcessInfo.FileName = Join-Path $systemRoot 'System32\cmd.exe'
         $helpProcessInfo.Arguments = ('/d /s /c ""{0}" help resize"' -f (Join-Path $sandboxRoot 'cg.cmd'))
@@ -1635,6 +1759,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $helpProcessInfo.RedirectStandardError = $true
         $helpProcessInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
         $helpProcessInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
+        $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER'] = '1'
         $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $azLogPath
         $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_NET_LOG'] = $netLogPath
         $helpProcess = New-Object System.Diagnostics.Process
@@ -1656,7 +1781,13 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         Assert-Tui -Condition ($helpErrorOutput -notmatch 'null-valued expression') -Message 'cg.cmd command mode must not fall through to the interactive TUI when arguments are supplied.'
     }
     finally {
-        if ($null -ne $process) { $process.Dispose() }
+        if ($null -ne $process) {
+            try {
+                if (-not $process.HasExited) { $process.Kill(); [void]$process.WaitForExit(5000) }
+            }
+            catch { }
+            $process.Dispose()
+        }
         if ($null -ne $helpProcess) { $helpProcess.Dispose() }
         $resolvedSandbox = [System.IO.Path]::GetFullPath($sandboxRoot)
         $resolvedTempBase = [System.IO.Path]::GetFullPath($tempBase).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
@@ -1664,7 +1795,15 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         if (-not $resolvedSandbox.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
             throw ('Refusing to remove an unexpected TUI fixture path: {0}' -f $resolvedSandbox)
         }
-        if (Test-Path -LiteralPath $resolvedSandbox) { Remove-Item -LiteralPath $resolvedSandbox -Recurse -Force }
+        for ($cleanupAttempt = 0; $cleanupAttempt -lt 20 -and (Test-Path -LiteralPath $resolvedSandbox); $cleanupAttempt++) {
+            try {
+                Remove-Item -LiteralPath $resolvedSandbox -Recurse -Force -ErrorAction Stop
+            }
+            catch {
+                if ($cleanupAttempt -ge 19) { throw }
+                Start-Sleep -Milliseconds 250
+            }
+        }
     }
 }
 
