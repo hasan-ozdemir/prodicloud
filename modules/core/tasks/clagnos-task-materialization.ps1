@@ -30,6 +30,7 @@ function Get-ClagnosTaskTokenReplacements {
         VM_ADMIN_PASS = [string]$Context.VmPass
         ASSISTANT_USER = [string]$Context.VmAssistantUser
         ASSISTANT_PASS = [string]$Context.VmAssistantPass
+        RESET_MANAGED_USER_PASSWORDS = [string]([bool]$script:ClagnosResetManagedUserPasswords)
         SSH_PORT = [string]$Context.SshPort
         RDP_PORT = [string]$Context.RdpPort
         TCP_PORTS_BASH = [string]$tcpPortsBash

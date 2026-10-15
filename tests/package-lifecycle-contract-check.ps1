@@ -22,7 +22,7 @@ foreach ($directory in @($packages)) {
     Assert-PackageLifecycle -Condition (([string]$manifest.updateScript) -ceq 'update.ps1') -Message ("Package '{0}' must declare update.ps1." -f $directory.Name)
     Assert-PackageLifecycle -Condition (([string]$manifest.uninstallScript) -ceq 'uninstall.ps1') -Message ("Package '{0}' must declare uninstall.ps1." -f $directory.Name)
     Assert-PackageLifecycle -Condition ([string]$manifest.updateStrategy -in @('winget','choco','npm','choco-self','installer')) -Message ("Package '{0}' has an invalid update strategy." -f $directory.Name)
-    foreach ($operation in @('status','update','uninstall')) {
+    foreach ($operation in @('status','update','uninstall','repair')) {
         $scriptPath = Join-Path $directory.FullName ("{0}.ps1" -f $operation)
         Assert-PackageLifecycle -Condition (Test-Path -LiteralPath $scriptPath -PathType Leaf) -Message ("Package '{0}' has no {1}.ps1." -f $directory.Name,$operation)
         $scriptText = [string](Get-Content -LiteralPath $scriptPath -Raw)
@@ -41,8 +41,33 @@ $contractText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot '
 $envText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot '.env.example') -Raw)
 $benchmarkText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'tools/benchmark-package-transports.ps1') -Raw)
 
-Assert-PackageLifecycle -Condition ($runtimeText.Contains("'install','update','uninstall'")) -Message 'Package runtime must route install, update, and uninstall as separate actions.'
+$null = . (Join-Path $resolvedRepoRoot 'clagnos.ps1')
+$allWindowsPackages = @(
+    @(Get-ClagnosPackageCatalog -Platform windows -Catalog builtin) +
+    @(Get-ClagnosPackageCatalog -Platform windows -Catalog custom)
+)
+$orderedPackageIds = @((Get-ClagnosPackageDependencyOrder -Packages $allWindowsPackages) | ForEach-Object { [string]$_.Id })
+foreach ($dependencyPair in @(
+    @('windows-subsystem-linux','docker-desktop'),
+    @('nodejs','github-copilot-cli'),
+    @('nodejs','google-gemini-cli'),
+    @('nodejs','openai-codex-cli')
+)) {
+    $dependencyIndex = [array]::IndexOf([object[]]$orderedPackageIds,[string]$dependencyPair[0])
+    $dependentIndex = [array]::IndexOf([object[]]$orderedPackageIds,[string]$dependencyPair[1])
+    Assert-PackageLifecycle -Condition ($dependencyIndex -ge 0 -and $dependentIndex -gt $dependencyIndex) -Message ("Package setup must order '{0}' before '{1}'." -f [string]$dependencyPair[0],[string]$dependencyPair[1])
+}
+$jawsPackage = @($allWindowsPackages | Where-Object { [string]$_.Id -eq 'jaws' })[0]
+$generatedRepairScript = New-ClagnosPackageLifecycleScript -Action repair -Package $jawsPackage
+$repairTokens = $null
+$repairParseErrors = $null
+[void][System.Management.Automation.Language.Parser]::ParseInput([string]$generatedRepairScript,[ref]$repairTokens,[ref]$repairParseErrors)
+Assert-PackageLifecycle -Condition (@($repairParseErrors).Count -eq 0) -Message 'Generated app-state-backed package repair wrappers must parse before they can run.'
+
+Assert-PackageLifecycle -Condition ($runtimeText.Contains("'install','repair','update','uninstall'")) -Message 'Package runtime must route install, repair, update, and uninstall as separate actions.'
 Assert-PackageLifecycle -Condition ($runtimeText.Contains('already installed') -and $runtimeText.Contains('update was not run')) -Message 'Package install/update must not collapse into one operation.'
+Assert-PackageLifecycle -Condition ($runtimeText.Contains('New-ClagnosPackageRepairWithAppStateBackupScript') -and $runtimeText.Contains('package-repair-backups') -and $runtimeText.Contains('VerifyMismatchCount')) -Message 'Same-version package repair must snapshot app-state, restore and verify it, and retain an emergency backup only after a failed restore.'
+Assert-PackageLifecycle -Condition ($operationModuleText.Contains('--version ([string]$record.Version)') -and $operationModuleText.Contains('same-version repair')) -Message 'Package repair must pin the detected version and refuse a vendor upgrade.'
 Assert-PackageLifecycle -Condition ($winrmText.Contains('Add-ClagnosPackageTrustedHost') -and $winrmText.Contains('Invoke-Command') -and $winrmText.Contains('Copy-Item')) -Message 'The WinRM task runner must copy assets and execute guest scripts.'
 Assert-PackageLifecycle -Condition ($appStatePluginText.Contains('$Transport -eq ''ssh'' -and (') -and $appStatePluginText.Contains('$Transport -eq ''winrm''')) -Message 'Windows app-state replay must not require SSH credentials when a WinRM session is supplied.'
 Assert-PackageLifecycle -Condition ($winrmText.Contains("Get-ClagnosPackageTransport") -or $runtimeText.Contains("Get-ClagnosPackageTransport")) -Message 'Package transport selection must be implemented.'
@@ -52,6 +77,7 @@ Assert-PackageLifecycle -Condition ($operationModuleText.Contains('list --upgrad
 $chocolateyInstallerText = [string](Get-Content -LiteralPath (Join-Path $catalogRoot 'chocolatey/install.ps1') -Raw)
 Assert-PackageLifecycle -Condition ($chocolateyInstallerText.Contains('preserve existing Chocolatey package files') -and $chocolateyInstallerText.Contains('Merge-ClagnosPreservedChocolateyFiles')) -Message 'Chocolatey bootstrap must preserve unrelated package files when reinstalling its CLI.'
 Assert-PackageLifecycle -Condition ($uiText.Contains("'v' { 'update' }") -and $uiText.Contains('v: update')) -Message 'The TUI must expose a separate package update action.'
+Assert-PackageLifecycle -Condition ($uiText.Contains('p: setup all program packages') -and $uiText.Contains('m: manage program packages') -and $runtimeText.Contains('Invoke-ClagnosPackageSetupPlan')) -Message 'The VC UI must expose the reviewed setup-all and separate package management paths.'
 Assert-PackageLifecycle -Condition ($contractText.Contains("'update'")) -Message 'The package CLI contract must accept update.'
 Assert-PackageLifecycle -Condition ($envText -match '(?m)^PACKAGE_TRANSPORT=ssh\s*$') -Message '.env.example must document the default Windows package transport.'
 Assert-PackageLifecycle -Condition ($benchmarkText.Contains("@('ssh','winrm')") -and $benchmarkText.Contains("'PACKAGE_TRANSPORT=' + $Value") -and $benchmarkText.Contains('BENCHMARK {0}')) -Message 'The live read-only package transport benchmark must compare SSH and WinRM and report both results.'

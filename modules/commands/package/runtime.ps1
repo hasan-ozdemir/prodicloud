@@ -70,19 +70,21 @@ function Get-ClagnosPackageCatalog {
         $lifecycleScriptText = @{}
         $operationsModulePath = ''
         if ($Platform -eq 'windows') {
-            if ($Catalog -eq 'builtin') {
-                foreach ($lifecycleAction in @('status','update','uninstall')) {
+            foreach ($lifecycleAction in @('status','update','uninstall','repair')) {
                 $manifestKey = '{0}Script' -f $lifecycleAction
                 $scriptName = [string]$manifest.$manifestKey
+                $hasExplicitScript = -not [string]::IsNullOrWhiteSpace($scriptName)
                 if ([string]::IsNullOrWhiteSpace($scriptName)) { $scriptName = ('{0}.ps1' -f $lifecycleAction) }
                 if ([System.IO.Path]::GetFileName($scriptName) -cne $scriptName -or [System.IO.Path]::GetExtension($scriptName) -cne '.ps1') {
                     throw ("Package '{0}' {1}Script must be a PowerShell file directly inside its package folder." -f $id,$lifecycleAction)
                 }
                 $scriptPath = Join-Path $folder.FullName $scriptName
-                if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw ("Package '{0}' {1} script was not found: {2}" -f $id,$lifecycleAction,$scriptPath) }
+                if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) {
+                    if (($lifecycleAction -eq 'repair' -and -not $hasExplicitScript) -or ($Catalog -eq 'custom' -and -not $hasExplicitScript)) { continue }
+                    throw ("Package '{0}' {1} script was not found: {2}" -f $id,$lifecycleAction,$scriptPath)
+                }
                 $lifecycleScriptPaths[$lifecycleAction] = [string]$scriptPath
                 $lifecycleScriptText[$lifecycleAction] = [string](Get-Content -LiteralPath $scriptPath -Raw -ErrorAction Stop)
-            }
             }
             $updateStrategy = [string]$manifest.updateStrategy
             if ([string]::IsNullOrWhiteSpace($updateStrategy)) {
@@ -114,6 +116,12 @@ function Get-ClagnosPackageCatalog {
         if ($appStateKey -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw ("Package '{0}' has an invalid appStateKey." -f $id) }
         $appStateSpec = $null
         if ($null -ne $manifest.appState) { $appStateSpec = ConvertTo-ClagnosTaskFolderAppStateSpec -AppState $manifest.appState -TaskName $appStateKey -TaskLabel $id }
+        if ($null -ne $appStateSpec -and $Platform -eq 'windows') {
+            $appStateGuestHelperPath = Get-ClagnosAppStateGuestHelperPath
+            if (Test-Path -LiteralPath $appStateGuestHelperPath -PathType Leaf) {
+                $assetSpecs += [pscustomobject]@{ LocalPath = [string]$appStateGuestHelperPath; RemotePath = 'C:/Windows/Temp/clagnos-app-state-guest.psm1' }
+            }
+        }
         $postInstallTasks = @()
         if ($null -ne $manifest.postInstallTasks) { $postInstallTasks = @($manifest.postInstallTasks | ForEach-Object { [string]$_ }) }
         $disabledReason = if ($enabled) { '' } else { 'disabled-in-package-manifest' }
@@ -125,6 +133,7 @@ function Get-ClagnosPackageCatalog {
             StatusCheck = $statusCheck
             Uninstall = $uninstall
             UpdateStrategy = [string]$updateStrategy
+            RepairStrategy = [string]$manifest.repairStrategy
             StartupPolicy = $manifest.startupPolicy
             Catalog = $Catalog
             AppStateKey = $appStateKey
@@ -156,6 +165,7 @@ function Get-ClagnosPackageCatalog {
             LifecycleScriptPaths = $lifecycleScriptPaths
             LifecycleScriptText = $lifecycleScriptText
             UpdateStrategy = [string]$updateStrategy
+            RepairStrategy = [string]$manifest.repairStrategy
             StartupPolicy = $manifest.startupPolicy
             ObservedDurationSeconds = [double]::PositiveInfinity
         }
@@ -166,11 +176,13 @@ function Get-ClagnosPackageCatalog {
             StatusCheck = $statusCheck
             Uninstall = $uninstall
             UpdateStrategy = [string]$updateStrategy
+            RepairStrategy = [string]$manifest.repairStrategy
             StartupPolicy = $manifest.startupPolicy
             LifecycleScriptPaths = $lifecycleScriptPaths
             StatusScriptText = [string]$lifecycleScriptText['status']
             UpdateScriptText = [string]$lifecycleScriptText['update']
             UninstallScriptText = [string]$lifecycleScriptText['uninstall']
+            RepairScriptText = [string]$lifecycleScriptText['repair']
             Catalog = $Catalog
             CatalogRoot = [string]$root
             ManifestPath = [string]$manifestPath
@@ -275,6 +287,7 @@ function Get-ClagnosPackageLifecycleSpecBase64 {
         statusCheck = $Package.StatusCheck
         uninstall = $Package.Uninstall
         updateStrategy = [string]$Package.UpdateStrategy
+        repairStrategy = [string]$Package.RepairStrategy
     }
     if ($null -ne $Package.PSObject.Properties['StartupPolicy']) { $spec.startupPolicy = $Package.StartupPolicy }
     if ($null -ne $Context) {
@@ -288,9 +301,76 @@ function Get-ClagnosPackageLifecycleSpecBase64 {
     return [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$json))
 }
 
+function New-ClagnosPackageRepairWithAppStateBackupScript {
+    param([string]$InnerScript,[object]$Package,[object]$Context)
+
+    if ([string]::IsNullOrWhiteSpace([string]$InnerScript) -or $null -eq $Package.PackageTask.AppStateSpec) { return [string]$InnerScript }
+    $capturePlan = Get-ClagnosTaskAppStateCapturePlan -TaskBlock $Package.PackageTask
+    $planJson = ConvertTo-ClagnosTaskAppStateCapturePlanJson -CapturePlan $capturePlan
+    if ([string]::IsNullOrWhiteSpace([string]$planJson)) { return [string]$InnerScript }
+    $planBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$planJson))
+    $innerBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$InnerScript))
+    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $Package.PackageTask
+    $managerUser = if ($null -ne $Context) { ([string]$Context.VmUser).Replace("'","''") } else { '' }
+    $assistantUser = if ($null -ne $Context) { ([string]$Context.VmAssistantUser).Replace("'","''") } else { '' }
+    $wrapper = @'
+$ErrorActionPreference = 'Stop'
+$taskName = '__CLAGNOS_REPAIR_TASK_NAME__'
+$managerUser = '__CLAGNOS_REPAIR_MANAGER_USER__'
+$assistantUser = '__CLAGNOS_REPAIR_ASSISTANT_USER__'
+$planBase64 = '__CLAGNOS_REPAIR_PLAN_B64__'
+$innerBase64 = '__CLAGNOS_REPAIR_INNER_B64__'
+$helperPath = 'C:\Windows\Temp\clagnos-app-state-guest.psm1'
+if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) { throw ('Package repair state helper was not staged: ' + $helperPath) }
+Import-Module $helperPath -Force -DisableNameChecking
+$scratchRoot = Join-Path ([IO.Path]::GetTempPath()) ('clagnos-package-repair-' + [guid]::NewGuid().ToString('N'))
+$planPath = Join-Path $scratchRoot 'capture-plan.json'
+$backupZip = Join-Path $scratchRoot 'current-app-state.zip'
+$emergencyRoot = Join-Path (Join-Path $env:ProgramData 'clagnos\state') 'package-repair-backups'
+$safeTaskName = [regex]::Replace($taskName,'[^A-Za-z0-9._-]','_')
+$emergencyZip = Join-Path $emergencyRoot ($safeTaskName + '.zip')
+New-Item -ItemType Directory -Path $scratchRoot -Force | Out-Null
+try {
+$planJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($planBase64))
+[IO.File]::WriteAllText($planPath,$planJson,(New-Object System.Text.UTF8Encoding($false)))
+$capture = Invoke-ClagnosTaskAppStateCapture -TaskName $taskName -PlanPath $planPath -OutputZipPath $backupZip -ManagerUser $managerUser -AssistantUser $assistantUser
+if (-not [bool]$capture.CreatedZip -or -not (Test-Path -LiteralPath $backupZip -PathType Leaf)) {
+    Write-Output ('No app-state files were present to preserve for ' + $taskName + '; continuing same-version repair.')
+    $innerScript = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($innerBase64))
+    & ([scriptblock]::Create($innerScript))
+    Remove-Item -LiteralPath $scratchRoot -Recurse -Force -ErrorAction SilentlyContinue
+    return
+}
+New-Item -ItemType Directory -Path $emergencyRoot -Force | Out-Null
+Copy-Item -LiteralPath $backupZip -Destination $emergencyZip -Force -ErrorAction Stop
+try {
+    $innerScript = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($innerBase64))
+    & ([scriptblock]::Create($innerScript))
+    $restore = Invoke-ClagnosTaskAppStateReplay -ZipPath $backupZip -TaskName $taskName -ManagerUser $managerUser -AssistantUser $assistantUser
+    if (-not [bool]$restore.Verified -or [int]$restore.VerifyMismatchCount -gt 0) { throw 'The captured package settings did not verify after repair.' }
+    if (Test-Path -LiteralPath $emergencyZip -PathType Leaf) { Remove-Item -LiteralPath $emergencyZip -Force -ErrorAction Stop }
+    if (Test-Path -LiteralPath $emergencyZip -PathType Leaf) { throw 'The verified package repair backup could not be cleaned up.' }
+    Write-Output ('Package repair restored and verified the target VC app-state for ' + $taskName + '.')
+}
+catch {
+    throw ('Package repair failed; the captured app-state emergency backup remains on the VC at ' + $emergencyZip + '. ' + [string]$_.Exception.Message)
+}
+}
+finally {
+    Remove-Item -LiteralPath $scratchRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+'@
+    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_TASK_NAME__',$taskName)
+    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_MANAGER_USER__',$managerUser)
+    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_ASSISTANT_USER__',$assistantUser)
+    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_PLAN_B64__',$planBase64)
+    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_INNER_B64__',$innerBase64)
+    return [string]$wrapper
+}
+
 function New-ClagnosPackageLifecycleScript {
     param(
-        [ValidateSet('status','install','update','uninstall')][string]$Action,
+        [ValidateSet('status','install','repair','update','uninstall')][string]$Action,
         [object]$Package,
         [object]$Context = $null
     )
@@ -298,9 +378,10 @@ function New-ClagnosPackageLifecycleScript {
         'status' { [string]$Package.StatusScriptText }
         'update' { [string]$Package.UpdateScriptText }
         'uninstall' { [string]$Package.UninstallScriptText }
+        'repair' { [string]$Package.RepairScriptText }
         'install' { '' }
     }
-    if ([string]::IsNullOrWhiteSpace($template) -and $Action -in @('install','update')) {
+    if ([string]::IsNullOrWhiteSpace($template) -and $Action -in @('install','repair','update')) {
         if ($Action -eq 'install') {
             $template = @'
 $ErrorActionPreference = 'Stop'
@@ -309,16 +390,18 @@ Invoke-ClagnosPackageLifecycle -Action install -PackageSpecBase64 '__CLAGNOS_PAC
 '@
         }
         else {
+            $scriptAction = $Action
             $template = @'
 $ErrorActionPreference = 'Stop'
 Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action update -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'
+Invoke-ClagnosPackageLifecycle -Action __CLAGNOS_ACTION__ -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'
 '@
+            $template = $template.Replace('__CLAGNOS_ACTION__',[string]$scriptAction)
         }
     }
     if ([string]::IsNullOrWhiteSpace($template)) { return '' }
     $template = $template.Replace('__CLAGNOS_PACKAGE_SPEC_B64__',(Get-ClagnosPackageLifecycleSpecBase64 -Package $Package -Context $Context))
-    if ($Action -in @('install','update')) {
+    if ($Action -in @('install','repair','update')) {
         $installSource = [string]$Package.PackageTask.Script
         if ($null -ne $Context) {
             $resolved = @(Apply-ClagnosTaskBlockReplacements -TaskBlocks @($Package.PackageTask) -Replacements (Get-ClagnosTaskTokenReplacements -Context $Context) -Context $Context)
@@ -327,6 +410,7 @@ Invoke-ClagnosPackageLifecycle -Action update -PackageSpecBase64 '__CLAGNOS_PACK
         $installBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($installSource))
         $template = $template.Replace('__CLAGNOS_INSTALL_SCRIPT_B64__',$installBase64)
     }
+    if ($Action -eq 'repair') { $template = New-ClagnosPackageRepairWithAppStateBackupScript -InnerScript $template -Package $Package -Context $Context }
     return [string]$template
 }
 
@@ -343,7 +427,8 @@ function New-ClagnosPackageGuestScript {
     param(
         [string]$Action,
         [object[]]$Packages,
-        [ValidateSet('windows','linux')][string]$Platform
+        [ValidateSet('windows','linux')][string]$Platform,
+        [psobject]$Context = $null
     )
 
     $payload = @(
@@ -353,6 +438,7 @@ function New-ClagnosPackageGuestScript {
                 displayName = [string]$_.DisplayName
                 statusCheck = $_.StatusCheck
                 uninstall = $_.Uninstall
+                targetUsers = @($(if ($null -ne $Context) { @([string]$Context.VmUser,[string]$Context.VmAssistantUser) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } } else { @() }))
             }
         }
     )
@@ -401,6 +487,7 @@ printf 'CLAGNOS_PACKAGE_RESULTS:%s\n' "$json"
         return @"
 `$payload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$base64'))
 `$parsedPackageInput = ConvertFrom-Json -InputObject `$payload
+Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
 `$packages = @()
 foreach (`$entry in @(`$parsedPackageInput)) {
     # Windows PowerShell 5.1 can return a JSON root array as one nested collection object.
@@ -502,7 +589,19 @@ function Get-PackageStatus {
 }
 `$results = @()
 foreach (`$package in `$packages) {
-    `$results += [pscustomobject]@{ id = [string]`$package.id; status = (Get-PackageStatus -Package `$package) }
+    `$status = Get-PackageStatus -Package `$package
+    `$detail = ''
+    if (`$status -eq 'installed') {
+        if ([string]`$package.id -eq 'jaws' -and @(`$package.targetUsers).Count -gt 0) {
+            `$missingUsers = @(`$package.targetUsers | Where-Object { -not (Test-ClagnosJawsPostLogonStartup -UserName ([string]`$_) -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe') })
+            if (`$missingUsers.Count -gt 0) { `$detail = 'JAWS startup is missing for: ' + (`$missingUsers -join ', '); `$status = 'installed-drifted' }
+        }
+        elseif ([string]`$package.id -in @('ollama','docker-desktop')) {
+            `$detail = Test-ClagnosPackageStartupState -Spec `$package
+            if (`$detail -match '(?i)missing|not verified') { `$status = 'installed-drifted' }
+        }
+    }
+    `$results += [pscustomobject]@{ id = [string]`$package.id; status = `$status; detail = `$detail }
 }
 `$jsonResult = ConvertTo-Json -InputObject `$results -Depth 4 -Compress
 Write-Output ('CLAGNOS_PACKAGE_RESULTS:' + `$jsonResult)
@@ -680,10 +779,11 @@ function Get-ClagnosPackageStatusSnapshot {
     if ($null -eq $Target) { $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package' }
     $Runtime.Context.ResourceGroup = [string]$Target.ResourceGroup
     $Runtime.Context.VmName = [string]$Target.VmName
-    $scriptText = if (@($Packages).Count -eq 1 -and -not [string]::IsNullOrWhiteSpace([string]$Packages[0].StatusScriptText)) {
+    $requiresStartupDriftCheck = @($Packages | Where-Object { [string]$_.Id -in @('jaws','ollama','docker-desktop') }).Count -gt 0
+    $scriptText = if (@($Packages).Count -eq 1 -and -not $requiresStartupDriftCheck -and -not [string]::IsNullOrWhiteSpace([string]$Packages[0].StatusScriptText)) {
         New-ClagnosPackageLifecycleScript -Action 'status' -Package $Packages[0] -Context $Runtime.Context
     }
-    else { New-ClagnosPackageGuestScript -Action 'status' -Packages $Packages -Platform $Platform }
+    else { New-ClagnosPackageGuestScript -Action 'status' -Packages $Packages -Platform $Platform -Context $Runtime.Context }
     $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status' -Runtime $Runtime -Target $Target
     $output = ''
     if ($result.TaskOutputs.Count -gt 0) { $output = [string]$result.TaskOutputs[0].Output }
@@ -698,7 +798,11 @@ function Get-ClagnosPackageStatusSnapshot {
     if (-not $match.Success) { throw 'Package status response could not be read from the VM.' }
     $rows = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject ([string]$match.Groups['json'].Value)))
     $map = @{}
-    foreach ($row in @($rows)) { $map[[string]$row.id] = [string]$row.status }
+    foreach ($row in @($rows)) {
+        $rowStatus = [string]$row.status
+        if ($rowStatus -eq 'installed' -and [string]$row.detail -match '(?i)missing|not verified') { $rowStatus = 'installed-drifted' }
+        $map[[string]$row.id] = $rowStatus
+    }
     $entry = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $true; StatusByPackage = $map }
     $script:ClagnosPackageStatusCache[$key] = $entry
     Save-ClagnosPackageStatusCacheEntry -Key $key -Entry $entry
@@ -747,6 +851,163 @@ function Set-ClagnosPackageStatusCacheValue {
 
 function Clear-ClagnosPackageStatusCache {
     $script:ClagnosPackageStatusCache = @{}
+}
+
+function Get-ClagnosPackageDependencyOrder {
+    param([object[]]$Packages)
+
+    $remaining = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($package in @($Packages | Sort-Object @{ Expression = { [int]$_.SortOrder } }, { [string]$_.DisplayName })) { $remaining.Add($package) }
+    $ordered = New-Object 'System.Collections.Generic.List[object]'
+    while ($remaining.Count -gt 0) {
+        $ready = @($remaining | Where-Object {
+            $candidate = $_
+            $dependencies = @($candidate.PackageTask.DependsOn | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+            foreach ($dependency in $dependencies) {
+                $matching = @($Packages | Where-Object { [string]::Equals([string]$_.Id,$dependency,[System.StringComparison]::OrdinalIgnoreCase) })
+                if ($matching.Count -eq 0) { continue }
+                if (@($ordered | Where-Object { [string]::Equals([string]$_.Id,$dependency,[System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { return $false }
+            }
+            return $true
+        })
+        if ($ready.Count -eq 0) { throw 'Package dependencies contain a cycle; setup-all was stopped before making changes.' }
+        foreach ($package in @($ready)) {
+            $ordered.Add($package)
+            [void]$remaining.Remove($package)
+        }
+    }
+    return @($ordered.ToArray())
+}
+
+function New-ClagnosPackageSetupPlan {
+    param(
+        [object[]]$Packages,
+        [hashtable]$Options,
+        [ValidateSet('windows','linux')][string]$Platform,
+        [switch]$AutoMode,
+        [switch]$WindowsFlag,
+        [switch]$LinuxFlag
+    )
+
+    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
+    $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
+    $runtime.Context.VmName = [string]$target.VmName
+    $Options['group'] = [string]$target.ResourceGroup
+    $Options['vm-name'] = [string]$target.VmName
+    $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+    if ($null -ne $resolvedSubscription) { $Options['subscription-id'] = [string]$resolvedSubscription.SubscriptionId }
+
+    $orderedPackages = @(Get-ClagnosPackageDependencyOrder -Packages $Packages)
+    $enabledPackages = @($orderedPackages | Where-Object { [bool]$_.Enabled })
+    $statusByPackage = @{}
+    if ($enabledPackages.Count -gt 0) {
+        $statusByPackage = Get-ClagnosPackageStatusSnapshot -Packages $enabledPackages -Options $Options -Platform $Platform -Force -Runtime $runtime -Target $target
+    }
+    $rows = @(
+        foreach ($package in @($orderedPackages)) {
+            $status = if ([bool]$package.Enabled) {
+                if ($statusByPackage.ContainsKey([string]$package.Id)) { [string]$statusByPackage[[string]$package.Id] } else { 'unknown' }
+            }
+            else { 'disabled' }
+            $action = switch ($status) {
+                'not-installed' { 'install' }
+                'installed' { 'already-healthy' }
+                'installed-drifted' { 'repair' }
+                'disabled' { 'skip-disabled' }
+                default { 'skip-unknown' }
+            }
+            [pscustomobject]@{
+                Package = $package
+                Status = $status
+                Action = $action
+                Reason = switch ($action) {
+                    'install' { 'Package is absent; install it.' }
+                    'already-healthy' { 'Package is installed; leave its current version and user state unchanged.' }
+                    'repair' { 'A Clagnos-managed startup setting is missing; repair the installed version.' }
+                    'skip-disabled' { 'Package is disabled in its catalog.' }
+                    default { 'Status is unknown; no package mutation is safe.' }
+                }
+            }
+        }
+    )
+    return [pscustomobject]@{
+        Platform = $Platform
+        Packages = @($orderedPackages)
+        Rows = @($rows)
+        StatusByPackage = $statusByPackage
+        Runtime = $runtime
+        Target = $target
+        Options = $Options
+        AutoMode = [bool]$AutoMode
+    }
+}
+
+function Invoke-ClagnosPackageSetupPlan {
+    param([Parameter(Mandatory = $true)][psobject]$Plan)
+
+    $results = New-Object 'System.Collections.Generic.List[object]'
+    $effectiveStatus = @{}
+    foreach ($key in @($Plan.StatusByPackage.Keys)) { $effectiveStatus[[string]$key] = [string]$Plan.StatusByPackage[[string]$key] }
+    foreach ($row in @($Plan.Rows)) {
+        $package = $row.Package
+        if ([string]$row.Action -notin @('install','repair')) {
+            $results.Add([pscustomobject]@{ Package = $package; Outcome = [string]$row.Action; Message = [string]$row.Reason })
+            continue
+        }
+        $blockedDependency = @($package.PackageTask.DependsOn | ForEach-Object { [string]$_ } | Where-Object {
+            $dependency = [string]$_
+            if (-not $effectiveStatus.ContainsKey($dependency)) { return $true }
+            return ([string]$effectiveStatus[$dependency] -notin @('installed','installed-drifted'))
+        } | Select-Object -First 1)
+        if ($blockedDependency.Count -gt 0) {
+            $message = "Skipped because dependency '$($blockedDependency[0])' is not verified as installed."
+            $effectiveStatus[[string]$package.Id] = 'blocked'
+            $results.Add([pscustomobject]@{ Package = $package; Outcome = 'skipped'; Message = $message })
+            Write-Warning ("Package setup skipped for {0}: {1}" -f [string]$package.DisplayName,$message)
+            continue
+        }
+
+        try {
+            $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
+            if ([string]::Equals([string]$packageAppState.Status,'invalid',[System.StringComparison]::OrdinalIgnoreCase)) {
+                throw ("Package app-state archive is invalid: {0}" -f [string]$packageAppState.Message)
+            }
+            if ([string]::Equals([string]$packageAppState.Status,'ready',[System.StringComparison]::OrdinalIgnoreCase)) {
+                Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
+            }
+            $installTask = [pscustomobject]@{}
+            foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
+            $packageAction = if ([string]$row.Action -eq 'repair') { 'repair' } else { 'install' }
+            if ($packageAction -eq 'repair' -and $installTask.PSObject.Properties['AppStateSpec']) { $installTask.AppStateSpec = $null }
+            if ([string]$Plan.Platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action $packageAction -Package $package -Context $Plan.Runtime.Context }
+            $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $Plan.Runtime -Options $Plan.Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:([bool]$Plan.AutoMode) -TaskOutcomeModeOverride 'strict'
+            if ([string]$Plan.Platform -eq 'windows') {
+                $structured = Get-ClagnosPackageStructuredResult -TaskResult $run
+                if ($null -eq $structured -or [string]$structured.status -ne 'installed') {
+                    $message = if ($null -ne $structured) { [string]$structured.message } else { 'No structured install verification was returned.' }
+                    throw ("Package {0} did not verify: {1}" -f $packageAction,$message)
+                }
+            }
+            $effectiveStatus[[string]$package.Id] = 'installed'
+            $successOutcome = if ($packageAction -eq 'repair') { 'repaired' } else { 'installed' }
+            $results.Add([pscustomobject]@{ Package = $package; Outcome = $successOutcome; Message = ('{0} and verified.' -f $successOutcome) })
+            Write-Host ("Package setup verified: {0} ({1})" -f [string]$package.DisplayName,$successOutcome) -ForegroundColor Green
+        }
+        catch {
+            $effectiveStatus[[string]$package.Id] = 'failed'
+            $message = [string]$_.Exception.Message
+            $results.Add([pscustomobject]@{ Package = $package; Outcome = 'failed'; Message = $message })
+            Write-Warning ("Package setup failed for {0}: {1}" -f [string]$package.DisplayName,$message)
+        }
+    }
+    $failed = @($results.ToArray() | Where-Object { [string]$_.Outcome -eq 'failed' }).Count
+    $skipped = @($results.ToArray() | Where-Object { [string]$_.Outcome -in @('skipped','skip-disabled','skip-unknown') }).Count
+    $installed = @($results.ToArray() | Where-Object { [string]$_.Outcome -eq 'installed' }).Count
+    $repaired = @($results.ToArray() | Where-Object { [string]$_.Outcome -eq 'repaired' }).Count
+    if ($failed -eq 0 -and $skipped -eq 0) { Write-Host ("Setup all completed: installed={0}, repaired={1}, failed=0, skipped=0." -f $installed,$repaired) -ForegroundColor Green }
+    else { Write-Host ("Setup all completed with warnings: installed={0}, repaired={1}, failed={2}, skipped={3}. Review the package results above." -f $installed,$repaired,$failed,$skipped) -ForegroundColor Yellow }
+    return [pscustomobject]@{ Installed = $installed; Repaired = $repaired; Failed = $failed; Skipped = $skipped; Results = @($results.ToArray()) }
 }
 
 function Set-ClagnosPackageManifestEnabled {
@@ -833,10 +1094,10 @@ function Invoke-ClagnosPackageOperation {
     $selected = @($catalogRuntime | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
     if (@($selected).Count -eq 0) { throw ("Package '{0}' was not found in the {1} catalog for {2}." -f $PackageId,$Catalog,$platform) }
     $package = $selected[0]
-    if ($Action -in @('install','update') -and -not [bool]$package.Enabled) {
-        throw ("'{0}' is disabled in the {1} package catalog. Enable it before installing or updating it." -f [string]$package.DisplayName,$Catalog)
+    if ($Action -in @('install','repair','update') -and -not [bool]$package.Enabled) {
+        throw ("'{0}' is disabled in the {1} package catalog. Enable it before installing, repairing, or updating it." -f [string]$package.DisplayName,$Catalog)
     }
-    if ($Action -notin @('status','install','update','uninstall')) { throw ("Unsupported package action '{0}'." -f $Action) }
+    if ($Action -notin @('status','install','repair','update','uninstall')) { throw ("Unsupported package action '{0}'." -f $Action) }
     $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
@@ -844,7 +1105,8 @@ function Invoke-ClagnosPackageOperation {
     $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
     if ($null -ne $resolvedSubscription) { $Options['subscription-id'] = [string]$resolvedSubscription.SubscriptionId }
     if ($Action -eq 'status') {
-        $statusScriptText = if (-not [string]::IsNullOrWhiteSpace([string]$package.StatusScriptText)) { New-ClagnosPackageLifecycleScript -Action 'status' -Package $package -Context $runtime.Context } else { New-ClagnosPackageGuestScript -Action 'status' -Packages @($package) -Platform $platform }
+        $requiresStartupDriftCheck = [string]$package.Id -in @('jaws','ollama','docker-desktop')
+        $statusScriptText = if (-not $requiresStartupDriftCheck -and -not [string]::IsNullOrWhiteSpace([string]$package.StatusScriptText)) { New-ClagnosPackageLifecycleScript -Action 'status' -Package $package -Context $runtime.Context } else { New-ClagnosPackageGuestScript -Action 'status' -Packages @($package) -Platform $platform -Context $runtime.Context }
         $statusResult = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $statusScriptText -TaskLabel ('package-status-' + [string]$package.Id) -Runtime $runtime -Target $target
         $statusOutput = if ($statusResult.TaskOutputs.Count -gt 0) { [string]$statusResult.TaskOutputs[0].Output } else { '' }
         $singleStatusMatch = [regex]::Match($statusOutput,'(?m)^CLAGNOS_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
@@ -853,6 +1115,7 @@ function Invoke-ClagnosPackageOperation {
             $statusRecord = ConvertFrom-JsonCompat -InputObject ([string]$singleStatusMatch.Groups['json'].Value)
             $status = [string]$statusRecord.status
             $statusMessage = [string]$statusRecord.message
+            if ($status -eq 'installed' -and ([string]$statusRecord.detail + ' ' + [string]$statusMessage) -match '(?i)missing|not verified') { $status = 'installed-drifted' }
             if (-not [string]::IsNullOrWhiteSpace([string]$statusRecord.version)) { $statusMessage += (' Version: {0}.' -f [string]$statusRecord.version) }
             Write-Host ("{0}: {1}" -f [string]$package.DisplayName,$statusMessage)
         }
@@ -862,19 +1125,24 @@ function Invoke-ClagnosPackageOperation {
             $statusRow = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject ([string]$batchStatusMatch.Groups['json'].Value)) | Where-Object { [string]::Equals([string]$_.id,[string]$package.Id,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
             if ($statusRow.Count -ne 1) { throw 'Package status response did not include the selected package.' }
             $status = [string]$statusRow[0].status
+            if ($status -eq 'installed' -and [string]$statusRow[0].detail -match '(?i)missing|not verified') { $status = 'installed-drifted' }
             Write-Host ("{0}: {1}" -f [string]$package.DisplayName,$status)
         }
         Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $status -RefreshTimestamp
         return
     }
-    if ($Action -eq 'install') {
+    if ($Action -in @('install','repair')) {
         $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
         $beforeStatus = [string]$before[[string]$package.Id]
-        if ($beforeStatus -eq 'installed') {
-            Write-Host ("{0} is already installed on VM '{1}'; no install was run." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Yellow
-            return [pscustomobject]@{ Package = $package; Action = 'install'; Status = 'installed'; Changed = $false }
+        $effectivePackageAction = [string]$Action
+        if ($beforeStatus -eq 'installed-drifted') { $beforeStatus = 'installed' }
+        if ($Action -eq 'install' -and $beforeStatus -eq 'installed') {
+            Write-Host ("{0} is already installed on VM '{1}'; checking and repairing its installed version." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Cyan
+            $effectivePackageAction = 'repair'
         }
-        if ($beforeStatus -ne 'not-installed') { throw ("Cannot safely install '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
+        if ($effectivePackageAction -eq 'install' -and $beforeStatus -ne 'not-installed') { throw ("Cannot safely install '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
+        if ($effectivePackageAction -eq 'repair' -and $beforeStatus -ne 'installed') { throw ("Cannot safely repair '{0}' because its current status is {1}; use install for an absent package." -f [string]$package.DisplayName,$beforeStatus) }
+        if ($effectivePackageAction -eq 'repair' -and $platform -ne 'windows') { throw 'Same-version package repair is not yet defined for this platform; no package installer was run.' }
         $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
         if ([string]::Equals([string]$packageAppState.Status, 'invalid', [System.StringComparison]::OrdinalIgnoreCase)) {
             throw ("Package '{0}' has an invalid app-state archive: {1}" -f [string]$package.DisplayName, [string]$packageAppState.Message)
@@ -884,12 +1152,13 @@ function Invoke-ClagnosPackageOperation {
         }
         $installTask = [pscustomobject]@{}
         foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
-        if ($platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action 'install' -Package $package -Context $runtime.Context }
+        if ($effectivePackageAction -eq 'repair' -and $installTask.PSObject.Properties['AppStateSpec']) { $installTask.AppStateSpec = $null }
+        if ($platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action $effectivePackageAction -Package $package -Context $runtime.Context }
         $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
         $structuredResult = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult $run } else { $null }
         if ($platform -eq 'windows' -and ($null -eq $structuredResult -or [string]$structuredResult.status -ne 'installed')) {
-            $detail = if ($null -ne $structuredResult) { [string]$structuredResult.message } else { 'No structured package install result was returned.' }
-            throw ("Install result verification failed for '{0}': {1}" -f [string]$package.DisplayName,$detail)
+            $detail = if ($null -ne $structuredResult) { [string]$structuredResult.message } else { 'No structured package lifecycle result was returned.' }
+            throw ("Package {0} result verification failed for '{1}': {2}" -f $effectivePackageAction,[string]$package.DisplayName,$detail)
         }
         $afterStatus = if ($platform -eq 'windows') { [string]$structuredResult.status } else {
             $after = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
@@ -897,7 +1166,7 @@ function Invoke-ClagnosPackageOperation {
         }
         Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $afterStatus -RefreshTimestamp -MarkIncomplete
         if ($afterStatus -ne 'installed') { throw ("Install script completed but '{0}' status verification returned {1}." -f [string]$package.DisplayName,$afterStatus) }
-        $installMessage = if ($null -ne $structuredResult -and -not [string]::IsNullOrWhiteSpace([string]$structuredResult.message)) { [string]$structuredResult.message } else { ("Installed {0}; target status verified." -f [string]$package.DisplayName) }
+        $installMessage = if ($null -ne $structuredResult -and -not [string]::IsNullOrWhiteSpace([string]$structuredResult.message)) { [string]$structuredResult.message } else { ("Package {0} completed for {1}; target status verified." -f $effectivePackageAction,[string]$package.DisplayName) }
         Write-Host $installMessage -ForegroundColor Green
         return $run
     }
@@ -909,7 +1178,7 @@ function Invoke-ClagnosPackageOperation {
             Write-Host ("{0} is not installed on VM '{1}'; update was not run." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Yellow
             return [pscustomobject]@{ Package = $package; Action = 'update'; Status = 'not-installed'; Changed = $false }
         }
-        if ($beforeStatus -ne 'installed') { throw ("Cannot safely update '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
+        if ($beforeStatus -notin @('installed','installed-drifted')) { throw ("Cannot safely update '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
         $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
         if ([string]::Equals([string]$packageAppState.Status,'invalid',[System.StringComparison]::OrdinalIgnoreCase)) {
             throw ("Package '{0}' has an invalid app-state archive: {1}" -f [string]$package.DisplayName,[string]$packageAppState.Message)

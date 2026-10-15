@@ -41,6 +41,7 @@ $script:ManagedByTagValue = 'clagnos'
 $script:LegacyManagedByTagValue = 'az-vm'
 $script:ClagnosPackageStatusCache = @{}
 $script:ClagnosPackageStatusCacheTtlSeconds = 45
+$script:ClagnosResetManagedUserPasswords = $false
 $script:ClagnosSshBootstrapCache = @{}
 $script:ClagnosSshBootstrapCacheTtlSeconds = 20
 $script:ClagnosAccessibleSubscriptionRowsCache = $null

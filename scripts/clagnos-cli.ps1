@@ -32,6 +32,7 @@ $script:ClagnosUiInventoryMaximumStaleSeconds = 300
 $script:ClagnosUiCacheWorkerProcess = $null
 $script:ClagnosUiCacheWorkerSubscriptionId = ''
 $script:ClagnosUiCacheWorkerStopPath = ''
+$script:ClagnosUiTestMode = $false
 $script:ClagnosUiInventoryCacheFilePath = ''
 $script:ClagnosUiInventoryCacheFileLastWriteUtc = [DateTime]::MinValue
 $script:ClagnosUiCacheRootPath = ''
@@ -773,6 +774,7 @@ function Show-ClagnosUiCloudSubscriptions {
             )
             $selection = Select-ClagnosNumberedOptionPage -Options $subscriptionOptions -Prompt 'Select active cloud subscription' -DefaultValue ([string]$selectedContext.SubscriptionId) -PageSize 12
             if ([string]$selection.Action -eq 'back') { if ([string]$selection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }; return }
+            if ([string]$selection.Action -eq 'close') { return }
             if ([string]$selection.Action -ne 'selected') { continue }
             $selectedRow = @($rows | Where-Object { [string]::Equals([string]$_.id, [string]$selection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
             if (@($selectedRow).Count -eq 0) { continue }
@@ -817,6 +819,63 @@ function Read-ClagnosUiChoice {
     param([string]$Prompt = 'Select an option')
     if (-not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) { Import-ClagnosUiInventoryCacheFromDisk | Out-Null }
     return ([string](Read-Host $Prompt)).Trim()
+}
+
+function Resolve-ClagnosUiMenuChoice {
+    param([AllowEmptyString()][string]$Value,[switch]$EscapePressed)
+    if ($EscapePressed -or [string]::Equals([string]$Value,'esc',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals([string]$Value,'escape',[System.StringComparison]::OrdinalIgnoreCase)) { return 'b' }
+    return ([string]$Value).Trim()
+}
+
+function Read-ClagnosUiMenuChoice {
+    param([string]$Prompt = 'Select an option')
+    if (-not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) { Import-ClagnosUiInventoryCacheFromDisk | Out-Null }
+    $choice = ''
+    if ([Console]::IsInputRedirected) {
+        $choice = Resolve-ClagnosUiMenuChoice -Value ([string](Read-ClagnosUiChoice -Prompt $Prompt))
+    }
+    else {
+        Write-Host ("{0}: " -f $Prompt) -NoNewline
+        $inputBuffer = New-Object System.Text.StringBuilder
+        while ($true) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq [ConsoleKey]::Escape) {
+                Write-Host ''
+                $choice = Resolve-ClagnosUiMenuChoice -Value '' -EscapePressed
+                break
+            }
+            if ($key.Key -eq [ConsoleKey]::Enter) {
+                Write-Host ''
+                $choice = Resolve-ClagnosUiMenuChoice -Value $inputBuffer.ToString()
+                break
+            }
+            if ($key.Key -eq [ConsoleKey]::Backspace) {
+                if ($inputBuffer.Length -gt 0) {
+                    [void]$inputBuffer.Remove($inputBuffer.Length - 1,1)
+                    Write-Host "`b `b" -NoNewline
+                }
+                continue
+            }
+            if (-not [char]::IsControl([char]$key.KeyChar)) {
+                [void]$inputBuffer.Append([char]$key.KeyChar)
+                Write-Host ([string]$key.KeyChar) -NoNewline
+            }
+        }
+    }
+    if ([string]::Equals([string]$choice,'q',[System.StringComparison]::OrdinalIgnoreCase) -and -not [bool]$script:ClagnosUiTestMode) {
+        Stop-ClagnosUiBackgroundCacheWorker
+        exit
+    }
+    return [string]$choice
+}
+
+function Write-ClagnosUiNavigationFooter {
+    param([switch]$IncludeClose = $true,[switch]$AtRoot)
+    $items = New-Object 'System.Collections.Generic.List[string]'
+    $items.Add($(if ($AtRoot) { 'b/Esc: back (no parent)' } else { 'b/Esc: back' }))
+    if ($IncludeClose) { $items.Add('c: close current flow') }
+    $items.Add('q: quit')
+    Write-Host (@($items.ToArray()) -join ' | ') -ForegroundColor DarkGray
 }
 
 function Read-ClagnosUiValidatedText {
@@ -1471,11 +1530,11 @@ function Show-ClagnosUiPackageAppStateMenu {
     Write-Host '1. Save package app-state'
     Write-Host '2. Restore package app-state'
     Write-Host 'b: back'
-    $choice = (Read-ClagnosUiChoice 'App-state action').ToLowerInvariant()
+    $choice = (Read-ClagnosUiMenuChoice 'App-state action').ToLowerInvariant()
     if ($choice -eq 'b' -or $choice -notin @('1','2')) { return }
     $save = $choice -eq '1'
     Write-Host 'v: virtual computer | l: local Windows host'
-    $surfaceChoice = (Read-ClagnosUiChoice 'App-state source or target').ToLowerInvariant()
+    $surfaceChoice = (Read-ClagnosUiMenuChoice 'App-state source or target').ToLowerInvariant()
     $surface = switch ($surfaceChoice) { 'v' { 'vm' } 'l' { 'lm' } default { '' } }
     if ([string]::IsNullOrWhiteSpace($surface)) { return }
     if ($surface -eq 'lm' -and $Platform -ne 'windows') {
@@ -1532,8 +1591,9 @@ function Show-ClagnosUiPackageCatalogMenu {
             Write-Host ('No packages are registered in the {0} catalog for {1}.' -f $Catalog, $platform) -ForegroundColor Yellow
             Write-Host 'b: back'
             Write-Host 'q: exit'
-            $emptyChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
+            $emptyChoice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
             if ($emptyChoice -eq 'b') { return }
+            if ($emptyChoice -eq 'c') { return 'close' }
             if ($emptyChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             continue
         }
@@ -1552,8 +1612,9 @@ function Show-ClagnosUiPackageCatalogMenu {
                 }
             }
         }
-        $packageSelection = Select-ClagnosNumberedOptionPage -Options $packageOptions -Prompt ("{0} packages on {1}" -f $Catalog, $platform) -PageSize 12 -ExtraKeys @('r') -ExtraKeyLabels @{ r = 'refresh package status' }
+        $packageSelection = Select-ClagnosNumberedOptionPage -Options $packageOptions -Prompt ("{0} packages on {1}" -f $Catalog, $platform) -PageSize 12 -ExtraKeys @('r','c') -ExtraKeyLabels @{ r = 'refresh package status'; c = 'close catalog' }
         if ([string]$packageSelection.Action -eq 'back') { if ([string]$packageSelection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }; return }
+        if ([string]$packageSelection.Action -eq 'extra' -and [string]$packageSelection.ExtraKey -eq 'c') { return 'close' }
         if ([string]$packageSelection.Action -eq 'extra' -and [string]$packageSelection.ExtraKey -eq 'r') {
             Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
             continue
@@ -1570,21 +1631,22 @@ function Show-ClagnosUiPackageCatalogMenu {
         Write-Host 'e: enable package'
         Write-Host 'd: disable package'
         Write-Host 'u: uninstall'
-        Write-Host 'i: install'
-        Write-Host 'v: update'
+        Write-Host 'i: install (repairs the installed version when already present)'
+        Write-Host 'r: repair installed version'
+        Write-Host 'v: update to a newer vendor version'
         Write-Host 's: status'
         if ($null -ne $package.PackageTask.AppStateSpec) { Write-Host 'a: manage package app-state' }
-        Write-Host 'b: back'
-        Write-Host 'q: exit'
-        $action = (Read-ClagnosUiChoice).ToLowerInvariant()
+        Write-ClagnosUiNavigationFooter
+        $action = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
         if ($action -eq 'b') { continue }
+        if ($action -eq 'c') { return 'close' }
         if ($action -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($action -eq 'a' -and $null -ne $package.PackageTask.AppStateSpec) {
             Show-ClagnosUiPackageAppStateMenu -Vm $Vm -Package $package -Catalog $Catalog -Platform $platform
             continue
         }
-        if ($action -notin @('e','d','u','i','v','s')) { continue }
-        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 'v' { 'update' } 's' { 'status' } default { '' } }
+        if ($action -notin @('e','d','u','i','r','v','s')) { continue }
+        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 'r' { 'repair' } 'v' { 'update' } 's' { 'status' } default { '' } }
         if ($packageAction -eq 'status' -and -not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) {
             Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
             Write-Host ('Status check requested for {0}; the catalog will show the result when the background check finishes.' -f [string]$package.DisplayName) -ForegroundColor DarkGray
@@ -1607,6 +1669,51 @@ function Show-ClagnosUiPackageCatalogMenu {
     }
 }
 
+function Show-ClagnosUiSetupAllPackages {
+    param([psobject]$Vm)
+
+    $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
+    $packages = @(
+        @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'builtin') +
+        @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'custom')
+    )
+    Write-ClagnosUiHeader -Title ('Setup all program packages on {0}' -f [string]$Vm.name)
+    if ($packages.Count -eq 0) {
+        Write-Host ('No packages are registered for the {0} platform.' -f $platform) -ForegroundColor Yellow
+        Wait-ClagnosUiContinue
+        return
+    }
+    try {
+        $options = New-ClagnosUiTargetOptions -Vm $Vm
+        $plan = New-ClagnosPackageSetupPlan -Packages $packages -Options $options -Platform $platform -WindowsFlag:($platform -eq 'windows') -LinuxFlag:($platform -eq 'linux')
+    }
+    catch {
+        Write-ClagnosUiError -ErrorRecord $_
+        Wait-ClagnosUiContinue
+        return
+    }
+
+    Write-Host 'Review plan (enabled packages only; dependency order):' -ForegroundColor Cyan
+    foreach ($row in @($plan.Rows)) {
+        $package = $row.Package
+        $catalogLabel = if ([string]$package.Catalog -eq 'builtin') { '[builtin]' } else { '[custom]' }
+        $color = if ([string]$row.Action -eq 'install') { 'Yellow' } elseif ([string]$row.Action -eq 'repair') { 'Cyan' } elseif ([string]$row.Action -eq 'already-healthy') { 'Green' } else { 'DarkGray' }
+        Write-Host ('  {0} {1} | {2} | {3}' -f $catalogLabel,[string]$package.DisplayName,[string]$row.Status,[string]$row.Reason) -ForegroundColor $color
+    }
+    Write-Host ''
+    Write-Host 'a: apply setup plan'
+    Write-ClagnosUiNavigationFooter
+    while ($true) {
+        $choice = (Read-ClagnosUiMenuChoice 'Setup action').ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
+        if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
+        if ($choice -ne 'a') { continue }
+        $null = Invoke-ClagnosPackageSetupPlan -Plan $plan
+        Wait-ClagnosUiContinue
+        return
+    }
+}
+
 function Show-ClagnosUiPackageMenu {
     param([psobject]$Vm)
 
@@ -1618,14 +1725,13 @@ function Show-ClagnosUiPackageMenu {
         Write-ClagnosUiHeader -Title ('Manage programs on {0}' -f [string]$Vm.name)
         Write-Host '1. Builtin package catalog'
         Write-Host '2. Custom package catalog'
-        Write-Host 'b: back'
-        Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
+        Write-ClagnosUiNavigationFooter
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
         if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         switch ($choice) {
-            '1' { Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'builtin' }
-            '2' { Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'custom' }
+            '1' { if ((Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'builtin') -eq 'close') { return } }
+            '2' { if ((Show-ClagnosUiPackageCatalogMenu -Vm $Vm -Catalog 'custom') -eq 'close') { return } }
         }
     }
 }
@@ -1702,9 +1808,10 @@ function Show-ClagnosUiComponentMenu {
             Write-Host ('{0}. {1}' -f ($index + 1), [string]$types[$index].Label)
         }
         Write-Host 'b: back'
+        Write-Host 'c: close component menu'
         Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
         if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $number = 0
         if (-not [int]::TryParse($choice, [ref]$number) -or $number -lt 1 -or $number -gt $types.Count) { continue }
@@ -1721,7 +1828,7 @@ function Show-ClagnosUiComponentMenu {
         }
         Write-Host 'b: back'
         Write-Host 'q: exit'
-        $actionChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
+        $actionChoice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
         if ($actionChoice -eq 'b') { continue }
         if ($actionChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($actionChoice -in @('a','t') -and $type.Id -in @('disk','nic')) {
@@ -1823,9 +1930,10 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         Write-Host '1. Initialization tasks'
         Write-Host '2. Maintenance tasks'
         Write-Host 'b: back'
+        Write-Host 'c: close availability screen'
         Write-Host 'q: exit'
-        $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
-        if ($stageChoice -eq 'b') { return }
+        $stageChoice = (Read-ClagnosUiMenuChoice 'Task stage').ToLowerInvariant()
+        if ($stageChoice -in @('b','c')) { return }
         if ($stageChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($stageChoice -notin @('1','2')) { continue }
 
@@ -1846,6 +1954,7 @@ function Show-ClagnosUiTaskAvailabilityMenu {
             if ([string]$taskSelection.Input -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             continue
         }
+        if ([string]$taskSelection.Action -eq 'close') { return }
         if ([string]$taskSelection.Action -ne 'selected') { continue }
         $selectedTask = @($tasks | Where-Object { [string]::Equals([string]$_.Name, [string]$taskSelection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
         if (@($selectedTask).Count -eq 0) { continue }
@@ -1854,9 +1963,11 @@ function Show-ClagnosUiTaskAvailabilityMenu {
         Write-Host 'e: enable'
         Write-Host 'd: disable'
         Write-Host 'b: back'
+        Write-Host 'c: close availability screen'
         Write-Host 'q: exit'
-        $action = (Read-ClagnosUiChoice 'Availability action').ToLowerInvariant()
+        $action = (Read-ClagnosUiMenuChoice 'Availability action').ToLowerInvariant()
         if ($action -eq 'b') { continue }
+        if ($action -eq 'c') { return }
         if ($action -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($action -notin @('e','d')) { continue }
 
@@ -1882,9 +1993,10 @@ function Show-ClagnosUiTaskMenu {
         Write-Host '7. Enable/disable a task'
         Write-Host '8. View recent task run history'
         Write-Host 'b: back'
+        Write-Host 'c: close task menu'
         Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
         if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $target = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
@@ -1907,7 +2019,8 @@ function Show-ClagnosUiTaskMenu {
                     break
                 }
                 Write-Host 'i: init | u: update'
-                $stageChoice = (Read-ClagnosUiChoice 'Task stage').ToLowerInvariant()
+                $stageChoice = (Read-ClagnosUiMenuChoice 'Task stage').ToLowerInvariant()
+                if ($stageChoice -in @('b','c')) { continue }
                 $stage = switch ($stageChoice) { 'i' { 'init' } 'u' { 'update' } default { '' } }
                 if ([string]::IsNullOrWhiteSpace($stage)) { continue }
                 $taskName = Select-ClagnosUiTaskName -Vm $Vm -Stage $stage
@@ -1915,7 +2028,8 @@ function Show-ClagnosUiTaskMenu {
                 $target[('vm-{0}-task' -f $stage)] = [string]$taskName
                 $target[$(if ($choice -eq '4') { 'save-app-state' } else { 'restore-app-state' })] = $true
                 Write-Host 'v: virtual computer | l: local Windows host'
-                $surfaceChoice = (Read-ClagnosUiChoice 'App-state target').ToLowerInvariant()
+                $surfaceChoice = (Read-ClagnosUiMenuChoice 'App-state target').ToLowerInvariant()
+                if ($surfaceChoice -in @('b','c')) { continue }
                 $surface = switch ($surfaceChoice) { 'v' { 'vm' } 'l' { 'lm' } default { '' } }
                 if ($surface -in @('vm','lm')) { $target[$(if ($choice -eq '4') { 'source' } else { 'target' })] = $surface }
                 else { continue }
@@ -1946,9 +2060,10 @@ function Show-ClagnosUiOperationsMenu {
         Write-Host '8. Component CRUD'
         Write-Host '9. Full read-only report'
         Write-Host 'b: back'
+        Write-Host 'c: close operations menu'
         Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
         if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $options = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
@@ -1968,7 +2083,8 @@ function Show-ClagnosUiOperationsMenu {
                     [pscustomobject]@{ Action = 'redeploy'; Label = 'redeploy VM to Azure host' }
                 )
                 for ($index = 0; $index -lt $actions.Count; $index++) { Write-Host ('{0}. {1}' -f ($index + 1), [string]$actions[$index].Label) }
-                $actionChoice = Read-ClagnosUiChoice 'VM action number'
+                $actionChoice = Read-ClagnosUiMenuChoice 'VM action number'
+                if ($actionChoice -in @('b','c')) { continue }
                 $actionIndex = 0
                 if (-not [int]::TryParse($actionChoice, [ref]$actionIndex) -or $actionIndex -lt 1 -or $actionIndex -gt $actions.Count) { continue }
                 $selectedAction = [string]$actions[$actionIndex - 1].Action
@@ -1987,7 +2103,8 @@ function Show-ClagnosUiOperationsMenu {
                 Write-Host '1. Change VM size'
                 Write-Host '2. Expand OS disk'
                 Write-Host '3. Show safe shrink guidance'
-                $resizeChoice = Read-ClagnosUiChoice 'Resize action'
+                $resizeChoice = Read-ClagnosUiMenuChoice 'Resize action'
+                if ($resizeChoice -in @('b','c')) { continue }
                 if ($resizeChoice -eq '1') {
                     # The resize runtime opens the region-aware Azure SKU picker.
                 }
@@ -2008,9 +2125,11 @@ function Show-ClagnosUiOperationsMenu {
             }
             '4' {
                 Write-Host 'h: hibernation | n: nested virtualization'
-                $feature = (Read-ClagnosUiChoice 'Feature').ToLowerInvariant()
+                $feature = (Read-ClagnosUiMenuChoice 'Feature').ToLowerInvariant()
+                if ($feature -in @('b','c')) { continue }
                 Write-Host '1: enable | 2: disable'
-                $valueChoice = Read-ClagnosUiChoice 'Feature state'
+                $valueChoice = Read-ClagnosUiMenuChoice 'Feature state'
+                if ($valueChoice -in @('b','c')) { continue }
                 $value = switch ($valueChoice) { '1' { 'true' } '2' { 'false' } default { '' } }
                 if ([string]::IsNullOrWhiteSpace($value)) { continue }
                 if ($feature -eq 'h') { $options['hibernation'] = $value }
@@ -2026,7 +2145,7 @@ function Show-ClagnosUiOperationsMenu {
                 else {
                     Write-Host 's: SSH | t: test SSH'
                 }
-                $transport = (Read-ClagnosUiChoice 'Connection').ToLowerInvariant()
+                $transport = (Read-ClagnosUiMenuChoice 'Connection').ToLowerInvariant()
                 if ($transport -in @('s','t')) { $options['ssh'] = $true }
                 elseif ($transport -in @('r','d') -and $isWindowsVm) { $options['rdp'] = $true }
                 elseif ($transport -in @('p','c','w') -and $isWindowsVm) { $options['powershell'] = $true }
@@ -2044,7 +2163,8 @@ function Show-ClagnosUiOperationsMenu {
             '8' { Show-ClagnosUiComponentMenu -Vm $Vm }
             '9' {
                 Write-Host 't: show report on screen | j: export redacted JSON'
-                $reportMode = (Read-ClagnosUiChoice 'Report output').ToLowerInvariant()
+                $reportMode = (Read-ClagnosUiMenuChoice 'Report output').ToLowerInvariant()
+                if ($reportMode -in @('b','c')) { continue }
                 if ($reportMode -eq 'j') {
                     $exportPath = Read-ClagnosUiValidatedText -Prompt 'JSON export path (press Enter to cancel)' -AllowBlank -Validator {
                         param($value)
@@ -2077,24 +2197,31 @@ function Show-ClagnosUiVmMenu {
     while ($true) {
         try { Show-ClagnosUiVmDetails -Vm $Vm }
         catch { Write-ClagnosUiHeader -Title ('Virtual computer: {0}' -f [string]$Vm.name); Write-ClagnosUiError -ErrorRecord $_ }
-        Write-Host 'p: manage programs'
+        Write-Host 'p: setup all program packages'
         Write-Host 'i: initialize VC'
+        Write-Host 'k: reset managed-user passwords from .env'
         Write-Host 'u: update VC'
-        Write-Host 'm: manage VC components'
+        Write-Host 'm: manage program packages'
+        Write-Host 'x: manage VC components'
         Write-Host 'o: operations'
         Write-Host 'd: delete VC and its resources'
         Write-Host 'r: refresh details'
-        Write-Host 'b: back to virtual computers'
-        Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
+        Write-ClagnosUiNavigationFooter
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
         if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         $target = New-ClagnosUiTargetOptions -Vm $Vm
         switch ($choice) {
-            'p' { Show-ClagnosUiPackageMenu -Vm $Vm }
+            'p' { Show-ClagnosUiSetupAllPackages -Vm $Vm }
             'i' { Invoke-ClagnosUiCommand -CommandName 'initialize' -Options $target }
+            'k' {
+                $resetOptions = @{}; foreach ($optionName in $target.Keys) { $resetOptions[[string]$optionName] = $target[$optionName] }
+                $resetOptions['reset-managed-user-passwords'] = $true
+                Invoke-ClagnosUiCommand -CommandName 'initialize' -Options $resetOptions
+            }
             'u' { Invoke-ClagnosUiCommand -CommandName 'update' -Options $target }
-            'm' { Show-ClagnosUiComponentMenu -Vm $Vm }
+            'm' { Show-ClagnosUiPackageMenu -Vm $Vm }
+            'x' { Show-ClagnosUiComponentMenu -Vm $Vm }
             'o' { Show-ClagnosUiOperationsMenu -Vm $Vm }
             'd' {
                 try {
@@ -2176,9 +2303,9 @@ function Read-ClagnosUiWizardTextStep {
         elseif ($Required) { Write-Host 'Required value: no default is configured.' -ForegroundColor Yellow }
         if (-not [string]::IsNullOrWhiteSpace([string]$Example)) { Write-Host ('Example: {0}' -f $Example) -ForegroundColor Gray }
         Write-Host 's: skip (keep default) | k: skip all remaining | a: apply default | l: apply all defaults | c: close wizard'
-        $raw = Read-ClagnosUiChoice 'Enter value'
+        $raw = Read-ClagnosUiMenuChoice 'Enter value'
         $command = $raw.ToLowerInvariant()
-        if ($command -eq 'c') { return [pscustomobject]@{ Action = 'close'; Value = '' } }
+        if ($command -in @('b','c')) { return [pscustomobject]@{ Action = 'close'; Value = '' } }
         if ($command -in @('s','a','k','l')) {
             if ([string]::IsNullOrWhiteSpace([string]$DefaultValue)) {
                 if ($Required) { Write-Host 'This required step has no default; enter a value.' -ForegroundColor Yellow; continue }
@@ -2358,7 +2485,7 @@ function Show-ClagnosUiCreateWizard {
                 Write-Host 'x: change or clear SKU filter'
                 Write-Host 'r: restart wizard and choose another region'
                 Write-Host 'c: close wizard'
-                $emptySkuChoice = (Read-ClagnosUiChoice 'SKU list action').ToLowerInvariant()
+            $emptySkuChoice = (Read-ClagnosUiMenuChoice 'SKU list action').ToLowerInvariant()
                 if ($emptySkuChoice -eq 'x') {
                     $skuFilter = Read-ClagnosUiValidatedText -Prompt 'Filter SKU names (letters, numbers, _, -, ., *, ?; Enter clears filter)' -AllowBlank -Validator {
                         param($value)
@@ -2563,7 +2690,7 @@ function Show-ClagnosUiCreateWizard {
         Write-Host ('Required defaults or selections are missing: {0}.' -f ($missingValues -join ', ')) -ForegroundColor Yellow
         Write-Host 'r: restart wizard'
         Write-Host 'c: close'
-        if ((Read-ClagnosUiChoice 'Create wizard action').ToLowerInvariant() -eq 'r') { return (Show-ClagnosUiCreateWizard) }
+        if ((Read-ClagnosUiMenuChoice 'Create wizard action').ToLowerInvariant() -eq 'r') { return (Show-ClagnosUiCreateWizard) }
         return
     }
 
@@ -2597,7 +2724,7 @@ function Show-ClagnosUiCreateWizard {
     Write-Host 'a: apply selected setup'
     Write-Host 'l: apply all (keep all remaining configured defaults)'
     Write-Host 'c: close without creating'
-    $finalChoice = (Read-ClagnosUiChoice 'Create virtual computer').ToLowerInvariant()
+    $finalChoice = (Read-ClagnosUiMenuChoice 'Create virtual computer').ToLowerInvariant()
     if ($finalChoice -notin @('a','l')) { return }
 
     $options = @{
@@ -2639,7 +2766,7 @@ function Show-ClagnosUiVirtualComputers {
             Write-Host 'r: check or refresh managed resource cache'
             Write-Host 'b: back'
             Write-Host 'q: exit'
-            $emptyChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
+            $emptyChoice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
             if ($emptyChoice -eq 'b') { return }
             if ($emptyChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             if ($emptyChoice -eq 'c') { Show-ClagnosUiCreateWizard; continue }
@@ -2690,8 +2817,8 @@ function Show-ClagnosUiInventoryMenu {
             Write-Host 'r: request cache refresh'
             Write-Host 'b: back'
             Write-Host 'q: exit'
-            $warmingChoice = (Read-ClagnosUiChoice).ToLowerInvariant()
-            if ($warmingChoice -eq 'b') { return }
+            $warmingChoice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+            if ($warmingChoice -in @('b','c')) { return }
             if ($warmingChoice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
             if ($warmingChoice -eq 'r') { Request-ClagnosUiInventoryRefresh -Force | Out-Null }
             continue
@@ -2701,10 +2828,11 @@ function Show-ClagnosUiInventoryMenu {
             Write-Host ('{0}. {1}' -f ($index + 2), [string]$types[$index].Label)
         }
         Write-Host 'b: back'
+        Write-Host 'c: close inventory menu'
         Write-Host 'r: refresh managed resource cache'
         Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
-        if ($choice -eq 'b') { return }
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
+        if ($choice -in @('b','c')) { return }
         if ($choice -eq 'q') { Stop-ClagnosUiBackgroundCacheWorker; exit }
         if ($choice -eq 'r') {
             Update-ClagnosUiSubscription
@@ -2724,6 +2852,7 @@ function Show-ClagnosUiInventoryMenu {
             $groupDefault = '__all__'
             $groupSelection = Select-ClagnosNumberedOptionPage -Options $groupOptions -Prompt 'Filter by resource group' -DefaultValue $groupDefault -PageSize 12
             if ([string]$groupSelection.Action -eq 'back') { continue }
+            if ([string]$groupSelection.Action -eq 'close') { return }
             if ([string]$groupSelection.Action -ne 'selected') { continue }
             if ([string]$groupSelection.Value -ne '__all__') { $group = [string]$groupSelection.Value }
         }
@@ -2794,7 +2923,7 @@ function Show-ClagnosUiHome {
         Write-Host 'c: configure settings'
         Write-Host 'h: help'
         Write-Host 'q: exit'
-        $choice = (Read-ClagnosUiChoice).ToLowerInvariant()
+        $choice = (Read-ClagnosUiMenuChoice).ToLowerInvariant()
         switch ($choice) {
             '1' { Show-ClagnosUiVirtualComputers }
             '2' { Show-ClagnosUiInventoryMenu }

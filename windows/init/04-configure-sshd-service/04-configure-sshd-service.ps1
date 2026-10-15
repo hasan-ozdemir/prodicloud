@@ -113,6 +113,7 @@ if (-not (Test-Path -LiteralPath $sshdConfig)) {
 }
 
 $content = @(Get-Content -Path $sshdConfig -ErrorAction SilentlyContinue)
+$originalContent = @($content)
 if ($content.Count -eq 0) {
     $content = @(
         "# Generated baseline sshd_config",
@@ -149,16 +150,32 @@ Set-OrAdd -Key "PermitEmptyPasswords" -Value "no"
 Set-OrAdd -Key "AllowTcpForwarding" -Value "yes"
 Set-OrAdd -Key "GatewayPorts" -Value "yes"
 Set-OrAdd -Key "Subsystem sftp" -Value "C:/Windows/System32/OpenSSH/sftp-server.exe"
-Set-Content -Path $sshdConfig -Value $content -Encoding ascii
+$sshdConfigChanged = -not [string]::Equals(($originalContent -join "`n"),($content -join "`n"),[System.StringComparison]::Ordinal)
+if ($sshdConfigChanged) {
+    Write-Host 'Doing: write the updated sshd configuration'
+    Set-Content -Path $sshdConfig -Value $content -Encoding ascii
+}
 
-New-Item -Path "HKLM:\SOFTWARE\OpenSSH" -Force
-Set-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name "DefaultShell" -Value "C:\Windows\System32\cmd.exe"
+$defaultShellPath = "HKLM:\SOFTWARE\OpenSSH"
+New-Item -Path $defaultShellPath -Force | Out-Null
+$defaultShellChanged = $false
+$currentDefaultShell = [string](Get-ItemProperty -Path $defaultShellPath -Name 'DefaultShell' -ErrorAction SilentlyContinue).DefaultShell
+if (-not [string]::Equals($currentDefaultShell,'C:\Windows\System32\cmd.exe',[System.StringComparison]::OrdinalIgnoreCase)) {
+    Set-ItemProperty -Path $defaultShellPath -Name "DefaultShell" -Value "C:\Windows\System32\cmd.exe"
+    $defaultShellChanged = $true
+}
 
 $sshdService = Get-OpenSshService
 Ensure-OpenSshHostKeyMaterial
 Set-Service -Name sshd -StartupType Automatic
 if ([string]::Equals([string]$sshdService.Status, 'Running', [System.StringComparison]::OrdinalIgnoreCase)) {
-    Restart-Service -Name sshd -Force
+    if ($sshdConfigChanged -or $defaultShellChanged) {
+        Write-Host 'Doing: restart sshd because its configuration changed'
+        Restart-Service -Name sshd -Force
+    }
+    else {
+        Write-Host 'sshd settings are already current; the running service remains active.'
+    }
 }
 else {
     Start-Service -Name sshd

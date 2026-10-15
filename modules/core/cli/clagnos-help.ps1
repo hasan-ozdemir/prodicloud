@@ -186,10 +186,10 @@ function Show-ClagnosCommandHelpDetailed {
                 'Command: initialize'
                 'Description: run the platform vm-init task stage for one existing managed virtual computer.'
                 'Usage:'
-                '  clagnos initialize [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--auto] [--perf]'
+                '  clagnos initialize [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--auto] [--perf] [--reset-managed-user-passwords]'
                 'Examples:'
                 '  clagnos initialize --group <resource-group> --vm-name <vm-name>'
-                'Notes: initialize never creates Azure resources and runs only enabled vm-init tasks. Interactive mode prompts for Azure subscription when --subscription-id is omitted. Task review and reboot recovery follow the shared stage contract.'
+                'Notes: initialize never creates Azure resources and runs only enabled vm-init tasks. Interactive mode prompts for Azure subscription when --subscription-id is omitted. Existing managed-user passwords are preserved by default. --reset-managed-user-passwords is interactive-only and requires typing RESET MANAGED USER PASSWORDS before the configured .env passwords are applied to both accounts.'
             )
             return
         }
@@ -298,14 +298,14 @@ function Show-ClagnosCommandHelpDetailed {
                 'Description: manage packages in the isolated builtin or custom catalog and install them on one managed VC.'
                 'Usage:'
                 '  clagnos package --action list --catalog <builtin|custom> [--group <resource-group>] [--vm-name <vm-name>] [--windows|--linux]'
-                '  clagnos package --action status|install|update|uninstall --catalog <builtin|custom> --package <package-id> --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
+                '  clagnos package --action status|install|repair|update|uninstall --catalog <builtin|custom> --package <package-id> --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
                 '  clagnos package --action enable|disable --catalog <builtin|custom> --package <package-id> [--windows|--linux]'
                 '  Windows package transport: set PACKAGE_TRANSPORT=ssh or PACKAGE_TRANSPORT=winrm in .env. The selected transport is strict; failures do not fall back silently.'
                 'Examples:'
                 '  clagnos package --action list --catalog builtin --group <resource-group> --vm-name <vm-name> --windows'
                 '  clagnos package --action install --catalog builtin --package visual-studio-code --group <resource-group> --vm-name <vm-name> --windows'
                 '  clagnos package --action disable --catalog custom --package my-tool --windows'
-                'Notes: packages/builtin/<platform> and packages/custom/<platform> are separate catalogs. Every package directory contains package.json and its installer script. Manage Programs opens a catalog selector and labels each row [builtin] or [custom]. Custom packages use the same validated status, uninstall, assets, app-state, and timeout manifest contract. Enable/disable modifies only package.json after typed confirmation, affects future operations in this repository, and does not change an installed package on a VC. Status and uninstall remain available while disabled; install/update requires an enabled package. Installers run synchronously on the selected VC. Uninstall requires explicit confirmation unless --yes is supplied.'
+                'Notes: packages/builtin/<platform> and packages/custom/<platform> are separate catalogs. Every package directory contains package.json and its installer script. The selected-VC menu offers p: setup all program packages and m: manage program packages. Setup-all reviews both catalogs, applies enabled packages in dependency order, and reports independent failures. Manage Programs labels rows [builtin] or [custom]. Custom packages use the same validated status, uninstall, assets, app-state, and timeout manifest contract. Enable/disable modifies only package.json after typed confirmation, affects future operations in this repository, and does not change an installed package on a VC. Status and uninstall remain available while disabled; install/repair/update requires an enabled package. Install repairs the detected installed version when already present; repair never performs a vendor upgrade and requires a detectable version and safe provider strategy. Update remains the vendor-version upgrade path. Installers run synchronously on the selected VC. Uninstall requires explicit confirmation unless --yes is supplied.'
             )
             return
         }

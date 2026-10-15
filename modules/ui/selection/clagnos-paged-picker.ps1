@@ -3,6 +3,9 @@
 function Read-ClagnosNumberedChoice {
     param([string]$Prompt)
 
+    if ($null -ne (Get-Command Read-ClagnosUiMenuChoice -ErrorAction SilentlyContinue)) {
+        return [string](Read-ClagnosUiMenuChoice -Prompt $Prompt)
+    }
     if ($null -ne (Get-Command Read-ClagnosUiChoice -ErrorAction SilentlyContinue)) {
         return [string](Read-ClagnosUiChoice -Prompt $Prompt)
     }
@@ -65,7 +68,9 @@ function Select-ClagnosNumberedOptionPage {
             Write-Host 's: skip | k: skip all remaining | a: apply default | l: apply all defaults | c: close wizard'
         }
         else {
-            Write-Host 'b: back/cancel'
+            $hasCloseExtra = @($ExtraKeys | ForEach-Object { ([string]$_).ToLowerInvariant() }) -contains 'c'
+            if ($hasCloseExtra) { Write-Host 'b/Esc: back | q: quit' }
+            else { Write-Host 'b/Esc: back | c: close current flow | q: quit' }
         }
         if (@($ExtraKeys).Count -gt 0) {
             $extraLabels = @($ExtraKeys | ForEach-Object {
@@ -79,6 +84,7 @@ function Select-ClagnosNumberedOptionPage {
         $choice = ([string](Read-ClagnosNumberedChoice -Prompt ('Enter option number or page key for {0}' -f $Prompt))).Trim()
         if ($WizardControls) {
             switch ($choice.ToLowerInvariant()) {
+                'b' { return [pscustomobject]@{ Action = 'close'; Value = ''; Index = 0 } }
                 's' { return [pscustomobject]@{ Action = 'skip'; Value = [string]$DefaultValue; Index = $defaultIndex } }
                 'k' { return [pscustomobject]@{ Action = 'skip-all'; Value = [string]$DefaultValue; Index = $defaultIndex } }
                 'a' {
@@ -95,6 +101,9 @@ function Select-ClagnosNumberedOptionPage {
         }
         if (@($ExtraKeys | ForEach-Object { ([string]$_).ToLowerInvariant() }) -contains $choice.ToLowerInvariant()) {
             return [pscustomobject]@{ Action = 'extra'; ExtraKey = $choice.ToLowerInvariant(); Value = ''; Index = 0 }
+        }
+        if (-not $WizardControls -and $choice -eq 'c') {
+            return [pscustomobject]@{ Action = 'close'; Input = 'c'; Value = ''; Index = 0 }
         }
 
         switch ($choice.ToLowerInvariant()) {

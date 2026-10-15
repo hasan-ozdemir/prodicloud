@@ -419,7 +419,7 @@ function Install-ClagnosJawsAppStateUpdateFiles {
 
 function Invoke-ClagnosPackageLifecycle {
     param(
-        [Parameter(Mandatory = $true)][ValidateSet('status','install','update','uninstall')][string]$Action,
+        [Parameter(Mandatory = $true)][ValidateSet('status','install','repair','update','uninstall')][string]$Action,
         [Parameter(Mandatory = $true)][string]$PackageSpecBase64,
         [string]$InstallScriptBase64 = ''
     )
@@ -492,6 +492,45 @@ function Invoke-ClagnosPackageLifecycle {
         $verified = Get-ClagnosPackageRecord -Spec $spec
         if ($verified.Status -ne 'installed') { throw ('Install script finished but package status verification returned {0}.' -f $verified.Status) }
         $message = 'Package installation completed and installed state verified.'
+        if (-not [string]::IsNullOrWhiteSpace([string]$verified.Detail)) { $message += ' ' + [string]$verified.Detail }
+        Write-ClagnosPackageOperationResult -Spec $spec -Action $Action -Record $verified -Message $message
+        return
+    }
+
+    if ($Action -eq 'repair') {
+        if ($record.Status -ne 'installed') { throw ('Cannot repair {0}: current package status is {1}; use install for an absent package.' -f [string]$spec.displayName,$record.Status) }
+        if ([string]::IsNullOrWhiteSpace([string]$record.Version)) { throw ('Cannot safely repair {0}: the installed version could not be determined, so a same-version reinstall cannot be guaranteed.' -f [string]$spec.displayName) }
+        $repairStrategy = [string]$spec.repairStrategy
+        if ([string]::IsNullOrWhiteSpace($repairStrategy)) { $repairStrategy = [string]$spec.updateStrategy }
+        if ([string]::IsNullOrWhiteSpace($repairStrategy)) { $repairStrategy = [string]$spec.statusCheck.kind }
+        $repairOutput = ''
+        Write-Output ('Doing: repair package {0} at installed version {1} using {2}' -f [string]$spec.id,[string]$record.Version,$repairStrategy)
+        switch ($repairStrategy) {
+            'winget' {
+                $command = Get-Command winget.exe -ErrorAction Stop
+                $repairOutput = & $command.Source install --id ([string]$spec.statusCheck.value) --exact --version ([string]$record.Version) --force --silent --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1 | Out-String
+                if ([int]$LASTEXITCODE -ne 0) { throw ('winget same-version repair exited with ' + [int]$LASTEXITCODE + '. ' + $repairOutput.Trim()) }
+            }
+            'choco' {
+                $command = Get-Command choco.exe -ErrorAction Stop
+                $repairOutput = & $command.Source install ([string]$spec.statusCheck.value) --version ([string]$record.Version) --force -y --no-progress 2>&1 | Out-String
+                if ([int]$LASTEXITCODE -ne 0) { throw ('Chocolatey same-version repair exited with ' + [int]$LASTEXITCODE + '. ' + $repairOutput.Trim()) }
+            }
+            'npm' {
+                $command = Get-Command npm.cmd -ErrorAction SilentlyContinue
+                if (-not $command) { $command = Get-Command npm -ErrorAction Stop }
+                $versionedPackage = '{0}@{1}' -f [string]$spec.statusCheck.value,[string]$record.Version
+                $repairOutput = & $command.Source install --global $versionedPackage 2>&1 | Out-String
+                if ([int]$LASTEXITCODE -ne 0) { throw ('npm same-version repair exited with ' + [int]$LASTEXITCODE + '. ' + $repairOutput.Trim()) }
+            }
+            default { throw ('Safe same-version repair is not defined for package strategy "{0}". No install or update was attempted.' -f $repairStrategy) }
+        }
+        Set-ClagnosPackageStartupState -Spec $spec
+        $verified = Get-ClagnosPackageRecord -Spec $spec
+        if ($verified.Status -ne 'installed' -or -not [string]::Equals([string]$verified.Version,[string]$record.Version,[StringComparison]::OrdinalIgnoreCase)) {
+            throw ('Repair verification failed for {0}: expected version {1}, observed status {2} version {3}.' -f [string]$spec.displayName,[string]$record.Version,[string]$verified.Status,[string]$verified.Version)
+        }
+        $message = ('Repaired {0} and verified version {1}.' -f [string]$spec.displayName,[string]$verified.Version)
         if (-not [string]::IsNullOrWhiteSpace([string]$verified.Detail)) { $message += ' ' + [string]$verified.Detail }
         Write-ClagnosPackageOperationResult -Spec $spec -Action $Action -Record $verified -Message $message
         return

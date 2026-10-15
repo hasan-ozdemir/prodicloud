@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.15.419 - 2026-10-15
+
+### Summary
+The selected-VC workflow now has a reviewed package setup-all operation, safe same-version repair, and repeatable init/update behavior that preserves existing operator state.
+
+### Highlights
+- `p: setup all program packages` reviews enabled packages in both catalogs, installs missing packages and repairs detected Clagnos-managed startup drift in dependency order, and continues independent packages after failures. `m: manage program packages` is for individual package operations.
+- Package install is idempotent. Installed packages use a verified same-version repair; explicit repair pins the detected version and refuses unsupported provider strategies. App-state-backed repairs temporarily capture and restore target state, verify it, clean up on success, and preserve one emergency archive on restore failure.
+- Re-running init preserves existing manager/assistant passwords. Operators can explicitly reset both to `.env` values with a typed-confirmation initialize flag or the VC `k` action.
+- RDP/SSH init restarts are conditional on relevant settings changing; update no longer forces a final VM reboot without a task signal. User-profile sync preserves existing files, registry values, excluded target data, and active sessions.
+
+### Validation
+- Compatibility smoke checks passed 193/193 and fixture-backed TUI coverage passed 179/179, including the real `cg.cmd` launcher. Package lifecycle, package app-state, documentation, and release checks passed. No live Azure resource or VM was changed.
+
 ## Release 2026.10.15.418 - 2026-10-15
 
 ### Summary

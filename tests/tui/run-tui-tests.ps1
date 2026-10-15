@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $env:CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER = '1'
+$script:ClagnosUiTestMode = $true
 if ([string]::IsNullOrWhiteSpace([string]$RepoRoot)) { $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
 $script:TuiTestResults = New-Object 'System.Collections.Generic.List[object]'
 $script:TuiRenderedLines = New-Object 'System.Collections.Generic.List[string]'
@@ -51,6 +52,8 @@ function Reset-TuiScenario {
     $script:TuiSubscriptionRefreshCount = 0
     $script:TuiVmDetailsCount = 0
     $script:TuiCreateWizardCount = 0
+    $script:TuiSetupAllMenuCount = 0
+    $script:TuiSetupApplyCount = 0
     $script:TuiPackageMenuCount = 0
     $script:TuiComponentMenuCount = 0
     $script:TuiOperationsMenuCount = 0
@@ -279,6 +282,7 @@ $script:TuiOriginalInventorySync = (Get-Command Sync-ClagnosUiResourceCache).Scr
 $script:TuiOriginalCreateWizard = (Get-Command Show-ClagnosUiCreateWizard).ScriptBlock
 $script:TuiOriginalVmDetails = (Get-Command Show-ClagnosUiVmDetails).ScriptBlock
 $script:TuiOriginalHeader = (Get-Command Write-ClagnosUiHeader).ScriptBlock
+$script:TuiOriginalSetupAll = (Get-Command Show-ClagnosUiSetupAllPackages).ScriptBlock
 $script:TuiOriginalPackageMenu = (Get-Command Show-ClagnosUiPackageMenu).ScriptBlock
 $script:TuiOriginalPackageCatalogMenu = (Get-Command Show-ClagnosUiPackageCatalogMenu).ScriptBlock
 $script:TuiOriginalPackageAppStateMenu = (Get-Command Show-ClagnosUiPackageAppStateMenu).ScriptBlock
@@ -441,6 +445,7 @@ function Show-ClagnosUiVmDetails {
     if ($script:TuiDetailsShouldThrow) { throw 'fixture VC detail read error' }
 }
 function Show-ClagnosUiCreateWizard { $script:TuiCreateWizardCount++ }
+function Show-ClagnosUiSetupAllPackages { param([psobject]$Vm) $script:TuiSetupAllMenuCount++ }
 function Show-ClagnosUiPackageMenu { param([psobject]$Vm) $script:TuiPackageMenuCount++ }
 function Show-ClagnosUiComponentMenu { param([psobject]$Vm) $script:TuiComponentMenuCount++ }
 function Show-ClagnosUiOperationsMenu { param([psobject]$Vm) $script:TuiOperationsMenuCount++ }
@@ -469,6 +474,8 @@ function Set-ClagnosUiActiveSubscription {
 }
 function Get-ClagnosPackageCatalog { param([string]$Platform, [ValidateSet('builtin','custom')][string]$Catalog) return @($script:TuiPackagesByCatalog[$Catalog]) }
 function Get-ClagnosPackageStatusSnapshot { param([object[]]$Packages, [hashtable]$Options, [string]$Platform) if ($script:TuiPackageStatusShouldThrow) { throw 'fixture package status unavailable' }; return $script:TuiPackageStatuses }
+function New-ClagnosPackageSetupPlan { param([object[]]$Packages,[hashtable]$Options,[string]$Platform,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag) $script:TuiSetupPlanPackages=@($Packages); return $script:TuiPackageSetupPlan }
+function Invoke-ClagnosPackageSetupPlan { param([psobject]$Plan) $script:TuiSetupApplyCount++; return [pscustomobject]@{ Installed = 1; Failed = 0; Skipped = 0 } }
 function Initialize-ClagnosTaskCommandRuntimeContext { param([switch]$AutoMode, [switch]$WindowsFlag, [switch]$LinuxFlag) return [pscustomobject]@{ VmInitTaskDir = 'fixture\init'; VmUpdateTaskDir = 'fixture\update' } }
 function Get-ClagnosTaskBlocksFromDirectory {
     param([string]$DirectoryPath, [ValidateSet('windows','linux')][string]$Platform, [ValidateSet('init','update')][string]$Stage, [switch]$SuppressSkipMessages)
@@ -549,6 +556,21 @@ Invoke-TuiTest -Name 'Paged numbered picker supports every page key and keeps se
     $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Visible page choices' -PageSize 12
     Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'An option on another page must become selectable after navigating to its page.'
     Assert-TuiOutputContains -Text 'Choose a number shown on the current page' -Message 'The picker must reject numbers that are not visible on the current page.'
+
+    Reset-TuiScenario
+    Set-TuiChoices -Choices @('escape')
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Escape back' -PageSize 12
+    Assert-Tui -Condition ([string]$selection.Action -eq 'back' -and [string]$selection.Input -eq 'b') -Message 'Escape input must return one level to the parent screen.'
+
+    Reset-TuiScenario
+    Set-TuiChoices -Choices @('c')
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Close picker' -PageSize 12
+    Assert-Tui -Condition ([string]$selection.Action -eq 'close') -Message 'c must close the current selection flow.'
+
+    Reset-TuiScenario
+    Set-TuiChoices -Choices @('escape')
+    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Close wizard page' -DefaultValue '1' -WizardControls
+    Assert-Tui -Condition ([string]$selection.Action -eq 'close') -Message 'Escape must close the active wizard step without dispatching create.'
 }
 
 Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state, and detects resource changes' -Action {
@@ -945,10 +967,11 @@ Invoke-TuiTest -Name 'Linux VC detail screen omits RDP and reports missing publi
 }
 
 Invoke-TuiTest -Name 'Selected VC screen routes all visible shortcuts and confirms complete group deletion' -Action {
-    Set-TuiChoices -Choices @('p','i','u','m','o','r','d','no','d','DELETE ALL')
+    Set-TuiChoices -Choices @('p','i','u','m','x','o','r','d','no','d','DELETE ALL')
     Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
-    Assert-Tui -Condition ($script:TuiPackageMenuCount -eq 1) -Message 'p must open Manage Programs.'
-    Assert-Tui -Condition ($script:TuiComponentMenuCount -eq 1) -Message 'm must open VC components.'
+    Assert-Tui -Condition ($script:TuiSetupAllMenuCount -eq 1) -Message 'p must open Setup All Program Packages.'
+    Assert-Tui -Condition ($script:TuiPackageMenuCount -eq 1) -Message 'm must open Manage Program Packages.'
+    Assert-Tui -Condition ($script:TuiComponentMenuCount -eq 1) -Message 'x must open VC components.'
     Assert-Tui -Condition ($script:TuiOperationsMenuCount -eq 1) -Message 'o must open VC operations.'
     Assert-Tui -Condition ($script:TuiVmDetailsCount -ge 8) -Message 'The selected VC must refresh its details on entry and after the refresh shortcut.'
     $initialize = Assert-TuiCommand -CommandName 'initialize'
@@ -967,12 +990,46 @@ Invoke-TuiTest -Name 'Selected VC screen returns on q after rendering details' -
     Assert-Tui -Condition ($script:TuiVmDetailsCount -eq 1) -Message 'VC details must render before the screen accepts q.'
 }
 
+Invoke-TuiTest -Name 'Selected VC screen routes password reset through the explicit initialize option' -Action {
+    Set-TuiChoices -Choices @('k','q')
+    Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
+    $initialize = Assert-TuiCommand -CommandName 'initialize'
+    Assert-TuiOption -Call $initialize -Name 'reset-managed-user-passwords' -Expected 'True'
+}
+
 Invoke-TuiTest -Name 'Selected VC screen keeps rendering after a detail-read error' -Action {
     $script:TuiDetailsShouldThrow = $true
     Set-TuiChoices -Choices @('b')
     Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
     Assert-TuiOutputContains -Text '[ERROR] fixture VC detail read error' -Message 'VC detail errors must be caught and rendered.'
-    Assert-TuiOutputContains -Text 'p: manage programs' -Message 'A detail-read error must not remove the VC actions.'
+    Assert-TuiOutputContains -Text 'p: setup all program packages' -Message 'A detail-read error must not remove the VC actions.'
+}
+
+Invoke-TuiTest -Name 'Setup all package screen previews before applying and respects close' -Action {
+    $script:TuiPackageSetupPlan = [pscustomobject]@{
+        Rows = @(
+            [pscustomobject]@{ Package = [pscustomobject]@{ Catalog = 'builtin'; DisplayName = 'Fixture package' }; Status = 'not-installed'; Action = 'install'; Reason = 'Package is absent; install it.' },
+            [pscustomobject]@{ Package = [pscustomobject]@{ Catalog = 'custom'; DisplayName = 'Disabled fixture' }; Status = 'disabled'; Action = 'skip-disabled'; Reason = 'Package is disabled in its catalog.' }
+        )
+    }
+    Set-TuiChoices -Choices @('a')
+    & $script:TuiOriginalSetupAll -Vm $script:TuiWindowsVm
+    Assert-TuiOutputContains -Text 'Review plan (enabled packages only; dependency order)' -Message 'Setup all must show its plan before mutation.'
+    Assert-TuiOutputContains -Text '[builtin] Fixture package | not-installed' -Message 'The setup plan must identify catalog, package, and detected state.'
+    Assert-Tui -Condition ($script:TuiSetupApplyCount -eq 1) -Message 'Only explicit a: apply may execute setup-all.'
+    Assert-TuiNoRealCloudCalls
+}
+
+Invoke-TuiTest -Name 'Setup all package screen closes without applying' -Action {
+    $script:TuiPackageSetupPlan = [pscustomobject]@{ Rows = @() }
+    Set-TuiChoices -Choices @('c')
+    & $script:TuiOriginalSetupAll -Vm $script:TuiWindowsVm
+    Assert-Tui -Condition ($script:TuiSetupApplyCount -eq 0) -Message 'Closing the setup plan must not install packages.'
+}
+
+Invoke-TuiTest -Name 'Escape and escape text map to one-level back' -Action {
+    Assert-Tui -Condition ((Resolve-ClagnosUiMenuChoice -Value 'escape') -eq 'b') -Message 'The escape word must map to back in redirected input mode.'
+    Assert-Tui -Condition ((Resolve-ClagnosUiMenuChoice -Value '' -EscapePressed) -eq 'b') -Message 'Physical Escape must map to back.'
 }
 
 Invoke-TuiTest -Name 'Selected VC deletion cancellation never dispatches delete' -Action {
@@ -995,6 +1052,7 @@ foreach ($packageActionCase in @(
     @{ Key = 'e'; Action = 'enable' },
     @{ Key = 'd'; Action = 'disable' },
     @{ Key = 'i'; Action = 'install' },
+    @{ Key = 'r'; Action = 'repair' },
     @{ Key = 'v'; Action = 'update' },
     @{ Key = 's'; Action = 'status' }
 )) {
@@ -1679,7 +1737,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $uiWorkerSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerCacheFiles[0].FullName -Raw -ErrorAction Stop))
         Assert-Tui -Condition ([string]$uiWorkerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$uiWorkerSnapshot.VirtualMachines[0].ClagnosResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message ("The live TUI must import complete worker VM identity data. Snapshot={0}" -f (ConvertTo-Json -InputObject $uiWorkerSnapshot.VirtualMachines[0] -Depth 6 -Compress))
 
-        foreach ($choice in @('1','1','p','1','b','b','m','3','b','b','o','1','b','5','q','b','b','2','b','3','b','q')) {
+        foreach ($choice in @('1','1','m','1','1','b','b','x','3','b','b','o','1','b','5','x','b','b','2','b','3','b','q')) {
             $process.StandardInput.WriteLine([string]$choice)
         }
         $process.StandardInput.Close()

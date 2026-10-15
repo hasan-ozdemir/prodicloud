@@ -1185,7 +1185,7 @@ Invoke-Test -Name "Workflow pipeline delegates restarts to task runners and star
 
     Assert-True -Condition ($pipelineText -match [regex]::Escape('$vmUpdateStageResult = Invoke-Step ''Step 6/7 - VM update''')) -Message 'Pipeline must capture the vm-update stage result from the shared step wrapper.'
     Assert-True -Condition ($pipelineText -match [regex]::Escape('return (Invoke-ClagnosSshTaskBlocks')) -Message 'VM update step must return the SSH stage result explicitly.'
-    Assert-True -Condition ($pipelineText -match [regex]::Escape('-EnableFinalVmRestart')) -Message 'Pipeline vm-update stage must request the final vm-update restart only for end-to-end workflow runs.'
+    Assert-True -Condition (-not ($pipelineText -match [regex]::Escape('-EnableFinalVmRestart'))) -Message 'Workflow vm-update must not force a final VM restart when no task requested one.'
     Assert-True -Condition (-not ($pipelineText -match [regex]::Escape('Invoke-ClagnosWorkflowRestartBarrier'))) -Message 'Pipeline must not keep the retired deferred restart barrier call.'
     Assert-True -Condition (-not ($pipelineText -match [regex]::Escape('-SuppressDeferredRestartHint'))) -Message 'Pipeline must not keep the retired deferred restart hint suppression flag.'
     Assert-True -Condition ($pipelineText -match [regex]::Escape('Invoke-ClagnosWorkflowSummaryReadback')) -Message 'Pipeline summary must invoke the shared summary readback helper.'
@@ -1387,7 +1387,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     Assert-True -Condition (@($builtinPackages | Where-Object { $_.Catalog -ne 'builtin' -or [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Builtin package rows must carry their catalog label and validated package metadata.'
     Assert-True -Condition (@($builtinPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Every package entry must resolve to its package.json and installer script.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape("Join-Path 'packages' (Join-Path `$Catalog `$Platform)")) -Message 'Builtin and custom packages must resolve under separate physical catalog roots.'
-    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -in @('install','update') -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/update target resolution.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -in @('install','repair','update') -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/repair/update target resolution.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape("Move-Item -LiteralPath `$tempPath -Destination `$ManifestPath -Force")) -Message 'Package enable/disable must atomically update only package.json.'
     $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'windows\update') -Platform windows -Stage update -SuppressSkipMessages
     Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
@@ -1405,7 +1405,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'package'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','v: update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from .env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape('Get-ClagnosUiCachedInventoryRows -TypeName')) -Message 'The inventory submenu must render managed inventory from the validated snapshot.'
@@ -9015,6 +9015,17 @@ Invoke-Test -Name "Windows autologon manager task and health contract" -Action {
     }
 }
 
+Invoke-Test -Name "Windows init preserves managed-user passwords unless explicitly reset" -Action {
+    $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage init -TaskName '01-ensure-local-user-accounts'
+    $taskText = [string](Get-Content -LiteralPath $taskPath -Raw)
+    $entryText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\initialize\entry.ps1') -Raw)
+    $contractText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\initialize\contract.ps1') -Raw)
+    Assert-True -Condition ($taskText -like '*already exists; preserving its current password*') -Message 'A normal init rerun must preserve existing managed-user passwords.'
+    Assert-True -Condition ($taskText -like '*Set-LocalUser -Name $UserName -Password $securePass*') -Message 'Only the explicit reset path may update an existing managed-user password.'
+    Assert-True -Condition ($entryText -like '*RESET MANAGED USER PASSWORDS*' -and $entryText -like '*AutoMode*reset-managed-user-passwords*') -Message 'The reset option must be interactive-only and require a typed confirmation.'
+    Assert-True -Condition ($contractText -like '*reset-managed-user-passwords*') -Message 'Initialize must register the explicit reset option.'
+}
+
 Invoke-Test -Name "Windows OpenSSH init tasks recover missing sshd registration" -Action {
     $installTaskPath = Get-RepoTaskScriptPath -Platform windows -Stage init -TaskName '03-install-openssh-service'
     $configTaskPath = Get-RepoTaskScriptPath -Platform windows -Stage init -TaskName '04-configure-sshd-service'
@@ -9055,7 +9066,8 @@ Invoke-Test -Name "Windows OpenSSH init tasks recover missing sshd registration"
         'Restart-Service -Name sshd -Force',
         'listener did not bind to the configured port in time',
         'Subsystem sftp C:/Windows/System32/OpenSSH/sftp-server.exe',
-        'Set-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name "DefaultShell" -Value "C:\Windows\System32\cmd.exe"'
+        '$defaultShellPath = "HKLM:\SOFTWARE\OpenSSH"',
+        'Set-ItemProperty -Path $defaultShellPath -Name "DefaultShell" -Value "C:\Windows\System32\cmd.exe"'
     )) {
         Assert-True -Condition ($configTaskText -like ('*' + [string]$fragment + '*')) -Message ("OpenSSH configure task must include fragment '{0}'." -f [string]$fragment)
     }

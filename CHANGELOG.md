@@ -3,6 +3,22 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.15.419] - 2026-10-15
+
+### Added
+- Added a reviewed `p: setup all program packages` flow to the selected-VC menu. It inventories enabled packages from both catalogs, installs missing packages and repairs detected Clagnos-managed startup drift in dependency order, skips disabled or unknown states, continues independent operations, and summarizes failures. `m: manage program packages` now owns individual package management.
+- Added pinned same-version package repair. `i: install` installs absent packages and repairs installed packages; `r: repair` never takes a vendor upgrade path. For packages with app-state policies, repair captures the current target settings, restores and verifies them after repair, removes the temporary backup on success, and retains one emergency archive on the VC if verification fails.
+- Added a typed-confirmation-only `initialize --reset-managed-user-passwords` operation and selected-VC `k` shortcut. Normal initialization preserves existing manager/assistant passwords.
+
+### Fixed
+- Init reruns now restart RDP and SSH services only when their effective configuration changes. The maintenance pipeline no longer forces a final VM restart when no task signaled one; task-requested restarts remain in place.
+- Windows profile-copy maintenance now copies only into missing target files and registry values, retains excluded data already on the target, and leaves logged-on user sessions and processes running.
+- Interactive menus now route Escape and `b` to the parent, `c` to close the active menu flow where available, and keep choices as numbered or lettered input.
+
+### Validation
+- Compatibility smoke checks passed 193/193. Fixture-backed TUI coverage passed 179/179, including the real `cg.cmd` process; it used an isolated Azure CLI fixture and made zero real Azure calls. Package lifecycle, package app-state, documentation, and release checks passed. Generated JAWS batch-status and repair scripts parsed successfully.
+- No live VC or Azure resource was created or modified for this change.
+
 ## [2026.10.15.418] - 2026-10-15
 
 ### Added

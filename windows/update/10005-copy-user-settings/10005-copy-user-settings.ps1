@@ -465,11 +465,14 @@ function Copy-RegistryBranch {
     }
 
     $sourceKey = Get-Item -LiteralPath $SourcePath -ErrorAction Stop
+    $targetKey = Get-Item -LiteralPath $TargetPath -ErrorAction Stop
+    $targetValueNames = @($targetKey.GetValueNames())
     try {
         try {
             $defaultValue = $sourceKey.GetValue('', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
             $defaultKind = $sourceKey.GetValueKind('')
-            if ($null -ne $defaultValue -or $defaultKind -ne [Microsoft.Win32.RegistryValueKind]::Unknown) {
+            $targetHasDefault = @($targetValueNames | Where-Object { [string]::IsNullOrEmpty([string]$_) }).Count -gt 0
+            if (($null -ne $defaultValue -or $defaultKind -ne [Microsoft.Win32.RegistryValueKind]::Unknown) -and -not $targetHasDefault) {
                 Set-ClagnosRegistryValue -Path $TargetPath -Name '(default)' -Value $defaultValue -Kind $defaultKind
             }
         }
@@ -480,6 +483,9 @@ function Copy-RegistryBranch {
             try {
                 $valueKind = $sourceKey.GetValueKind($valueName)
                 if ($valueKind -eq [Microsoft.Win32.RegistryValueKind]::Unknown) {
+                    continue
+                }
+                if (@($targetValueNames | Where-Object { [string]::Equals([string]$_,[string]$valueName,[System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) {
                     continue
                 }
                 $valueData = $sourceKey.GetValue($valueName, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
@@ -512,6 +518,7 @@ function Copy-RegistryBranch {
         }
     }
     finally {
+        if ($targetKey -is [System.IDisposable]) { $targetKey.Dispose() }
         if ($sourceKey -is [System.IDisposable]) {
             $sourceKey.Dispose()
         }
@@ -654,93 +661,11 @@ function Remove-StaleExcludedTargetPaths {
         [string]$Label
     )
 
-    if ([string]::IsNullOrWhiteSpace([string]$TargetPath) -or -not (Test-Path -LiteralPath $TargetPath)) {
-        return
-    }
-
-    foreach ($relativeDirectory in @($ExcludedDirectories)) {
-        $relativeText = [string]$relativeDirectory
-        if ([string]::IsNullOrWhiteSpace([string]$relativeText)) {
-            continue
-        }
-
-        $targetCandidate = Join-Path $TargetPath $relativeText
-        if (-not (Test-Path -LiteralPath $targetCandidate)) {
-            continue
-        }
-
-        try {
-            Remove-Item -LiteralPath $targetCandidate -Recurse -Force -ErrorAction Stop
-            Add-CopySkipEvidence -Reason 'excluded-target-pruned' -Label $Label -Path $targetCandidate
-            Write-Detail ("copy-user-settings-target-prune: {0} excluded-directory => {1}" -f $Label, $targetCandidate)
-        }
-        catch {
-            $skipReason = Get-TargetPruneSkipReason -Message ([string]$_.Exception.Message)
-            if (-not [string]::IsNullOrWhiteSpace([string]$skipReason)) {
-                Add-CopySkipEvidence -Reason $skipReason -Label $Label -Path $targetCandidate
-                Write-Detail ("copy-user-settings-target-prune-skip: {0} {1} => {2}" -f $Label, $skipReason, $targetCandidate)
-                continue
-            }
-
-            throw ("Excluded target directory could not be cleared for {0}: {1}. {2}" -f $Label, $targetCandidate, $_.Exception.Message)
-        }
-    }
-
-    foreach ($excludedFile in @($ExcludedFiles)) {
-        $relativeText = [string]$excludedFile
-        if ([string]::IsNullOrWhiteSpace([string]$relativeText)) {
-            continue
-        }
-
-        $hasRelativeParent = ($relativeText.Contains('\') -or $relativeText.Contains('/'))
-        $parentRelativePath = ''
-        $leafPattern = $relativeText
-        if ($hasRelativeParent) {
-            $parentRelativePath = [string](Split-Path -Path $relativeText -Parent)
-            $leafPattern = [string](Split-Path -Path $relativeText -Leaf)
-        }
-
-        if ([string]::IsNullOrWhiteSpace([string]$leafPattern)) {
-            continue
-        }
-
-        $searchRoot = $TargetPath
-        if (-not [string]::IsNullOrWhiteSpace([string]$parentRelativePath) -and $parentRelativePath -ne '.') {
-            $searchRoot = Join-Path $TargetPath $parentRelativePath
-        }
-
-        if (-not (Test-Path -LiteralPath $searchRoot)) {
-            continue
-        }
-
-        $matches = if ($hasRelativeParent) {
-            @(Get-ChildItem -LiteralPath $searchRoot -Force -File -Filter $leafPattern -ErrorAction SilentlyContinue)
-        }
-        else {
-            @(Get-ChildItem -LiteralPath $searchRoot -Force -File -Filter $leafPattern -Recurse -ErrorAction SilentlyContinue)
-        }
-
-        foreach ($targetCandidate in @($matches)) {
-            if ($null -eq $targetCandidate -or [string]::IsNullOrWhiteSpace([string]$targetCandidate.FullName)) {
-                continue
-            }
-
-            try {
-                Remove-Item -LiteralPath ([string]$targetCandidate.FullName) -Force -ErrorAction Stop
-                Add-CopySkipEvidence -Reason 'excluded-target-pruned' -Label $Label -Path ([string]$targetCandidate.FullName)
-                Write-Detail ("copy-user-settings-target-prune: {0} excluded-file => {1}" -f $Label, ([string]$targetCandidate.FullName))
-            }
-            catch {
-                $skipReason = Get-TargetPruneSkipReason -Message ([string]$_.Exception.Message)
-                if (-not [string]::IsNullOrWhiteSpace([string]$skipReason)) {
-                    Add-CopySkipEvidence -Reason $skipReason -Label $Label -Path ([string]$targetCandidate.FullName)
-                    Write-Detail ("copy-user-settings-target-prune-skip: {0} {1} => {2}" -f $Label, $skipReason, ([string]$targetCandidate.FullName))
-                    continue
-                }
-
-                throw ("Excluded target file could not be cleared for {0}: {1}. {2}" -f $Label, ([string]$targetCandidate.FullName), $_.Exception.Message)
-            }
-        }
+    # Exclusions apply to incoming source data only. Existing target content is
+    # user-owned and must never be deleted as a side effect of an update rerun.
+    if (-not [string]::IsNullOrWhiteSpace([string]$TargetPath) -and (Test-Path -LiteralPath $TargetPath)) {
+        Add-CopySkipEvidence -Reason 'target-preserved' -Label $Label -Path $TargetPath
+        Write-Detail ("copy-user-settings-target-preserved: {0}; excluded target data was left untouched" -f $Label)
     }
 }
 
@@ -787,6 +712,9 @@ function Invoke-RobocopyBranch {
         '/R:1',
         '/W:1',
         '/XJ',
+        '/XC',
+        '/XN',
+        '/XO',
         '/NFL',
         '/NDL',
         '/NJH',
@@ -1309,9 +1237,7 @@ if ([string]::IsNullOrWhiteSpace([string]$managerProfilePath) -or -not (Test-Pat
 }
 
 $assistantProfilePath = Ensure-UserProfileMaterialized -UserName $assistantUser -UserPassword $assistantPassword
-Stop-LoggedOnUserSessions -UserName $assistantUser
-Stop-UserProcesses -UserName $assistantUser
-Wait-UserSessionsAndProcessesToSettle -UserName $assistantUser -TimeoutSeconds 8
+Write-Detail 'copy-user-settings-user-sessions-preserved: no managed-user sessions or processes were stopped'
 
 $defaultProfilePath = 'C:\Users\Default'
 if (-not (Test-Path -LiteralPath $defaultProfilePath)) {
@@ -1341,17 +1267,6 @@ foreach ($requiredRelativePath in @(
 )) {
     Assert-RepresentativePathCopiedIfPresent -SourceProfilePath $managerProfilePath -TargetProfilePath $assistantProfilePath -RelativePath $requiredRelativePath
     Assert-RepresentativePathCopiedIfPresent -SourceProfilePath $managerProfilePath -TargetProfilePath $defaultProfilePath -RelativePath $requiredRelativePath
-}
-
-foreach ($excludedRelativePath in @(
-    'AppData\Roaming\Microsoft\Credentials',
-    'AppData\Roaming\Microsoft\Protect',
-    'AppData\Roaming\Microsoft\Vault',
-    'AppData\Roaming\Microsoft\IdentityCRL',
-    'AppData\Local\Microsoft\Windows\WebCache\WebCacheV01.dat'
-)) {
-    Assert-ExcludedPathAbsentIfPresent -SourceProfilePath $managerProfilePath -TargetProfilePath $assistantProfilePath -RelativePath $excludedRelativePath
-    Assert-ExcludedPathAbsentIfPresent -SourceProfilePath $managerProfilePath -TargetProfilePath $defaultProfilePath -RelativePath $excludedRelativePath
 }
 
 $assistantLoadedRoots = Get-LoadedUserHiveRoots -UserName $assistantUser

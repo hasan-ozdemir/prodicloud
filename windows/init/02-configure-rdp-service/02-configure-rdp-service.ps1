@@ -2,11 +2,21 @@ $ErrorActionPreference = "Stop"
 Write-Host "Init task started: configure-rdp-service"
 
 $rdpPort = [int]"__RDP_PORT__"
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 0
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "SecurityLayer" -Value 1
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "MinEncryptionLevel" -Value 2
-Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "PortNumber" -Value $rdpPort
+$requiresServiceRestart = $false
+$rdpSettings = @(
+    @{ Path = "HKLM:\System\CurrentControlSet\Control\Terminal Server"; Name = 'fDenyTSConnections'; Value = 0 },
+    @{ Path = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"; Name = 'UserAuthentication'; Value = 0 },
+    @{ Path = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"; Name = 'SecurityLayer'; Value = 1 },
+    @{ Path = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"; Name = 'MinEncryptionLevel'; Value = 2 },
+    @{ Path = "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"; Name = 'PortNumber'; Value = $rdpPort }
+)
+foreach ($setting in $rdpSettings) {
+    $current = Get-ItemProperty -Path $setting.Path -Name $setting.Name -ErrorAction SilentlyContinue
+    if ($null -eq $current -or [int]$current.($setting.Name) -ne [int]$setting.Value) {
+        Set-ItemProperty -Path $setting.Path -Name $setting.Name -Value $setting.Value
+        $requiresServiceRestart = $true
+    }
+}
 
 $rdpRuleName = "Allow-RDP-$rdpPort"
 $legacyRuleNames = @("Allow-TCP-3389")
@@ -31,7 +41,13 @@ else {
 Set-Service -Name TermService -StartupType Automatic
 $termService = Get-Service -Name TermService -ErrorAction SilentlyContinue
 if ($termService -and $termService.Status -eq "Running") {
-    Restart-Service -Name TermService -Force
+    if ($requiresServiceRestart) {
+        Write-Host 'Doing: restart TermService because an RDP setting changed'
+        Restart-Service -Name TermService -Force
+    }
+    else {
+        Write-Host 'RDP settings are already current; TermService remains running without a restart.'
+    }
 }
 else {
     Start-Service -Name TermService
