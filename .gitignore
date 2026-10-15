@@ -15,41 +15,13 @@ tmp/
 tmp-logs/
 /dist/
 
-# Ignore local-only stage task trees
-windows/init/**/app-state/**
-windows/update/**/app-state/**
-linux/init/**/app-state/**
-linux/update/**/app-state/**
-windows/init/**/backup-app-states/**
-windows/update/**/backup-app-states/**
-linux/init/**/backup-app-states/**
-linux/update/**/backup-app-states/**
-packages/builtin/**/backup-app-states/**
-packages/custom/**/backup-app-states/**
-windows/init/local/**
-!windows/init/local/
-!windows/init/local/.gitkeep
-!windows/init/local/disabled/
-windows/init/local/disabled/**
-!windows/init/local/disabled/.gitkeep
-windows/update/local/**
-!windows/update/local/
-!windows/update/local/.gitkeep
-!windows/update/local/disabled/
-windows/update/local/disabled/**
-!windows/update/local/disabled/.gitkeep
-linux/init/local/**
-!linux/init/local/
-!linux/init/local/.gitkeep
-!linux/init/local/disabled/
-linux/init/local/disabled/**
-!linux/init/local/disabled/.gitkeep
-linux/update/local/**
-!linux/update/local/
-!linux/update/local/.gitkeep
-!linux/update/local/disabled/
-linux/update/local/disabled/**
-!linux/update/local/disabled/.gitkeep
+# Keep task-local app-state captures and restore backups out of the shared task catalog.
+vm-init/**/app-state/**
+vm-update/**/app-state/**
+vm-init/**/backup-app-states/**
+vm-update/**/backup-app-states/**
+vm-packages/builtin/**/backup-app-states/**
+vm-packages/custom/**/backup-app-states/**
 
 # Ignore downloaded SSH helper binaries/vendors
 tools/putty/*.exe

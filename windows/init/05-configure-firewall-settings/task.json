@@ -1,9 +1,0 @@
-{
-  "priority": 6,
-  "enabled": true,
-  "timeout": 150,
-  "dependsOn": [
-    "02-configure-rdp-service",
-    "04-configure-sshd-service"
-  ]
-}

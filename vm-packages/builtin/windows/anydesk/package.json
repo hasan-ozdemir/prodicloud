@@ -1,0 +1,22 @@
+{
+  "id": "anydesk",
+  "displayName": "AnyDesk",
+  "category": "application",
+  "timeout": 600,
+  "sortOrder": 109,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "installer",
+  "statusCheck": {
+    "kind": "command",
+    "value": "C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe"
+  },
+  "uninstall": {
+    "kind": "anydesk",
+    "value": "C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe"
+  },
+  "appStateKey": "109-install-anydesk-application"
+}

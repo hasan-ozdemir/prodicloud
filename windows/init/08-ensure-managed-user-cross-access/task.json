@@ -1,8 +1,0 @@
-{
-  "priority": 8,
-  "enabled": true,
-  "timeout": 120,
-  "dependsOn": [
-    "07-configure-all-users"
-  ]
-}

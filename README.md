@@ -144,9 +144,8 @@ The wizard accepts inbound TCP ports as comma-separated numbers and ascending ra
 - `modules/commands/`: command-owned implementations split by command, plus shared pipeline/context/step/feature helpers.
 - `modules/ui/`: prompts, interactive selection, show/report rendering, and connection presentation helpers.
 - `modules/tasks/`: Azure Run Command and persistent SSH transport/runtime helpers.
-- `packages/builtin/<platform>/` and `packages/custom/<platform>/`: physically isolated standard and operator-authored package catalogs; see [`packages/README.md`](packages/README.md).
-- `windows/init/`, `windows/update/`: Windows stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
-- `linux/init/`, `linux/update/`: Linux stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
+- `vm-packages/{builtin,custom}/<platform>/`: physically isolated package catalogs; each catalog has a `tasks.toml` availability list and package folders; see [`vm-packages/README.md`](vm-packages/README.md).
+- `vm-init/<platform>/{builtin,custom}/` and `vm-update/<platform>/{builtin,custom}/`: task catalogs with a `tasks.toml` availability list and portable task folders.
 - `tools/`: pyssh helper, scripts, Windows helper assets, and git-hook toggles.
 - `tests/`: local quality and contract checks.
 - `docs/prompt-history.md`: English-normalized historical ledger of completed prompt/summary pairs.
@@ -384,14 +383,14 @@ To compare the read-only package status path over both transports, run `tools/be
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd package --action=list --catalog=builtin --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists builtin packages and their status | Standard software inventory | Status is detected from validated package.json metadata. |
+| `.\cg.cmd package --action=list --catalog=builtin --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists builtin packages and their status | Standard software inventory | Availability comes from the catalog tasks.toml; installed status comes from validated package metadata. |
 | `.\cg.cmd package --action=list --catalog=custom --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists custom packages and their status | Operator-added software inventory | The custom and builtin catalogs remain isolated. |
 | `.\cg.cmd package --action=install --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Installs an absent package or requests a verified same-version repair when installed | Install or repair one package | Repair is pinned to the detected version and fails safely if that version cannot be determined. Disabled packages must be enabled first. |
 | `.\cg.cmd package --action=repair --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Reinstalls the detected version and verifies the same version remains installed | Repair one installed package | It does not run a vendor upgrade and fails before mutation if safe same-version repair is unavailable. Disabled packages must be enabled first. |
 | `.\cg.cmd package --action=update --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the package's distinct update script and verifies status | Update one installed package | Packages that are absent are not implicitly installed. Disabled packages must be enabled first. |
 | `.\cg.cmd package --action=setup-all --catalog=all --group=<resource-group> --vm-name=<vm-name> --windows --yes` | both catalogs, target | Reviews enabled packages in both catalogs, installs absent packages, and repairs managed startup drift | Prepare enabled packages on one VC | Omitting `--yes` requests a typed `SETUP ALL` confirmation. Disabled packages are skipped; unknown status and operation failures return a nonzero result after independent work completes. |
 | `.\cg.cmd package --action=uninstall --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the allow-listed package remover | Remove one package | Requires exact `UNINSTALL` confirmation unless `--yes` is passed. |
-| `.\cg.cmd package --action=disable --catalog=custom --package=my-tool --windows` | catalog, package id | Disables future operations for one custom package | Block an operator package | Typed confirmation updates only its `package.json`. |
+| `.\cg.cmd package --action=disable --catalog=custom --package=my-tool --windows` | catalog, package id | Disables future operations for one custom package | Block an operator package | Typed confirmation updates only its catalog `tasks.toml`. |
 #### `component`
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
@@ -441,8 +440,8 @@ To compare the read-only package status path over both transports, run `tools/be
 | `.\cg.cmd task --list --vm-init` | `--list`, `--vm-init` | Lists init tasks | Init audit | Shows real execution order. |
 | `.\cg.cmd task --list --vm-update --windows` | `--list`, `--vm-update`, `--windows` | Lists Windows update tasks | Update inspection | Good before isolated reruns. |
 | `.\cg.cmd task --list --disabled --vm-update --windows` | `--disabled` | Lists disabled tasks | Cleanup or contract review | Surfaces disabled reason and source. |
-| `.\cg.cmd task --disable --vm-update-task=136 --windows` | `--disable`, task selector, platform | Moves one maintenance task into the disabled catalog after typed confirmation | Stop future task runs | Package availability is managed by the package command. |
-| `.\cg.cmd task --enable --vm-update-task=136 --windows` | `--enable`, task selector, platform | Restores one maintenance task to the active catalog after typed confirmation | Allow future task runs | Preserves the other `task.json` metadata and verifies the catalog state. |
+| `.\cg.cmd task --disable --vm-update-task=136 --windows` | `--disable`, task selector, platform | Disables one maintenance task in its catalog tasks.toml after typed confirmation; the task folder stays in place | Stop future task runs | Package availability is managed by the package command. |
+| `.\cg.cmd task --enable --vm-update-task=136 --windows` | `--enable`, task selector, platform | Enables one maintenance task in its catalog tasks.toml after typed confirmation | Allow future task runs | Leaves `task.json` unchanged and verifies the `tasks.toml` state. |
 | `.\cg.cmd task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>` | `--run-vm-init`, target selectors | Runs one init task directly | Isolated bootstrap rerun | Uses Azure run-command against one managed VM. |
 | `.\cg.cmd task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name> --windows` | `--run-vm-update`, platform | Runs one update task directly | Isolated guest fix | Uses the SSH task runner against one managed VM; task-signaled immediate restarts still run, Isolated task reruns do not run package installers or their declared post-install tasks. |
 | `.\cg.cmd task --save-app-state --vm-update-task=115 --group=<resource-group> --vm-name=<vm-name> -s <subscription-guid>` | `--save-app-state`, `--vm-update-task`, target selectors | Captures one live task-owned app-state payload into the task-local `<task-folder>/app-state/app-state.zip` | Refreshing an operator-owned payload from the active VM | Cleanly skips when no capture coverage exists. |
@@ -575,7 +574,7 @@ Practical outcomes:
 
 Practical outcomes:
 - support and development teams can rerun only the failing task instead of replaying the whole deployment
-- `task` exposes the real discovered inventory, including tracked and local-only tasks
+- `task` exposes the real discovered inventory, including builtin and custom tasks
 - `connect --ssh`, `connect --rdp`, and Windows-only `connect --powershell` remain direct operator commands; `connect --powershell --command <text>` runs one remote command, and `--test` verifies WinRM authentication/readiness
 
 ### Resize Compute Or OS Disk In Place
@@ -681,11 +680,11 @@ Behavior notes:
 Purpose: manage the separate builtin and custom package catalogs, and install or remove packages on one managed VC.
 
 Behavior notes:
-- `packages/builtin/<platform>/<package-id>/` and `packages/custom/<platform>/<package-id>/` are physically separate catalogs. Each package folder contains `package.json` and its platform installer script.
+- `vm-packages/builtin/<platform>/<package-id>/` and `vm-packages/custom/<platform>/<package-id>/` are physically separate catalogs. Each package folder contains `package.json` and its platform installer script.
 - Manage Programs first offers `Builtin package catalog` and `Custom package catalog`. Rows are labeled `[builtin]` or `[custom]`; disabled packages display `(disabled)`.
 - The selected VC menu offers `p: setup all program packages` and `m: manage program packages`. Setup-all shows a review plan, installs enabled absent packages and repairs detected Clagnos-managed startup drift in dependency order, then reports independent failures. Docker Desktop startup verification accepts the manager/assistant Run entry or the user's verified StartupFolder shortcut produced by the update startup profile, avoiding an unnecessary vendor reinstall.
 - Select a package by number, then choose `e: enable`, `d: disable`, `u: uninstall`, `i: install/repair`, `r: repair`, `v: update`, or `s: status`. Packages with app-state policies also offer `a: manage package app-state`.
-- `e` and `d` update only that package's `package.json` after typed confirmation. The change affects future operations for VCs using this repository; it does not change software already installed on a VC.
+- `e` and `d` update only that catalog's `tasks.toml` boolean after typed confirmation. `package.json` remains package metadata. The change affects future operations for VCs using this repository; it does not change software already installed on a VC.
 - Status and uninstall remain available while disabled. Install/repair/update is blocked until the package is enabled. `install` installs an absent package or repairs its detected installed version; `repair` pins that version and refuses unsafe strategies; `update` remains the vendor-version upgrade path.
 - Package manifests supply a display name, category, installed-state detector, explicit uninstall action, and optional installer assets, timeout, app-state policy, dependencies, and post-install tasks. Windows builtin manifests declare separate `status.ps1`, `update.ps1`, `uninstall.ps1`, and `repair.ps1` scripts with validated strategies; custom catalogs can use the shared lifecycle fallback.
 - Installers run synchronously on the selected VC; uninstalls require confirmation and are verified against the status detector. Setup-all mutates only after `a: apply`; `c: close` leaves the VM unchanged.
@@ -729,7 +728,7 @@ Behavior notes:
 Purpose: list discovered init/update tasks in runtime order, run one task in isolation, or save/restore one task-owned app-state payload.
 
 Behavior notes:
-- shows tracked and local-only task folders together
+- shows builtin and custom task folders together
 - `--run-vm-init` routes one init task through Azure run-command and relays the full guest transcript immediately after that task finishes
 - `--run-vm-update` routes one update task through the SSH task runner and streams guest stdout/stderr live over SSH
 - `--history` shows recent isolated/package outcomes and vm-init/vm-update stage summaries recorded on the operator machine without Azure access
@@ -814,37 +813,35 @@ Behavior notes:
 ## Task Authoring And Execution
 
 ### Task Folder Ownership
-Every task is a portable folder. The folder name defines the task identity, the same-named script defines the executable body, and `task.json` defines ordering, enable state, timeout, assets, and app-state capture coverage. Runtime code must not rewrite `task.json` automatically.
+Every task is a portable folder under `vm-init/<platform>/{builtin,custom}/` or `vm-update/<platform>/{builtin,custom}/`. The folder name defines the task identity, the same-named script defines the executable body, `tasks.toml` defines whether the task is enabled, and `task.json` defines ordering, timeout, assets, dependencies, and app-state capture coverage. Runtime code must not rewrite either catalog implicitly.
 
 ### Task Naming Rules
 - `<task-number>-verb-noun-target/`
 - task-number bands:
   - `01-99` = `initial`
   - `101-999` = `normal`
-  - `1001-9999` = local-only
   - `10001-10099` = `final`
 - 2-5 English words in kebab-case
 - each task folder contains one same-named `.ps1` or `.sh` script plus `task.json`
 
-### Timeouts, Priority, And Enable Flags
-- every task folder uses `task.json` for `priority`, `enabled`, `timeout`, optional `assets`, and optional `appState`
+### Timeouts, Priority, And Availability
+- each `builtin` and `custom` task catalog has a `tasks.toml` file with one `[tasks]` table; every task folder id appears exactly once with a boolean availability value
+- each task folder uses `task.json` for `priority`, `timeout`, optional `assets`, optional `appState`, and optional dependencies; it must not define `enabled`
 - The selected VC menu offers `p: setup all program packages` and `m: manage program packages`. The package screen supports `e: enable`, `d: disable`, `u: uninstall`, `i: install/repair`, `r: repair`, `v: update`, and `s: status`. Status and uninstall remain available while disabled; install/repair/update is blocked until enabled.
-- Enable/disable changes the shared repository task catalog for future runs on any VM using that repository. Task enable/disable requires typing `ENABLE` or `DISABLE`; disabling moves a task under its corresponding `disabled/` folder, while enabling restores it and sets `task.json` `enabled` to `true` without dropping other metadata. Package enable/disable changes only the selected package manifest. It does not change an already-running VM or uninstall a package already installed there.
-- local-only tasks under `local/` are discovered from disk dynamically
-- local-only tasks under `local/disabled/` remain disabled by location
+- Task and package enable/disable changes only the matching boolean in that catalog's `tasks.toml`, after typing `ENABLE` or `DISABLE`. Folders stay in their `builtin` or `custom` catalog. Availability changes apply to future runs and do not uninstall a package already installed on a VC.
 - task asset paths are resolved relative to the owning task folder
-- task-folder discovery scans the stage root, `disabled/`, `local/`, and `local/disabled/`
+- missing task folders are treated as absent, unlisted task folders warn and skip, and package catalogs require their `tasks.toml` ids to match package folders
 - missing task folders behave as if the task never existed; malformed task folders warn and skip; duplicate task names or duplicate effective priorities still fail fast
 - missing `priority`: default to the filename task number when available, otherwise `1000`
 - missing `timeout`: default to `180`
-- builtin `initial` task folders, builtin `normal` task folders, local task folders from `local/`, then builtin `final` task folders
+- `initial`, `normal`, and `final` task folders from both `builtin` and `custom` catalogs are ordered by their effective priority and dependencies
 
 ### Direct Task Execution With `task`
 Direct `task --run-vm-init` and `task --run-vm-update` are the main diagnosis path when one task needs to be rerun without replaying the entire orchestration chain.
 
 Current task template replacement uses the public selected-value placeholders: `__SELECTED_VM_NAME__`, `__SELECTED_AZURE_REGION__`, `__SELECTED_RESOURCE_GROUP__`, `__SELECTED_COMPANY_NAME__`, `__SELECTED_COMPANY_WEB_ADDRESS__`, `__SELECTED_COMPANY_EMAIL_ADDRESS__`, `__SELECTED_EMPLOYEE_EMAIL_ADDRESS__`, and `__SELECTED_EMPLOYEE_FULL_NAME__`.
 
-Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Package snapshots are settings-first, exclude sign-in and machine state, and resolve supported `%CLAGNOS_*%` placeholders against the target profile and VM immediately before replay. Sanitized package archives are versioned in Git with their package definitions; validate every archive with `tests/package-app-state-contract-check.ps1` before committing it. Task app-state plugins remain git-ignored. Local-machine restore snapshots are written under the owning task stage or package catalog `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
+Task-scoped app-state capture and replay use the portable task folder contract. Package app-state uses the owning `<package-folder>/app-state/app-state.zip` and policy in `package.json`; `appStateKey` preserves the identity of previously captured archives. Package snapshots are settings-first, exclude sign-in and machine state, and resolve supported `%CLAGNOS_*%` placeholders against the target profile and VM immediately before replay. Sanitized package archives are versioned in Git with their package definitions; validate every archive with `tests/package-app-state-contract-check.ps1` before committing it. Task app-state plugins remain git-ignored. Local-machine restore snapshots are written under the owning task or package catalog's `backup-app-states/` root and include both `restore-journal.json` and `verify-report.json`.
 
 ## Configuration Guide
 
@@ -941,8 +938,8 @@ The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a 
 - `vm-init` is Azure Run Command driven and is used for early guest bootstrap, one task at a time.
 - `vm-update` is pyssh driven and is used for richer task-by-task update flows after the VM is reachable.
 - `vm-init` relays the full guest transcript back to the local clagnos console as soon as each task completes, while `vm-update` streams guest stdout/stderr live over SSH while the task is still running.
-- Both stages use portable task folders plus `task.json` as the source of truth for ordering, timeout, and enable/disable state, and both now invoke the same per-task app-state restore helper as a post-task step when a matching task-local plugin zip exists.
-- The natural execution order for both stages is: builtin `initial` task folders, builtin `normal` task folders, local task folders from `local/`, then builtin `final` task folders.
+- Both stages use portable task folders, `tasks.toml` for availability, and `task.json` for ordering, timeout, and execution metadata. Both invoke the same per-task app-state restore helper when a matching task-local plugin zip exists.
+- `builtin` and `custom` tasks share the `initial`, `normal`, and `final` priority bands and are ordered by effective priority and dependencies.
 - Every task timeout is normalized to a minimum of `30` seconds and then rounded up in `15`-second slots.
 - Reboot-signaling tasks restart the VM immediately, wait for the required transport recovery, and then resume from the next task. The `update` stage retains its Windows final restart after the vm-update maintenance stage; isolated `task --run-vm-update` reruns skip that workflow-only final restart.
 - Windows Store package manifests declare the public desktop shortcut refresh as a post-install task.
@@ -992,7 +989,7 @@ This matters because:
 - `.env` remains local and untracked
 
 ### Task Folder Model
-Each task directory is self-contained. The folder holds one same-named script, one `task.json`, optional helper assets, and an optional git-ignored `app-state/` directory. The runtime never auto-writes `task.json`, and a missing portable task folder is treated as absent rather than as a failure. Package installer folders are separate from task stages and use `package.json` plus `install.ps1` or `install.sh`.
+Each task directory is self-contained. The folder holds one same-named script, one `task.json`, optional helper assets, and an optional git-ignored `app-state/` directory. `tasks.toml` owns catalog membership and availability; discovery does not rewrite it or `task.json`. A missing portable task folder is treated as absent rather than as a failure. Package installer folders are separate from task stages and use `package.json` plus `install.ps1` or `install.sh`.
 
 ### Windows And Linux Execution Model
 - Windows and Linux share the same top-level orchestration model.
@@ -1028,7 +1025,7 @@ Each task directory is self-contained. The folder holds one same-named script, o
 
 ### Task Failures
 - Rerun the failing task with `task --run-vm-init` or `task --run-vm-update`.
-- Check `task.json` timeout and enabled state.
+- Check task timeouts in `task.json` and task/package availability in the corresponding `tasks.toml`.
 - Vm-init and vm-update app-state replay are post-task and plug-in based. If `<task-folder>/app-state/app-state.zip` is absent, the task logs a skip and continues; if it exists, the shared SSH post-process deploys it without requiring a dedicated restore task, and vm-init defers replay until SSH is ready.
 - Managed app-state save and restore target only the `manager` and `assistant` OS profiles. Large generated payloads such as installers, models, telemetry trees, and low-value caches are intentionally pruned so the zips stay operator-owned and reusable instead of drifting into machine-image snapshots.
 - Local-machine app-state restore validates the current `task.json` allow-list and writes task-adjacent `backup-app-states/<task-name>/` snapshots plus `restore-journal.json` and `verify-report.json` before replaying onto the operator machine.

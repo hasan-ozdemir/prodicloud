@@ -1,0 +1,35 @@
+{
+  "id": "azure-developer-cli",
+  "displayName": "Azure Developer CLI",
+  "category": "tool",
+  "timeout": 300,
+  "sortOrder": 108,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "winget",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Microsoft.Azd"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Microsoft.Azd"
+  },
+  "appStateKey": "108-install-azd-tool",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [],
+    "profileFiles": [
+      {
+        "path": ".azd\\config.json",
+        "targetProfiles": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

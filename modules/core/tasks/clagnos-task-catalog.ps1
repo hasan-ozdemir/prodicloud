@@ -1,5 +1,86 @@
 # Shared task discovery helpers for portable task folders.
 
+function Read-ClagnosTaskCatalogState {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw ("Task catalog was not found: {0}" -f $Path)
+    }
+
+    $entries = @{}
+    $lines = @(Get-Content -LiteralPath $Path -ErrorAction Stop)
+    $inTasks = $false
+    $sawTasks = $false
+    for ($lineIndex = 0; $lineIndex -lt $lines.Count; $lineIndex++) {
+        $line = [string]$lines[$lineIndex]
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) { continue }
+        if ($trimmed -match '^\[(?<section>[A-Za-z0-9_-]+)\]$') {
+            if ($Matches.section -cne 'tasks' -or $sawTasks) {
+                throw ("Task catalog '{0}' may contain only one [tasks] table." -f $Path)
+            }
+            $sawTasks = $true
+            $inTasks = $true
+            continue
+        }
+        if (-not $inTasks -or $trimmed -notmatch '^(?:"(?<quoted>[A-Za-z0-9][A-Za-z0-9._-]*)"|(?<bare>[A-Za-z0-9][A-Za-z0-9._-]*))\s*=\s*(?<value>true|false)\s*(?:#.*)?$') {
+            throw ("Invalid tasks.toml entry at {0}:{1}. Expected a task id and a true/false value inside [tasks]." -f $Path, ($lineIndex + 1))
+        }
+
+        $id = if (-not [string]::IsNullOrWhiteSpace([string]$Matches.quoted)) { [string]$Matches.quoted } else { [string]$Matches.bare }
+        if ($entries.ContainsKey($id)) {
+            throw ("Task catalog '{0}' contains duplicate task id '{1}'." -f $Path, $id)
+        }
+        $entries[$id] = [bool]([string]$Matches.value -ceq 'true')
+    }
+
+    if (-not $sawTasks) { throw ("Task catalog '{0}' is missing its [tasks] table." -f $Path) }
+    return [pscustomobject]@{ Path = [string]$Path; Entries = $entries; Lines = @($lines) }
+}
+
+function Set-ClagnosTaskCatalogEnabled {
+    param(
+        [string]$Path,
+        [string]$TaskId,
+        [bool]$Enabled
+    )
+
+    $catalog = Read-ClagnosTaskCatalogState -Path $Path
+    if (-not $catalog.Entries.ContainsKey($TaskId)) {
+        throw ("Task '{0}' is not registered in tasks.toml: {1}" -f $TaskId, $Path)
+    }
+    if ([bool]$catalog.Entries[$TaskId] -eq [bool]$Enabled) { return $false }
+
+    $quotedId = [regex]::Escape($TaskId)
+    $pattern = '^\s*(?:"' + $quotedId + '"|' + $quotedId + ')\s*=\s*(?:true|false)(\s*(?:#.*)?)$'
+    $updated = $false
+    $newLines = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($line in @($catalog.Lines)) {
+        if (-not $updated -and [string]$line -match $pattern) {
+            $newLines.Add(('"{0}" = {1}{2}' -f $TaskId, $(if ($Enabled) { 'true' } else { 'false' }), [string]$Matches[1])) | Out-Null
+            $updated = $true
+        }
+        else { $newLines.Add([string]$line) | Out-Null }
+    }
+    if (-not $updated) { throw ("Task '{0}' could not be updated in tasks.toml: {1}" -f $TaskId, $Path) }
+
+    $directory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($Path))
+    $tempPath = Join-Path $directory ('.tasks.toml.clagnos-{0}.tmp' -f ([guid]::NewGuid().ToString('N')))
+    try {
+        [System.IO.File]::WriteAllLines($tempPath, [string[]]$newLines.ToArray(), ([System.Text.UTF8Encoding]::new($false)))
+        Move-Item -LiteralPath $tempPath -Destination $Path -Force -ErrorAction Stop
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue }
+    }
+
+    $verified = Read-ClagnosTaskCatalogState -Path $Path
+    if ([bool]$verified.Entries[$TaskId] -ne [bool]$Enabled) {
+        throw ("Task availability did not verify after updating tasks.toml for '{0}'." -f $TaskId)
+    }
+    return $true
+}
+
 function Convert-ClagnosTaskCatalogPriority {
     param(
         [AllowNull()]
@@ -192,8 +273,7 @@ function Get-ClagnosTaskBandRank {
     switch ([string]$TaskType) {
         'initial' { return 0 }
         'normal' { return 1 }
-        'local' { return 2 }
-        'final' { return 3 }
+        'final' { return 2 }
         default { return 99 }
     }
 }
@@ -201,7 +281,7 @@ function Get-ClagnosTaskBandRank {
 function Sort-ClagnosTaskInventoryRows {
     param([object[]]$Rows)
 
-    $bandOrder = @('initial', 'normal', 'local', 'final')
+    $bandOrder = @('initial', 'normal', 'final')
     $sortedRows = New-Object 'System.Collections.Generic.List[object]'
     foreach ($band in @($bandOrder)) {
         $bandRows = @($Rows | Where-Object { [string]::Equals([string]$_.TaskType, [string]$band, [System.StringComparison]::OrdinalIgnoreCase) })
@@ -291,16 +371,9 @@ function Test-ClagnosTaskPriorityFitsType {
     switch ([string]$TaskType) {
         'initial' { return ($Priority -ge 1 -and $Priority -le 99) }
         'normal' { return ($Priority -ge 101 -and $Priority -le 999) }
-        'local' { return ($Priority -ge 1001 -and $Priority -le 9999) }
         'final' { return ($Priority -ge 10001 -and $Priority -le 10099) }
         default { return $false }
     }
-}
-
-function Test-ClagnosTaskNumberFitsLocalBand {
-    param([int]$TaskNumber)
-
-    return ($TaskNumber -ge 1001 -and $TaskNumber -le 9999)
 }
 
 function Get-ClagnosTrackedTaskTypeFromNumber {
@@ -587,8 +660,10 @@ function Get-ClagnosTaskFolderMetadata {
         throw ("task.json parse failed for '{0}': {1}" -f [string]$MetadataPath, $_.Exception.Message)
     }
 
+    if ($null -ne $metadata -and $null -ne $metadata.PSObject.Properties['enabled']) {
+        throw ("Task availability belongs in tasks.toml; remove 'enabled' from {0}." -f $MetadataPath)
+    }
     $priority = Convert-ClagnosTaskCatalogPriority -Value $(if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('priority').Count -gt 0) { $metadata.priority } else { $null }) -DefaultValue $TaskNumber
-    $enabled = Convert-ClagnosTaskCatalogBool -Value $(if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('enabled').Count -gt 0) { $metadata.enabled } else { $null }) -DefaultValue $true
     $timeoutSeconds = Convert-ClagnosTaskCatalogTimeout -Value $(if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('timeout').Count -gt 0) { $metadata.timeout } else { $null }) -DefaultValue (Get-ClagnosTaskDefaultTimeoutSeconds)
     $assets = @()
     if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('assets').Count -gt 0 -and $null -ne $metadata.assets) {
@@ -612,7 +687,6 @@ function Get-ClagnosTaskFolderMetadata {
 
     return [pscustomobject]@{
         Priority = [int]$priority
-        Enabled = [bool]$enabled
         TimeoutSeconds = [int]$timeoutSeconds
         AssetSpecs = @($assets)
         AppStateSpec = $appStateSpec
@@ -637,74 +711,33 @@ function Get-ClagnosTaskFolderCandidates {
     $rootPath = (Resolve-Path -LiteralPath $DirectoryPath).Path
     $candidates = New-Object 'System.Collections.Generic.List[object]'
 
-    foreach ($folder in @(Get-ChildItem -LiteralPath $rootPath -Directory | Sort-Object Name)) {
-        if ($folder.Name.StartsWith('.')) {
-            continue
+    foreach ($catalogName in @('builtin', 'custom')) {
+        $catalogRoot = Join-Path $rootPath $catalogName
+        if (-not (Test-Path -LiteralPath $catalogRoot -PathType Container)) {
+            throw ("Task catalog folder was not found: {0}" -f $catalogRoot)
         }
-        if ($folder.Name -in @('disabled', 'local', 'app-states')) {
-            continue
+        $catalogPath = Join-Path $catalogRoot 'tasks.toml'
+        $state = Read-ClagnosTaskCatalogState -Path $catalogPath
+        $folders = @(Get-ChildItem -LiteralPath $catalogRoot -Directory | Where-Object { -not $_.Name.StartsWith('.') -and $_.Name -ne 'backup-app-states' } | Sort-Object Name)
+        $folderNames = @($folders | ForEach-Object { [string]$_.Name })
+        foreach ($catalogTaskName in @($state.Entries.Keys)) {
+            if ($folderNames -notcontains [string]$catalogTaskName) {
+                Write-Warning ("Task catalog entry skipped: '{0}' lists '{1}', but its task folder is absent." -f $catalogPath, [string]$catalogTaskName)
+            }
         }
-
-        $candidates.Add([pscustomobject]@{
-            TaskRootPath = [string]$folder.FullName
-            RelativeFolderPath = [string]$folder.Name
-            IsDisabled = $false
-            IsLocalOnly = $false
-            Source = 'tracked'
-        }) | Out-Null
-    }
-
-    $disabledRoot = Join-Path $rootPath 'disabled'
-    if (Test-Path -LiteralPath $disabledRoot) {
-        foreach ($folder in @(Get-ChildItem -LiteralPath $disabledRoot -Directory | Sort-Object Name)) {
-            if ($folder.Name.StartsWith('.')) {
+        foreach ($folder in @($folders)) {
+            if (-not $state.Entries.ContainsKey([string]$folder.Name)) {
+                Write-Warning ("Task folder skipped: {0}/{1} is not listed in tasks.toml." -f $catalogName, [string]$folder.Name)
                 continue
             }
-
             $candidates.Add([pscustomobject]@{
                 TaskRootPath = [string]$folder.FullName
-                RelativeFolderPath = ("disabled/{0}" -f [string]$folder.Name)
-                IsDisabled = $true
-                IsLocalOnly = $false
-                Source = 'tracked'
+                RelativeFolderPath = ("{0}/{1}" -f $catalogName, [string]$folder.Name)
+                CatalogPath = [string]$catalogPath
+                Catalog = [string]$catalogName
+                Enabled = [bool]$state.Entries[[string]$folder.Name]
+                Source = [string]$catalogName
             }) | Out-Null
-        }
-    }
-
-    $localRoot = Join-Path $rootPath 'local'
-    if (Test-Path -LiteralPath $localRoot) {
-        foreach ($folder in @(Get-ChildItem -LiteralPath $localRoot -Directory | Sort-Object Name)) {
-            if ($folder.Name.StartsWith('.')) {
-                continue
-            }
-            if ([string]::Equals([string]$folder.Name, 'disabled', [System.StringComparison]::OrdinalIgnoreCase)) {
-                continue
-            }
-
-            $candidates.Add([pscustomobject]@{
-                TaskRootPath = [string]$folder.FullName
-                RelativeFolderPath = ("local/{0}" -f [string]$folder.Name)
-                IsDisabled = $false
-                IsLocalOnly = $true
-                Source = 'local'
-            }) | Out-Null
-        }
-
-        $localDisabledRoot = Join-Path $localRoot 'disabled'
-        if (Test-Path -LiteralPath $localDisabledRoot) {
-            foreach ($folder in @(Get-ChildItem -LiteralPath $localDisabledRoot -Directory | Sort-Object Name)) {
-                if ($folder.Name.StartsWith('.')) {
-                    continue
-                }
-
-                $candidates.Add([pscustomobject]@{
-                    TaskRootPath = [string]$folder.FullName
-                    RelativeFolderPath = ("local/disabled/{0}" -f [string]$folder.Name)
-                    IsDisabled = $true
-                    IsLocalOnly = $true
-                    Source = 'local'
-                }) | Out-Null
-            }
         }
     }
 
@@ -734,11 +767,7 @@ function Read-ClagnosTaskFolderRow {
 
     $taskNumber = [int]$Matches.n
     $taskName = [string]$folderName
-    $taskType = if ([bool]$Candidate.IsLocalOnly) { 'local' } else { Get-ClagnosTrackedTaskTypeFromNumber -TaskNumber $taskNumber -TaskName $taskName }
-    if ([bool]$Candidate.IsLocalOnly -and -not (Test-ClagnosTaskNumberFitsLocalBand -TaskNumber $taskNumber)) {
-        Write-ClagnosTaskFolderSkipWarning -RelativeFolderPath $relativeFolderPath -Message ("local task '{0}' must use a 1001-9999 task number." -f [string]$taskName)
-        return $null
-    }
+    $taskType = Get-ClagnosTrackedTaskTypeFromNumber -TaskNumber $taskNumber -TaskName $taskName
 
     $scriptPath = Join-Path $taskRootPath ("{0}{1}" -f [string]$taskName, [string]$ExpectedExtension)
     if (-not (Test-Path -LiteralPath $scriptPath)) {
@@ -764,15 +793,8 @@ function Read-ClagnosTaskFolderRow {
 
     $script = [string](Get-Content -LiteralPath $scriptPath -Raw -ErrorAction Stop)
     $relativeScriptPath = ("{0}/{1}{2}" -f $relativeFolderPath.Trim('/'), [string]$taskName, [string]$ExpectedExtension)
-    $isEnabled = [bool]$metadata.Enabled
-    $disabledReason = ''
-    if ([bool]$Candidate.IsDisabled) {
-        $isEnabled = $false
-        $disabledReason = 'disabled-by-location'
-    }
-    elseif (-not $isEnabled) {
-        $disabledReason = 'disabled-in-task-json'
-    }
+    $isEnabled = [bool]$Candidate.Enabled
+    $disabledReason = if ($isEnabled) { '' } else { 'disabled-in-tasks-toml' }
 
     return [pscustomobject]@{
         Name = [string]$taskName
@@ -780,6 +802,8 @@ function Read-ClagnosTaskFolderRow {
         Path = [string]$scriptPath
         TaskRootPath = [string]$taskRootPath
         TaskMetadataPath = [string]$metadataPath
+        CatalogPath = [string]$Candidate.CatalogPath
+        Catalog = [string]$Candidate.Catalog
         RelativePath = [string]$relativeScriptPath
         DirectoryPath = [string]$taskRootPath
         StageRootDirectoryPath = [string]$RootPath
@@ -866,8 +890,8 @@ function Get-ClagnosTaskBlocksFromDirectory {
     $disabledTasks = @()
     foreach ($task in @($sortedInventory)) {
         if (-not [bool]$task.Enabled) {
-            if (-not $SuppressSkipMessages -and [string]::Equals([string]$task.DisabledReason, 'disabled-in-task-json', [System.StringComparison]::OrdinalIgnoreCase)) {
-                Write-Host ("Task skipped (disabled in task.json): {0}" -f [string]$task.Name) -ForegroundColor DarkYellow
+            if (-not $SuppressSkipMessages -and [string]::Equals([string]$task.DisabledReason, 'disabled-in-tasks-toml', [System.StringComparison]::OrdinalIgnoreCase)) {
+                Write-Host ("Task skipped (disabled in tasks.toml): {0}" -f [string]$task.Name) -ForegroundColor DarkYellow
             }
 
             $disabledTasks += [pscustomobject]@{

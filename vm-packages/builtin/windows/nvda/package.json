@@ -1,0 +1,35 @@
+{
+  "id": "nvda",
+  "displayName": "NVDA",
+  "category": "application",
+  "timeout": 120,
+  "sortOrder": 115,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "winget",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "NVAccess.NVDA"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "NVAccess.NVDA"
+  },
+  "appStateKey": "115-install-nvda-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [],
+    "profileFiles": [
+      {
+        "path": "AppData\\Roaming\\nvda\\nvda.ini",
+        "targetProfiles": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

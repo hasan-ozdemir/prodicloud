@@ -1,9 +1,0 @@
-{
-  "priority": 4,
-  "enabled": true,
-  "timeout": 180,
-  "dependsOn": [
-    "02-configure-sshd-port",
-    "03-open-ports-firewall"
-  ]
-}

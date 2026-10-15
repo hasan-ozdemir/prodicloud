@@ -1,0 +1,6 @@
+# Availability for this catalog is managed here.
+[tasks]
+"01-ensure-users-local" = true
+"02-configure-sshd-port" = true
+"03-open-ports-firewall" = true
+"04-restart-sshd-service" = true

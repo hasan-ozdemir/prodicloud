@@ -1,6 +1,6 @@
 # Windows Store Migration Audit
 
-This audit captures the current `windows/update` application install surface and highlights which apps are already Store-backed, which ones have a plausible `winget + msstore` path that still needs explicit maintainer approval, and which ones should stay on their current installer source for now.
+This audit captures the current `vm-update/windows` application install surface and highlights which apps are already Store-backed, which ones have a plausible `winget + msstore` path that still needs explicit maintainer approval, and which ones should stay on their current installer source for now.
 
 Status rules used here:
 - `already-store-backed`: the current tracked task already installs from `msstore`.

@@ -3,7 +3,7 @@ param([switch]$Apply)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$catalogRoot = Join-Path $repoRoot 'packages/builtin/windows'
+$catalogRoot = Join-Path $repoRoot 'vm-packages/builtin/windows'
 $statusTemplate = @'
 $ErrorActionPreference = 'Stop'
 Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking

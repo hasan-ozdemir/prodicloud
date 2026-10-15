@@ -56,7 +56,7 @@ function Get-TrackedAuditPaths {
     )
 
     $allowedExtensions = @(
-        '.ps1', '.psm1', '.psd1', '.cmd', '.sh', '.py', '.md', '.yml', '.yaml', '.json', '.txt'
+        '.ps1', '.psm1', '.psd1', '.cmd', '.sh', '.py', '.md', '.yml', '.yaml', '.json', '.toml', '.txt'
     )
     $explicitFileNames = @(
         '.env.example', '.gitignore', '.gitattributes'

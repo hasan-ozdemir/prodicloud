@@ -1,0 +1,29 @@
+{
+  "priority": 10001,
+  "timeout": 30,
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [],
+    "profileFiles": [],
+    "machineRegistryKeys": [
+      {
+        "path": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      },
+      {
+        "path": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ],
+    "userRegistryKeys": [
+      {
+        "path": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies",
+        "targetProfiles": [],
+        "distributionAllowList": []
+      }
+    ]
+  }
+}

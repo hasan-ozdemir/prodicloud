@@ -2,6 +2,19 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.15.421 - 2026-10-15
+
+### Summary
+Task and package catalogs now use one readable TOML availability list per builtin/custom catalog, and the repository has fully moved to the `vm-init`, `vm-update`, and `vm-packages` roots.
+
+### Highlights
+- Every task/package catalog lists its entries and enabled state in `tasks.toml`; task and package JSON manifests contain metadata only.
+- Task folders stay under their builtin/custom catalog when enabled or disabled. Missing tasks are treated as absent, unlisted task folders warn and skip, and package catalog mismatches fail safely. The former disabled/local folder layouts have been removed.
+- All package roots, stage defaults, operator docs, local configuration selectors, and catalog-dependent tools now use the new roots. The previously disabled JAWS maintenance task is active in the custom vm-update catalog.
+
+### Validation
+- `git diff --check` passed. Automated test suites were updated but not run for this change.
+
 ## Release 2026.10.15.420 - 2026-10-15
 
 ### Summary

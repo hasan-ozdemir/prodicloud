@@ -3,6 +3,17 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.15.421] - 2026-10-15
+
+### Changed
+- Cut over Windows/Linux task roots to `vm-init/<platform>` and `vm-update/<platform>`, and moved package catalogs to `vm-packages/{builtin,custom}/<platform>`.
+- Made each builtin/custom task or package catalog's `tasks.toml` the sole source of availability. Task discovery treats missing folders as absent and warns on unlisted folders; package discovery rejects catalog/folder mismatches. `task.json` and `package.json` no longer store enabled state.
+- Removed the `disabled/` and local-only task-folder layouts. The prior disabled JAWS maintenance task now lives as an enabled custom vm-update task; all other task and package availability remains in its normal catalog.
+- Updated repository defaults, operator docs, package-state tools, smoke fixtures, and local task-directory selectors for the new catalog roots.
+
+### Validation
+- `git diff --check` passed. Automated test suites were updated but not run for this change.
+
 ## [2026.10.15.420] - 2026-10-15
 
 ### Added

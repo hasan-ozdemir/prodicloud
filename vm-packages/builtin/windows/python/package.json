@@ -1,0 +1,27 @@
+{
+  "id": "python",
+  "displayName": "Python",
+  "category": "tool",
+  "timeout": 180,
+  "sortOrder": 128,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "choco",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "python312"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "python312"
+  },
+  "assets": [
+    {
+      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
+    }
+  ]
+}

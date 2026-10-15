@@ -1,0 +1,10 @@
+# Availability for this catalog is managed here.
+[tasks]
+"01-ensure-local-user-accounts" = true
+"02-configure-rdp-service" = true
+"03-install-openssh-service" = true
+"04-configure-sshd-service" = true
+"05-configure-firewall-settings" = true
+"06-configure-powershell-remoting" = true
+"07-configure-all-users" = true
+"08-ensure-managed-user-cross-access" = true

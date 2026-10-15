@@ -9,16 +9,27 @@ function Get-ClagnosPackageCatalog {
 
     $repoRoot = Get-ClagnosRepoRoot
     $root = if ([string]::IsNullOrWhiteSpace([string]$CatalogRoot)) {
-        Join-Path $repoRoot (Join-Path 'packages' (Join-Path $Catalog $Platform))
+        Join-Path $repoRoot (Join-Path 'vm-packages' (Join-Path $Catalog $Platform))
     }
     else {
         [System.IO.Path]::GetFullPath($CatalogRoot)
     }
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { return @() }
+    $catalogPath = Join-Path $root 'tasks.toml'
+    $catalogState = Read-ClagnosTaskCatalogState -Path $catalogPath
     $expectedExtension = if ($Platform -eq 'windows') { '.ps1' } else { '.sh' }
+    $packageFolders = @(Get-ChildItem -LiteralPath $root -Directory -Force | Where-Object { -not $_.Name.StartsWith('.') -and $_.Name -ne 'backup-app-states' } | Sort-Object Name)
+    $packageFolderNames = @($packageFolders | ForEach-Object { [string]$_.Name })
+    foreach ($catalogPackageId in @($catalogState.Entries.Keys)) {
+        if ($packageFolderNames -notcontains [string]$catalogPackageId) {
+            throw ("Package catalog '{0}' lists '{1}', but its package folder is missing." -f $catalogPath, [string]$catalogPackageId)
+        }
+    }
     $packages = @()
-    foreach ($folder in @(Get-ChildItem -LiteralPath $root -Directory -Force | Sort-Object Name)) {
-        if ($folder.Name.StartsWith('.') -or [string]::Equals($folder.Name, 'backup-app-states', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+    foreach ($folder in @($packageFolders)) {
+        if (-not $catalogState.Entries.ContainsKey([string]$folder.Name)) {
+            throw ("Package folder '{0}' is missing from tasks.toml: {1}" -f [string]$folder.Name, $catalogPath)
+        }
         if ($folder.Name -notmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$') {
             throw ("Package folder '{0}' must use a lower-case package id." -f [string]$folder.Name)
         }
@@ -31,6 +42,9 @@ function Get-ClagnosPackageCatalog {
         if ([string]::IsNullOrWhiteSpace($manifestText)) { throw ("Package manifest is empty: {0}" -f $manifestPath) }
         try { $manifest = ConvertFrom-JsonCompat -InputObject $manifestText }
         catch { throw ("Package manifest parse failed for '{0}': {1}" -f $manifestPath, $_.Exception.Message) }
+        if ($null -ne $manifest -and $null -ne $manifest.PSObject.Properties['enabled']) {
+            throw ("Package availability belongs in tasks.toml; remove 'enabled' from {0}." -f $manifestPath)
+        }
 
         $id = [string]$manifest.id
         if (-not [string]::Equals($id, [string]$folder.Name, [System.StringComparison]::Ordinal)) {
@@ -105,7 +119,7 @@ function Get-ClagnosPackageCatalog {
         }
         else { $updateStrategy = '' }
 
-        $enabled = Convert-ClagnosTaskCatalogBool -Value $manifest.enabled -DefaultValue $true
+        $enabled = [bool]$catalogState.Entries[[string]$folder.Name]
         $timeoutSeconds = Convert-ClagnosTaskCatalogTimeout -Value $manifest.timeout -DefaultValue (Get-ClagnosTaskDefaultTimeoutSeconds)
         $sortOrder = 0
         if ($null -ne $manifest.sortOrder -and [string]$manifest.sortOrder -match '^\d+$') { $sortOrder = [int]$manifest.sortOrder }
@@ -127,7 +141,7 @@ function Get-ClagnosPackageCatalog {
         }
         $postInstallTasks = @()
         if ($null -ne $manifest.postInstallTasks) { $postInstallTasks = @($manifest.postInstallTasks | ForEach-Object { [string]$_ }) }
-        $disabledReason = if ($enabled) { '' } else { 'disabled-in-package-manifest' }
+        $disabledReason = if ($enabled) { '' } else { 'disabled-in-tasks-toml' }
 
         $packageSpec = [pscustomobject]@{
             Id = $id
@@ -149,6 +163,7 @@ function Get-ClagnosPackageCatalog {
             Path = $installPath
             TaskRootPath = [string]$folder.FullName
             TaskMetadataPath = [string]$manifestPath
+            CatalogPath = [string]$catalogPath
             RelativePath = ('{0}/{1}' -f $id, $installScript)
             DirectoryPath = [string]$folder.FullName
             StageRootDirectoryPath = [string]$root
@@ -189,6 +204,7 @@ function Get-ClagnosPackageCatalog {
             Catalog = $Catalog
             CatalogRoot = [string]$root
             ManifestPath = [string]$manifestPath
+            CatalogPath = [string]$catalogPath
             DirectoryPath = [string]$folder.FullName
             Enabled = [bool]$enabled
             DisabledReason = [string]$disabledReason
@@ -211,7 +227,7 @@ function Get-ClagnosPackageStatusCacheKey {
     catch { $transport = 'invalid' }
     $catalogIdentity = @($Packages | ForEach-Object {
         $statusCheck = ConvertTo-Json -InputObject $_.StatusCheck -Depth 20 -Compress
-        '{0}:{1}:{2}' -f [string]$_.Catalog,[string]$_.Id,[string]$statusCheck
+        '{0}:{1}:{2}:{3}' -f [string]$_.Catalog,[string]$_.Id,[string]$statusCheck,[bool]$_.Enabled
     } | Sort-Object) -join ','
     return ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'group'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name'), [string]$Platform, $transport, $catalogIdentity).ToLowerInvariant()
 }
@@ -705,7 +721,7 @@ function Invoke-ClagnosPackageGuestScript {
     $block = [pscustomobject]@{
         Name = [string]$TaskLabel
         Script = [string]$ScriptText
-        RelativePath = ('packages/{0}' -f [string]$TaskLabel)
+        RelativePath = ('vm-packages/{0}' -f [string]$TaskLabel)
         DirectoryPath = (Get-ClagnosRepoRoot)
         TaskRootPath = (Get-ClagnosRepoRoot)
         StageRootDirectoryPath = (Get-ClagnosRepoRoot)
@@ -1110,30 +1126,6 @@ function Invoke-ClagnosPackageSetupAll {
     return $result
 }
 
-function Set-ClagnosPackageManifestEnabled {
-    param([string]$ManifestPath, [bool]$Enabled)
-
-    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { throw ("Package manifest was not found: {0}" -f $ManifestPath) }
-    $manifest = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop))
-    if ($null -eq $manifest -or $manifest -isnot [psobject]) { throw ("Package manifest is not a JSON object: {0}" -f $ManifestPath) }
-    $enabledProperty = $manifest.PSObject.Properties['enabled']
-    if ($null -eq $enabledProperty) { $manifest | Add-Member -NotePropertyName 'enabled' -NotePropertyValue ([bool]$Enabled) }
-    else { $enabledProperty.Value = [bool]$Enabled }
-
-    $directory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($ManifestPath))
-    $tempPath = Join-Path $directory ('.package.json.clagnos-{0}.tmp' -f ([guid]::NewGuid().ToString('N')))
-    try {
-        $serialized = ConvertTo-Json -InputObject $manifest -Depth 100
-        [System.IO.File]::WriteAllText($tempPath,([string]$serialized + [Environment]::NewLine),[System.Text.UTF8Encoding]::new($false))
-        Move-Item -LiteralPath $tempPath -Destination $ManifestPath -Force -ErrorAction Stop
-    }
-    finally {
-        if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue }
-    }
-    $verified = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop))
-    if ($null -eq $verified -or [bool]$verified.enabled -ne [bool]$Enabled) { throw 'Package availability did not verify after updating package.json.' }
-}
-
 function Invoke-ClagnosPackageOperation {
     param(
         [string]$Action,
@@ -1168,7 +1160,7 @@ function Invoke-ClagnosPackageOperation {
             Write-Host 'Package availability change canceled; no files were changed.' -ForegroundColor Yellow
             return [pscustomobject]@{ Package = $package; Enabled = [bool]$package.Enabled; Changed = $false }
         }
-        Set-ClagnosPackageManifestEnabled -ManifestPath ([string]$package.ManifestPath) -Enabled $shouldEnable
+        Set-ClagnosTaskCatalogEnabled -Path ([string]$package.CatalogPath) -TaskId ([string]$package.Id) -Enabled $shouldEnable
         $verified = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[System.StringComparison]::OrdinalIgnoreCase) })
         if ($verified.Count -ne 1 -or [bool]$verified[0].Enabled -ne $shouldEnable) { throw ("Package availability verification failed for '{0}'." -f $PackageId) }
         Write-Host ("Package '{0}' is now {1}." -f $package.DisplayName, $(if ($shouldEnable) { 'enabled' } else { 'disabled' })) -ForegroundColor Green

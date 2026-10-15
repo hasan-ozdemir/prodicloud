@@ -15,8 +15,8 @@ function Get-ClagnosPlatformDefaults {
             VmImageDefault = 'MicrosoftWindowsDesktop:office-365:win11-25h2-avd-m365:latest'
             VmSizeDefault = 'Standard_B4as_v2'
             VmDiskSizeDefault = '128'
-            VmInitTaskDirDefault = 'windows\init'
-            VmUpdateTaskDirDefault = 'windows\update'
+            VmInitTaskDirDefault = 'vm-init\windows'
+            VmUpdateTaskDirDefault = 'vm-update\windows'
             RunCommandId = 'RunPowerShellScript'
             SshShell = 'powershell'
             IncludeRdp = $true
@@ -30,8 +30,8 @@ function Get-ClagnosPlatformDefaults {
         VmImageDefault = 'Canonical:ubuntu-24_04-lts:server:latest'
         VmSizeDefault = 'Standard_B2as_v2'
         VmDiskSizeDefault = '40'
-        VmInitTaskDirDefault = 'linux\init'
-        VmUpdateTaskDirDefault = 'linux\update'
+        VmInitTaskDirDefault = 'vm-init\linux'
+        VmUpdateTaskDirDefault = 'vm-update\linux'
         RunCommandId = 'RunShellScript'
         SshShell = 'bash'
         IncludeRdp = $false

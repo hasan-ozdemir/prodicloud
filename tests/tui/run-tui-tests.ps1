@@ -1636,7 +1636,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         New-Item -ItemType Directory -Path (Join-Path $sandboxRoot 'scripts') -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cli.ps1') -Force
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cache-worker.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cache-worker.ps1') -Force
-        foreach ($catalogRoot in @('packages\builtin\windows','packages\custom\windows','packages\builtin\linux','packages\custom\linux')) {
+        foreach ($catalogRoot in @('vm-packages\builtin\windows','vm-packages\custom\windows','vm-packages\builtin\linux','vm-packages\custom\linux')) {
             New-Item -ItemType Directory -Path (Join-Path $sandboxRoot $catalogRoot) -Force | Out-Null
         }
         foreach ($fixtureName in @('az.cmd','az-fixture.ps1','az-fixture.cs')) {

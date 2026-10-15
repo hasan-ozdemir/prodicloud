@@ -1,0 +1,22 @@
+{
+  "id": "itunes",
+  "displayName": "iTunes",
+  "category": "application",
+  "timeout": 90,
+  "sortOrder": 117,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "winget",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Apple.iTunes"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Apple.iTunes"
+  },
+  "appStateKey": "117-install-itunes-application"
+}

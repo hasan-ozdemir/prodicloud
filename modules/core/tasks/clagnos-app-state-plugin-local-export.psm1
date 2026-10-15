@@ -84,7 +84,7 @@ function Get-LocalAppStatePluginRepoRoot {
 
 function Get-LocalAppStatePluginExportConfig {
     $repoRoot = Get-LocalAppStatePluginRepoRoot
-    $stageRoot = Join-Path $repoRoot 'windows\update'
+    $stageRoot = Join-Path $repoRoot 'vm-update\windows'
     return [ordered]@{
         RepoRoot = [string]$repoRoot
         StageRoot = [string]$stageRoot
@@ -106,17 +106,15 @@ function Get-LocalAppStatePluginDirectoryPath {
 
     $stageRoot = [string]$TaskConfig.StageRoot
     foreach ($candidate in @(
-        (Join-Path $stageRoot $TaskName),
-        (Join-Path $stageRoot ('disabled\' + $TaskName)),
-        (Join-Path $stageRoot ('local\' + $TaskName)),
-        (Join-Path $stageRoot ('local\disabled\' + $TaskName))
+        (Join-Path (Join-Path $stageRoot 'builtin') $TaskName),
+        (Join-Path (Join-Path $stageRoot 'custom') $TaskName)
     )) {
         if (Test-Path -LiteralPath $candidate) {
             return (Join-Path $candidate 'app-state')
         }
     }
 
-    return (Join-Path (Join-Path $stageRoot $TaskName) 'app-state')
+    return (Join-Path (Join-Path (Join-Path $stageRoot 'custom') $TaskName) 'app-state')
 }
 
 function Resolve-LocalAppStatePathMatches {

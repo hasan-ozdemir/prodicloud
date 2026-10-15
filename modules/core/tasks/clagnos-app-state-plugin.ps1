@@ -111,28 +111,16 @@ function Get-ClagnosTaskAppStateBackupScopeDirectoryPath {
         $relativePath = [string]$TaskBlock.RelativePath
     }
 
-    if (-not [string]::IsNullOrWhiteSpace([string]$relativePath)) {
+    if ([string]::Equals([string]$TaskBlock.TaskType, 'package', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [string]$stageRootPath
+    }
+    $catalog = if ($TaskBlock.PSObject.Properties.Match('Catalog').Count -gt 0) { [string]$TaskBlock.Catalog } else { '' }
+    if ($catalog -notin @('builtin','custom')) {
         $normalizedRelative = $relativePath.Replace('\', '/').TrimStart('/')
-        if ($normalizedRelative.StartsWith('local/', [System.StringComparison]::OrdinalIgnoreCase)) {
-            return (Join-Path $stageRootPath 'local')
-        }
+        if ($normalizedRelative -match '^(?<catalog>builtin|custom)/') { $catalog = [string]$Matches.catalog }
     }
-
-    $taskRootPath = ''
-    if ($TaskBlock.PSObject.Properties.Match('TaskRootPath').Count -gt 0) {
-        $taskRootPath = [string]$TaskBlock.TaskRootPath
-    }
-    if ([string]::IsNullOrWhiteSpace([string]$taskRootPath) -and $TaskBlock.PSObject.Properties.Match('DirectoryPath').Count -gt 0) {
-        $taskRootPath = [string]$TaskBlock.DirectoryPath
-    }
-    if (-not [string]::IsNullOrWhiteSpace([string]$taskRootPath)) {
-        $taskParentPath = [string](Split-Path -Path $taskRootPath -Parent)
-        if ([string]::Equals([string](Split-Path -Path $taskParentPath -Leaf), 'local', [System.StringComparison]::OrdinalIgnoreCase)) {
-            return (Join-Path $stageRootPath 'local')
-        }
-    }
-
-    return [string]$stageRootPath
+    if ($catalog -notin @('builtin','custom')) { throw 'Task catalog source could not be resolved for app-state backup.' }
+    return (Join-Path $stageRootPath $catalog)
 }
 
 function Get-ClagnosTaskAppStateBackupRootDirectoryPath {

@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$packageRoot = Join-Path $repoRoot 'packages'
+$packageRoot = Join-Path $repoRoot 'vm-packages'
 $script:ClagnosPackageStateSourceAddresses = @()
 try {
     $script:ClagnosPackageStateSourceAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' } | Select-Object -ExpandProperty IPAddress)

@@ -1,0 +1,22 @@
+{
+  "id": "google-drive",
+  "displayName": "Google Drive",
+  "category": "application",
+  "timeout": 180,
+  "sortOrder": 129,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "winget",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "Google.GoogleDrive"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "Google.GoogleDrive"
+  },
+  "appStateKey": "129-install-google-drive-application"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "git",
+  "displayName": "Git",
+  "category": "tool",
+  "timeout": 180,
+  "sortOrder": 123,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "choco",
+  "statusCheck": {
+    "kind": "choco",
+    "value": "git"
+  },
+  "uninstall": {
+    "kind": "choco",
+    "value": "git"
+  }
+}

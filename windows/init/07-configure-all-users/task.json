@@ -1,8 +1,0 @@
-{
-  "priority": 2,
-  "enabled": true,
-  "timeout": 120,
-  "dependsOn": [
-    "01-ensure-local-user-accounts"
-  ]
-}

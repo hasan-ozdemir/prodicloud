@@ -1,0 +1,16 @@
+{
+  "priority": 200,
+  "timeout": 60,
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [
+      {
+        "path": "C:\\Program Files\\Freedom Scientific\\JAWS\\2025\\version.dll"
+      }
+    ],
+    "profileDirectories": [],
+    "profileFiles": [],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

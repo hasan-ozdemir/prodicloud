@@ -1,8 +1,0 @@
-{
-  "priority": 7,
-  "enabled": true,
-  "timeout": 180,
-  "dependsOn": [
-    "05-configure-firewall-settings"
-  ]
-}

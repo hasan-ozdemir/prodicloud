@@ -1,0 +1,4 @@
+# Availability for this catalog is managed here.
+[tasks]
+"01-upgrade-packages-system" = true
+"101-configure-capabilities-node-sshd" = true

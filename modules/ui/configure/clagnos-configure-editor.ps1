@@ -407,10 +407,10 @@ function Get-ClagnosConfigureTaskDirRows {
     $candidates = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
     $currentValue = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key $Key -DefaultValue '')
     $defaults = @{
-        'WIN_VM_INIT_TASK_DIR' = 'windows/init'
-        'WIN_VM_UPDATE_TASK_DIR' = 'windows/update'
-        'LIN_VM_INIT_TASK_DIR' = 'linux/init'
-        'LIN_VM_UPDATE_TASK_DIR' = 'linux/update'
+        'WIN_VM_INIT_TASK_DIR' = 'vm-init/windows'
+        'WIN_VM_UPDATE_TASK_DIR' = 'vm-update/windows'
+        'LIN_VM_INIT_TASK_DIR' = 'vm-init/linux'
+        'LIN_VM_UPDATE_TASK_DIR' = 'vm-update/linux'
     }
 
     foreach ($candidate in @($currentValue, [string]$defaults[$Key])) {

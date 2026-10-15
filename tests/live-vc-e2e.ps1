@@ -126,34 +126,25 @@ foreach (`$property in @(`$expected.PSObject.Properties)) {
 function Get-ClagnosE2eActiveTaskCount {
     param([ValidateSet('init','update')][string]$Stage, [ValidateSet('windows','linux')][string]$Platform)
 
-    $stageRoot = Join-Path $RepoRoot (Join-Path $Platform $Stage)
-    $candidateRoots = @($stageRoot, (Join-Path $stageRoot 'local'))
-    $taskCount = 0
-    foreach ($candidateRoot in @($candidateRoots)) {
-        if (-not (Test-Path -LiteralPath $candidateRoot -PathType Container)) { continue }
-        foreach ($folder in @(Get-ChildItem -LiteralPath $candidateRoot -Directory -Force -ErrorAction SilentlyContinue)) {
-            if ($folder.Name -in @('disabled','local','backup-app-states')) { continue }
-            $manifestPath = Join-Path $folder.FullName 'task.json'
-            if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { continue }
-            $manifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop) -ErrorAction Stop
-            if ($null -eq $manifest.PSObject.Properties['enabled'] -or [bool]$manifest.enabled) { $taskCount++ }
-        }
-    }
-    return $taskCount
+    $stageName = if ($Stage -eq 'init') { 'vm-init' } else { 'vm-update' }
+    $stageRoot = Join-Path $RepoRoot (Join-Path $stageName $Platform)
+    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
+    return @($catalog.ActiveTasks).Count
 }
-
 function Get-ClagnosE2ePackageInventory {
     param([ValidateSet('builtin','custom')][string]$Catalog, [ValidateSet('windows','linux')][string]$Platform)
 
-    $catalogRoot = Join-Path $RepoRoot (Join-Path 'packages' (Join-Path $Catalog $Platform))
+    $catalogRoot = Join-Path $RepoRoot (Join-Path 'vm-packages' (Join-Path $Catalog $Platform))
     if (-not (Test-Path -LiteralPath $catalogRoot -PathType Container)) { return @() }
+    $availability = Read-ClagnosTaskCatalogState -Path (Join-Path $catalogRoot 'tasks.toml')
     $packages = @()
     foreach ($folder in @(Get-ChildItem -LiteralPath $catalogRoot -Directory -Force | Sort-Object Name)) {
         if ($folder.Name -in @('backup-app-states')) { continue }
         $manifestPath = Join-Path $folder.FullName 'package.json'
         if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { continue }
         $manifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPath -Raw -ErrorAction Stop) -ErrorAction Stop
-        if ($null -ne $manifest.PSObject.Properties['enabled'] -and -not [bool]$manifest.enabled) { continue }
+        if (-not $availability.Entries.ContainsKey([string]$folder.Name)) { throw ("Package folder is not listed in tasks.toml: {0}" -f [string]$folder.Name) }
+        if (-not [bool]$availability.Entries[[string]$folder.Name]) { continue }
         $installerName = [string]$manifest.installScript
         if ([string]::IsNullOrWhiteSpace($installerName)) { $installerName = 'install.ps1' }
         $installerPath = Join-Path $folder.FullName $installerName
@@ -310,7 +301,7 @@ $safeVmName = [regex]::Replace($VmName,'[^A-Za-z0-9-]','_')
 $script:LogPath = Join-Path $script:LogDirectory ("{0}-{1}.log" -f $safeVmName,(Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss'))
 Set-Content -LiteralPath $script:LogPath -Value ("Clagnos live acceptance started {0} UTC." -f (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) -Encoding UTF8
 
-$packageArchives = @(Get-ChildItem -LiteralPath (Join-Path $resolvedRepoRoot 'packages') -Recurse -File -Filter app-state.zip -ErrorAction SilentlyContinue)
+$packageArchives = @(Get-ChildItem -LiteralPath (Join-Path $resolvedRepoRoot 'vm-packages') -Recurse -File -Filter app-state.zip -ErrorAction SilentlyContinue)
 if ($packageArchives.Count -gt 0) {
     $contractOutput = & $script:PowerShellExecutable -NoLogo -NoProfile -ExecutionPolicy Bypass -File (Join-Path $resolvedRepoRoot 'tests\package-app-state-contract-check.ps1') -RepoRoot $resolvedRepoRoot 2>&1
     if ($LASTEXITCODE -ne 0) { throw 'Package app-state snapshot validation failed before Azure mutation.' }
@@ -419,9 +410,9 @@ try {
         $jawsPrerequisite = @($packageOrder | Where-Object { [string]$_.Catalog -eq 'builtin' -and [string]$_.Id -eq 'jaws' })
         if ($jawsPrerequisite.Count -ne 1) { throw 'The enabled builtin JAWS package is required before interactive autologon setup.' }
         $null = Invoke-ClagnosE2eCommand -Label 'Install JAWS before its enabled vm-update maintenance task' -Arguments @('package','--action','install','--catalog','builtin','--package','jaws','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows','--yes')
-        $autologonTask = Join-Path $resolvedRepoRoot 'windows\update\102-configure-autologon-settings'
-        $autologonManifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $autologonTask 'task.json') -Raw -ErrorAction Stop) -ErrorAction Stop
-        if ($null -ne $autologonManifest.PSObject.Properties['enabled'] -and -not [bool]$autologonManifest.enabled) { throw 'The enabled Store packages require vm-update task 102, but it is disabled.' }
+        $autologonCatalogPath = Join-Path $resolvedRepoRoot 'vm-update\windows\builtin\tasks.toml'
+        $autologonAvailability = Read-ClagnosTaskCatalogState -Path $autologonCatalogPath
+        if (-not $autologonAvailability.Entries.ContainsKey('102-configure-autologon-settings') -or -not [bool]$autologonAvailability.Entries['102-configure-autologon-settings']) { throw 'The enabled Store packages require vm-update task 102 to be enabled in tasks.toml.' }
         $autologonOutput = Invoke-ClagnosE2eCommand -Label 'Enable the manager interactive desktop for Store packages' -Arguments @('task','--run-vm-update','102','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows')
         if ($autologonOutput -notmatch '(?i)autologon-state\s*=>\s*AutoAdminLogon=1' -or $autologonOutput -notmatch 'TASK_REBOOT_REQUIRED:configure-autologon-settings') {
             throw 'The autologon prerequisite did not verify and request the restart needed for Store package installation.'
@@ -467,7 +458,7 @@ try {
         Write-Host 'All enabled vm-update tasks already passed with zero warnings; resuming at final VM verification.' -ForegroundColor DarkCyan
     }
 
-    $jawsArchivePath = Join-Path $resolvedRepoRoot 'packages\builtin\windows\jaws\app-state\app-state.zip'
+    $jawsArchivePath = Join-Path $resolvedRepoRoot 'vm-packages\builtin\windows\jaws\app-state\app-state.zip'
     $jawsVerifierPath = Join-Path (Split-Path $script:LogPath -Parent) 'verify-jaws-update-files.ps1'
     New-ClagnosE2eJawsPayloadVerifier -ArchivePath $jawsArchivePath -ScriptPath $jawsVerifierPath
     $null = Invoke-ClagnosE2eCommand -Label 'Verify JAWS app-state update files byte-for-byte on the target VM' -Arguments @('exec','--quiet','--file',$jawsVerifierPath,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)

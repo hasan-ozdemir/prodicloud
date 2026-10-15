@@ -1,0 +1,11 @@
+# Availability for this catalog is managed here.
+[tasks]
+"10001-configure-advanced-settings" = true
+"10002-configure-startup-settings" = true
+"10003-create-public-desktop-shortcuts" = true
+"10004-configure-windows-experience" = true
+"10005-copy-user-settings" = true
+"10006-ensure-managed-user-cross-access" = true
+"102-configure-autologon-settings" = true
+"110-configure-unlocker-settings" = true
+"136-configure-language-settings" = true

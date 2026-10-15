@@ -1,0 +1,39 @@
+{
+  "id": "vlc",
+  "displayName": "VLC media player",
+  "category": "application",
+  "timeout": 180,
+  "sortOrder": 131,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "winget",
+  "statusCheck": {
+    "kind": "winget",
+    "value": "VideoLAN.VLC"
+  },
+  "uninstall": {
+    "kind": "winget",
+    "value": "VideoLAN.VLC"
+  },
+  "appStateKey": "131-install-vlc-application",
+  "appState": {
+    "machineDirectories": [],
+    "machineFiles": [],
+    "profileDirectories": [],
+    "profileFiles": [
+      {
+        "path": "AppData\\Roaming\\vlc\\vlcrc",
+        "targetProfiles": []
+      },
+      {
+        "path": "AppData\\Roaming\\vlc\\vlc-qt-interface.ini",
+        "targetProfiles": []
+      }
+    ],
+    "machineRegistryKeys": [],
+    "userRegistryKeys": []
+  }
+}

@@ -158,7 +158,7 @@ function Get-RepoTaskScriptPath {
             '134-install-docker-desktop-application' = 'docker-desktop'; '135-install-ollama-tool' = 'ollama'
         }
         if ($packageIds.ContainsKey([string]$resolvedTaskName)) {
-            return (Join-Path $RepoRoot (Join-Path 'packages\builtin\windows' (Join-Path ([string]$packageIds[[string]$resolvedTaskName]) 'install.ps1')))
+            return (Join-Path $RepoRoot (Join-Path 'vm-packages\builtin\windows' (Join-Path ([string]$packageIds[[string]$resolvedTaskName]) 'install.ps1')))
         }
     }
     if ($Stage -eq 'update' -and $Platform -eq 'windows') {
@@ -201,22 +201,19 @@ function Get-RepoTaskScriptPath {
             '135-install-ollama-tool' = 'ollama'
         }
         if ($packageIds.ContainsKey([string]$resolvedTaskName)) {
-            return (Join-Path $RepoRoot (Join-Path 'packages\builtin\windows' (Join-Path ([string]$packageIds[[string]$resolvedTaskName]) 'install.ps1')))
+            return (Join-Path $RepoRoot (Join-Path 'vm-packages\builtin\windows' (Join-Path ([string]$packageIds[[string]$resolvedTaskName]) 'install.ps1')))
         }
     }
-    $stageRoot = Join-Path $RepoRoot ("{0}\{1}" -f [string]$Platform, [string]$Stage)
-    foreach ($candidate in @(
-        (Join-Path $stageRoot ("{0}\{0}{1}" -f [string]$resolvedTaskName, [string]$extension)),
-        (Join-Path $stageRoot ("disabled\{0}\{0}{1}" -f [string]$resolvedTaskName, [string]$extension)),
-        (Join-Path $stageRoot ("local\{0}\{0}{1}" -f [string]$resolvedTaskName, [string]$extension)),
-        (Join-Path $stageRoot ("local\disabled\{0}\{0}{1}" -f [string]$resolvedTaskName, [string]$extension))
-    )) {
+    $stageName = if ($Stage -eq 'init') { 'vm-init' } else { 'vm-update' }
+    $stageRoot = Join-Path $RepoRoot (Join-Path $stageName $Platform)
+    foreach ($catalog in @('builtin','custom')) {
+        $candidate = Join-Path (Join-Path (Join-Path $stageRoot $catalog) $resolvedTaskName) ($resolvedTaskName + $extension)
         if (Test-Path -LiteralPath $candidate) {
             return [string]$candidate
         }
     }
 
-    return (Join-Path $stageRoot ("{0}\{0}{1}" -f [string]$resolvedTaskName, [string]$extension))
+    return (Join-Path (Join-Path (Join-Path $stageRoot 'builtin') $resolvedTaskName) ($resolvedTaskName + $extension))
 }
 
 function Get-RepoTaskRootPath {
@@ -269,7 +266,8 @@ function New-RepoTaskTemplate {
         [int]$TimeoutSeconds = 180
     )
 
-    $stageRootPath = Join-Path $RepoRoot ("{0}\{1}" -f [string]$Platform, [string]$Stage)
+    $stageName = if ($Stage -eq 'init') { 'vm-init' } else { 'vm-update' }
+    $stageRootPath = Join-Path $RepoRoot (Join-Path $stageName $Platform)
     $resolvedTaskName = Get-CurrentSmokeTaskName -TaskName $TaskName
     $scriptPath = Get-RepoTaskScriptPath -Platform $Platform -Stage $Stage -TaskName $resolvedTaskName
     $packageRoot = Split-Path -Path $scriptPath -Parent
@@ -303,23 +301,51 @@ function New-SmokeTaskFolder {
         [ValidateSet('windows','linux')]
         [string]$Platform,
         [string]$ScriptText,
-        [hashtable]$TaskJson
+        [hashtable]$TaskJson,
+        [bool]$Enabled = $true
     )
 
-    $taskRootPath = Join-Path $RootPath $RelativeFolderPath
+    $normalizedRelative = $RelativeFolderPath.Replace('\','/')
+    $relativeParts = @($normalizedRelative.Split('/') | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if (@($relativeParts).Count -lt 2 -or $relativeParts[0] -notin @('builtin','custom')) {
+        throw 'Smoke task folders must be created under a builtin or custom catalog.'
+    }
+    $catalogName = [string]$relativeParts[0]
+    $taskName = [string]$relativeParts[-1]
+    $catalogRoot = Join-Path $RootPath $catalogName
+    $taskRootPath = Join-Path $RootPath ($normalizedRelative.Replace('/','\'))
+    foreach ($name in @('builtin','custom')) {
+        $otherRoot = Join-Path $RootPath $name
+        New-Item -Path $otherRoot -ItemType Directory -Force | Out-Null
+        $otherCatalogPath = Join-Path $otherRoot 'tasks.toml'
+        if (-not (Test-Path -LiteralPath $otherCatalogPath -PathType Leaf)) {
+            [System.IO.File]::WriteAllLines($otherCatalogPath,[string[]]@('# Task availability.','[tasks]'),[System.Text.UTF8Encoding]::new($false))
+        }
+    }
     New-Item -Path $taskRootPath -ItemType Directory -Force | Out-Null
-    $taskName = Split-Path -Path $RelativeFolderPath -Leaf
     $extension = if ([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) { '.sh' } else { '.ps1' }
     Set-Content -LiteralPath (Join-Path $taskRootPath ($taskName + $extension)) -Value $ScriptText -Encoding UTF8
     if ($null -eq $TaskJson) {
         $TaskJson = @{}
     }
+    if ($TaskJson.ContainsKey('enabled')) { throw 'Task availability must be passed through the tasks.toml fixture state.' }
     Set-Content -LiteralPath (Join-Path $taskRootPath 'task.json') -Value ($TaskJson | ConvertTo-Json -Depth 12) -Encoding UTF8
+    $catalogPath = Join-Path $catalogRoot 'tasks.toml'
+    $state = Read-ClagnosTaskCatalogState -Path $catalogPath
+    $state.Entries[$taskName] = [bool]$Enabled
+    $lines = New-Object 'System.Collections.Generic.List[string]'
+    $lines.Add('# Task availability.') | Out-Null
+    $lines.Add('[tasks]') | Out-Null
+    foreach ($id in @($state.Entries.Keys | Sort-Object)) {
+        $lines.Add(('"{0}" = {1}' -f [string]$id,$(if([bool]$state.Entries[$id]){'true'}else{'false'}))) | Out-Null
+    }
+    [System.IO.File]::WriteAllLines($catalogPath,[string[]]$lines.ToArray(),([System.Text.UTF8Encoding]::new($false)))
     return [pscustomobject]@{
         TaskRootPath = [string]$taskRootPath
         TaskName = [string]$taskName
         ScriptPath = [string](Join-Path $taskRootPath ($taskName + $extension))
         TaskJsonPath = [string](Join-Path $taskRootPath 'task.json')
+        CatalogPath = [string]$catalogPath
     }
 }
 
@@ -515,10 +541,10 @@ Invoke-Test -Name "Platform config precedence mapping" -Action {
 
 Invoke-Test -Name "Platform task catalog keys stay platform-specific" -Action {
     $config = @{
-        WIN_VM_INIT_TASK_DIR = "windows/init"
-        WIN_VM_UPDATE_TASK_DIR = "windows/update"
-        LIN_VM_INIT_TASK_DIR = "linux/init"
-        LIN_VM_UPDATE_TASK_DIR = "linux/update"
+        WIN_VM_INIT_TASK_DIR = "vm-init/windows"
+        WIN_VM_UPDATE_TASK_DIR = "vm-update/windows"
+        LIN_VM_INIT_TASK_DIR = "vm-init/linux"
+        LIN_VM_UPDATE_TASK_DIR = "vm-update/linux"
     }
 
     $winInitKey = Get-ClagnosPlatformTaskCatalogConfigKey -Platform windows -Stage 'init'
@@ -530,10 +556,10 @@ Invoke-Test -Name "Platform task catalog keys stay platform-specific" -Action {
     Assert-True -Condition ([string]$winUpdateKey -eq 'WIN_VM_UPDATE_TASK_DIR') -Message "Windows update catalog key mapping failed."
     Assert-True -Condition ([string]$linInitKey -eq 'LIN_VM_INIT_TASK_DIR') -Message "Linux init catalog key mapping failed."
     Assert-True -Condition ([string]$linUpdateKey -eq 'LIN_VM_UPDATE_TASK_DIR') -Message "Linux update catalog key mapping failed."
-    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $winInitKey -DefaultValue '') -eq 'windows/init') -Message "Windows init catalog path lookup failed."
-    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $winUpdateKey -DefaultValue '') -eq 'windows/update') -Message "Windows update catalog path lookup failed."
-    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $linInitKey -DefaultValue '') -eq 'linux/init') -Message "Linux init catalog path lookup failed."
-    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $linUpdateKey -DefaultValue '') -eq 'linux/update') -Message "Linux update catalog path lookup failed."
+    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $winInitKey -DefaultValue '') -eq 'vm-init/windows') -Message "Windows init catalog path lookup failed."
+    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $winUpdateKey -DefaultValue '') -eq 'vm-update/windows') -Message "Windows update catalog path lookup failed."
+    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $linInitKey -DefaultValue '') -eq 'vm-init/linux') -Message "Linux init catalog path lookup failed."
+    Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $linUpdateKey -DefaultValue '') -eq 'vm-update/linux') -Message "Linux update catalog path lookup failed."
 }
 
 Invoke-Test -Name ".env.example runtime contract" -Action {
@@ -680,10 +706,10 @@ Invoke-Test -Name "Create and update use review-first workflow checkpoints" -Act
 }
 
 Invoke-Test -Name "Task catalog discovery" -Action {
-    $winInit = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "windows\init") -Platform windows -Stage init
-    $winUpdate = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "windows\update") -Platform windows -Stage update
-    $linInit = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "linux\init") -Platform linux -Stage init
-    $linUpdate = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "linux\update") -Platform linux -Stage update
+    $winInit = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "vm-init\windows") -Platform windows -Stage init
+    $winUpdate = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "vm-update\windows") -Platform windows -Stage update
+    $linInit = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "vm-init\linux") -Platform linux -Stage init
+    $linUpdate = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot "vm-update\linux") -Platform linux -Stage update
 
     Assert-True -Condition (@($winInit.ActiveTasks).Count -ge 1) -Message "Windows init active tasks are missing."
     Assert-True -Condition (@($winUpdate.ActiveTasks).Count -ge 1) -Message "Windows update active tasks are missing."
@@ -699,24 +725,12 @@ Invoke-Test -Name "Task catalog discovery" -Action {
     }
 }
 
-Invoke-Test -Name "Task availability actions move and verify catalog entries safely" -Action {
+Invoke-Test -Name "Task availability updates tasks.toml without moving task folders" -Action {
     $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-toggle-{0}' -f ([guid]::NewGuid().ToString('N')))
-    $stageRoot = Join-Path $testRoot 'windows\update'
+    $stageRoot = Join-Path $testRoot 'vm-update/windows'
     $taskName = '101-install-toggle-tool'
-    $activeTaskRoot = Join-Path $stageRoot $taskName
+    $taskFolder = New-SmokeTaskFolder -RootPath $stageRoot -RelativeFolderPath ('builtin/' + $taskName) -Platform windows -ScriptText "Write-Output 'toggle-test'" -TaskJson @{ priority = 101; timeout = 60; customMetadata = 'preserve-me' }
     $script:ClagnosTaskAvailabilityToggleAnswer = 'DISABLE'
-    New-Item -ItemType Directory -Path $activeTaskRoot -Force | Out-Null
-    [System.IO.File]::WriteAllText((Join-Path $activeTaskRoot ($taskName + '.ps1')), "Write-Output 'toggle-test'`r`n", [System.Text.UTF8Encoding]::new($false))
-    $manifestText = @'
-{
-  "priority": 101,
-  "enabled": true,
-  "timeout": 60,
-  "customMetadata": "preserve-me"
-}
-'@
-    [System.IO.File]::WriteAllText((Join-Path $activeTaskRoot 'task.json'), $manifestText, [System.Text.UTF8Encoding]::new($false))
-
     try {
         function Read-Host {
             param([string]$Prompt)
@@ -724,29 +738,25 @@ Invoke-Test -Name "Task availability actions move and verify catalog entries saf
         }
 
         $disabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'disable'
-        Assert-True -Condition (-not [bool]$disabled.Enabled -and [bool]$disabled.Changed) -Message 'Disable must move an active task into the disabled inventory.'
-        $disabledPath = Join-Path (Join-Path $stageRoot 'disabled') $taskName
-        Assert-True -Condition (Test-Path -LiteralPath $disabledPath) -Message 'Disable must preserve the full task folder under disabled/.'
+        Assert-True -Condition (-not [bool]$disabled.Enabled -and [bool]$disabled.Changed) -Message 'Disable must change the task catalog state.'
+        Assert-True -Condition (Test-Path -LiteralPath $taskFolder.TaskRootPath) -Message 'Disable must leave the task folder in its catalog.'
         $disabledCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform windows -Stage update -SuppressSkipMessages
         $disabledTask = @($disabledCatalog.DisabledTasks | Where-Object { [string]$_.Name -eq $taskName } | Select-Object -First 1)
-        Assert-True -Condition (@($disabledTask).Count -eq 1 -and [string]$disabledTask[0].DisabledReason -eq 'disabled-by-location') -Message 'Disabled task folders must remain visible with their location reason.'
+        Assert-True -Condition (@($disabledTask).Count -eq 1 -and [string]$disabledTask[0].DisabledReason -eq 'disabled-in-tasks-toml') -Message 'Disabled task state must come from tasks.toml.'
+        $manifest = ConvertFrom-Json -InputObject ([string](Get-Content -LiteralPath $taskFolder.TaskJsonPath -Raw))
+        Assert-True -Condition ($null -eq $manifest.PSObject.Properties['enabled'] -and [string]$manifest.customMetadata -eq 'preserve-me') -Message 'Task metadata must remain unchanged and contain no availability field.'
 
         $script:ClagnosTaskAvailabilityToggleAnswer = 'ENABLE'
         $enabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName '101' -Action 'enable'
-        Assert-True -Condition ([bool]$enabled.Enabled -and [bool]$enabled.Changed) -Message 'Enable by task number must restore the task to the active catalog.'
-        Assert-True -Condition (Test-Path -LiteralPath $activeTaskRoot) -Message 'Enable must move the task folder back to the active stage root.'
-        $manifest = ConvertFrom-Json -InputObject ([string](Get-Content -LiteralPath (Join-Path $activeTaskRoot 'task.json') -Raw))
-        Assert-True -Condition ([bool]$manifest.enabled) -Message 'Enable must update a false task.json enabled value.'
-        Assert-True -Condition ([string]$manifest.customMetadata -eq 'preserve-me') -Message 'Enable must preserve unrelated task.json metadata.'
-
-        Set-ClagnosTaskManifestEnabled -ManifestPath (Join-Path $activeTaskRoot 'task.json') -Enabled $false
-        $manifestDisabled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'enable'
-        Assert-True -Condition ([bool]$manifestDisabled.Enabled -and [bool]$manifestDisabled.Changed) -Message 'Enable must also clear an explicit task.json disabled state.'
+        Assert-True -Condition ([bool]$enabled.Enabled -and [bool]$enabled.Changed) -Message 'Enable by task number must update the catalog state.'
+        Assert-True -Condition (Test-Path -LiteralPath $taskFolder.TaskRootPath) -Message 'Enable must leave the task folder in its catalog.'
+        $state = Read-ClagnosTaskCatalogState -Path $taskFolder.CatalogPath
+        Assert-True -Condition ([bool]$state.Entries[$taskName]) -Message 'Enable must set the tasks.toml boolean to true.'
 
         $script:ClagnosTaskAvailabilityToggleAnswer = 'NO'
         $cancelled = Invoke-ClagnosTaskAvailabilityToggle -StageRoot $stageRoot -Platform 'windows' -Stage 'update' -TaskNumberOrName $taskName -Action 'disable'
-        Assert-True -Condition (-not [bool]$cancelled.Changed -and [bool]$cancelled.Enabled) -Message 'A rejected typed confirmation must leave the task enabled.'
-        Assert-True -Condition (Test-Path -LiteralPath $activeTaskRoot) -Message 'A rejected typed confirmation must leave the task folder in place.'
+        Assert-True -Condition (-not [bool]$cancelled.Changed -and [bool]$cancelled.Enabled) -Message 'Rejected confirmation must leave the task enabled.'
+        Assert-True -Condition (Test-Path -LiteralPath $taskFolder.TaskRootPath) -Message 'Rejected confirmation must leave the task folder in place.'
     }
     finally {
         Remove-Item -LiteralPath 'Function:\Read-Host' -Force -ErrorAction SilentlyContinue
@@ -758,7 +768,6 @@ Invoke-Test -Name "Task availability actions move and verify catalog entries saf
         $script:ClagnosTaskAvailabilityToggleAnswer = $null
     }
 }
-
 Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availability updates only package manifests" -Action {
     $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-package-catalog-{0}' -f ([guid]::NewGuid().ToString('N')))
     $builtinRoot = Join-Path $testRoot 'builtin\windows'
@@ -769,6 +778,8 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
     $script:ClagnosPackageToggleAnswer = 'DISABLE'
     New-Item -ItemType Directory -Path $builtinFolder -Force | Out-Null
     New-Item -ItemType Directory -Path $customFolder -Force | Out-Null
+    [System.IO.File]::WriteAllLines((Join-Path $builtinRoot 'tasks.toml'),[string[]]@('# Package availability.','[tasks]','"shared-tool" = true'),([System.Text.UTF8Encoding]::new($false)))
+    [System.IO.File]::WriteAllLines((Join-Path $customRoot 'tasks.toml'),[string[]]@('# Package availability.','[tasks]','"shared-tool" = true'),([System.Text.UTF8Encoding]::new($false)))
     [System.IO.File]::WriteAllText((Join-Path $builtinFolder 'install.ps1'), "Write-Output 'builtin'`r`n", [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText((Join-Path $customFolder 'install.ps1'), "Write-Output 'custom'`r`n", [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText((Join-Path $customFolder 'helper.ps1'), "Write-Output 'asset'`r`n", [System.Text.UTF8Encoding]::new($false))
@@ -784,7 +795,6 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
         id = $packageId
         displayName = 'Builtin Shared Tool'
         category = 'tool'
-        enabled = $true
         timeout = 45
         sortOrder = 1
         installScript = 'install.ps1'
@@ -799,7 +809,6 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
         id = $packageId
         displayName = 'Custom Shared Tool'
         category = 'tool'
-        enabled = $true
         timeout = 90
         sortOrder = 2
         installScript = 'install.ps1'
@@ -838,7 +847,9 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
         $customAfterDisable = @(Get-ClagnosPackageCatalog -Platform windows -Catalog custom -CatalogRoot $customRoot)
         Assert-True -Condition ($customAfterDisable.Count -eq 1 -and -not [bool]$customAfterDisable[0].Enabled) -Message 'Disabled packages must remain visible in their catalog.'
         $updatedManifest = ConvertFrom-Json -InputObject ([string](Get-Content -LiteralPath (Join-Path $customFolder 'package.json') -Raw))
-        Assert-True -Condition ([string]$updatedManifest.customMetadata -eq 'preserve-me' -and [string]$updatedManifest.appStateKey -eq 'previous-shared-tool-installer') -Message 'Availability changes must preserve unrelated package manifest metadata.'
+        Assert-True -Condition ([string]$updatedManifest.customMetadata -eq 'preserve-me' -and [string]$updatedManifest.appStateKey -eq 'previous-shared-tool-installer' -and $null -eq $updatedManifest.PSObject.Properties['enabled']) -Message 'Availability changes must preserve package metadata while keeping availability out of package.json.'
+        $customToml = Read-ClagnosTaskCatalogState -Path (Join-Path $customRoot 'tasks.toml')
+        Assert-True -Condition (-not [bool]$customToml.Entries[$packageId]) -Message 'Package availability must be stored in the catalog tasks.toml file.'
 
         $installBlocked = $false
         try { [void](Invoke-ClagnosPackageOperation -Action install -PackageId $packageId -Catalog custom -CatalogRoot $customRoot -Options @{} -WindowsFlag) }
@@ -850,7 +861,7 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
         Assert-True -Condition ([bool]$enabled.Enabled -and [bool]$enabled.Changed) -Message 'Enabling a package must restore its install availability.'
         $script:ClagnosPackageToggleAnswer = 'NO'
         $cancelled = Invoke-ClagnosPackageOperation -Action disable -PackageId $packageId -Catalog custom -CatalogRoot $customRoot -Options @{} -WindowsFlag
-        Assert-True -Condition (-not [bool]$cancelled.Changed -and [bool]$cancelled.Enabled) -Message 'A rejected package confirmation must leave package.json unchanged.'
+        Assert-True -Condition (-not [bool]$cancelled.Changed -and [bool]$cancelled.Enabled) -Message 'A rejected package confirmation must leave tasks.toml unchanged.'
     }
     finally {
         Remove-Item -LiteralPath 'Function:\Read-Host' -Force -ErrorAction SilentlyContinue
@@ -984,19 +995,19 @@ Invoke-Test -Name "Package status reads the same ProgramData stores used by inst
     Assert-True -Condition ($packageOperationsText.IndexOf("ProgramData 'chocolatey'",[System.StringComparison]::Ordinal) -ge 0) -Message 'Chocolatey status must read the Chocolatey ProgramData root.'
     Assert-True -Condition ($packageRuntimeText -notlike '*C:\PackageData\clagnos\state\store-installs*') -Message 'Package status must not use the obsolete PackageData store-state root.'
 
-    $windscribe = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\windscribe\package.json') -Raw) -ErrorAction Stop
-    $vsCode = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\visual-studio-code\package.json') -Raw) -ErrorAction Stop
+    $windscribe = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\windscribe\package.json') -Raw) -ErrorAction Stop
+    $vsCode = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\visual-studio-code\package.json') -Raw) -ErrorAction Stop
     Assert-True -Condition ([string]$windscribe.statusCheck.value -eq 'Windscribe.Windscribe') -Message 'Windscribe status must use the canonical winget package id.'
     Assert-True -Condition ([string]$vsCode.statusCheck.kind -eq 'command' -and [string]$vsCode.statusCheck.value -eq 'code') -Message 'VS Code status must use the installed command rather than a winget alias.'
 }
 
 Invoke-Test -Name "Unlocker setup skips an unavailable package and Windows UX respects its machine-policy privilege boundary" -Action {
-    $unlockerPath = Join-Path $RepoRoot 'windows\update\110-configure-unlocker-settings\110-configure-unlocker-settings.ps1'
+    $unlockerPath = Join-Path $RepoRoot 'vm-update\windows\110-configure-unlocker-settings\110-configure-unlocker-settings.ps1'
     $unlockerText = [string](Get-Content -LiteralPath $unlockerPath -Raw -ErrorAction Stop)
     Assert-True -Condition ($unlockerText -like '*unlocker-settings-skip => IObit Unlocker is not installed*') -Message 'Unlocker settings task must skip cleanly when its optional package is absent.'
     Assert-True -Condition ($unlockerText -notlike '*choco install io-unlocker*') -Message 'Unlocker settings must not invoke the outdated checksum-mismatched Chocolatey installer.'
 
-    $experiencePath = Join-Path $RepoRoot 'windows\update\10004-configure-windows-experience\10004-configure-windows-experience.ps1'
+    $experiencePath = Join-Path $RepoRoot 'vm-update\windows\10004-configure-windows-experience\10004-configure-windows-experience.ps1'
     $experienceText = [string](Get-Content -LiteralPath $experiencePath -Raw -ErrorAction Stop)
     Assert-True -Condition ($experienceText -like '*-SkipMachineDshPolicy*') -Message 'Interactive UX worker must defer the machine DSH policy write.'
     Assert-True -Condition ($experienceText -like '*ux-worker-machine-policy-verification-deferred => Microsoft.Dsh.AllowNewsAndInterests*') -Message 'Interactive UX worker must also defer machine DSH policy readback.'
@@ -1303,8 +1314,8 @@ Invoke-Test -Name "Task folder defaults" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-folder-defaults-" + [Guid]::NewGuid().ToString("N"))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
     try {
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '01-initial-default' -Platform windows -ScriptText "Write-Host 'task01'" -TaskJson @{}
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '101-normal-default' -Platform windows -ScriptText "Write-Host 'task101'" -TaskJson @{ enabled = $true }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/01-initial-default' -Platform windows -ScriptText "Write-Host 'task01'" -TaskJson @{}
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/101-normal-default' -Platform windows -ScriptText "Write-Host 'task101'" -TaskJson @{}
 
         $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $tempRoot -Platform windows -Stage update
         $active = @($catalog.ActiveTasks)
@@ -1391,10 +1402,10 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     Assert-True -Condition ($builtinPackages.Count -ge 36) -Message 'Builtin package folders must be discoverable outside task-stage directories.'
     Assert-True -Condition (@($builtinPackages | Where-Object { $_.Catalog -ne 'builtin' -or [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Builtin package rows must carry their catalog label and validated package metadata.'
     Assert-True -Condition (@($builtinPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Every package entry must resolve to its package.json and installer script.'
-    Assert-True -Condition ($packageRuntime -match [regex]::Escape("Join-Path 'packages' (Join-Path `$Catalog `$Platform)")) -Message 'Builtin and custom packages must resolve under separate physical catalog roots.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("Join-Path 'vm-packages' (Join-Path `$Catalog `$Platform)")) -Message 'Builtin and custom packages must resolve under separate physical catalog roots.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -in @('install','repair','update') -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/repair/update target resolution.'
-    Assert-True -Condition ($packageRuntime -match [regex]::Escape("Move-Item -LiteralPath `$tempPath -Destination `$ManifestPath -Force")) -Message 'Package enable/disable must atomically update only package.json.'
-    $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'windows\update') -Platform windows -Stage update -SuppressSkipMessages
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape('Set-ClagnosTaskCatalogEnabled')) -Message 'Package enable/disable must update the owning tasks.toml catalog.'
+    $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'vm-update\windows') -Platform windows -Stage update -SuppressSkipMessages
     Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
     Assert-True -Condition (@($updateInventory.InventoryTasks | Where-Object { $_.Name -eq '01-install-choco-tool' -or $_.Name -eq '03-install-chrome-application' }).Count -eq 0) -Message 'Builtin package installers must no longer appear as vm-update tasks.'
     Assert-True -Condition ((@(Get-ClagnosComponentTypeIds) -join ',') -eq 'group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule') -Message 'The component catalog must expose all managed VC resource types.'
@@ -2386,8 +2397,8 @@ Invoke-Test -Name "Task command lists discovered tasks in runtime order" -Action
             param([switch]$AutoMode, [switch]$WindowsFlag, [switch]$LinuxFlag)
             return [pscustomobject]@{
                 Platform = 'windows'
-                VmInitTaskDir = 'windows/init'
-                VmUpdateTaskDir = 'windows/update'
+                VmInitTaskDir = 'vm-init/windows'
+                VmUpdateTaskDir = 'vm-update/windows'
             }
         }
         function Get-ClagnosTaskBlocksFromDirectory {
@@ -2401,21 +2412,21 @@ Invoke-Test -Name "Task command lists discovered tasks in runtime order" -Action
                             TimeoutSeconds = 180
                             Priority = 1
                             TaskType = 'initial'
-                            Source = 'tracked'
+                            Source = 'builtin'
                             TaskNumber = 1
                             Enabled = $true
                             DisabledReason = ''
                         },
                         [pscustomobject]@{
-                            Name = '1004-disabled-local-task'
-                            RelativePath = 'local/disabled/1004-disabled-local-task.ps1'
+                            Name = '104-disabled-custom-task'
+                            RelativePath = 'custom/104-disabled-custom-task.ps1'
                             TimeoutSeconds = 180
                             Priority = 1004
-                            TaskType = 'local'
-                            Source = 'local'
-                            TaskNumber = 1004
+                            TaskType = 'normal'
+                            Source = 'custom'
+                            TaskNumber = 104
                             Enabled = $false
-                            DisabledReason = 'disabled-by-location'
+                            DisabledReason = 'disabled-in-tasks-toml'
                         }
                     )
                 }
@@ -2429,7 +2440,7 @@ Invoke-Test -Name "Task command lists discovered tasks in runtime order" -Action
                         TimeoutSeconds = 45
                         Priority = 10006
                         TaskType = 'final'
-                        Source = 'tracked'
+                        Source = 'builtin'
                         TaskNumber = 10006
                         Enabled = $true
                         DisabledReason = ''
@@ -2447,7 +2458,7 @@ Invoke-Test -Name "Task command lists discovered tasks in runtime order" -Action
         $disabledResult = Invoke-ClagnosTaskCommand -Options @{ list = $true; disabled = $true } -AutoMode:$false -WindowsFlag -LinuxFlag:$false
         Assert-True -Condition ($disabledResult.Rows.Count -eq 1) -Message 'Task command disabled filter must return only disabled rows.'
         Assert-True -Condition ([string]$disabledResult.Rows[0].Status -eq 'disabled') -Message 'Task command disabled filter must label disabled tasks correctly.'
-        Assert-True -Condition ([string]$disabledResult.Rows[0].Source -eq 'local') -Message 'Task command must preserve local/builtin source labels.'
+        Assert-True -Condition ([string]$disabledResult.Rows[0].Source -eq 'custom') -Message 'Task command must preserve builtin/custom source labels.'
     }
     finally {
         foreach ($functionName in @(
@@ -5883,8 +5894,8 @@ Invoke-Test -Name "Task command run-vm-init uses the isolated task execution pat
                 Context = [ordered]@{
                     ResourceGroup = 'rg-samplevm-ate1-g1'
                     VmName = 'samplevm'
-                    VmInitTaskDir = 'windows/init'
-                    VmUpdateTaskDir = 'windows/update'
+                    VmInitTaskDir = 'vm-init/windows'
+                    VmUpdateTaskDir = 'vm-update/windows'
                     VmUser = 'manager'
                     VmPass = 'secret'
                     VmAssistantUser = 'assistant'
@@ -6222,8 +6233,8 @@ Invoke-Test -Name "Task execution helper supports strict outcome override for up
             Context = [ordered]@{
                 ResourceGroup = 'rg-samplevm-ate1-g1'
                 VmName = 'samplevm'
-                VmInitTaskDir = 'windows/init'
-                VmUpdateTaskDir = 'windows/update'
+                VmInitTaskDir = 'vm-init/windows'
+                VmUpdateTaskDir = 'vm-update/windows'
                 VmUser = 'manager'
                 VmPass = 'secret'
                 VmAssistantUser = 'assistant'
@@ -6530,9 +6541,8 @@ Invoke-Test -Name "Startup profile task overrides the generic host startup token
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-startup-profile-override-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
     try {
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '10002-configure-startup-settings' -Platform windows -ScriptText 'Write-Host "__HOST_STARTUP_PROFILE_JSON_B64__"' -TaskJson @{
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/10002-configure-startup-settings' -Platform windows -ScriptText 'Write-Host "__HOST_STARTUP_PROFILE_JSON_B64__"' -TaskJson @{
             priority = 10002
-            enabled = $true
             timeout = 120
             extensions = @{
                 startupProfile = @{
@@ -6639,7 +6649,7 @@ Invoke-Test -Name "Required config helper rejects empty and placeholder values" 
 }
 
 Invoke-Test -Name "Windows task and package catalogs are physically isolated" -Action {
-    $updateDir = Join-Path $RepoRoot 'windows\update'
+    $updateDir = Join-Path $RepoRoot 'vm-update\windows'
     $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $updateDir -Platform windows -Stage update -SuppressSkipMessages
     $active = @($catalog.ActiveTasks)
     $activeNames = @($active | ForEach-Object { [string]$_.Name })
@@ -6771,89 +6781,57 @@ Invoke-Test -Name "Exec quiet mode suppresses remote chatter but keeps local act
     }
 }
 
-Invoke-Test -Name "Task json controls local-only task discovery" -Action {
+Invoke-Test -Name "Task catalogs store availability apart from task metadata" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-meta-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
     try {
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '101-alpha-task' -Platform windows -ScriptText "Write-Host 'alpha'" -TaskJson @{
-            priority = 101
-            enabled = $true
-            timeout = 90
-        }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'local/1002-beta-task' -Platform windows -ScriptText "Write-Host 'beta'" -TaskJson @{
-            priority = 1002
-            enabled = $true
-            timeout = 44
-        }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'local/1001-delta-task' -Platform windows -ScriptText "Write-Host 'delta'" -TaskJson @{
-            enabled = $true
-        }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'local/disabled/1004-gamma-task' -Platform windows -ScriptText "Write-Host 'gamma'" -TaskJson @{
-            priority = 1004
-            enabled = $false
-            timeout = 99
-        }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/101-alpha-task' -Platform windows -ScriptText "Write-Host 'alpha'" -TaskJson @{ priority = 101; timeout = 90 }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/102-beta-task' -Platform windows -ScriptText "Write-Host 'beta'" -TaskJson @{ priority = 102; timeout = 44 }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/103-delta-task' -Platform windows -ScriptText "Write-Host 'delta'" -TaskJson @{}
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/104-gamma-task' -Platform windows -ScriptText "Write-Host 'gamma'" -TaskJson @{ priority = 104; timeout = 99 } -Enabled:$false
 
         $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $tempRoot -Platform windows -Stage update
         $active = @($catalog.ActiveTasks)
         $activeNames = @($active | ForEach-Object { [string]$_.Name })
         $disabled = @($catalog.DisabledTasks)
 
-        Assert-True -Condition ($active.Count -eq 3) -Message 'Tracked root tasks and local-only tasks must both be discoverable.'
-        Assert-True -Condition ($disabled.Count -eq 1) -Message 'Tasks under local/disabled must be discovered as disabled.'
-        Assert-True -Condition ([string]$activeNames[0] -eq '101-alpha-task') -Message 'Tracked tasks must keep their task.json priority.'
-        Assert-True -Condition ([string]$activeNames[1] -eq '1001-delta-task') -Message 'Local-only tasks must now sort by priority before timeout once they are ready.'
-        Assert-True -Condition ([string]$activeNames[2] -eq '1002-beta-task') -Message 'Local-only tasks with higher priority numbers must follow lower-priority peers even when timeout ordering would previously place them earlier.'
-
+        Assert-True -Condition ($active.Count -eq 3) -Message 'Builtin and custom catalog entries must both be discoverable.'
+        Assert-True -Condition ($disabled.Count -eq 1) -Message 'A false tasks.toml entry must be visible in the disabled inventory.'
+        Assert-True -Condition ([string]$activeNames[0] -eq '101-alpha-task' -and [string]$activeNames[1] -eq '102-beta-task' -and [string]$activeNames[2] -eq '103-delta-task') -Message 'Builtin and custom tasks must share the task priority order.'
         $alphaTask = $active | Where-Object { [string]$_.Name -eq '101-alpha-task' } | Select-Object -First 1
-        $betaTask = $active | Where-Object { [string]$_.Name -eq '1002-beta-task' } | Select-Object -First 1
-        $deltaTask = $active | Where-Object { [string]$_.Name -eq '1001-delta-task' } | Select-Object -First 1
-
-        Assert-True -Condition ([int]$alphaTask.TimeoutSeconds -eq 90) -Message 'task.json timeout must drive tracked tasks.'
-        Assert-True -Condition ([int]$betaTask.TimeoutSeconds -eq 45) -Message 'Local-only task timeouts must be normalized to the shared 30-plus-15-second contract.'
-        Assert-True -Condition ([int]$deltaTask.TimeoutSeconds -eq 180) -Message 'Local-only tasks without task.json timeout must default to 180.'
-        Assert-True -Condition ([int]$alphaTask.Priority -eq 101) -Message 'Tracked task priority must come from task.json.'
-        Assert-True -Condition ([int]$betaTask.Priority -eq 1002) -Message 'task.json priority must drive local-only tasks.'
-        Assert-True -Condition ([int]$deltaTask.Priority -eq 1001) -Message 'Local-only tasks without task.json priority must use the task number.'
-        Assert-True -Condition ([string]$betaTask.RelativePath -eq 'local/1002-beta-task/1002-beta-task.ps1') -Message 'Local-only active task must preserve its folderized relative path.'
-        Assert-True -Condition ([string]$disabled[0].RelativePath -eq 'local/disabled/1004-gamma-task/1004-gamma-task.ps1') -Message 'Local-only disabled task must preserve its folderized relative path.'
+        $betaTask = $active | Where-Object { [string]$_.Name -eq '102-beta-task' } | Select-Object -First 1
+        $deltaTask = $active | Where-Object { [string]$_.Name -eq '103-delta-task' } | Select-Object -First 1
+        Assert-True -Condition ([string]$alphaTask.Source -eq 'builtin' -and [string]$betaTask.Source -eq 'custom') -Message 'Task inventory rows must retain their builtin/custom catalog source.'
+        Assert-True -Condition ([int]$alphaTask.TimeoutSeconds -eq 90 -and [int]$betaTask.TimeoutSeconds -eq 45 -and [int]$deltaTask.TimeoutSeconds -eq 180) -Message 'task.json timeout values must retain the shared timeout normalization and default.'
+        Assert-True -Condition ([int]$alphaTask.Priority -eq 101 -and [int]$betaTask.Priority -eq 102 -and [int]$deltaTask.Priority -eq 103) -Message 'Task priority must come from task.json or the numbered task id.'
+        Assert-True -Condition ([string]$betaTask.RelativePath -eq 'custom/102-beta-task/102-beta-task.ps1') -Message 'Custom tasks must resolve within their custom catalog path.'
+        Assert-True -Condition ([string]$disabled[0].RelativePath -eq 'custom/104-gamma-task/104-gamma-task.ps1' -and [string]$disabled[0].DisabledReason -eq 'disabled-in-tasks-toml') -Message 'Disabled custom tasks must stay in their catalog and report the TOML state.'
+        $betaManifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $betaTask.TaskMetadataPath -Raw)
+        Assert-True -Condition ($null -eq $betaManifest.PSObject.Properties['enabled']) -Message 'task.json must not contain catalog availability.'
     }
     finally {
-        if (Test-Path -LiteralPath $tempRoot) {
-            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
 
-Invoke-Test -Name "Task discovery keeps initial then normal then local then final order" -Action {
+Invoke-Test -Name "Task discovery orders initial normal and final tasks across builtin and custom catalogs" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-order-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
     try {
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '01-alpha-init' -Platform windows -ScriptText "Write-Host 'alpha'" -TaskJson @{ timeout = 30 }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '101-bravo-normal' -Platform windows -ScriptText "Write-Host 'bravo'" -TaskJson @{ timeout = 40 }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '10001-delta-final' -Platform windows -ScriptText "Write-Host 'delta'" -TaskJson @{ timeout = 50 }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'local/1002-charlie-local' -Platform windows -ScriptText "Write-Host 'charlie'" -TaskJson @{
-            priority = 1002
-            timeout = 44
-            enabled = $true
-        }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/01-alpha-init' -Platform windows -ScriptText "Write-Host 'alpha'" -TaskJson @{ timeout = 30 }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/101-bravo-normal' -Platform windows -ScriptText "Write-Host 'bravo'" -TaskJson @{ timeout = 40 }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/102-charlie-custom' -Platform windows -ScriptText "Write-Host 'charlie'" -TaskJson @{ priority = 102; timeout = 44 }
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/10001-delta-final' -Platform windows -ScriptText "Write-Host 'delta'" -TaskJson @{ timeout = 50 }
 
         $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $tempRoot -Platform windows -Stage update
         $activeNames = @(@($catalog.ActiveTasks) | ForEach-Object { [string]$_.Name })
-
-        Assert-True -Condition ($activeNames.Count -eq 4) -Message 'Expected tracked initial, tracked normal, local, and tracked final tasks to all be discovered.'
-        Assert-True -Condition ([string]$activeNames[0] -eq '01-alpha-init') -Message 'Initial tracked tasks must stay first.'
-        Assert-True -Condition ([string]$activeNames[1] -eq '101-bravo-normal') -Message 'Normal tracked tasks must stay after initial tasks.'
-        Assert-True -Condition ([string]$activeNames[2] -eq '1002-charlie-local') -Message 'Local untracked tasks must stay after normal tracked tasks.'
-        Assert-True -Condition ([string]$activeNames[3] -eq '10001-delta-final') -Message 'Tracked final tasks must stay after local untracked tasks.'
+        Assert-True -Condition ($activeNames.Count -eq 4) -Message 'Builtin and custom tasks in each supported task band must be discovered.'
+        Assert-True -Condition ([string]$activeNames[0] -eq '01-alpha-init' -and [string]$activeNames[1] -eq '101-bravo-normal' -and [string]$activeNames[2] -eq '102-charlie-custom' -and [string]$activeNames[3] -eq '10001-delta-final') -Message 'Execution order must follow initial, normal, and final task bands.'
     }
     finally {
-        if (Test-Path -LiteralPath $tempRoot) {
-            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
-
 Invoke-Test -Name "Generic task metadata assets resolve into asset copies" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-assets-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
@@ -6863,10 +6841,9 @@ Invoke-Test -Name "Generic task metadata assets resolve into asset copies" -Acti
         $assetPath = Join-Path $assetDir 'profile.zip'
         Set-Content -Path $assetPath -Value 'payload' -Encoding UTF8
 
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'local/1002-local-config-task' -Platform windows -ScriptText 'Write-Host "__VM_ADMIN_USER__"' -TaskJson @{
-            priority = 1002
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/101-custom-config-task' -Platform windows -ScriptText 'Write-Host "__VM_ADMIN_USER__"' -TaskJson @{
+            priority = 101
             timeout = 7
-            enabled = $true
             assets = @(
                 @{
                     local = '../../shared-assets/profile.zip'
@@ -6913,14 +6890,12 @@ Invoke-Test -Name "Duplicate task names across portable task trees fail fast" -A
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-duplicate-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
     try {
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath '101-alpha-task' -Platform windows -ScriptText 'Write-Host "tracked"' -TaskJson @{
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/101-alpha-task' -Platform windows -ScriptText 'Write-Host "tracked"' -TaskJson @{
             priority = 101
-            enabled = $true
             timeout = 180
         }
-        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'disabled/101-alpha-task' -Platform windows -ScriptText 'Write-Host "disabled-duplicate"' -TaskJson @{
+        New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'custom/101-alpha-task' -Platform windows -ScriptText 'Write-Host "custom-duplicate"' -TaskJson @{
             priority = 101
-            enabled = $true
             timeout = 180
         }
 
@@ -6942,30 +6917,18 @@ Invoke-Test -Name "Duplicate task names across portable task trees fail fast" -A
     }
 }
 
-Invoke-Test -Name "Malformed nested local task folders warn and skip" -Action {
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-nesting-test-" + [Guid]::NewGuid().ToString("N"))
-    New-Item -Path (Join-Path $tempRoot 'local\subdir\1001-bad-task') -ItemType Directory -Force | Out-Null
+Invoke-Test -Name "Missing task folders are treated as absent from the enabled catalog" -Action {
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-task-catalog-parity-" + [Guid]::NewGuid().ToString("N"))
     try {
-        Set-Content -Path (Join-Path $tempRoot 'local\subdir\1001-bad-task\1001-bad-task.ps1') -Encoding UTF8 -Value 'Write-Host "bad"'
-        Set-Content -Path (Join-Path $tempRoot 'local\subdir\1001-bad-task\task.json') -Encoding UTF8 -Value '{"priority":1001,"enabled":true,"timeout":180}'
-
-        $warnings = @()
-        $null = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $tempRoot -Platform windows -Stage update 3>&1 | ForEach-Object {
-            if ($_ -is [System.Management.Automation.WarningRecord]) {
-                $warnings += [string]$_.Message
-            }
-        }
-
-        Assert-True -Condition ($warnings.Count -ge 1) -Message 'Unexpected nested local task folders must emit one concise warning.'
-        Assert-True -Condition (($warnings -join "`n") -like '*Task folder skipped: local/subdir*') -Message 'Malformed nested local task folders must be skipped by their top-level folder.'
+        $task = New-SmokeTaskFolder -RootPath $tempRoot -RelativeFolderPath 'builtin/101-present-task' -Platform windows -ScriptText 'Write-Host "present"' -TaskJson @{ priority = 101 }
+        [System.IO.File]::WriteAllLines($task.CatalogPath,[string[]]@('# Task availability.','[tasks]','"101-missing-task" = true'),([System.Text.UTF8Encoding]::new($false)))
+        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $tempRoot -Platform windows -Stage update -SuppressSkipMessages
+        Assert-True -Condition (@($catalog.ActiveTasks).Count -eq 0 -and @($catalog.DisabledTasks).Count -eq 0) -Message 'A missing task folder must be treated as absent from the catalog.'
     }
     finally {
-        if (Test-Path -LiteralPath $tempRoot) {
-            Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
     }
 }
-
 Invoke-Test -Name "Windows Ollama task verifies API readiness" -Action {
     $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '135-install-ollama-tool'
     $taskJsonPath = Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '135-install-ollama-tool'
@@ -7192,8 +7155,8 @@ Invoke-Test -Name "Store package post-install tasks run synchronously with the i
             Context = [ordered]@{
                 ResourceGroup = 'rg-samplevm-ate1-g1'
                 VmName = 'samplevm'
-                VmInitTaskDir = 'windows/init'
-                VmUpdateTaskDir = 'windows/update'
+                VmInitTaskDir = 'vm-init/windows'
+                VmUpdateTaskDir = 'vm-update/windows'
                 VmUser = 'manager'
                 VmPass = 'secret'
                 VmAssistantUser = 'assistant'
@@ -7213,8 +7176,8 @@ Invoke-Test -Name "Store package post-install tasks run synchronously with the i
             Script = 'Write-Host teams'
             TaskRootPath = $RepoRoot
             DirectoryPath = $RepoRoot
-            TaskMetadataPath = (Join-Path $RepoRoot 'packages\builtin\windows\microsoft-teams\package.json')
-            StageRootDirectoryPath = (Join-Path $RepoRoot 'packages\builtin\windows')
+            TaskMetadataPath = (Join-Path $RepoRoot 'vm-packages\builtin\windows\microsoft-teams\package.json')
+            StageRootDirectoryPath = (Join-Path $RepoRoot 'vm-packages\builtin\windows')
             RelativePath = 'microsoft-teams/install.ps1'
             TimeoutSeconds = 75
             AssetSpecs = @()
@@ -7349,9 +7312,9 @@ Assert-True -Condition (-not $resolvedAdvancedTask.PSObject.Properties.Match('In
 
 Invoke-Test -Name "Vm-update app-state plugin contract resolves only task-local app-state zip paths" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-app-state-plugin-test-" + [Guid]::NewGuid().ToString("N"))
-    $updateDir = Join-Path $tempRoot 'windows\update'
-    $localDir = Join-Path $updateDir 'local'
-    New-Item -Path $localDir -ItemType Directory -Force | Out-Null
+    $updateDir = Join-Path $tempRoot 'vm-update\windows'
+    $customDir = Join-Path $updateDir 'custom'
+    New-Item -Path $customDir -ItemType Directory -Force | Out-Null
 
     function New-TestAppStateZip {
         param(
@@ -7387,46 +7350,45 @@ Invoke-Test -Name "Vm-update app-state plugin contract resolves only task-local 
     }
 
     try {
-        New-SmokeTaskFolder -RootPath $updateDir -RelativeFolderPath '113-install-docker-desktop-application' -Platform windows -ScriptText 'Write-Host "tracked"' -TaskJson @{
+        New-SmokeTaskFolder -RootPath $updateDir -RelativeFolderPath 'builtin/113-install-docker-desktop-application' -Platform windows -ScriptText 'Write-Host "builtin"' -TaskJson @{
             priority = 113
-            enabled = $true
             timeout = 600
         }
-        New-SmokeTaskFolder -RootPath $updateDir -RelativeFolderPath 'local/1001-install-configure-screen-reader' -Platform windows -ScriptText 'Write-Host "local"' -TaskJson @{
-            priority = 1001
-            enabled = $true
+        New-SmokeTaskFolder -RootPath $updateDir -RelativeFolderPath 'custom/201-install-configure-screen-reader' -Platform windows -ScriptText 'Write-Host "custom"' -TaskJson @{
+            priority = 201
             timeout = 780
         }
 
         $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $updateDir -Platform windows -Stage update
-        $trackedTask = @($catalog.ActiveTasks | Where-Object { [string]$_.Name -eq '113-install-docker-desktop-application' })[0]
-        $localTask = @($catalog.ActiveTasks | Where-Object { [string]$_.Name -eq '1001-install-configure-screen-reader' })[0]
+        $builtinTask = @($catalog.ActiveTasks | Where-Object { [string]$_.Name -eq '113-install-docker-desktop-application' })[0]
+        $customTask = @($catalog.ActiveTasks | Where-Object { [string]$_.Name -eq '201-install-configure-screen-reader' })[0]
 
-        $expectedTrackedPluginDir = Join-Path (Join-Path $updateDir '113-install-docker-desktop-application') 'app-state'
-        $expectedLocalPluginDir = Join-Path (Join-Path $localDir '1001-install-configure-screen-reader') 'app-state'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStateRootDirectoryPath -TaskBlock $trackedTask) -eq $expectedTrackedPluginDir) -Message 'Tracked vm-update tasks must resolve their task-local app-state root.'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStateRootDirectoryPath -TaskBlock $localTask) -eq $expectedLocalPluginDir) -Message 'Local-only vm-update tasks must resolve their task-local app-state root.'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStatePluginDirectoryPath -TaskBlock $trackedTask) -eq $expectedTrackedPluginDir) -Message 'Tracked task plugin directory mismatch.'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStatePluginDirectoryPath -TaskBlock $localTask) -eq $expectedLocalPluginDir) -Message 'Local-only task plugin directory mismatch.'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStateZipPath -TaskBlock $trackedTask) -eq (Join-Path $expectedTrackedPluginDir 'app-state.zip')) -Message 'Tracked task plugin zip path mismatch.'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStateZipPath -TaskBlock $localTask) -eq (Join-Path $expectedLocalPluginDir 'app-state.zip')) -Message 'Local-only task plugin zip path mismatch.'
+        $expectedBuiltinPluginDir = Join-Path (Join-Path (Join-Path $updateDir 'builtin') '113-install-docker-desktop-application') 'app-state'
+        $expectedCustomPluginDir = Join-Path (Join-Path (Join-Path $updateDir 'custom') '201-install-configure-screen-reader') 'app-state'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStateRootDirectoryPath -TaskBlock $builtinTask) -eq $expectedBuiltinPluginDir) -Message 'Builtin vm-update tasks must resolve their task-local app-state root.'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStateRootDirectoryPath -TaskBlock $customTask) -eq $expectedCustomPluginDir) -Message 'Custom vm-update tasks must resolve their task-local app-state root.'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStatePluginDirectoryPath -TaskBlock $builtinTask) -eq $expectedBuiltinPluginDir) -Message 'Builtin task plugin directory mismatch.'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStatePluginDirectoryPath -TaskBlock $customTask) -eq $expectedCustomPluginDir) -Message 'Custom task plugin directory mismatch.'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStateZipPath -TaskBlock $builtinTask) -eq (Join-Path $expectedBuiltinPluginDir 'app-state.zip')) -Message 'Builtin task plugin zip path mismatch.'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStateZipPath -TaskBlock $customTask) -eq (Join-Path $expectedCustomPluginDir 'app-state.zip')) -Message 'Custom task plugin zip path mismatch.'
 
-        New-Item -Path (Join-Path $localDir 'legacy-side-assets') -ItemType Directory -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $localDir 'legacy-side-assets\app-state.zip') -Value 'legacy' -Encoding UTF8
-        $missingPluginInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $localTask
-        Assert-True -Condition ([string]$missingPluginInfo.Status -eq 'missing-plugin') -Message 'Task app-state resolution must not read zip payloads from local/ helper directories.'
+        $neighborDir = Join-Path $tempRoot 'neighbor-assets'
+        New-Item -Path $neighborDir -ItemType Directory -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $neighborDir 'app-state.zip') -Value 'neighbor' -Encoding UTF8
+        $missingPluginInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $customTask
+        Assert-True -Condition ([string]$missingPluginInfo.Status -eq 'missing-plugin') -Message 'Task app-state resolution must use only the owning custom task folder.'
 
-        New-Item -Path $expectedTrackedPluginDir -ItemType Directory -Force | Out-Null
-        $missingZipInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $trackedTask
+        New-Item -Path $expectedBuiltinPluginDir -ItemType Directory -Force | Out-Null
+        $missingZipInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $builtinTask
         Assert-True -Condition ([string]$missingZipInfo.Status -eq 'missing-zip') -Message 'Existing app-state plugin folders without app-state.zip must report missing-zip.'
 
-        New-TestAppStateZip -DestinationPath (Join-Path $expectedTrackedPluginDir 'app-state.zip') -TaskName '113-install-docker-desktop-application' -ManifestTaskName 'wrong-task-name'
-        $invalidZipInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $trackedTask
+        New-TestAppStateZip -DestinationPath (Join-Path $expectedBuiltinPluginDir 'app-state.zip') -TaskName '113-install-docker-desktop-application' -ManifestTaskName 'wrong-task-name'
+        $invalidZipInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $builtinTask
         Assert-True -Condition ([string]$invalidZipInfo.Status -eq 'invalid') -Message 'Task app-state plugin zips with mismatched taskName must be rejected.'
 
-        New-Item -Path $expectedLocalPluginDir -ItemType Directory -Force | Out-Null
-        New-TestAppStateZip -DestinationPath (Join-Path $expectedLocalPluginDir 'app-state.zip') -TaskName '1001-install-configure-screen-reader'
-        $readyInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $localTask
+        New-Item -Path $expectedCustomPluginDir -ItemType Directory -Force | Out-Null
+        New-TestAppStateZip -DestinationPath (Join-Path $expectedCustomPluginDir 'app-state.zip') -TaskName '201-install-configure-screen-reader'
+        $readyInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $customTask
         Assert-True -Condition ([string]$readyInfo.Status -eq 'ready') -Message 'Valid per-task app-state zip plugins must resolve as ready.'
         Assert-True -Condition ($null -ne $readyInfo.Manifest) -Message 'Ready app-state zip plugins must publish their parsed manifest.'
     }
@@ -7474,24 +7436,24 @@ Invoke-Test -Name "Vm-update app-state plugin runtime removes legacy restore sur
     Assert-True -Condition ($localExportModuleText -like '*HKLM\\Software\\WOW6432Node\\Freedom Scientific*') -Message 'Local app-state export helpers must export the JAWS WOW6432 Freedom Scientific subtree.'
     Assert-True -Condition ($localExportModuleText -like '*HKCU\\Software\\Freedom Scientific*') -Message 'Local app-state export helpers must export the JAWS user Freedom Scientific subtree.'
     Assert-True -Condition (-not ($localExportModuleText -like '*AppStatesRoot*')) -Message 'Local app-state export helpers must not keep the retired shared app-states root.'
-    Assert-True -Condition ($gitignoreText -like '*windows/update/**/app-state/***') -Message '.gitignore must ignore Windows update task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*windows/init/**/app-state/***') -Message '.gitignore must ignore Windows init task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*linux/update/**/app-state/***') -Message '.gitignore must ignore Linux update task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*linux/init/**/app-state/***') -Message '.gitignore must ignore Linux init task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*windows/update/**/backup-app-states/***') -Message '.gitignore must ignore Windows update backup-app-states snapshots.'
-    Assert-True -Condition ($gitignoreText -like '*windows/init/**/backup-app-states/***') -Message '.gitignore must ignore Windows init backup-app-states snapshots.'
-    Assert-True -Condition ($gitignoreText -like '*linux/update/**/backup-app-states/***') -Message '.gitignore must ignore Linux update backup-app-states snapshots.'
-    Assert-True -Condition ($gitignoreText -like '*linux/init/**/backup-app-states/***') -Message '.gitignore must ignore Linux init backup-app-states snapshots.'
-    Assert-True -Condition (-not ($gitignoreText -like '*windows/update/app-states/***')) -Message '.gitignore must not keep the retired Windows update shared app-states root ignore.'
-    Assert-True -Condition (-not ($gitignoreText -like '*windows/init/app-states/***')) -Message '.gitignore must not keep the retired Windows init shared app-states root ignore.'
-    Assert-True -Condition (-not ($gitignoreText -like '*linux/update/app-states/***')) -Message '.gitignore must not keep the retired Linux update shared app-states root ignore.'
-    Assert-True -Condition (-not ($gitignoreText -like '*linux/init/app-states/***')) -Message '.gitignore must not keep the retired Linux init shared app-states root ignore.'
+    Assert-True -Condition ($gitignoreText -like '*vm-update/windows/**/app-state/***') -Message '.gitignore must ignore Windows update task-local app-state payloads.'
+    Assert-True -Condition ($gitignoreText -like '*vm-init/windows/**/app-state/***') -Message '.gitignore must ignore Windows init task-local app-state payloads.'
+    Assert-True -Condition ($gitignoreText -like '*vm-update/linux/**/app-state/***') -Message '.gitignore must ignore Linux update task-local app-state payloads.'
+    Assert-True -Condition ($gitignoreText -like '*vm-init/linux/**/app-state/***') -Message '.gitignore must ignore Linux init task-local app-state payloads.'
+    Assert-True -Condition ($gitignoreText -like '*vm-update/windows/**/backup-app-states/***') -Message '.gitignore must ignore Windows update backup-app-states snapshots.'
+    Assert-True -Condition ($gitignoreText -like '*vm-init/windows/**/backup-app-states/***') -Message '.gitignore must ignore Windows init backup-app-states snapshots.'
+    Assert-True -Condition ($gitignoreText -like '*vm-update/linux/**/backup-app-states/***') -Message '.gitignore must ignore Linux update backup-app-states snapshots.'
+    Assert-True -Condition ($gitignoreText -like '*vm-init/linux/**/backup-app-states/***') -Message '.gitignore must ignore Linux init backup-app-states snapshots.'
+    Assert-True -Condition (-not ($gitignoreText -like '*vm-update/windows/app-states/***')) -Message '.gitignore must not keep the retired Windows update shared app-states root ignore.'
+    Assert-True -Condition (-not ($gitignoreText -like '*vm-init/windows/app-states/***')) -Message '.gitignore must not keep the retired Windows init shared app-states root ignore.'
+    Assert-True -Condition (-not ($gitignoreText -like '*vm-update/linux/app-states/***')) -Message '.gitignore must not keep the retired Linux update shared app-states root ignore.'
+    Assert-True -Condition (-not ($gitignoreText -like '*vm-init/linux/app-states/***')) -Message '.gitignore must not keep the retired Linux init shared app-states root ignore.'
     Assert-True -Condition (-not ($runnerText -like '*linux replay is not implemented yet*')) -Message 'Shared app-state runtime must not keep the old Linux replay unsupported warning.'
 
     foreach ($removedPath in @(
-        'windows\update\133-restore-managed-app-state.ps1',
-        'windows\update\app-state\managed-app-state-common.psm1',
-        'windows\update\app-state\managed-app-state-manifest.json'
+        'vm-update\windows\133-restore-managed-app-state.ps1',
+        'vm-update\windows\app-state\managed-app-state-common.psm1',
+        'vm-update\windows\app-state\managed-app-state-manifest.json'
     )) {
         Assert-True -Condition (-not (Test-Path -LiteralPath (Join-Path $RepoRoot $removedPath))) -Message ("Legacy app-state restore surface must be removed: {0}" -f $removedPath)
     }
@@ -7999,16 +7961,16 @@ Invoke-Test -Name "App-state runtime keeps managed VM targeting strict and local
     $guestHelperText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-app-state-guest.psm1') -Raw)
     $captureHelperText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-app-state-capture.ps1') -Raw)
     $localAppStateText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-app-state-local.ps1') -Raw)
-    $chromeTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\google-chrome\package.json') -Raw)
-    $edgeTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\microsoft-edge\package.json') -Raw)
+    $chromeTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\google-chrome\package.json') -Raw)
+    $edgeTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\microsoft-edge\package.json') -Raw)
     $copySettingsTaskJsonText = [string](Get-Content -LiteralPath (Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '10005-copy-user-settings') -Raw)
-    $dockerTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\docker-desktop\package.json') -Raw)
-    $ollamaTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\ollama\package.json') -Raw)
-    $azdTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\azure-developer-cli\package.json') -Raw)
-    $azureCliTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\azure-cli\package.json') -Raw)
-    $ghCliTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\github-cli\package.json') -Raw)
-    $jawsTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\jaws\package.json') -Raw)
-    $whatsAppTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\whatsapp\package.json') -Raw)
+    $dockerTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\docker-desktop\package.json') -Raw)
+    $ollamaTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\ollama\package.json') -Raw)
+    $azdTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\azure-developer-cli\package.json') -Raw)
+    $azureCliTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\azure-cli\package.json') -Raw)
+    $ghCliTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\github-cli\package.json') -Raw)
+    $jawsTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\jaws\package.json') -Raw)
+    $whatsAppTaskJsonText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\whatsapp\package.json') -Raw)
     $sshAssetsText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\tasks\ssh\assets.ps1') -Raw)
     $sshProcessText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\tasks\ssh\process.ps1') -Raw)
     $auditScriptPath = Join-Path $RepoRoot 'tools\scripts\app-state-audit.ps1'
@@ -8167,7 +8129,7 @@ Windows Registry Editor Version 5.00
 Invoke-Test -Name "App-state normalization tool merges foreign profile payloads into manager" -Action {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $tempRepo = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-normalize-tool-' + [Guid]::NewGuid().ToString('N'))
-    $taskRoot = Join-Path $tempRepo 'windows\update\117-test'
+    $taskRoot = Join-Path $tempRepo 'vm-update\windows\117-test'
     $pluginRoot = Join-Path $taskRoot 'app-state'
     $scratchRoot = Join-Path $tempRepo 'scratch'
     $payloadRoot = Join-Path $scratchRoot 'payload'
@@ -8478,10 +8440,10 @@ Invoke-Test -Name "Task command surface supports save and restore app-state main
 Invoke-Test -Name "Local-machine app-state helpers resolve task users and preserve restore journals" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-local-app-state-test-' + [Guid]::NewGuid().ToString('N'))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
-    $stageRoot = Join-Path $tempRoot 'windows\update'
-    $taskRoot = Join-Path $stageRoot '101-local-app-state'
-    $localStageRoot = Join-Path $stageRoot 'local'
-    $localTaskRoot = Join-Path $localStageRoot '1001-local-app-state'
+    $stageRoot = Join-Path $tempRoot 'vm-update\windows'
+    $taskRoot = Join-Path (Join-Path $stageRoot 'builtin') '101-profile-app-state'
+    $customCatalogRoot = Join-Path $stageRoot 'custom'
+    $customTaskRoot = Join-Path $customCatalogRoot '201-custom-app-state'
     $profileRoot = Join-Path $tempRoot 'profiles'
     $currentUserAlias = [string][System.Environment]::UserName
     $operatorProfile = Join-Path $profileRoot 'operator'
@@ -8492,12 +8454,13 @@ Invoke-Test -Name "Local-machine app-state helpers resolve task users and preser
         [pscustomobject]@{ Label = 'assistant'; UserName = 'assistant'; ProfilePath = $assistantProfile; NtUserDatPath = (Join-Path $assistantProfile 'NTUSER.DAT') }
     )
     $taskBlock = [pscustomobject]@{
-        Name = '101-local-app-state'
+        Name = '101-profile-app-state'
         TaskRootPath = [string]$taskRoot
         DirectoryPath = [string]$taskRoot
         StageRootDirectoryPath = [string]$stageRoot
-        RelativePath = '101-local-app-state\101-local-app-state.ps1'
-        AppStateSpec = ConvertTo-ClagnosTaskFolderAppStateSpec -TaskName '101-local-app-state' -TaskLabel '101-local-app-state' -AppState ([ordered]@{
+        RelativePath = 'builtin\101-profile-app-state\101-profile-app-state.ps1'
+        Catalog = 'builtin'
+        AppStateSpec = ConvertTo-ClagnosTaskFolderAppStateSpec -TaskName '101-profile-app-state' -TaskLabel '101-profile-app-state' -AppState ([ordered]@{
             machineDirectories = @()
             machineFiles = @()
             profileDirectories = @()
@@ -8506,12 +8469,13 @@ Invoke-Test -Name "Local-machine app-state helpers resolve task users and preser
             userRegistryKeys = @()
         })
     }
-    $localTaskBlock = [pscustomobject]@{
-        Name = '1001-local-app-state'
-        TaskRootPath = [string]$localTaskRoot
-        DirectoryPath = [string]$localTaskRoot
+    $customTaskBlock = [pscustomobject]@{
+        Name = '201-custom-app-state'
+        TaskRootPath = [string]$customTaskRoot
+        DirectoryPath = [string]$customTaskRoot
         StageRootDirectoryPath = [string]$stageRoot
-        RelativePath = 'local\1001-local-app-state\1001-local-app-state.ps1'
+        RelativePath = 'custom\201-custom-app-state\201-custom-app-state.ps1'
+        Catalog = 'custom'
         AppStateSpec = $taskBlock.AppStateSpec
     }
 
@@ -8520,7 +8484,7 @@ Invoke-Test -Name "Local-machine app-state helpers resolve task users and preser
     $originalReplayCommand = Get-Command Invoke-ClagnosTaskAppStateReplay -CommandType Function -ErrorAction SilentlyContinue
     try {
         New-Item -Path $taskRoot -ItemType Directory -Force | Out-Null
-        New-Item -Path $localTaskRoot -ItemType Directory -Force | Out-Null
+        New-Item -Path $customTaskRoot -ItemType Directory -Force | Out-Null
         foreach ($profilePath in @($operatorProfile, $assistantProfile)) {
             New-Item -Path $profilePath -ItemType Directory -Force | Out-Null
             Set-Content -LiteralPath (Join-Path $profilePath 'NTUSER.DAT') -Value 'stub' -Encoding UTF8
@@ -8541,10 +8505,10 @@ Invoke-Test -Name "Local-machine app-state helpers resolve task users and preser
         Assert-True -Condition (@($selectedCurrent).Count -eq 1) -Message 'Local app-state .current. must resolve to one profile target.'
         $selectedExplicit = @(Resolve-ClagnosLocalAppStateProfileTargets -RequestedUsers @('assistant,operator'))
         Assert-True -Condition (@($selectedExplicit).Count -eq 2) -Message 'Local app-state explicit user lists must resolve multiple profile targets.'
-        $expectedTrackedBackupRoot = Join-Path (Join-Path $stageRoot 'backup-app-states') '101-local-app-state'
-        $expectedLocalBackupRoot = Join-Path (Join-Path $localStageRoot 'backup-app-states') '1001-local-app-state'
+        $expectedTrackedBackupRoot = Join-Path (Join-Path (Join-Path $stageRoot 'builtin') 'backup-app-states') '101-profile-app-state'
+        $expectedCustomBackupRoot = Join-Path (Join-Path $customCatalogRoot 'backup-app-states') '201-custom-app-state'
         Assert-True -Condition ([string](Get-ClagnosTaskAppStateLocalBackupRootPath -TaskBlock $taskBlock) -eq $expectedTrackedBackupRoot) -Message 'Tracked local restore backups must resolve under the stage backup-app-states root.'
-        Assert-True -Condition ([string](Get-ClagnosTaskAppStateLocalBackupRootPath -TaskBlock $localTaskBlock) -eq $expectedLocalBackupRoot) -Message 'Local-only restore backups must resolve under the local backup-app-states root.'
+        Assert-True -Condition ([string](Get-ClagnosTaskAppStateLocalBackupRootPath -TaskBlock $customTaskBlock) -eq $expectedCustomBackupRoot) -Message 'Custom task restore backups must resolve under the custom catalog backup-app-states root.'
 
         Set-Item -Path Function:Invoke-ClagnosTaskAppStateCapture -Value {
             param([string]$TaskName,[string]$PlanPath,[string]$OutputZipPath,[string]$ManagerUser,[string]$AssistantUser,[object[]]$ProfileTargets=@())
@@ -8628,7 +8592,7 @@ Invoke-Test -Name "Local-machine app-state helpers resolve task users and preser
 Invoke-Test -Name "Task app-state save uses current task.json rules ahead of legacy zip coverage" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-app-state-plan-' + [Guid]::NewGuid().ToString('N'))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
-    $stageRoot = Join-Path $tempRoot 'windows\update'
+    $stageRoot = Join-Path $tempRoot 'vm-update\windows'
     $taskRoot = Join-Path $stageRoot '109-test-application'
     $pluginRoot = Join-Path $taskRoot 'app-state'
     try {
@@ -8744,7 +8708,7 @@ Invoke-Test -Name "App-state wildcard capture path matching resolves matched ite
 Invoke-Test -Name "Local-machine app-state restore rolls back when verification fails" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-local-app-state-rollback-' + [Guid]::NewGuid().ToString('N'))
     New-Item -Path $tempRoot -ItemType Directory -Force | Out-Null
-    $stageRoot = Join-Path $tempRoot 'windows\update'
+    $stageRoot = Join-Path $tempRoot 'vm-update\windows'
     $taskRoot = Join-Path $stageRoot '101-local-app-state'
     $profileRoot = Join-Path $tempRoot 'profiles'
     $operatorProfile = Join-Path $profileRoot 'operator'
@@ -8931,9 +8895,9 @@ Invoke-Test -Name "Windows PATH refresh is centralized and refreshenv is gone" -
     Assert-True -Condition ($helperText -like '*Refresh-ClagnosSessionPath*') -Message 'Session environment helper must export a PATH refresh function.'
 
     $windowsSurfaceFiles = @(
-        Get-ChildItem (Join-Path $RepoRoot 'windows\init') -Recurse -File -Include *.ps1 |
+        Get-ChildItem (Join-Path $RepoRoot 'vm-init\windows') -Recurse -File -Include *.ps1 |
             Select-Object -ExpandProperty FullName
-        Get-ChildItem (Join-Path $RepoRoot 'windows\update') -Recurse -File -Include *.ps1 |
+        Get-ChildItem (Join-Path $RepoRoot 'vm-update\windows') -Recurse -File -Include *.ps1 |
             Select-Object -ExpandProperty FullName
         (Join-Path $RepoRoot 'tools\scripts\clagnos-summary-readback-windows.ps1')
         (Join-Path $RepoRoot 'modules\core\tasks\clagnos-store-install-state.psm1')
@@ -9140,6 +9104,7 @@ Invoke-Test -Name "Windows configure-all-users init task contract" -Action {
 Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Action {
     $remotingTaskPath = Get-RepoTaskScriptPath -Platform windows -Stage init -TaskName '06-configure-powershell-remoting'
     $remotingTaskJsonPath = Get-RepoTaskJsonPath -Platform windows -Stage init -TaskName '06-configure-powershell-remoting'
+    $remotingTaskCatalogPath = Join-Path $RepoRoot 'vm-init\windows\builtin\tasks.toml'
     $advancedTaskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '10001-configure-advanced-settings'
     $guestRuntimePath = Join-Path $RepoRoot 'modules\platform\clagnos-guest-runtime.ps1'
     $mainCommandPath = Join-Path $RepoRoot 'modules\commands\pipeline\clagnos-main-command.ps1'
@@ -9176,7 +9141,8 @@ Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Actio
     }
 
     Assert-True -Condition ($remotingTaskJsonText -like '*"priority": 7*') -Message 'PowerShell remoting init task priority must stay 7.'
-    Assert-True -Condition ($remotingTaskJsonText -like '*"enabled": true*') -Message 'PowerShell remoting init task must remain enabled.'
+    $remotingTaskAvailability = Read-ClagnosTaskCatalogState -Path $remotingTaskCatalogPath
+    Assert-True -Condition ($remotingTaskAvailability.Entries.ContainsKey('06-configure-powershell-remoting') -and [bool]$remotingTaskAvailability.Entries['06-configure-powershell-remoting']) -Message 'PowerShell remoting init task must remain enabled in tasks.toml.'
     Assert-True -Condition ($remotingTaskJsonText -like '*05-configure-firewall-settings*') -Message 'PowerShell remoting init task must depend on firewall configuration.'
     Assert-True -Condition (($remotingTaskText -like "*Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName `$managerUser*") -and ($remotingTaskText -like "*Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName `$assistantUser*")) -Message 'PowerShell remoting init task must grant both managed users access.'
     Assert-True -Condition ($platformDefaultsText -like '*5985*') -Message 'Default TCP ports must include 5985 for WinRM.'
@@ -9211,7 +9177,7 @@ Invoke-Test -Name "Windows auto-start task applies the approved startup profile 
     $taskJsonText = [string](Get-Content -LiteralPath $taskJsonPath -Raw)
     $healthTaskPath = Get-RepoSummaryReadbackScriptPath -Platform windows
     $healthTaskText = [string](Get-Content -LiteralPath $healthTaskPath -Raw)
-    $taskCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'windows\update') -Platform windows -Stage update
+    $taskCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'vm-update\windows') -Platform windows -Stage update
     $taskBlock = @($taskCatalog.ActiveTasks | Where-Object { [string]$_.Name -eq '10002-configure-startup-settings' } | Select-Object -First 1)[0]
     Assert-True -Condition ($null -ne $taskBlock) -Message 'Auto-start task must be discoverable from the Windows vm-update catalog.'
     Assert-True -Condition (Test-ClagnosTaskStartupProfileEnabled -TaskBlock $taskBlock) -Message 'Auto-start task must carry the startup-profile extension through task discovery.'
@@ -9434,7 +9400,7 @@ Invoke-Test -Name "Windows install tasks short-circuit healthy installs and avoi
     }
 
     foreach ($taskPath in @(
-        Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'windows\update') -Recurse -Filter '*.ps1' -File -ErrorAction Stop |
+        Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'vm-update\windows') -Recurse -Filter '*.ps1' -File -ErrorAction Stop |
             Where-Object { [string]$_.BaseName -eq [string](Split-Path -Path $_.DirectoryName -Leaf) }
     )) {
         $taskText = [string](Get-Content -LiteralPath $taskPath.FullName -Raw)
@@ -9463,10 +9429,10 @@ Invoke-Test -Name "Tracked tree omits legacy local-only accessibility residue" -
         if ($relativeText.StartsWith('.git/', [System.StringComparison]::OrdinalIgnoreCase)) {
             continue
         }
-        if ($relativeText.StartsWith('windows/update/local/', [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($relativeText.StartsWith('vm-update/windows/local/', [System.StringComparison]::OrdinalIgnoreCase)) {
             continue
         }
-        if ($relativeText.StartsWith('windows/init/local/', [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($relativeText.StartsWith('vm-init/windows/local/', [System.StringComparison]::OrdinalIgnoreCase)) {
             continue
         }
 

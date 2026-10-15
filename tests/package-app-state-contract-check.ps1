@@ -27,7 +27,7 @@ function Add-ClagnosSensitiveJsonKeyFindings {
     }
 }
 
-$packageRoot = Join-Path $RepoRoot 'packages'
+$packageRoot = Join-Path $RepoRoot 'vm-packages'
 $manifests = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File -Filter package.json -ErrorAction SilentlyContinue)
 $noPortableIdentityState = @('anydesk','be-my-eyes','codex-app','docker-desktop','google-chrome','google-drive','github-copilot-cli','icloud','itunes','microsoft-edge','microsoft-teams','onedrive','rclone','whatsapp','windscribe')
 $manifestPaths = @{}

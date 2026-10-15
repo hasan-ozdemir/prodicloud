@@ -33,9 +33,8 @@ Use these sources in this order when maintaining the repo:
 - `scripts/clagnos-cache-worker.ps1`: read-only background refresher for subscription-scoped Azure inventory and requested package-status snapshots.
 - `clagnos.ps1`: unified orchestration and direct-command entrypoint used by the menu.
 - `modules/`: runtime modules grouped by domain.
-- `packages/builtin/<platform>/` and `packages/custom/<platform>/`: isolated standard and operator-authored package catalogs with `package.json` manifests and per-package installers.
-- `windows/init/`, `windows/update/`: Windows stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
-- `linux/init/`, `linux/update/`: Linux stage roots with portable task folders at the root, portable disabled task folders under `disabled/`, and portable local-only task folders under `local/` and `local/disabled/`.
+- `vm-init/<platform>/{builtin,custom}/` and `vm-update/<platform>/{builtin,custom}/`: portable task catalogs; each catalog owns a `tasks.toml` and task folders with `task.json` metadata.
+- `vm-packages/{builtin,custom}/<platform>/`: isolated standard and operator-authored package catalogs; each owns a `tasks.toml` and package folders with `package.json` manifests and installers.
 - `tools/`: helper tooling, pyssh bootstrap, git-hook toggles, and support scripts.
 - `tests/`: static, compatibility, audit, and contract checks.
 - `docs/prompt-history.md`: human-readable prompt ledger for this repo.
@@ -112,30 +111,28 @@ Use these sources in this order when maintaining the repo:
 - If naming rules change, update README, tests, and any naming-related summaries in the same change.
 
 ## Task Folder Rules
-- Each task lives in a portable folder named `<task-number>-verb-noun-target`.
+- Each task lives in `vm-init/<platform>/{builtin,custom}/` or `vm-update/<platform>/{builtin,custom}/` in a portable folder named `<task-number>-verb-noun-target`.
 - Each task folder must contain one same-named task script plus one `task.json`.
 - Task-number bands are:
   - `01-99` for `initial`
   - `101-999` for `normal`
-  - `1001-9999` for intentionally local-only tasks
   - `10001-10099` for `final`
-- `task.json` is the execution-order, enable-state, timeout, asset, and app-state source of truth for tracked and local-only task folders.
-- Intentionally local-only tasks live under `local/` as portable task folders and are discovered from disk at runtime.
-- Intentionally local-only disabled tasks live under `local/disabled/` and remain disabled by location.
-- Root `disabled/` remains for tracked disabled tasks.
+- Each `builtin` and `custom` task catalog owns a `tasks.toml` file with a `[tasks]` table that lists every task id and its enabled state. Folder location never controls availability.
+- `task.json` owns task priority, timeout, assets, app-state, and dependencies; it must not contain `enabled`.
 - A missing task folder must be treated as absent; init/update execution must continue cleanly as if that task never existed.
 - Malformed task folders must warn and skip instead of aborting the stage, unless duplicate names or duplicate effective priorities make execution order ambiguous.
 - The only allowed task app-state source is the owning task or package plugin zip `<task-folder>/app-state/app-state.zip` or `<package-folder>/app-state/app-state.zip`.
-- Builtin and local-only init/update task folders must use the same post-process app-state contract and the same exact task-local plugin path rule.
+- Builtin and custom init/update task folders use the same post-process app-state contract and the same exact task-local plugin path rule.
 - Task-local `app-state/` folders are untracked and git-ignored; missing task plugins must log a skip and continue instead of failing the stage.
 - Sanitized package-local `app-state/app-state.zip` snapshots are versioned with their owning package manifests. Before adding or updating a snapshot, validate its allow-listed payload, generalized target paths, and absence of credentials or machine identity with `tests/package-app-state-contract-check.ps1` and the sensitive-content audit.
-- Task- or catalog-adjacent `backup-app-states/` folders are untracked and git-ignored; local-machine restore must write backups under the owning task-stage or package-catalog root, verify the restored content, and roll back from that backup root if verification fails.
+- Task-catalog- or package-catalog-adjacent `backup-app-states/` folders are untracked and git-ignored; local-machine restore must write backups under the owning `builtin` or `custom` catalog root, verify the restored content, and roll back from that backup root if verification fails.
 - Stage-root shared `app-states/`, task-side helper folders outside the owning task folder, and any legacy overlay paths must not be used as alternate app-state storage locations.
 - Managed app-state save and restore must target only the `manager` and `assistant` OS profiles. Do not capture or replay `default` or arbitrary local user profiles.
 - App-state capture is settings-first. Exclude generated installers, models, telemetry trees, caches, and other low-value runtime artifacts unless a task explicitly proves they are durable required state.
-- `task.json` supplies task-only ordering, enable state, timeout, assets, app-state, and dependencies. It must not define package metadata.
-- Each package lives under exactly one of `packages/builtin/<platform>/<package-id>/` or `packages/custom/<platform>/<package-id>/` and contains one `package.json` plus its platform installer (`install.ps1` or `install.sh`). Windows builtin packages also carry distinct `status.ps1`, `update.ps1`, `uninstall.ps1`, and `repair.ps1` scripts. The folder id must match the manifest id. Builtin and custom catalogs are discovered and operated independently.
-- `package.json` owns package identity, display name, category, enabled state, installer timeout, validated status/uninstall/repair actions, Windows builtin lifecycle-script paths and update/repair strategy, package assets, optional app-state policy, and optional post-install tasks. Runtime discovery must not write package manifests; only explicit `package --action enable|disable` may update `enabled` after typed confirmation, preserving other metadata and verifying the result.
+- `tasks.toml` is the only source of task and package availability. Missing task folders are treated as absent, unlisted task folders warn and skip, and package catalog ids must match their package folders. Runtime discovery must not rewrite catalogs implicitly.
+- `task.json` supplies task-only ordering, timeout, assets, app-state, and dependencies. It must not define availability or package metadata.
+- Each package lives under exactly one of `vm-packages/builtin/<platform>/<package-id>/` or `vm-packages/custom/<platform>/<package-id>/` and contains one `package.json` plus its platform installer (`install.ps1` or `install.sh`). Windows builtin packages also carry distinct `status.ps1`, `update.ps1`, `uninstall.ps1`, and `repair.ps1` scripts. The folder id must match the manifest id. Builtin and custom catalogs are discovered and operated independently.
+- `package.json` owns package identity, display name, category, installer timeout, validated status/uninstall/repair actions, Windows builtin lifecycle-script paths and update/repair strategy, package assets, optional app-state policy, and optional post-install tasks. It must not contain `enabled`. Explicit package enable/disable updates only the selected `tasks.toml` boolean after typed confirmation and verifies the result.
 - Package app-state identity may use `appStateKey` to preserve previously captured package snapshots when a package folder or public id is migrated.
 - Package app-state archives must contain only portable preferences selected by `package.json`; do not capture credentials, authenticated browser profiles, tokens, caches, histories, workspace databases, or licensing/activation registry state.
 - Generalize source-user and machine paths in captured package app-state with the supported `%CLAGNOS_*%` tokens. Capture normalizes known profile paths, SIDs, drive roots, Visual Studio instance ids, host names, and source addresses; restore resolves tokens against the target VM and selected `manager`/`assistant` profile immediately before replay. Unknown or unavailable tokens must fail before replay.
@@ -143,10 +140,10 @@ Use these sources in this order when maintaining the repo:
 - `%CLAGNOS_SYSTEM_DRIVE%`, `%CLAGNOS_WINDOWS_DIRECTORY%`, `%CLAGNOS_TARGET_USER_SID%`, `%CLAGNOS_VM_ADMIN_USER_SID%`, `%CLAGNOS_ASSISTANT_USER_SID%`, and `%CLAGNOS_VS_INSTANCE_DIRECTORY%` are Windows-only. `%CLAGNOS_SYSTEM_ROOT%`, `%CLAGNOS_TARGET_HOME%`, `%CLAGNOS_TARGET_UID%`, `%CLAGNOS_TARGET_GID%`, `%CLAGNOS_VM_ADMIN_HOME%`, `%CLAGNOS_ASSISTANT_HOME%`, `%CLAGNOS_VM_ADMIN_UID%`, `%CLAGNOS_ASSISTANT_UID%`, `%CLAGNOS_VM_ADMIN_GID%`, and `%CLAGNOS_ASSISTANT_GID%` are Linux-only. The shared capture and replay code must reject a token that has no value on the selected guest OS.
 - `tools/maintain-package-app-state.ps1` reports its planned package app-state policy by default and rewrites builtin package snapshot policies and payloads only with `-Apply`. Keep its allow-list aligned with `tests/package-app-state-contract-check.ps1`.
 - Task priority precedence is: `task.json priority` -> filename task number -> deterministic fallback within the current task-number band.
-- Runtime discovery and execution must not auto-write, auto-sync, or auto-reconcile task or package manifests. The explicit `task --enable` / `task --disable` operation may change only the task's `enabled` field after typed confirmation, must preserve all other metadata, and must verify the resulting catalog state; location-disabled folders must move only between their matching active and `disabled/` roots.
+- Runtime discovery and execution must not auto-write, auto-sync, or auto-reconcile task or package catalogs. Explicit task and package enable/disable operations may change only the selected boolean in `tasks.toml` after typed confirmation and must verify the resulting catalog state. They never move task or package folders.
 - For task folders with missing `priority`, default to the filename task number when available, otherwise `1000`.
 - For task folders with missing `timeout`, default to `180`.
-- Disabled tasks belong under `disabled/` and must be ignored by execution logic.
+- Disabled tasks and packages stay in their normal `builtin` or `custom` catalog folders; `tasks.toml` availability controls execution and installation.
 - Package manifests must supply a display name, category, an installed-state check, and an explicit allow-listed uninstall action. Packages must not be embedded in `task.json` or task-stage folders.
 - The Manage Programs screen must offer separate builtin and custom catalog paths and label each row `[builtin]` or `[custom]`.
 - Disabled packages display `(disabled)`; `e`/`d` change package availability, status and uninstall remain available while disabled, and install/repair/update is blocked until re-enabled.

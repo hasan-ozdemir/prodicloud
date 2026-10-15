@@ -1,0 +1,35 @@
+{
+  "id": "microsoft-teams",
+  "displayName": "Microsoft Teams",
+  "category": "application",
+  "timeout": 120,
+  "sortOrder": 114,
+  "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "repairScript": "repair.ps1",
+  "updateStrategy": "installer",
+  "statusCheck": {
+    "kind": "appx",
+    "value": "MSTeams"
+  },
+  "uninstall": {
+    "kind": "appx",
+    "value": "MSTeams"
+  },
+  "assets": [
+    {
+      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
+    },
+    {
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+    }
+  ],
+  "appStateKey": "114-install-teams-application",
+  "postInstallTasks": [
+    "10003-create-public-desktop-shortcuts"
+  ]
+}

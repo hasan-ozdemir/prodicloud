@@ -98,10 +98,10 @@ function Get-AppStateAuditZipPaths {
     param([string]$RepositoryRoot)
 
     $roots = @(
-        'windows\init',
-        'windows\update',
-        'linux\init',
-        'linux\update'
+        'vm-init\windows',
+        'vm-update\windows',
+        'vm-init\linux',
+        'vm-update\linux'
     )
 
     foreach ($relativeRoot in @($roots)) {

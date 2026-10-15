@@ -3,7 +3,7 @@ param([string]$RepoRoot = (Split-Path -Parent $PSScriptRoot))
 
 $ErrorActionPreference = 'Stop'
 $resolvedRepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
-$catalogRoot = Join-Path $resolvedRepoRoot 'packages/builtin/windows'
+$catalogRoot = Join-Path $resolvedRepoRoot 'vm-packages/builtin/windows'
 $packages = @(Get-ChildItem -LiteralPath $catalogRoot -Directory | Sort-Object Name)
 
 function Assert-PackageLifecycle {
@@ -95,7 +95,7 @@ Assert-PackageLifecycle -Condition ($setupVc2Text.Contains('[switch]$ResumeAtPac
 Assert-PackageLifecycle -Condition ($setupVc2Text.Contains('$instance.instanceView.statuses') -and $setupVc2Text.Contains("'do','--vm-action=start'") -and $setupVc2Text.Contains("'do','--vm-action=status'") -and -not $setupVc2Text.Contains("'do','--auto','--windows'") -and $setupVc2Text.Contains('refusing to issue a lifecycle action without a verified current state')) -Message 'The VC2 runner must read power state from Azure instanceView and use supported start/status commands only after known power states.'
 Assert-PackageLifecycle -Condition ($setupVc2Text.Contains("'show','--group'") -and -not $setupVc2Text.Contains("'show','--windows'")) -Message 'The VC2 runner must call show using only options accepted by its public command contract.'
 Assert-PackageLifecycle -Condition ($setupVc2Text.Contains('$output = New-Object ''System.Collections.Generic.List[string]''') -and $setupVc2Text.IndexOf('Write-Host $safeLine',$setupVc2Text.IndexOf('function Invoke-SetupCgCaptured',[System.StringComparison]::Ordinal),[System.StringComparison]::Ordinal) -lt $setupVc2Text.IndexOf('$exitCode = $LASTEXITCODE',$setupVc2Text.IndexOf('function Invoke-SetupCgCaptured',[System.StringComparison]::Ordinal),[System.StringComparison]::Ordinal)) -Message 'The setup runner must stream redacted setup-all progress as it arrives instead of buffering the full package pass.'
-$dockerManifest = Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'packages/builtin/windows/docker-desktop/package.json') -Raw | ConvertFrom-Json
+$dockerManifest = Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'vm-packages/builtin/windows/docker-desktop/package.json') -Raw | ConvertFrom-Json
 Assert-PackageLifecycle -Condition ([string]$dockerManifest.repairStrategy -eq 'startup' -and $operationModuleText.Contains("'startup' {") -and $operationModuleText.Contains('Set-ClagnosPackageStartupState -Spec $spec | Out-String')) -Message 'Docker Desktop startup drift must be repaired by reconciling its managed startup shortcut without reinstalling the 600 MB vendor package.'
 $setupInitIndex = $setupVc2Text.IndexOf("'initialize','--auto'",[System.StringComparison]::Ordinal)
 $setupChocolateyIndex = $setupVc2Text.IndexOf("'package','--action','install','--catalog','builtin','--package','chocolatey'",[System.StringComparison]::Ordinal)
@@ -107,7 +107,7 @@ Assert-PackageLifecycle -Condition ($setupInitIndex -ge 0 -and $setupChocolateyI
 Assert-PackageLifecycle -Condition ($setupVc2CmdText.Contains('setup-vc2.ps1') -and $setupVc2CmdText.Contains('%ERRORLEVEL%')) -Message 'The setup-vc2.cmd launcher must delegate to the PowerShell runner and propagate its exit code.'
 $slowStoreTimeouts = @{}
 foreach ($packageId in @('be-my-eyes','whatsapp','codex-app','icloud','windows-subsystem-linux')) {
-    $packageManifest = Get-Content -LiteralPath (Join-Path $resolvedRepoRoot ("packages/builtin/windows/{0}/package.json" -f $packageId)) -Raw | ConvertFrom-Json
+    $packageManifest = Get-Content -LiteralPath (Join-Path $resolvedRepoRoot ("vm-packages/builtin/windows/{0}/package.json" -f $packageId)) -Raw | ConvertFrom-Json
     $slowStoreTimeouts[$packageId] = [int]$packageManifest.timeout
 }
 Assert-PackageLifecycle -Condition ($slowStoreTimeouts['be-my-eyes'] -ge 600 -and $slowStoreTimeouts['whatsapp'] -ge 600 -and $slowStoreTimeouts['codex-app'] -ge 600 -and $slowStoreTimeouts['icloud'] -ge 600 -and $slowStoreTimeouts['windows-subsystem-linux'] -ge 600) -Message 'WinRM Store-backed and WSL bootstrap package jobs must receive a bounded timeout that covers first-install work.'
