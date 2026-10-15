@@ -175,7 +175,17 @@ function Test-ClagnosOutputIndicatesRebootRequired {
         return $true
     }
 
-    return ($MessageText -match '(?i)(reboot required|restart required|pending reboot|press any key to install windows subsystem for linux)')
+    $positiveRestartSignalLines = @(
+        $MessageText -split "`r?`n" |
+            Where-Object {
+                $line = [string]$_
+                if ($line -notmatch '(?i)(?:reboot|restart)(?:\s+is)?\s+required|pending reboot|press any key to install windows subsystem for linux') {
+                    return $false
+                }
+                return ($line -notmatch '(?i)\b(?:no|not|without)\s+(?:immediate\s+)?(?:reboot|restart)(?:\s+is)?\s+required\b')
+            }
+    )
+    return (@($positiveRestartSignalLines).Count -gt 0)
 }
 
 # Handles Get-ClagnosTaskDurationsFromMessageText.

@@ -1167,6 +1167,11 @@ Invoke-Test -Name "CLI entrypoint keeps a normal banner path and a pre-banner ve
     Assert-True -Condition ($entryText -match '(?s)# Load modular function files.*?if \(\$MyInvocation\.InvocationName -eq ''\.''\) \{\s*return\s*\}\s*Write-ClagnosCliBanner\s*try \{') -Message 'CLI entrypoint must still load modules when dot-sourced and print the banner only for normal command dispatch.'
 }
 
+Invoke-Test -Name "cg.cmd propagates direct-command failures to its caller" -Action {
+    $launcherText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'cg.cmd') -Raw)
+    Assert-True -Condition ($launcherText -match '(?im)^set "clagnosExitCode=%ERRORLEVEL%"\s*\r?\nendlocal\s*&\s*exit /b %clagnosExitCode%\s*$') -Message 'cg.cmd must return the PowerShell CLI exit code so automation cannot mistake a failed operation for success.'
+}
+
 Invoke-Test -Name "Workflow pipeline delegates restarts to task runners and starts vm-summary with readback" -Action {
     $pipelineText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\pipeline\clagnos-main-command.ps1') -Raw)
     $workflowText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\pipeline\clagnos-main-workflow.ps1') -Raw)
@@ -3850,6 +3855,10 @@ Invoke-Test -Name "TCP port specification accepts ranges and rejects malformed o
     Assert-True -Condition ($specification.CanonicalText -eq '22,80,3000-3310') -Message "TCP port ranges must sort, merge, and include required connection ports."
     Assert-True -Condition (@($specification.PortRanges).Count -eq 3) -Message "Normalized TCP port ranges must remain compact."
     Assert-True -Condition (@($specification.Ports).Count -eq 313) -Message "Expanded guest port targets must reflect the merged range and required port."
+
+    $existingNsgPorts = Resolve-ClagnosTcpPortSpecification -Text '80,3000-3001,3389,5985' -MaximumExpandedPorts 65535
+    $resolvedConfigurePorts = Resolve-ClagnosConfigurePortValues -Platform 'windows' -Ports @($existingNsgPorts.Ports) -ConfigBefore @{ VM_SSH_PORT = '3000'; VM_RDP_PORT = '3389' }
+    Assert-True -Condition ($resolvedConfigurePorts.SshPort -eq '3000' -and $resolvedConfigurePorts.RdpPort -eq '3389') -Message "Configure must recognize SSH/RDP ports inside a valid NSG port range."
 
     foreach ($invalidSpecification in @('0','65536','500-300','1-65535','80,abc','')) {
         $threw = $false
@@ -7447,6 +7456,7 @@ Invoke-Test -Name "Vm-update app-state plugin runtime removes legacy restore sur
     Assert-True -Condition ($runnerText -like '*Invoke-ClagnosTaskAppStatePostProcess*') -Message 'Windows update SSH runner must invoke the shared app-state post-process after each task.'
     Assert-True -Condition ($runCommandRunnerText -like '*Invoke-ClagnosTaskAppStatePostProcess*') -Message 'VM init run-command runner must invoke the shared app-state post-process after each task.'
     Assert-True -Condition ($runCommandRunnerText -like '*Invoke-ClagnosRunCommandDeferredAppStateFlush*') -Message 'VM init run-command runner must defer app-state replay until SSH is ready.'
+    Assert-True -Condition ($runCommandRunnerText -like '*$pendingAppStateTaskBlocks.ToArray()*' -and -not ($runCommandRunnerText -like '*DeferredAppStateCount = @($pendingAppStateTaskBlocks).Count*')) -Message 'VM init summary must convert its generic deferred-task list with ToArray for Windows PowerShell 5.1 compatibility.'
     Assert-True -Condition ($runCommandRunnerText -like '*App-state deferred:*') -Message 'VM init run-command runner must log deferred app-state replay while waiting for SSH readiness.'
     Assert-True -Condition ($runCommandRunnerText -like '*SSH was not ready before vm-init completed*') -Message 'VM init run-command runner must summarize unresolved deferred app-state replay at stage end.'
     Assert-True -Condition ($runnerText -like '*Invoke-ClagnosSshTaskScript*') -Message 'Windows update SSH runner must use the shared SSH task execution wrapper.'
@@ -7947,6 +7957,7 @@ Invoke-Test -Name "Windows WSL and health contracts expose Docker prerequisite s
     Assert-True -Condition ([int]$wslManifest.timeout -ge 600) -Message 'WSL feature installation must allow enough time for servicing-stack DISM enablement.'
     Assert-True -Condition (@($wslManifest.assets | Where-Object { [string]$_.local -eq '../../../../tools/scripts/clagnos-interactive-session-helper.ps1' -and [string]$_.remote -eq 'C:/Windows/Temp/clagnos-interactive-session-helper.ps1' }).Count -eq 1) -Message 'WSL Store package installation must carry the interactive desktop helper asset.'
     Assert-True -Condition ($wslTaskText -like '*Install-WslAppxThroughInteractiveSession*' -and $wslTaskText -like '*RunAsMode ''interactiveToken''*') -Message 'WSL Store package installation must run in the interactive manager desktop session.'
+    Assert-True -Condition ($wslTaskText -like "*Get-AppxPackage -Name 'Microsoft.DesktopAppInstaller'*") -Message 'The interactive WSL installer must resolve winget from the registered App Installer package when no portable or per-user alias exists.'
     Assert-True -Condition ($wslTaskText -like '*wsl.exe --update --web-download*') -Message 'WSL updates must use the non-Store web download path.'
 
     foreach ($fragment in @(
@@ -8996,6 +9007,9 @@ Invoke-Test -Name "Windows autologon manager task and health contract" -Action {
         'DefaultDomainName',
         'DefaultPasswordPresent',
         'autologon-state =>',
+        'Autologon registry settings already match the validated manager credential; Sysinternals reconfiguration is skipped.',
+        'manager interactive session are already healthy; no restart is needed',
+        'TASK_REBOOT_REQUIRED:configure-autologon-settings',
         'Autologon note: DefaultPassword is not present in Winlogon.',
         'configure-autologon-settings-completed',
         'autologon.exe was not found',
@@ -9012,6 +9026,23 @@ Invoke-Test -Name "Windows autologon manager task and health contract" -Action {
         'sysinternals-autologon-or-external-store'
     )) {
         Assert-True -Condition ($healthTaskText -like ('*' + [string]$fragment + '*')) -Message ("Health snapshot must include autologon fragment '{0}'." -f [string]$fragment)
+    }
+}
+
+Invoke-Test -Name "Reboot signal parser ignores explicit no-restart status" -Action {
+    foreach ($message in @(
+        'language-step-ok: already-current; no restart required',
+        'Language components are already installed; no install worker or restart is needed.',
+        'Package is current; no reboot is required.'
+    )) {
+        Assert-True -Condition (-not (Test-ClagnosOutputIndicatesRebootRequired -MessageText $message)) -Message ("No-restart status must not trigger a VM reboot: {0}" -f $message)
+    }
+    foreach ($message in @(
+        'TASK_REBOOT_REQUIRED:configure-language-settings',
+        'Windows reports that a restart is required to finish this update.',
+        'The operation is pending reboot.'
+    )) {
+        Assert-True -Condition (Test-ClagnosOutputIndicatesRebootRequired -MessageText $message) -Message ("Positive reboot evidence must remain actionable: {0}" -f $message)
     }
 }
 
@@ -9289,6 +9320,9 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
         'en-US',
         'TASK_REBOOT_REQUIRED:configure-language-settings',
         'language-step-ok: restart-required-to-finalize',
+        'language-step-ok: already-current; no restart required',
+        'already installed; no install worker or restart is needed',
+        'if ($rebootRequired) {',
         'Applying system preferred UI language',
         'Collecting final language verification output',
         'language-capabilities-final => {0} => {1}',

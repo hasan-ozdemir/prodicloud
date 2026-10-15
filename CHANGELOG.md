@@ -3,6 +3,23 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.15.420] - 2026-10-15
+
+### Added
+- Added `setup-vc2.cmd` / `setup-vc2.ps1` as a repeatable managed-VC setup workflow with per-run `%TEMP%` transcripts and `-ResumeAtPackageStage` support. Resume requires an existing compatible target, does not create infrastructure or change disk/network resources, and resumes at package prerequisites.
+- Added signed AnyDesk installer staging: the operator host verifies the vendor Authenticode signature, transfers through the exact WinRM endpoint, and the VM confirms the transferred SHA-256 and publisher metadata before install. WinGet hash mismatches are never bypassed.
+- Aligned Docker Desktop package startup health with the manager/assistant Run-entry and StartupFolder policies managed by `vm-update`; setup-all can verify this drift without redownloading/reinstalling the Docker Desktop package.
+
+### Fixed
+- `setup-vc2` now reads power state from `instanceView.statuses`, fails closed if Azure reports `unknown`, and calls `do` / `show` with only supported options.
+- Reboot-signal parsing now ignores explicit negative messages such as `no restart required`. Autologon and language tasks skip already-healthy settings and request a restart only when their effective state changes.
+- AnyDesk signature metadata is read through an isolated PowerShell process; the lifecycle helper parses its JSON output consistently across Windows PowerShell and PowerShell 7.
+
+### Validation
+- A fresh managed Windows VM was created with the requested region, `Standard_B2s_v2` SKU, 160 GB StandardSSD OS disk, and hibernation. The script completed `vm-init`, all nine enabled `vm-update` tasks, setup-all, a final update, redacted `show`, `do status`, and live RDP/SSH/WinRM tests; Azure confirmed the VM remained running.
+- Setup-all verified the enabled Windows builtin package catalog, including the signed AnyDesk installation and Docker startup policy. The AnyDesk vendor installer required a signed local transfer after WinGet returned a catalog hash mismatch; no hash bypass was used.
+- Nested virtualization is unavailable to guest workloads on the selected B2s_v2 SKU; WSL2/Docker engine readiness remains hardware-limited. Hibernation was enabled and verified. The operator `.env` was restored byte-for-byte.
+
 ## [2026.10.15.419] - 2026-10-15
 
 ### Added

@@ -4,15 +4,20 @@ function Get-ClagnosPackageOptionSpecifications {
     $actionValidation = {
         param($Options)
         $value = [string](Get-ClagnosCliOptionText -Options $Options -Name 'action')
-        if ($value.Trim().ToLowerInvariant() -notin @('list','status','install','repair','update','uninstall','enable','disable')) {
-            Throw-FriendlyError -Detail "Package action must be list, status, install, repair, update, uninstall, enable, or disable." -Code 2 -Summary "Package action is invalid." -Hint "Choose an action from the package menu."
+        if ($value.Trim().ToLowerInvariant() -notin @('list','status','install','repair','update','uninstall','enable','disable','setup-all')) {
+            Throw-FriendlyError -Detail "Package action must be list, status, install, repair, update, uninstall, enable, disable, or setup-all." -Code 2 -Summary "Package action is invalid." -Hint "Choose an action from the package menu."
         }
     }
     $catalogValidation = {
         param($Options)
         $value = [string](Get-ClagnosCliOptionText -Options $Options -Name 'catalog')
-        if ($value.Trim().ToLowerInvariant() -notin @('builtin','custom')) {
-            Throw-FriendlyError -Detail "Package catalog must be builtin or custom." -Code 2 -Summary "Package catalog is invalid." -Hint "Use --catalog=builtin or --catalog=custom."
+        $action = [string](Get-ClagnosCliOptionText -Options $Options -Name 'action')
+        $isSetupAll = [string]::Equals($action.Trim(),'setup-all',[System.StringComparison]::OrdinalIgnoreCase)
+        $validCatalog = if ($isSetupAll) { @('all') } else { @('builtin','custom') }
+        if ($value.Trim().ToLowerInvariant() -notin $validCatalog) {
+            $hint = if ($isSetupAll) { 'Use --catalog=all with --action=setup-all.' } else { 'Use --catalog=builtin or --catalog=custom.' }
+            $detail = if ($isSetupAll) { 'Package setup-all must select both isolated catalogs.' } else { 'Package catalog must be builtin or custom.' }
+            Throw-FriendlyError -Detail $detail -Code 2 -Summary "Package catalog is invalid." -Hint $hint
         }
     }
     return @(

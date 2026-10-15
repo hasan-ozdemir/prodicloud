@@ -3,7 +3,7 @@
   "displayName": "Windows Subsystem for Linux",
   "category": "feature",
   "enabled": true,
-  "timeout": 600,
+  "timeout": 1800,
   "sortOrder": 121,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

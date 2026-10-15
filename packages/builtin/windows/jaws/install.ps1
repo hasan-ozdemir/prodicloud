@@ -24,7 +24,6 @@ $taskConfig = [ordered]@{
 }
 
 Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
     Refresh-ClagnosSessionPath | Out-Null

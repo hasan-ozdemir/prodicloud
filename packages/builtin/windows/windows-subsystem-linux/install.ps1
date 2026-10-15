@@ -114,8 +114,26 @@ $ErrorActionPreference = 'Stop'
 $helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
 $resultPath = '__RESULT_PATH__'
 $taskName = '__TASK_NAME__'
-$wingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
 . $helperPath
+
+function Resolve-InteractiveWingetPath {
+    $command = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (-not $command) { $command = Get-Command winget -ErrorAction SilentlyContinue }
+    if ($command -and -not [string]::IsNullOrWhiteSpace([string]$command.Source)) { return [string]$command.Source }
+
+    $installerPackages = @()
+    try { $installerPackages = @(Get-AppxPackage -Name 'Microsoft.DesktopAppInstaller' -ErrorAction SilentlyContinue | Sort-Object Version -Descending) } catch { }
+    if ($installerPackages.Count -eq 0) {
+        try { $installerPackages = @(Get-AppxPackage -AllUsers -Name 'Microsoft.DesktopAppInstaller' -ErrorAction SilentlyContinue | Sort-Object Version -Descending) } catch { }
+    }
+    foreach ($installerPackage in @($installerPackages)) {
+        if ([string]::IsNullOrWhiteSpace([string]$installerPackage.InstallLocation)) { continue }
+        $candidate = Join-Path ([string]$installerPackage.InstallLocation) 'winget.exe'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return [string]$candidate }
+    }
+    return ''
+}
+$wingetPath = Resolve-InteractiveWingetPath
 
 function Test-WslAppxInstalled {
     return (@(Get-AppxPackage -Name 'MicrosoftCorporationII.WindowsSubsystemForLinux' -ErrorAction SilentlyContinue).Count -gt 0)
@@ -125,8 +143,8 @@ if (Test-WslAppxInstalled) {
     Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'The WSL Store package is already registered for the interactive manager user.'
     exit 0
 }
-if (-not (Test-Path -LiteralPath $wingetPath -PathType Leaf)) {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'The portable winget executable was not found for the interactive WSL installation.'
+if ([string]::IsNullOrWhiteSpace([string]$wingetPath)) {
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'The Windows Package Manager executable was not found for the interactive WSL installation.'
     exit 1
 }
 

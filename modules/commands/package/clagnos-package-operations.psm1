@@ -44,9 +44,9 @@ function Get-ClagnosPackageRecord {
             else { $status = 'not-installed' }
         }
         'winget' {
-            $command = Get-Command winget.exe -ErrorAction SilentlyContinue
-            if (-not $command) { $status = 'unknown'; $detail = 'winget is unavailable for package detection'; break }
-            try { $output = & $command.Source list --id $value --exact --accept-source-agreements --disable-interactivity 2>&1 | Out-String }
+            $wingetExe = Resolve-ClagnosWingetExecutable
+            if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) { $status = 'unknown'; $detail = 'winget is unavailable for package detection'; break }
+            try { $output = & $wingetExe list --id $value --exact --accept-source-agreements --disable-interactivity 2>&1 | Out-String }
             catch { $status = 'unknown'; $detail = 'winget package detection failed'; break }
             $exitCode = [int]$LASTEXITCODE
             if ($exitCode -eq 0 -and $output -match ('(?im)(?:^|\s)' + [regex]::Escape($value) + '(?:\s|$)')) {
@@ -71,18 +71,25 @@ function Get-ClagnosPackageRecord {
             $command = Get-Command npm.cmd -ErrorAction SilentlyContinue
             if (-not $command) { $command = Get-Command npm -ErrorAction SilentlyContinue }
             if (-not $command) { $status = 'unknown'; $detail = 'npm is unavailable for package detection'; break }
-            try { $output = & $command.Source list --global --depth=0 --json 2>&1 | Out-String }
-            catch { $status = 'unknown'; $detail = 'npm package detection failed'; break }
-            if ([int]$LASTEXITCODE -eq 0 -or $output -match '"dependencies"') {
-                try {
-                    $inventory = ConvertFrom-Json -InputObject $output
-                    $packageProperty = $inventory.dependencies.PSObject.Properties[[string]$value]
-                    if ($null -ne $packageProperty) { $status = 'installed'; $version = [string]$packageProperty.Value.version }
-                    else { $status = 'not-installed' }
-                }
-                catch { $status = 'unknown'; $detail = 'npm returned an unreadable global package inventory' }
+            $applicationData = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
+            if ([string]::IsNullOrWhiteSpace([string]$applicationData)) { $applicationData = Join-Path $env:USERPROFILE 'AppData\Roaming' }
+            $npmModulesRoot = Join-Path (Join-Path $applicationData 'npm') 'node_modules'
+            $packagePath = [string]$npmModulesRoot
+            $packagePathIsValid = $true
+            foreach ($segment in @([string]$value -split '/')) {
+                if ([string]::IsNullOrWhiteSpace([string]$segment) -or [string]$segment -eq '.' -or [string]$segment -eq '..') { $packagePathIsValid = $false; break }
+                $packagePath = Join-Path $packagePath ([string]$segment)
             }
-            else { $status = 'unknown'; $detail = ('npm inventory exited with {0}' -f [int]$LASTEXITCODE) }
+            if (-not $packagePathIsValid) { $status = 'unknown'; $detail = 'npm package id is not a safe path'; break }
+            if (-not (Test-Path -LiteralPath $packagePath -PathType Container)) { $status = 'not-installed'; break }
+            $packageManifestPath = Join-Path $packagePath 'package.json'
+            if (-not (Test-Path -LiteralPath $packageManifestPath -PathType Leaf)) { $status = 'unknown'; $detail = 'global npm package directory exists without package.json'; break }
+            try {
+                $packageManifest = Get-Content -LiteralPath $packageManifestPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+                $status = 'installed'
+                $version = [string]$packageManifest.version
+            }
+            catch { $status = 'unknown'; $detail = 'global npm package manifest could not be read' }
         }
         'appx' {
             try { $packages = @(Get-AppxPackage -AllUsers -ErrorAction Stop | Where-Object { $_.Name -like ('*' + $value + '*') -or $_.PackageFamilyName -like ('*' + $value + '*') -or $_.PackageFullName -like ('*' + $value + '*') }) }
@@ -136,7 +143,45 @@ function Get-ClagnosPackageRecord {
     elseif ($status -eq 'installed' -and [string]$Spec.id -in @('ollama','docker-desktop')) {
         $detail = Test-ClagnosPackageStartupState -Spec $Spec
     }
+    $global:LASTEXITCODE = 0
     return [pscustomobject]@{ Id = [string]$Spec.id; Status = $status; Version = $version; Detail = $detail }
+}
+
+function Resolve-ClagnosWingetExecutable {
+    $command = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (-not $command) { $command = Get-Command winget -ErrorAction SilentlyContinue }
+    if ($command -and -not [string]::IsNullOrWhiteSpace([string]$command.Source)) { return [string]$command.Source }
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:LOCALAPPDATA)) {
+        $candidates += (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winget.exe')
+    }
+    if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
+        try {
+            $installerPackages = @(Get-AppxPackage -AllUsers -Name 'Microsoft.DesktopAppInstaller' -ErrorAction Stop | Sort-Object Version -Descending)
+            foreach ($installerPackage in @($installerPackages)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$installerPackage.InstallLocation)) {
+                    $candidates += (Join-Path ([string]$installerPackage.InstallLocation) 'winget.exe')
+                }
+            }
+        }
+        catch { }
+    }
+    foreach ($candidate in @($candidates | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath ([string]$candidate) -PathType Leaf) { return [string]$candidate }
+    }
+    return ''
+}
+
+function Initialize-ClagnosWingetCommandPath {
+    $wingetExe = Resolve-ClagnosWingetExecutable
+    if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) { return '' }
+    $directory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath([string]$wingetExe))
+    $pathEntries = @(([string]$env:PATH) -split ';' | ForEach-Object { ([string]$_).Trim().TrimEnd('\') } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if (@($pathEntries | Where-Object { [string]::Equals([string]$_,$directory,[System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) {
+        $env:PATH = [string]$env:PATH + ';' + $directory
+    }
+    return [string]$wingetExe
 }
 
 function Write-ClagnosPackageOperationResult {
@@ -238,6 +283,15 @@ function Remove-ClagnosPackageStartupArtifacts {
         'docker-desktop' {
             $startupShortcut = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Docker Desktop.lnk'
             if (Test-Path -LiteralPath $startupShortcut) { Remove-Item -LiteralPath $startupShortcut -Force -ErrorAction Stop }
+            $entryName = if ($null -ne $Spec.startupPolicy -and -not [string]::IsNullOrWhiteSpace([string]$Spec.startupPolicy.userRunEntryName)) { [string]$Spec.startupPolicy.userRunEntryName } else { 'Docker Desktop' }
+            foreach ($userName in @($Spec.targetUsers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)) {
+                $sid = Get-ClagnosPackageUserSid -UserName ([string]$userName)
+                $runKey = if (-not [string]::IsNullOrWhiteSpace([string]$sid)) { 'Registry::HKEY_USERS\{0}\Software\Microsoft\Windows\CurrentVersion\Run' -f [string]$sid } else { '' }
+                if (-not [string]::IsNullOrWhiteSpace($runKey) -and (Test-Path -LiteralPath $runKey)) { Remove-ItemProperty -LiteralPath $runKey -Name $entryName -ErrorAction SilentlyContinue }
+                $profilePath = Get-ClagnosPackageUserProfilePath -UserName ([string]$userName)
+                $userShortcut = Join-Path $profilePath 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Docker Desktop.lnk'
+                if (Test-Path -LiteralPath $userShortcut -PathType Leaf) { Remove-Item -LiteralPath $userShortcut -Force -ErrorAction SilentlyContinue }
+            }
         }
     }
 }
@@ -275,6 +329,44 @@ function Set-ClagnosPackageStartupShortcut {
     }
 }
 
+function Get-ClagnosPackageUserSid {
+    param([Parameter(Mandatory = $true)][string]$UserName)
+    try {
+        $accountName = ('{0}\{1}' -f $env:COMPUTERNAME,$UserName)
+        return [string]([System.Security.Principal.NTAccount]::new($accountName)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+    }
+    catch { return '' }
+}
+
+function Test-ClagnosPackageDockerStartupForUser {
+    param([string]$UserName,[string]$EntryName,[string]$TargetPath,[string]$Arguments)
+    $expectedCommand = '"{0}"' -f [string]$TargetPath
+    if (-not [string]::IsNullOrWhiteSpace([string]$Arguments)) { $expectedCommand += ' ' + [string]$Arguments }
+    $sid = Get-ClagnosPackageUserSid -UserName $UserName
+    if (-not [string]::IsNullOrWhiteSpace([string]$sid)) {
+        $runKey = 'Registry::HKEY_USERS\{0}\Software\Microsoft\Windows\CurrentVersion\Run' -f [string]$sid
+        try {
+            if (Test-Path -LiteralPath $runKey) {
+                $runState = Get-ItemProperty -LiteralPath $runKey -Name $EntryName -ErrorAction SilentlyContinue
+                $runValue = if ($null -ne $runState) { [string]$runState.$EntryName } else { '' }
+                if ([string]::Equals($runValue,$expectedCommand,[System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+            }
+        }
+        catch { }
+    }
+
+    $profilePath = Get-ClagnosPackageUserProfilePath -UserName $UserName
+    if ([string]::IsNullOrWhiteSpace([string]$profilePath)) { return $false }
+    $shortcutPath = Join-Path $profilePath 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Docker Desktop.lnk'
+    if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) { return $false }
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        return ([string]::Equals([string]$shortcut.TargetPath,[string]$TargetPath,[System.StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$shortcut.Arguments,[string]$Arguments,[System.StringComparison]::Ordinal))
+    }
+    catch { return $false }
+}
+
 function Set-ClagnosOllamaStartupState {
     param([string[]]$UserNames)
     $appCandidates = @(
@@ -301,9 +393,22 @@ function Set-ClagnosPackageStartupState {
         'ollama' { Set-ClagnosOllamaStartupState -UserNames @($Spec.targetUsers); break }
         'docker-desktop' {
             $dockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
-            $startupPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Docker Desktop.lnk'
-            Write-Output 'Doing: ensure Docker Desktop startup shortcut'
-            Set-ClagnosPackageStartupShortcut -ShortcutPath $startupPath -TargetPath $dockerExe -Arguments '--minimized'
+            $entryName = if ($null -ne $Spec.startupPolicy -and -not [string]::IsNullOrWhiteSpace([string]$Spec.startupPolicy.userRunEntryName)) { [string]$Spec.startupPolicy.userRunEntryName } else { 'Docker Desktop' }
+            $arguments = if ($null -ne $Spec.startupPolicy -and $null -ne $Spec.startupPolicy.launchArgument) { [string]$Spec.startupPolicy.launchArgument } else { '--minimized' }
+            $users = @($Spec.targetUsers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+            if ($users.Count -eq 0 -and $null -ne $Spec.startupPolicy) { $users = @($Spec.startupPolicy.roles | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) }
+            $machineShortcut = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Docker Desktop.lnk'
+            if (Test-Path -LiteralPath $machineShortcut -PathType Leaf) { Remove-Item -LiteralPath $machineShortcut -Force -ErrorAction SilentlyContinue }
+            foreach ($userName in @($users)) {
+                if (Test-ClagnosPackageDockerStartupForUser -UserName ([string]$userName) -EntryName $entryName -TargetPath $dockerExe -Arguments $arguments) {
+                    Write-Output ("Docker Desktop startup is already verified for '{0}'." -f [string]$userName)
+                    continue
+                }
+                $profilePath = Get-ClagnosPackageUserProfilePath -UserName ([string]$userName)
+                $userShortcut = Join-Path $profilePath 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Docker Desktop.lnk'
+                Write-Output ("Doing: ensure Docker Desktop startup for managed user '{0}'" -f [string]$userName)
+                Set-ClagnosPackageStartupShortcut -ShortcutPath $userShortcut -TargetPath $dockerExe -Arguments $arguments
+            }
             break
         }
     }
@@ -323,9 +428,14 @@ function Test-ClagnosPackageStartupState {
             return 'Ollama startup shortcuts are verified for managed users.'
         }
         'docker-desktop' {
-            $startupPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Docker Desktop.lnk'
-            if (-not (Test-Path -LiteralPath $startupPath -PathType Leaf)) { return 'Docker Desktop startup shortcut is missing.' }
-            return 'Docker Desktop machine-wide startup shortcut is verified.'
+            $dockerExe = Join-Path $env:ProgramFiles 'Docker\Docker\Docker Desktop.exe'
+            $entryName = if ($null -ne $Spec.startupPolicy -and -not [string]::IsNullOrWhiteSpace([string]$Spec.startupPolicy.userRunEntryName)) { [string]$Spec.startupPolicy.userRunEntryName } else { 'Docker Desktop' }
+            $arguments = if ($null -ne $Spec.startupPolicy -and $null -ne $Spec.startupPolicy.launchArgument) { [string]$Spec.startupPolicy.launchArgument } else { '--minimized' }
+            $users = @($Spec.targetUsers | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
+            if ($users.Count -eq 0 -and $null -ne $Spec.startupPolicy) { $users = @($Spec.startupPolicy.roles | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) }
+            $missingUsers = @($users | Where-Object { -not (Test-ClagnosPackageDockerStartupForUser -UserName ([string]$_) -EntryName $entryName -TargetPath $dockerExe -Arguments $arguments) })
+            if ($missingUsers.Count -gt 0) { return ('Docker Desktop startup is missing for: ' + ($missingUsers -join ', ')) }
+            return ('Docker Desktop startup is verified for managed users: ' + ($users -join ', '))
         }
         default { return '' }
     }
@@ -426,6 +536,7 @@ function Invoke-ClagnosPackageLifecycle {
 
     $specJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PackageSpecBase64))
     $spec = ConvertFrom-Json -InputObject $specJson
+    [void](Initialize-ClagnosWingetCommandPath)
     $record = Get-ClagnosPackageRecord -Spec $spec
     if ($Action -eq 'status') {
         $message = if ($record.Status -eq 'installed') { 'Package is installed and detectable.' } elseif ($record.Status -eq 'not-installed') { 'Package is not installed.' } else { 'Package status could not be determined safely.' }
@@ -448,6 +559,13 @@ function Invoke-ClagnosPackageLifecycle {
             'winget' { $command = Get-Command winget.exe -ErrorAction Stop; & $command.Source uninstall --id $value --exact --silent --accept-source-agreements --disable-interactivity; if ([int]$LASTEXITCODE -ne 0) { throw ('winget uninstall exited with ' + [int]$LASTEXITCODE) } }
             'choco' { $command = Get-Command choco.exe -ErrorAction Stop; & $command.Source uninstall $value -y --no-progress; if ([int]$LASTEXITCODE -ne 0) { throw ('Chocolatey uninstall exited with ' + [int]$LASTEXITCODE) } }
             'npm' { $command = Get-Command npm.cmd -ErrorAction SilentlyContinue; if (-not $command) { $command = Get-Command npm -ErrorAction Stop }; & $command.Source uninstall --global $value; if ([int]$LASTEXITCODE -ne 0) { throw ('npm uninstall exited with ' + [int]$LASTEXITCODE) } }
+            'anydesk' {
+                if (Test-Path -LiteralPath $value -PathType Leaf) {
+                    Write-Output 'Doing: uninstall AnyDesk with its vendor-supported silent remove command'
+                    $removeOutput = & $value --remove --silent 2>&1 | Out-String
+                    if ([int]$LASTEXITCODE -ne 0) { throw ('AnyDesk silent uninstall exited with ' + [int]$LASTEXITCODE + '. ' + $removeOutput.Trim()) }
+                }
+            }
             'appx' { $matches = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object { $_.Name -like ('*' + $value + '*') -or $_.PackageFamilyName -like ('*' + $value + '*') -or $_.PackageFullName -like ('*' + $value + '*') }); foreach ($app in $matches) { Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction Stop } }
             'windows-feature' { Disable-WindowsOptionalFeature -Online -FeatureName $value -NoRestart -ErrorAction Stop | Out-Null }
             'choco-self' {
@@ -506,6 +624,9 @@ function Invoke-ClagnosPackageLifecycle {
         $repairOutput = ''
         Write-Output ('Doing: repair package {0} at installed version {1} using {2}' -f [string]$spec.id,[string]$record.Version,$repairStrategy)
         switch ($repairStrategy) {
+            'startup' {
+                $repairOutput = (Set-ClagnosPackageStartupState -Spec $spec | Out-String).Trim()
+            }
             'winget' {
                 $command = Get-Command winget.exe -ErrorAction Stop
                 $repairOutput = & $command.Source install --id ([string]$spec.statusCheck.value) --exact --version ([string]$record.Version) --force --silent --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1 | Out-String
@@ -594,4 +715,4 @@ function Invoke-ClagnosPackageLifecycle {
     Write-ClagnosPackageOperationResult -Spec $spec -Action $Action -Record $verified -Message $message
 }
 
-Export-ModuleMember -Function Invoke-ClagnosPackageLifecycle,Set-ClagnosJawsPostLogonStartup
+Export-ModuleMember -Function Invoke-ClagnosPackageLifecycle,Set-ClagnosJawsPostLogonStartup,Test-ClagnosJawsPostLogonStartup,Install-ClagnosJawsAppStateUpdateFiles,Set-ClagnosPackageStartupState,Test-ClagnosPackageStartupState

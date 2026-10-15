@@ -2218,6 +2218,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$ollamaExe)) {
     $ollamaCliResult = Invoke-NativeCommandProbe -FilePath $ollamaExe -Arguments @('ls') -TimeoutSeconds 20 -SuppressOutput
 }
 $ollamaProcesses = @(Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue)
+$ollamaStartupShortcutHealth = $null
 if (Test-Path -LiteralPath $ollamaStartupShortcutPath) {
     Write-ShortcutReadback -Label 'ollama-startup-shortcut' -ShortcutPath $ollamaStartupShortcutPath
     $ollamaStartupShortcutHealth = Get-ShortcutHealth -ShortcutPath $ollamaStartupShortcutPath

@@ -284,34 +284,42 @@ if ([string]::IsNullOrWhiteSpace([string]$autologonExe)) {
 Assert-LocalCredentialValid -UserName $vmAdminUser -Password $vmAdminPass
 
 Write-Host ("Resolved autologon executable: {0}" -f [string]$autologonExe)
-Write-Host ("Running: {0} /accepteula {1} . <redacted>" -f [string]$autologonExe, [string]$vmAdminUser)
-$autologonOutput = & $autologonExe /accepteula $vmAdminUser '.' $vmAdminPass 2>&1
-$autologonExit = [int]$LASTEXITCODE
-$filteredAutologonOutput = @(
-    @($autologonOutput) |
-        Where-Object {
-            $line = [string]$_
-            (-not [string]::Equals($line, "'wmic' is not recognized as an internal or external command,", [System.StringComparison]::OrdinalIgnoreCase)) -and
-            (-not [string]::Equals($line, 'operable program or batch file.', [System.StringComparison]::OrdinalIgnoreCase))
-        }
-)
-if (@($filteredAutologonOutput).Count -ne @($autologonOutput).Count) {
-    Write-Host "Autologon emitted legacy WMIC lookup output; continuing because the tool completed and registry state will be validated."
+$beforeState = Get-AutologonState
+$validDomains = @('.', $env:COMPUTERNAME)
+$domainMatches = @($validDomains | Where-Object { [string]::Equals([string]$_, [string]$beforeState.DefaultDomainName, [System.StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+$autologonStateMatches = [string]::Equals([string]$beforeState.AutoAdminLogon, '1', [System.StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$beforeState.DefaultUserName, [string]$vmAdminUser, [System.StringComparison]::OrdinalIgnoreCase) -and $domainMatches
+$readinessBefore = Get-InteractiveLogonReadiness -ExpectedUserName $vmAdminUser
+$restartRequired = (-not $autologonStateMatches) -or (-not [bool]$readinessBefore.Ready)
+if ($autologonStateMatches) {
+    Write-Host 'Autologon registry settings already match the validated manager credential; Sysinternals reconfiguration is skipped.'
 }
-if (@($filteredAutologonOutput).Count -gt 0) {
-    $filteredAutologonOutput | ForEach-Object { Write-Host ([string]$_) }
+else {
+    Write-Host ("Running: {0} /accepteula {1} . <redacted>" -f [string]$autologonExe, [string]$vmAdminUser)
+    $autologonOutput = & $autologonExe /accepteula $vmAdminUser '.' $vmAdminPass 2>&1
+    $autologonExit = [int]$LASTEXITCODE
+    $filteredAutologonOutput = @(
+        @($autologonOutput) |
+            Where-Object {
+                $line = [string]$_
+                (-not [string]::Equals($line, "'wmic' is not recognized as an internal or external command,", [System.StringComparison]::OrdinalIgnoreCase)) -and
+                (-not [string]::Equals($line, 'operable program or batch file.', [System.StringComparison]::OrdinalIgnoreCase))
+            }
+    )
+    if (@($filteredAutologonOutput).Count -ne @($autologonOutput).Count) {
+        Write-Host "Autologon emitted legacy WMIC lookup output; continuing because the tool completed and registry state will be validated."
+    }
+    if (@($filteredAutologonOutput).Count -gt 0) {
+        $filteredAutologonOutput | ForEach-Object { Write-Host ([string]$_) }
+    }
+    if ($autologonExit -ne 0) { throw ("autologon exited with code {0}." -f $autologonExit) }
+    Sync-WinlogonAutologonState -UserName $vmAdminUser -Password $vmAdminPass
+    Start-Sleep -Seconds 1
 }
 
-if ($autologonExit -ne 0) {
-    throw ("autologon exited with code {0}." -f $autologonExit)
-}
-
-Sync-WinlogonAutologonState -UserName $vmAdminUser -Password $vmAdminPass
-Start-Sleep -Seconds 1
 Assert-AutologonConfigured -ExpectedUserName $vmAdminUser
 $interactiveLogonReadiness = Get-InteractiveLogonReadiness -ExpectedUserName $vmAdminUser
-Write-Host ("interactive-logon-readiness => ready={0}; active-user={1}; user-match={2}; explorer-ready={3}; note={4}" -f [bool]$interactiveLogonReadiness.Ready, $(if ([string]::IsNullOrWhiteSpace([string]$interactiveLogonReadiness.ActiveUser)) { '(none)' } else { [string]$interactiveLogonReadiness.ActiveUser }), [bool]$interactiveLogonReadiness.UserMatch, [bool]$interactiveLogonReadiness.ExplorerReady, 'autologon is configured and an immediate reboot is required to validate the next desktop session')
-Write-Host 'TASK_REBOOT_REQUIRED:configure-autologon-settings'
+Write-Host ("interactive-logon-readiness => ready={0}; active-user={1}; user-match={2}; explorer-ready={3}; note={4}" -f [bool]$interactiveLogonReadiness.Ready, $(if ([string]::IsNullOrWhiteSpace([string]$interactiveLogonReadiness.ActiveUser)) { '(none)' } else { [string]$interactiveLogonReadiness.ActiveUser }), [bool]$interactiveLogonReadiness.UserMatch, [bool]$interactiveLogonReadiness.ExplorerReady, $(if ($restartRequired) { 'autologon settings changed or the target interactive session is not ready; an immediate reboot is required' } else { 'autologon settings and the manager interactive session are already healthy; no restart is needed' }))
+if ($restartRequired) { Write-Host 'TASK_REBOOT_REQUIRED:configure-autologon-settings' }
 
 Write-Host "configure-autologon-settings-completed"
 Write-Host "Update task completed: configure-autologon-settings"

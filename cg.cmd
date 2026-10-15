@@ -12,4 +12,5 @@ if %errorlevel% neq 0 (
     exit /b
 )
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\clagnos-cli.ps1" %*
-endlocal
+set "clagnosExitCode=%ERRORLEVEL%"
+endlocal & exit /b %clagnosExitCode%

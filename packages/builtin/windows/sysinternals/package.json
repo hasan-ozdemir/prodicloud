@@ -3,7 +3,7 @@
   "displayName": "Sysinternals",
   "category": "tool",
   "enabled": true,
-  "timeout": 180,
+  "timeout": 600,
   "sortOrder": 101,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

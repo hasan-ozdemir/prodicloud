@@ -3,7 +3,7 @@
   "displayName": "Be My Eyes",
   "category": "application",
   "enabled": true,
-  "timeout": 120,
+  "timeout": 600,
   "sortOrder": 118,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

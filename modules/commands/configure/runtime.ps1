@@ -194,7 +194,7 @@ function Resolve-ClagnosConfigureNsgRuleDescriptor {
         $portValues += [string]$selectedRule.destinationPortRange
     }
 
-    $normalizedPorts = @(
+    $portTokens = @(
         @($portValues) |
             ForEach-Object { ([string]$_).Trim() } |
             Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
@@ -208,20 +208,12 @@ function Resolve-ClagnosConfigureNsgRuleDescriptor {
             -Hint 'Repair the managed NSG rule so it carries explicit destination ports.'
     }
 
-    foreach ($portText in @($normalizedPorts)) {
-        if ($portText -notmatch '^\d+$') {
-            Throw-FriendlyError `
-                -Detail ("NSG rule '{0}' contains unsupported destination port value '{1}'." -f [string]$selectedRule.name, [string]$portText) `
-                -Code 66 `
-                -Summary 'Configure command could not persist TCP port settings.' `
-                -Hint 'Use explicit numeric ports in the managed NSG rule before rerunning configure.'
-        }
-    }
+    $portSpecification = Resolve-ClagnosTcpPortSpecification -Text (@($portTokens) -join ',') -MaximumExpandedPorts 65535
 
     return [pscustomobject]@{
         Name = [string]$selectedRule.name
-        Ports = @($normalizedPorts)
-        PortsCsv = (@($normalizedPorts) -join ',')
+        Ports = @($portSpecification.Ports)
+        PortsCsv = [string]$portSpecification.CanonicalText
     }
 }
 

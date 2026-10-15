@@ -2,7 +2,8 @@ $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-anydesk-application"
 
 $taskConfig = [ordered]@{
-    WingetInstallTimeoutSeconds = 90
+    WingetInstallTimeoutSeconds = 300
+    WingetSourceUpdateTimeoutSeconds = 120
     LogTailLineCount = 20
 }
 
@@ -40,10 +41,68 @@ function Test-AnyDeskInstalled {
         }
     }
 
-    Write-Host "AnyDesk was not found at either managed installation path; winget install will verify the package directly."
+    Write-Host "AnyDesk was not found at either managed machine installation path."
     return [pscustomobject]@{
         Installed = $false
         Path = ""
+    }
+}
+
+function Get-AnyDeskAuthenticodeInfo {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $pwshCandidate = Join-Path $env:ProgramFiles 'PowerShell\7\pwsh.exe'
+    $childPowerShell = if (Test-Path -LiteralPath $pwshCandidate -PathType Leaf) { $pwshCandidate } else { Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe' }
+    if (-not (Test-Path -LiteralPath $childPowerShell -PathType Leaf)) { throw 'Windows PowerShell was not found for isolated AnyDesk Authenticode verification.' }
+    $escapedPath = $Path.Replace("'", "''")
+    $childScript = @"
+`$ErrorActionPreference = 'Stop'
+`$signature = Get-AuthenticodeSignature -LiteralPath '$escapedPath' -ErrorAction Stop
+`$version = (Get-Item -LiteralPath '$escapedPath' -ErrorAction Stop).VersionInfo
+`$signer = if (`$null -ne `$signature.SignerCertificate) { [string]`$signature.SignerCertificate.Subject } else { '' }
+[pscustomobject]@{ Status = [string]`$signature.Status; Signer = `$signer; Company = [string]`$version.CompanyName; Product = [string]`$version.ProductName; ProductVersion = [string]`$version.ProductVersion } | ConvertTo-Json -Compress
+"@
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($childScript))
+    $probe = Invoke-ProcessWithTimeout -Label 'verify-anydesk-authenticode' -FilePath $childPowerShell -ArgumentList @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand',$encodedCommand) -TimeoutSeconds 30
+    if ([bool]$probe.TimedOut -or [int]$probe.ExitCode -ne 0) { throw ("Isolated AnyDesk Authenticode verification failed (exit {0}): {1}" -f [int]$probe.ExitCode,[string]$probe.StderrText) }
+    $jsonLine = @([string]$probe.StdoutText -split "`r?`n" | Where-Object { [string]$_ -match '^\s*\{' } | Select-Object -Last 1)
+    if ($jsonLine.Count -ne 1) { throw ("Isolated AnyDesk Authenticode verification returned no JSON result. Output: {0}" -f ([string]$probe.StdoutText).Trim()) }
+    try { return (ConvertFrom-Json -InputObject ([string]$jsonLine[0]) -ErrorAction Stop) }
+    catch { throw ("Isolated AnyDesk Authenticode verification returned invalid JSON: {0}" -f ([string]$jsonLine[0]).Trim()) }
+}
+
+function Install-AnyDeskFromVerifiedOfficialDownload {
+    $downloadRoot = ''
+    $installerPath = 'C:\Windows\Temp\clagnos-anydesk-verified.exe'
+    $installerWasStaged = Test-Path -LiteralPath $installerPath -PathType Leaf
+    try {
+        if (-not $installerWasStaged) {
+            $downloadRoot = Join-Path $env:TEMP ('clagnos-anydesk-official-' + [guid]::NewGuid().ToString('N'))
+            [void](New-Item -ItemType Directory -Path $downloadRoot -Force)
+            $installerPath = Join-Path $downloadRoot 'AnyDesk.exe'
+            Write-Host 'Doing: download the official AnyDesk installer after WinGet rejected a stale catalog hash'
+            Invoke-WebRequest -Uri 'https://download.anydesk.com/AnyDesk.exe' -OutFile $installerPath -UseBasicParsing -TimeoutSec 120 -ErrorAction Stop
+        }
+        else { Write-Host 'Doing: use the locally staged official AnyDesk installer after WinGet rejected a stale catalog hash' }
+        $installerInfo = Get-AnyDeskAuthenticodeInfo -Path $installerPath
+        if ([string]$installerInfo.Status -ne 'Valid' -or [string]$installerInfo.Signer -notmatch '(?i)O=AnyDesk Software GmbH' -or [string]$installerInfo.Company -ne 'AnyDesk Software GmbH' -or [string]$installerInfo.Product -notmatch '(?i)^AnyDesk$') {
+            throw 'The official AnyDesk installer did not pass the expected valid Authenticode publisher and product checks.'
+        }
+        Write-Host ("Official AnyDesk installer signature verified for product version {0}." -f [string]$installerInfo.ProductVersion)
+        $destination = 'C:\Program Files (x86)\AnyDesk'
+        $installResult = Invoke-ProcessWithTimeout `
+            -FilePath $installerPath `
+            -ArgumentList @('--install',('"{0}"' -f $destination),'--start-with-win','--silent','--create-shortcuts') `
+            -TimeoutSeconds ([int]$taskConfig.WingetInstallTimeoutSeconds) `
+            -Label 'official-signed-installer-anydesk'
+        if ([bool]$installResult.TimedOut -or [int]$installResult.ExitCode -ne 0) {
+            throw ("The signature-verified official AnyDesk installer failed (exit={0}, timedOut={1})." -f [int]$installResult.ExitCode,[bool]$installResult.TimedOut)
+        }
+    }
+    finally {
+        if (-not $installerWasStaged -and -not [string]::IsNullOrWhiteSpace([string]$downloadRoot)) {
+            if (Test-Path -LiteralPath $installerPath -PathType Leaf) { Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue }
+            if (Test-Path -LiteralPath $downloadRoot -PathType Container) { Remove-Item -LiteralPath $downloadRoot -Force -ErrorAction SilentlyContinue }
+        }
     }
 }
 
@@ -124,9 +183,7 @@ if ([bool]$existingAnyDesk.Installed) {
     if (-not [string]::IsNullOrWhiteSpace([string]$existingAnyDesk.Path)) {
         Write-Host ("Existing AnyDesk installation is already healthy: {0}" -f [string]$existingAnyDesk.Path)
     }
-    else {
-        Write-Host "Existing AnyDesk installation is already healthy. Skipping winget install."
-    }
+    else { Write-Host 'Existing AnyDesk installation is already healthy.' }
     Write-Host "install-anydesk-application-completed"
     Write-Host "Update task completed: install-anydesk-application"
     return
@@ -139,6 +196,34 @@ $installResult = Invoke-ProcessWithTimeout `
     -TimeoutSeconds ([int]$taskConfig.WingetInstallTimeoutSeconds) `
     -Label 'winget-install-anydesk-application'
 $installExit = [int]$installResult.ExitCode
+$installTranscript = [string]$installResult.StdoutText + [Environment]::NewLine + [string]$installResult.StderrText
+$hashMismatch = ($installTranscript -match '(?i)installer hash does not match|hash mismatch')
+if ($hashMismatch) {
+    Write-Warning 'WinGet rejected the AnyDesk installer because its downloaded hash did not match the catalog manifest.'
+    Write-Host 'Doing: refresh the WinGet source once and retry without bypassing hash verification'
+    $sourceUpdate = Invoke-ProcessWithTimeout `
+        -FilePath $wingetExe `
+        -ArgumentList @('source','update','--disable-interactivity') `
+        -TimeoutSeconds ([int]$taskConfig.WingetSourceUpdateTimeoutSeconds) `
+        -Label 'winget-source-update-anydesk'
+    if (-not [bool]$sourceUpdate.TimedOut -and [int]$sourceUpdate.ExitCode -eq 0) {
+        Write-Host 'Doing: retry AnyDesk install against the refreshed WinGet source'
+        $installResult = Invoke-ProcessWithTimeout `
+            -FilePath $wingetExe `
+            -ArgumentList @('install','anydesk.anydesk','--accept-source-agreements','--accept-package-agreements','--silent','--disable-interactivity') `
+            -TimeoutSeconds ([int]$taskConfig.WingetInstallTimeoutSeconds) `
+            -Label 'winget-install-anydesk-application-retry'
+        $installExit = [int]$installResult.ExitCode
+        $installTranscript = [string]$installResult.StdoutText + [Environment]::NewLine + [string]$installResult.StderrText
+        $hashMismatch = ($installTranscript -match '(?i)installer hash does not match|hash mismatch')
+    }
+}
+$verifiedAnyDesk = Test-AnyDeskInstalled
+if (-not [bool]$verifiedAnyDesk.Installed) {
+    if (-not $hashMismatch) { Write-Warning 'WinGet did not produce a verified AnyDesk machine install; checking the official signed publisher installer.' }
+    Install-AnyDeskFromVerifiedOfficialDownload
+    $verifiedAnyDesk = Test-AnyDeskInstalled
+}
 $needsPostInstallVerification = $false
 if ([bool]$installResult.TimedOut) {
     Write-Warning ("winget install anydesk.anydesk exceeded the bounded wait ({0}s); post-install verification will determine whether the package is usable." -f [int]$taskConfig.WingetInstallTimeoutSeconds)
@@ -151,7 +236,8 @@ elseif ($installExit -ne 0 -and $installExit -ne -1978335189) {
 
 $verifiedAnyDesk = Test-AnyDeskInstalled
 if (-not [bool]$verifiedAnyDesk.Installed) {
-    throw ("AnyDesk install could not be verified. stdoutLog={0}; stderrLog={1}" -f [string]$installResult.StdoutLog, [string]$installResult.StderrLog)
+    $failureDetail = if ($hashMismatch) { 'WinGet hash verification still blocked the install after one source refresh; no hash bypass was attempted. ' } else { ' ' }
+    throw ("AnyDesk install could not be verified.{0}stdoutLog={1}; stderrLog={2}" -f $failureDetail,[string]$installResult.StdoutLog, [string]$installResult.StderrLog)
 }
 
 if ([string]::IsNullOrWhiteSpace([string]$verifiedAnyDesk.Path)) {

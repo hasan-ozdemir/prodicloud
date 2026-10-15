@@ -3,7 +3,7 @@
   "displayName": "iCloud",
   "category": "application",
   "enabled": true,
-  "timeout": 150,
+  "timeout": 600,
   "sortOrder": 122,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

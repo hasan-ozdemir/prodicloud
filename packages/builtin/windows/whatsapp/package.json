@@ -3,7 +3,7 @@
   "displayName": "WhatsApp",
   "category": "application",
   "enabled": true,
-  "timeout": 150,
+  "timeout": 600,
   "sortOrder": 119,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

@@ -3,7 +3,7 @@
   "displayName": "Codex",
   "category": "application",
   "enabled": true,
-  "timeout": 120,
+  "timeout": 600,
   "sortOrder": 120,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

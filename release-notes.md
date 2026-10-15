@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.15.420 - 2026-10-15
+
+### Summary
+A reusable VC setup launcher now provisions or resumes an existing compatible target, performs the Clagnos guest/package lifecycle, and verifies Azure configuration plus RDP, SSH, and WinRM connectivity.
+
+### Highlights
+- `setup-vc2.cmd` delegates to a transcript-producing PowerShell runner. `-ResumeAtPackageStage` skips creation, init, and the first update pass and never mutates disk or network resources.
+- AnyDesk installation uses a locally Authenticode-verified vendor installer staged over WinRM with remote SHA-256 and publisher metadata verification; WinGet hash checks remain enforced.
+- Docker Desktop startup state follows the manager/assistant Run-entry and StartupFolder policy, so a missing per-machine shortcut no longer triggers a full vendor reinstall.
+- Power-state reads use Azure `instanceView.statuses`, and the restart parser distinguishes positive reboot signals from explicit no-restart reports.
+
+### Validation
+- Fresh setup completed with the requested Windows image, B2s_v2 size, 160 GB disk, hibernation, all enabled init/update tasks, package setup-all, final status/report, and RDP/SSH/WinRM tests; the VM remains running.
+- The VM SKU does not expose nested virtualization to the guest, so WSL2/Docker engine readiness is hardware-limited. Hibernation and Azure properties were verified; the original local `.env` was restored byte-for-byte.
+- Repository PowerShell, package lifecycle, smoke, TUI, sensitive-content, and documentation checks passed. No CI/live provisioning was added.
+
 ## Release 2026.10.15.419 - 2026-10-15
 
 ### Summary

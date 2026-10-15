@@ -54,8 +54,11 @@ function Get-ClagnosPackageCatalog {
         if ([string]$statusCheck.kind -notin @('command','winget','choco','npm','appx','store-state','choco-self','dpkg','rpm')) {
             throw ("Package '{0}' has unsupported status check '{1}'." -f $id, [string]$statusCheck.kind)
         }
-        if ([string]$uninstall.kind -notin @('winget','choco','npm','appx','windows-feature','choco-self','apt','dnf','snap')) {
+        if ([string]$uninstall.kind -notin @('winget','choco','npm','appx','windows-feature','choco-self','anydesk','apt','dnf','snap')) {
             throw ("Package '{0}' has unsupported uninstall action '{1}'." -f $id, [string]$uninstall.kind)
+        }
+        if ([string]$uninstall.kind -eq 'anydesk' -and ([string]$id -ne 'anydesk' -or [string]$uninstall.value -ne 'C:\Program Files (x86)\AnyDesk\AnyDesk.exe')) {
+            throw 'The anydesk uninstall action is valid only for the builtin AnyDesk package and its fixed machine installation path.'
         }
 
         $installScript = [string]$manifest.installScript
@@ -438,6 +441,7 @@ function New-ClagnosPackageGuestScript {
                 displayName = [string]$_.DisplayName
                 statusCheck = $_.StatusCheck
                 uninstall = $_.Uninstall
+                startupPolicy = $_.StartupPolicy
                 targetUsers = @($(if ($null -ne $Context) { @([string]$Context.VmUser,[string]$Context.VmAssistantUser) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } } else { @() }))
             }
         }
@@ -521,19 +525,7 @@ if (`$hasChocoPackages) {
         `$chocoInventoryReady = ([int]`$LASTEXITCODE -eq 0)
     }
 }
-`$npmInventory = `$null
-`$npmInventoryReady = `$false
-if (`$hasNpmPackages) {
-    `$npmExe = Get-Command npm.cmd -ErrorAction SilentlyContinue
-    if (-not `$npmExe) { `$npmExe = Get-Command npm -ErrorAction SilentlyContinue }
-    if (`$npmExe) {
-        Write-Output 'Doing: read one global npm package inventory'
-        `$npmOutput = & `$npmExe.Source list --global --depth=0 --json 2>`$null | Out-String
-        if ([int]`$LASTEXITCODE -eq 0 -or `$npmOutput -match '"dependencies"') {
-            try { `$npmInventory = ConvertFrom-Json -InputObject `$npmOutput; `$npmInventoryReady = `$true } catch { `$npmInventoryReady = `$false }
-        }
-    }
-}
+`$npmModulesRoot = Join-Path (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)) 'npm') 'node_modules'
 `$appxInventory = @()
 `$appxInventoryReady = `$false
 if (`$hasAppxPackages) {
@@ -562,9 +554,14 @@ function Get-PackageStatus {
             return 'not-installed'
         }
         'npm' {
-            if (-not `$npmInventoryReady) { return 'unknown' }
-            if (`$null -ne `$npmInventory.dependencies.PSObject.Properties[[string]`$value]) { return 'installed' }
-            return 'not-installed'
+            `$packagePath = [string]`$npmModulesRoot
+            foreach (`$segment in @([string]`$value -split '/')) {
+                if ([string]::IsNullOrWhiteSpace([string]`$segment) -or [string]`$segment -eq '.' -or [string]`$segment -eq '..') { return 'unknown' }
+                `$packagePath = Join-Path `$packagePath ([string]`$segment)
+            }
+            if (-not (Test-Path -LiteralPath `$packagePath -PathType Container)) { return 'not-installed' }
+            if (Test-Path -LiteralPath (Join-Path `$packagePath 'package.json') -PathType Leaf) { return 'installed' }
+            return 'unknown'
         }
         'appx' {
             if (-not `$appxInventoryReady) { return 'unknown' }
@@ -604,6 +601,7 @@ foreach (`$package in `$packages) {
     `$results += [pscustomobject]@{ id = [string]`$package.id; status = `$status; detail = `$detail }
 }
 `$jsonResult = ConvertTo-Json -InputObject `$results -Depth 4 -Compress
+`$global:LASTEXITCODE = 0
 Write-Output ('CLAGNOS_PACKAGE_RESULTS:' + `$jsonResult)
 "@
     }
@@ -917,6 +915,12 @@ function New-ClagnosPackageSetupPlan {
                 'disabled' { 'skip-disabled' }
                 default { 'skip-unknown' }
             }
+            $dependencies = @(
+                @($package.PackageTask.DependsOn) |
+                    ForEach-Object { [string]$_ } |
+                    Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+            )
+            if ($action -eq 'skip-unknown' -and $dependencies.Count -gt 0) { $action = 'recheck-after-dependencies' }
             [pscustomobject]@{
                 Package = $package
                 Status = $status
@@ -925,6 +929,7 @@ function New-ClagnosPackageSetupPlan {
                     'install' { 'Package is absent; install it.' }
                     'already-healthy' { 'Package is installed; leave its current version and user state unchanged.' }
                     'repair' { 'A Clagnos-managed startup setting is missing; repair the installed version.' }
+                    'recheck-after-dependencies' { 'Status is unknown until its declared dependencies are installed; recheck before deciding whether to install.' }
                     'skip-disabled' { 'Package is disabled in its catalog.' }
                     default { 'Status is unknown; no package mutation is safe.' }
                 }
@@ -951,11 +956,60 @@ function Invoke-ClagnosPackageSetupPlan {
     foreach ($key in @($Plan.StatusByPackage.Keys)) { $effectiveStatus[[string]$key] = [string]$Plan.StatusByPackage[[string]$key] }
     foreach ($row in @($Plan.Rows)) {
         $package = $row.Package
-        if ([string]$row.Action -notin @('install','repair')) {
-            $results.Add([pscustomobject]@{ Package = $package; Outcome = [string]$row.Action; Message = [string]$row.Reason })
+        $dependencies = @(
+            @($package.PackageTask.DependsOn) |
+                ForEach-Object { [string]$_ } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+        )
+        $action = [string]$row.Action
+        if ($action -eq 'recheck-after-dependencies') {
+            $blocked = @($dependencies | Where-Object {
+                $dependency = [string]$_
+                if (-not $effectiveStatus.ContainsKey($dependency)) { return $true }
+                return ([string]$effectiveStatus[$dependency] -notin @('installed','installed-drifted'))
+            } | Select-Object -First 1)
+            if ($blocked.Count -gt 0) {
+                $message = "Skipped because dependency '$($blocked[0])' is not verified as installed."
+                $effectiveStatus[[string]$package.Id] = 'blocked'
+                $results.Add([pscustomobject]@{ Package = $package; Outcome = 'skipped'; Message = $message })
+                Write-Warning ("Package setup skipped for {0}: {1}" -f [string]$package.DisplayName,$message)
+                continue
+            }
+            try {
+                Write-ClagnosActionProgress -Action ("recheck package '{0}' after its dependencies were verified" -f [string]$package.Id)
+                $refreshedStatus = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Plan.Options -Platform $Plan.Platform -Force -Runtime $Plan.Runtime -Target $Plan.Target
+                $action = switch ([string]$refreshedStatus[[string]$package.Id]) {
+                    'not-installed' { 'install' }
+                    'installed' { 'already-healthy' }
+                    'installed-drifted' { 'repair' }
+                    default { 'skip-unknown' }
+                }
+                $effectiveStatus[[string]$package.Id] = [string]$refreshedStatus[[string]$package.Id]
+                if ($action -eq 'already-healthy') {
+                    $results.Add([pscustomobject]@{ Package = $package; Outcome = 'already-healthy'; Message = 'Package is installed; no repair or vendor upgrade was needed.' })
+                    Write-Host ("Package setup verified: {0} (already healthy after dependency recheck)" -f [string]$package.DisplayName) -ForegroundColor Green
+                    continue
+                }
+                if ($action -eq 'skip-unknown') {
+                    $message = 'Package status remains unknown after its dependencies were installed; no package mutation is safe.'
+                    $results.Add([pscustomobject]@{ Package = $package; Outcome = 'skip-unknown'; Message = $message })
+                    Write-Warning ("Package setup skipped for {0}: {1}" -f [string]$package.DisplayName,$message)
+                    continue
+                }
+            }
+            catch {
+                $effectiveStatus[[string]$package.Id] = 'unknown'
+                $message = [string]$_.Exception.Message
+                $results.Add([pscustomobject]@{ Package = $package; Outcome = 'skip-unknown'; Message = $message })
+                Write-Warning ("Package status recheck failed for {0}: {1}" -f [string]$package.DisplayName,$message)
+                continue
+            }
+        }
+        if ($action -notin @('install','repair')) {
+            $results.Add([pscustomobject]@{ Package = $package; Outcome = $action; Message = [string]$row.Reason })
             continue
         }
-        $blockedDependency = @($package.PackageTask.DependsOn | ForEach-Object { [string]$_ } | Where-Object {
+        $blockedDependency = @($dependencies | Where-Object {
             $dependency = [string]$_
             if (-not $effectiveStatus.ContainsKey($dependency)) { return $true }
             return ([string]$effectiveStatus[$dependency] -notin @('installed','installed-drifted'))
@@ -978,7 +1032,7 @@ function Invoke-ClagnosPackageSetupPlan {
             }
             $installTask = [pscustomobject]@{}
             foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
-            $packageAction = if ([string]$row.Action -eq 'repair') { 'repair' } else { 'install' }
+            $packageAction = if ($action -eq 'repair') { 'repair' } else { 'install' }
             if ($packageAction -eq 'repair' -and $installTask.PSObject.Properties['AppStateSpec']) { $installTask.AppStateSpec = $null }
             if ([string]$Plan.Platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action $packageAction -Package $package -Context $Plan.Runtime.Context }
             $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $Plan.Runtime -Options $Plan.Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:([bool]$Plan.AutoMode) -TaskOutcomeModeOverride 'strict'
@@ -1008,6 +1062,52 @@ function Invoke-ClagnosPackageSetupPlan {
     if ($failed -eq 0 -and $skipped -eq 0) { Write-Host ("Setup all completed: installed={0}, repaired={1}, failed=0, skipped=0." -f $installed,$repaired) -ForegroundColor Green }
     else { Write-Host ("Setup all completed with warnings: installed={0}, repaired={1}, failed={2}, skipped={3}. Review the package results above." -f $installed,$repaired,$failed,$skipped) -ForegroundColor Yellow }
     return [pscustomobject]@{ Installed = $installed; Repaired = $repaired; Failed = $failed; Skipped = $skipped; Results = @($results.ToArray()) }
+}
+
+function Invoke-ClagnosPackageSetupAll {
+    param(
+        [hashtable]$Options,
+        [switch]$AutoMode,
+        [switch]$WindowsFlag,
+        [switch]$LinuxFlag
+    )
+
+    Write-ClagnosActionProgress -Action 'review enabled builtin and custom packages for setup-all'
+    $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $platform = [string]$runtime.Platform
+    $packages = @(
+        @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'builtin') +
+        @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'custom')
+    )
+    if ($packages.Count -eq 0) { throw ("No builtin or custom packages are available for platform '{0}'." -f $platform) }
+
+    $plan = New-ClagnosPackageSetupPlan -Packages $packages -Options $Options -Platform $platform -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    Write-Host ''
+    Write-Host ("Package setup plan for {0} VM '{1}' in resource group '{2}':" -f $platform,[string]$plan.Target.VmName,[string]$plan.Target.ResourceGroup) -ForegroundColor Cyan
+    foreach ($row in @($plan.Rows)) {
+        Write-Host ("- [{0}] {1}: {2} ({3})" -f [string]$row.Package.Catalog,[string]$row.Package.DisplayName,[string]$row.Action,[string]$row.Reason)
+    }
+
+    $approved = Get-ClagnosCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+    if (-not $approved) {
+        $confirmation = Read-Host 'Type SETUP ALL to apply this package plan'
+        if (-not [string]::Equals([string]$confirmation,'SETUP ALL',[System.StringComparison]::Ordinal)) {
+            Write-Host 'Package setup-all canceled; no packages were changed.' -ForegroundColor Yellow
+            return [pscustomobject]@{ Installed = 0; Repaired = 0; Failed = 0; Skipped = 0; Cancelled = $true; Results = @() }
+        }
+    }
+
+    $result = Invoke-ClagnosPackageSetupPlan -Plan $plan
+    $unsafe = @($result.Results | Where-Object { [string]$_.Outcome -in @('failed','skipped','skip-unknown') })
+    if ($unsafe.Count -gt 0) {
+        $names = @($unsafe | ForEach-Object { [string]$_.Package.DisplayName }) -join ', '
+        Throw-FriendlyError `
+            -Detail ("Package setup-all left one or more enabled packages unverified: {0}." -f $names) `
+            -Code 66 `
+            -Summary 'Package setup-all did not verify every enabled package.' `
+            -Hint 'Review the per-package results, resolve the reported issue, and rerun setup-all.'
+    }
+    return $result
 }
 
 function Set-ClagnosPackageManifestEnabled {

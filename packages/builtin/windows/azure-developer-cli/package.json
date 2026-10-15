@@ -3,7 +3,7 @@
   "displayName": "Azure Developer CLI",
   "category": "tool",
   "enabled": true,
-  "timeout": 60,
+  "timeout": 300,
   "sortOrder": 108,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

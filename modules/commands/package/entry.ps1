@@ -17,5 +17,17 @@ function Invoke-ClagnosPackageCommand {
     if ([string]::IsNullOrWhiteSpace($catalog)) {
         Throw-FriendlyError -Detail "Package command requires --catalog." -Code 2 -Summary "Package catalog selection is missing." -Hint "Select --catalog=builtin or --catalog=custom."
     }
-    Invoke-ClagnosPackageOperation -Action $action.Trim().ToLowerInvariant() -PackageId $packageId -Catalog $catalog.Trim().ToLowerInvariant() -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $normalizedAction = $action.Trim().ToLowerInvariant()
+    $normalizedCatalog = $catalog.Trim().ToLowerInvariant()
+    if ($normalizedAction -eq 'setup-all') {
+        if ($normalizedCatalog -ne 'all') {
+            Throw-FriendlyError -Detail "Package setup-all operates on both isolated catalogs." -Code 2 -Summary "Package catalog selection is invalid." -Hint "Use --action=setup-all --catalog=all to review builtin and custom packages together."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($packageId)) {
+            Throw-FriendlyError -Detail "Package setup-all does not take an individual package id." -Code 2 -Summary "Package selection is invalid." -Hint "Omit --package when using --action=setup-all."
+        }
+        Invoke-ClagnosPackageSetupAll -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        return
+    }
+    Invoke-ClagnosPackageOperation -Action $normalizedAction -PackageId $packageId -Catalog $normalizedCatalog -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
 }

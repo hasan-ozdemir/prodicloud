@@ -120,7 +120,7 @@ function Invoke-ClagnosPackageWinRmTaskScript {
     try {
         while ($job.State -in @('NotStarted','Running')) {
             if ($watch.Elapsed.TotalSeconds -ge $safeTimeout) {
-                Stop-Job -Job $job -Force -ErrorAction SilentlyContinue | Out-Null
+                Stop-Job -Job $job -ErrorAction SilentlyContinue | Out-Null
                 throw ("WinRM task '{0}' exceeded its {1}s timeout." -f $TaskName,$safeTimeout)
             }
             $remaining = [Math]::Max(1,[int][Math]::Ceiling($safeTimeout - $watch.Elapsed.TotalSeconds))

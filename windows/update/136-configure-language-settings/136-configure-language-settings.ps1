@@ -383,6 +383,23 @@ function Install-LanguageComponents {
     Write-StateIntent ("Language components for {0} will be installed." -f [string]$DisplayName)
     Write-StateStart ("Installing language components for {0}..." -f [string]$DisplayName)
 
+    $existingCapabilityState = Get-LanguageCapabilityStateMap -LanguageTag $LanguageTag
+    $existingCapabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $existingCapabilityState
+    $existingBasicState = if ($existingCapabilityState.PSObject.Properties.Match('Language.Basic').Count -gt 0) { [string]$existingCapabilityState.'Language.Basic' } else { '' }
+    $existingInstalledRows = @(Get-InstalledLanguageSafe -LanguageTag $LanguageTag)
+    if (@($existingInstalledRows).Count -gt 0 -and $existingBasicState -eq 'Installed') {
+        Write-StateSuccess ("Language components for {0} are already installed; no install worker or restart is needed." -f [string]$DisplayName)
+        Write-Host ("language-components => {0} => {1}" -f [string]$LanguageTag, (Get-LanguageFeatureSummary -InstalledLanguage $existingInstalledRows[0]))
+        Write-Host ("language-capabilities-current => {0} => {1}" -f [string]$LanguageTag, [string]$existingCapabilitySummary)
+        return [pscustomobject]@{
+            LanguageTag = [string]$LanguageTag
+            RebootRequired = $false
+            QueuedInstallAccepted = $false
+            CapabilitySummary = [string]$existingCapabilitySummary
+            InstalledLanguagePresent = $true
+        }
+    }
+
     $interactiveTaskName = ('{0}-install-{1}' -f $taskName, (($LanguageTag -replace '[^a-zA-Z0-9]+', '-').Trim('-')))
     $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
     $workerScript = @'
@@ -892,8 +909,13 @@ try {
     Write-Host ("installed-language => {0} => {1}" -f $secondaryLanguage, (Get-LanguageFeatureSummary -InstalledLanguage (@(Get-InstalledLanguageSafe -LanguageTag $secondaryLanguage) | Select-Object -First 1)))
     Assert-LanguageStateReadyForRestart -ComponentResults $systemLanguageState.ComponentResults
 
-    Write-Host 'language-step-ok: restart-required-to-finalize'
-    Write-Host 'TASK_REBOOT_REQUIRED:configure-language-settings'
+    if ($rebootRequired) {
+        Write-Host 'language-step-ok: restart-required-to-finalize'
+        Write-Host 'TASK_REBOOT_REQUIRED:configure-language-settings'
+    }
+    else {
+        Write-Host 'language-step-ok: already-current; no restart required'
+    }
 
     Write-Host 'configure-language-settings-completed'
     Write-Host 'Update task completed: configure-language-settings'

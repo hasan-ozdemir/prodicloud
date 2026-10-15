@@ -702,13 +702,14 @@ function Invoke-VmRunCommandBlocks {
         throw ("VM init strict task outcome mode blocked continuation: warning={0}, error={1}" -f $totalWarnings, $totalErrors)
     }
 
+    $pendingAppStateTaskArray = $pendingAppStateTaskBlocks.ToArray()
     return [pscustomobject]@{
         SuccessCount = $totalSuccess
         WarningCount = $totalWarnings
         ErrorCount = $totalErrors
         RebootCount = $rebootCount
-        DeferredAppStateCount = @($pendingAppStateTaskBlocks).Count
-        DeferredAppStateTasks = @($pendingAppStateTaskBlocks | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        DeferredAppStateCount = $pendingAppStateTaskArray.Count
+        DeferredAppStateTasks = @($pendingAppStateTaskArray | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
         RebootRequired = $false
         NextTaskIndex = [int]$processedTaskCount
         TaskDurations = @()

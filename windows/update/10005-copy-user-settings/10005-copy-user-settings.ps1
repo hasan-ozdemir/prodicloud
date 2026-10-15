@@ -464,8 +464,18 @@ function Copy-RegistryBranch {
         New-Item -Path $TargetPath -Force | Out-Null
     }
 
-    $sourceKey = Get-Item -LiteralPath $SourcePath -ErrorAction Stop
-    $targetKey = Get-Item -LiteralPath $TargetPath -ErrorAction Stop
+    try {
+        $sourceKey = Get-Item -LiteralPath $SourcePath -ErrorAction Stop
+        $targetKey = Get-Item -LiteralPath $TargetPath -ErrorAction Stop
+    }
+    catch {
+        if ($_.Exception -is [System.Security.SecurityException] -or $_.Exception -is [System.UnauthorizedAccessException]) {
+            Add-CopySkipEvidence -Reason 'registry-branch-access-denied' -Label $RelativePath -Path $SourcePath
+            Write-Detail ("copy-user-settings-registry-branch-skip: access-denied => {0}" -f $SourcePath)
+            return
+        }
+        throw
+    }
     $targetValueNames = @($targetKey.GetValueNames())
     try {
         try {

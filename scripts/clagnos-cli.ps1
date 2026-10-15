@@ -43,6 +43,17 @@ if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
 
 . $script:ClagnosUiBackendPath
 
+function Write-ClagnosUiError {
+    param([object]$ErrorRecord)
+
+    $friendly = Resolve-ClagnosFriendlyError -ErrorRecord $ErrorRecord -DefaultErrorSummary 'The operation did not complete.' -DefaultErrorHint "Review the reason and retry. Azure operations require 'az login'."
+    Write-Host ''
+    Write-Host ([string]$friendly.Summary) -ForegroundColor Red
+    if (-not [string]::IsNullOrWhiteSpace([string]$friendly.ErrorMessage)) { Write-Host ([string]$friendly.ErrorMessage) -ForegroundColor Gray }
+    if (-not [string]::IsNullOrWhiteSpace([string]$friendly.Hint)) { Write-Host ('Next: {0}' -f [string]$friendly.Hint) -ForegroundColor Cyan
+    }
+}
+
 # The dot-sourced runtime declares the same CliTokens parameter. Restore the
 # launcher arguments saved above before deciding between command and TUI mode.
 $CliTokens = if ($null -ne $script:ClagnosUiStartupTokens) { [string[]]$script:ClagnosUiStartupTokens } else { $null }
@@ -902,20 +913,6 @@ function Wait-ClagnosUiContinue {
     [void](Read-Host 'Press Enter to return')
 }
 
-function Write-ClagnosUiError {
-    param([object]$ErrorRecord)
-
-    $friendly = Resolve-ClagnosFriendlyError -ErrorRecord $ErrorRecord -DefaultErrorSummary 'The operation did not complete.' -DefaultErrorHint "Review the reason and retry. Azure operations require 'az login'."
-    Write-Host ''
-    Write-Host ([string]$friendly.Summary) -ForegroundColor Red
-    if (-not [string]::IsNullOrWhiteSpace([string]$friendly.ErrorMessage)) {
-        Write-Host ([string]$friendly.ErrorMessage) -ForegroundColor Gray
-    }
-    if (-not [string]::IsNullOrWhiteSpace([string]$friendly.Hint)) {
-        Write-Host ('Next: {0}' -f [string]$friendly.Hint) -ForegroundColor Cyan
-    }
-}
-
 function Invoke-ClagnosUiCommand {
     param(
         [Parameter(Mandatory = $true)][string]$CommandName,
@@ -933,7 +930,7 @@ function Invoke-ClagnosUiCommand {
     }
 
     $packageAction = ([string](Get-ClagnosCliOptionText -Options $Options -Name 'action')).ToLowerInvariant()
-    $packageStateMayHaveChanged = ($CommandName -eq 'package' -and $packageAction -in @('install','uninstall') -and $commandFailed)
+    $packageStateMayHaveChanged = ($CommandName -eq 'package' -and $packageAction -in @('install','uninstall','setup-all') -and $commandFailed)
     if ($CommandName -in @('initialize','update')) { $packageStateMayHaveChanged = $true }
     if ($CommandName -eq 'task' -and -not (
         (Test-ClagnosCliOptionPresent -Options $Options -Name 'list') -or

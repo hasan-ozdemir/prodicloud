@@ -11,6 +11,7 @@
   "uninstallScript": "uninstall.ps1",
   "repairScript": "repair.ps1",
   "updateStrategy": "winget",
+  "repairStrategy": "startup",
   "statusCheck": {
     "kind": "winget",
     "value": "Docker.DockerDesktop"
@@ -27,11 +28,11 @@
   ],
   "appStateKey": "134-install-docker-desktop-application",
   "startupPolicy": {
-    "machineStartupShortcut": "Docker Desktop.lnk",
     "roles": [
       "manager",
       "assistant"
     ],
+    "userRunEntryName": "Docker Desktop",
     "launchArgument": "--minimized"
   },
   "dependsOn": [
