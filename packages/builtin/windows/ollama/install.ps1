@@ -10,6 +10,8 @@ $taskConfig = [ordered]@{
     )
     ChocoPackageId = 'ollama'
     WingetPackageId = 'Ollama.Ollama'
+    ManagerUser = '__VM_ADMIN_USER__'
+    AssistantUser = '__ASSISTANT_USER__'
     OllamaApiVersionUris = @(
         'http://127.0.0.1:11434/api/version',
         'http://localhost:11434/api/version'
@@ -386,6 +388,53 @@ function Format-OllamaProcessSummary {
     }) -join ' | '
 }
 
+function Get-OllamaManagedStartupShortcutPaths {
+    $paths = @()
+    foreach ($userName in @([string]$taskConfig.ManagerUser,[string]$taskConfig.AssistantUser)) {
+        if ([string]::IsNullOrWhiteSpace([string]$userName)) { continue }
+        $profilePath = ''
+        try {
+            $sid = ([System.Security.Principal.NTAccount]::new(('{0}\{1}' -f $env:COMPUTERNAME,[string]$userName))).Translate([System.Security.Principal.SecurityIdentifier]).Value
+            $profile = Get-CimInstance -ClassName Win32_UserProfile -Filter ("SID='{0}'" -f $sid) -ErrorAction Stop
+            if ($null -ne $profile -and -not [string]::IsNullOrWhiteSpace([string]$profile.LocalPath)) { $profilePath = [string]$profile.LocalPath }
+        }
+        catch { Write-Host ("ollama-startup-profile-info: profile lookup for '{0}' used the standard Windows profile path." -f [string]$userName) }
+        if ([string]::IsNullOrWhiteSpace($profilePath)) { $profilePath = Join-Path $env:SystemDrive (Join-Path 'Users' ([string]$userName)) }
+        $paths += Join-Path $profilePath 'AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk'
+    }
+    return @($paths | Select-Object -Unique)
+}
+
+function Ensure-OllamaStartupShortcuts {
+    param([string]$OllamaExe)
+
+    $applicationPath = Join-Path (Split-Path -Parent $OllamaExe) 'ollama app.exe'
+    if (-not (Test-Path -LiteralPath $applicationPath -PathType Leaf)) {
+        $applicationPath = ''
+        foreach ($candidate in @(
+            (Join-Path $env:ProgramFiles 'Ollama\ollama app.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama app.exe')
+        )) {
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) { $applicationPath = [string]$candidate; break }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($applicationPath)) { throw 'Ollama desktop startup executable was not found; no startup shortcut was written.' }
+    $shell = New-Object -ComObject WScript.Shell
+    foreach ($shortcutPath in @(Get-OllamaManagedStartupShortcutPaths)) {
+        $startupDirectory = Split-Path -Parent $shortcutPath
+        if (-not (Test-Path -LiteralPath $startupDirectory -PathType Container)) { New-Item -ItemType Directory -Path $startupDirectory -Force -ErrorAction Stop | Out-Null }
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $applicationPath
+        $shortcut.WorkingDirectory = Split-Path -Parent $applicationPath
+        $shortcut.IconLocation = "$applicationPath,0"
+        $shortcut.Save()
+        if (-not (Test-Path -LiteralPath $shortcutPath -PathType Leaf)) { throw ("Ollama startup shortcut was not created: {0}" -f $shortcutPath) }
+        $verified = $shell.CreateShortcut($shortcutPath)
+        if (-not [string]::Equals([string]$verified.TargetPath,[string]$applicationPath,[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Ollama startup shortcut target did not verify: {0}" -f $shortcutPath) }
+        Write-Host ("ollama-startup-shortcut-verified => {0}" -f ([System.IO.Path]::GetFileName([string]$shortcutPath)))
+    }
+}
+
 function Wait-OllamaProcessReady {
     param([int]$TimeoutSeconds = 30)
 
@@ -485,7 +534,7 @@ function Remove-OllamaArtifacts {
         }
     }
 
-    foreach ($shortcutPath in @([string[]]$taskConfig.OllamaStartupShortcutPaths)) {
+    foreach ($shortcutPath in @(Get-OllamaManagedStartupShortcutPaths) + @([string[]]$taskConfig.OllamaStartupShortcutPaths)) {
         if ([string]::IsNullOrWhiteSpace([string]$shortcutPath) -or -not (Test-Path -LiteralPath $shortcutPath)) {
             continue
         }
@@ -603,6 +652,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$existingOllamaExe)) {
             $existingHealth = Confirm-OllamaRuntime -OllamaExe $existingOllamaExe -Bootstrap:([string]::IsNullOrWhiteSpace([string]$existingApiVersion))
             if ($null -ne $existingHealth) {
                 Write-Host ("Existing Ollama installation is already healthy. Skipping choco install. version={0}; processCount={1}" -f [string]$existingHealth.Version, [int]$existingHealth.ProcessCount)
+                Ensure-OllamaStartupShortcuts -OllamaExe $existingOllamaExe
                 Write-Host "Update task completed: install-ollama-tool"
                 return
             }
@@ -646,5 +696,6 @@ if ($versionExit -ne 0) {
 }
 
 $runtime = Confirm-OllamaRuntime -OllamaExe $ollamaExe -Bootstrap
+Ensure-OllamaStartupShortcuts -OllamaExe $ollamaExe
 Write-Host ("install-ollama-tool-completed: version={0}; processCount={1}; listReady={2}" -f [string]$runtime.Version, [int]$runtime.ProcessCount, [bool]$runtime.ListReady)
 Write-Host "Update task completed: install-ollama-tool"

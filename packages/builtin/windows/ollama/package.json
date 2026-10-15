@@ -6,6 +6,10 @@
   "timeout": 540,
   "sortOrder": 150,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "winget",
   "statusCheck": {
     "kind": "winget",
     "value": "Ollama.Ollama"
@@ -15,6 +19,14 @@
     "value": "Ollama.Ollama"
   },
   "appStateKey": "135-install-ollama-tool",
+  "startupPolicy": {
+    "userStartupShortcut": "Ollama.lnk",
+    "roles": [
+      "manager",
+      "assistant"
+    ],
+    "launchTarget": "ollama app.exe"
+  },
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],

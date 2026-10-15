@@ -320,7 +320,9 @@ function New-ClagnosPowerShellCredential {
         [string]$Password
     )
 
-    $securePassword = ConvertTo-SecureString -String ([string]$Password) -AsPlainText -Force
+    $securePassword = New-Object System.Security.SecureString
+    foreach ($passwordCharacter in ([string]$Password).ToCharArray()) { $securePassword.AppendChar([char]$passwordCharacter) }
+    $securePassword.MakeReadOnly()
     $localUserName = (".\{0}" -f [string]$UserName)
     return [System.Management.Automation.PSCredential]::new($localUserName, $securePassword)
 }

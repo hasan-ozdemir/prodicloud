@@ -125,6 +125,19 @@ Invoke-AuditStep -Name "Package app-state contract" -Action {
     }
 }
 
+Invoke-AuditStep -Name "Package lifecycle contract" -Action {
+    $lifecycleContractPath = Join-Path $RepoRoot "tests\package-lifecycle-contract-check.ps1"
+    if (-not (Test-Path -LiteralPath $lifecycleContractPath)) {
+        throw "package-lifecycle-contract-check.ps1 was not found."
+    }
+
+    $powerShellHost = Resolve-PowerShellHost
+    & $powerShellHost -NoLogo -NoProfile -ExecutionPolicy Bypass -File $lifecycleContractPath -RepoRoot $RepoRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "package-lifecycle-contract-check.ps1 failed."
+    }
+}
+
 Invoke-AuditStep -Name "Versioned release package" -Action {
     $releasePackageCheckPath = Join-Path $RepoRoot "tests\release-package-check.ps1"
     if (-not (Test-Path -LiteralPath $releasePackageCheckPath)) {

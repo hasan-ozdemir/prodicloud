@@ -3,6 +3,23 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.15.418] - 2026-10-15
+
+### Added
+- Added a reproducible lifecycle-script maintainer for Windows builtin packages and versioned `status.ps1`, `update.ps1`, and `uninstall.ps1` dispatchers for all 36 catalog entries. The shared lifecycle module verifies status before and after operations, keeps install separate from update, preserves package data where appropriate, and verifies uninstall.
+- Added strict WinRM package execution with exact-endpoint TrustedHosts handling, shared-session asset transfer, bounded job progress, and WinRM app-state replay. The read-only package transport benchmark compares SSH and WinRM with repeated status samples and restores the operator's original `.env` transport.
+- Added target-aware startup handling for JAWS, Ollama, and Docker Desktop. JAWS update-files are hash-checked against the package app-state before replacement; JAWS logon-screen startup remains installer-managed.
+
+### Fixed
+- Chocolatey self-uninstall now removes only its CLI manager files while retaining other package data. Reinstallation preserves existing package files around Chocolatey's official bootstrap and verifies the restored CLI.
+- JAWS updates check for an available winget upgrade before running its installer, skip already matching update-files, close `jfw.exe` before any required replacement, and verify machine-wide post-logon startup.
+- Windows app-state replay no longer requires SSH credentials when it is using the active WinRM session.
+
+### Validation
+- Package lifecycle and app-state contracts passed; repository quality checks passed. Compatibility smoke checks passed 192/192 and fixture-backed TUI checks passed 174/174, including the real `cg.cmd` launcher; the TUI tests made zero native Azure CLI calls.
+- On an authorized live Windows target, the full 36-package status inventory returned installed. Chocolatey uninstall/install/update/status, GitHub Copilot CLI uninstall/install, and JAWS status/install-no-op/update/app-state replay were exercised. JAWS app-state replay verified 4/4 settings with zero mismatches.
+- Five read-only Chocolatey status samples per transport completed successfully: SSH median 39,310 ms (35,251–47,594 ms); WinRM median 18,151 ms (18,118–19,168 ms). The VM remained running; no disk, network, or other Azure resource was changed.
+
 ## [2026.10.14.417] - 2026-10-14
 
 ### Fixed

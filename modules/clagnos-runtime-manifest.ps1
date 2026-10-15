@@ -10,6 +10,7 @@
     'modules/core/host/clagnos-startup-mirror.ps1'
     'modules/core/tasks/clagnos-task-materialization.ps1'
     'modules/core/tasks/clagnos-ssh-task-runner.ps1'
+    'modules/core/tasks/clagnos-winrm-task-runner.ps1'
     'modules/core/runtime/clagnos-step-runner.ps1'
     'modules/core/runtime/clagnos-errors.ps1'
     'modules/core/move/clagnos-move-cleanup.ps1'

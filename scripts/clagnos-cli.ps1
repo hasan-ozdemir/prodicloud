@@ -1570,7 +1570,8 @@ function Show-ClagnosUiPackageCatalogMenu {
         Write-Host 'e: enable package'
         Write-Host 'd: disable package'
         Write-Host 'u: uninstall'
-        Write-Host 'i: install or update'
+        Write-Host 'i: install'
+        Write-Host 'v: update'
         Write-Host 's: status'
         if ($null -ne $package.PackageTask.AppStateSpec) { Write-Host 'a: manage package app-state' }
         Write-Host 'b: back'
@@ -1582,8 +1583,8 @@ function Show-ClagnosUiPackageCatalogMenu {
             Show-ClagnosUiPackageAppStateMenu -Vm $Vm -Package $package -Catalog $Catalog -Platform $platform
             continue
         }
-        if ($action -notin @('e','d','u','i','s')) { continue }
-        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 's' { 'status' } default { '' } }
+        if ($action -notin @('e','d','u','i','v','s')) { continue }
+        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 'v' { 'update' } 's' { 'status' } default { '' } }
         if ($packageAction -eq 'status' -and -not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) {
             Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
             Write-Host ('Status check requested for {0}; the catalog will show the result when the background check finishes.' -f [string]$package.DisplayName) -ForegroundColor DarkGray

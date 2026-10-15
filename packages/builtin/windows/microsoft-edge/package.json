@@ -6,6 +6,10 @@
   "timeout": 60,
   "sortOrder": 103,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "winget",
   "statusCheck": {
     "kind": "winget",
     "value": "Microsoft.Edge"

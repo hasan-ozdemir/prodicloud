@@ -4,8 +4,8 @@ function Get-ClagnosPackageOptionSpecifications {
     $actionValidation = {
         param($Options)
         $value = [string](Get-ClagnosCliOptionText -Options $Options -Name 'action')
-        if ($value.Trim().ToLowerInvariant() -notin @('list','status','install','uninstall','enable','disable')) {
-            Throw-FriendlyError -Detail "Package action must be list, status, install, uninstall, enable, or disable." -Code 2 -Summary "Package action is invalid." -Hint "Choose an action from the package menu."
+        if ($value.Trim().ToLowerInvariant() -notin @('list','status','install','update','uninstall','enable','disable')) {
+            Throw-FriendlyError -Detail "Package action must be list, status, install, update, uninstall, enable, or disable." -Code 2 -Summary "Package action is invalid." -Hint "Choose an action from the package menu."
         }
     }
     $catalogValidation = {

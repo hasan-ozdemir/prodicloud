@@ -6,6 +6,10 @@
   "timeout": 150,
   "sortOrder": 122,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "installer",
   "statusCheck": {
     "kind": "store-state",
     "value": "122-install-icloud-application"

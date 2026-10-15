@@ -995,6 +995,7 @@ foreach ($packageActionCase in @(
     @{ Key = 'e'; Action = 'enable' },
     @{ Key = 'd'; Action = 'disable' },
     @{ Key = 'i'; Action = 'install' },
+    @{ Key = 'v'; Action = 'update' },
     @{ Key = 's'; Action = 'status' }
 )) {
     Invoke-TuiTest -Name ("Builtin package action '{0}' routes to the matching package operation" -f $packageActionCase.Action) -Action {

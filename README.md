@@ -323,7 +323,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `show` | Print a full managed report and optionally export redacted JSON | Azure-read-only | Health review, support handoff, release verification, diagnostic export | Screen report or redacted JSON file |
 | `do` | Apply lifecycle or repair actions | Azure-mutating or read-only for `status` | Power-state control, reapply, redeploy, hibernation flow | Target VM lifecycle action |
 | `task` | List tasks, view local run history, explicitly enable/disable a task, run one task, or save/restore task or package app-state | Local for inventory/history and confirmed availability changes; Azure-touching for remote task/app-state actions; local-machine for `--source=lm` / `--target=lm` | Review task state and outcomes, change future task availability, rerun one task, or refresh one payload | Verified catalog change, history view, or isolated task/app-state action |
-| `package` | Check status, install/update, uninstall, enable, or disable one builtin/custom package | Guest-mutating except status and catalog availability | Manage packages on one VC | Verified catalog or package action result |
+| `package` | Check status, install, update, uninstall, enable, or disable one builtin/custom package | Guest-mutating except status and catalog availability | Manage packages on one VC | Verified catalog or package action result |
 | `component` | List/read/create/update/delete a Clagnos-managed Azure component | Azure-read-only for list/show; Azure-mutating for create/update/delete | Inspect or change one VC component | Component state or dependency-reviewed mutation |
 | `connect` | Launch or test SSH/RDP/Windows PowerShell remoting | Azure-touching, local-client action | SSH access, Windows desktop access, or Windows remote PowerShell commands | Direct client launch, PSSession, or connection test |
 | `exec` | Open direct remote shell path or run one remote command | Azure-touching and guest-touching | Interactive shell work or one-shot remote command execution | One direct shell or command result |
@@ -332,6 +332,10 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `set` | Apply hibernation and validate or store nested virtualization requests | Azure-mutating plus guest validation | Feature-state management | Updated hibernation state and validated guest capability |
 | `delete` | Delete a selected managed scope after showing its resource chain | Azure-mutating | Controlled cleanup | Deleted selected target scope, verified absent in Azure. |
 | `help` | Print the command catalog or one command's details | Local/read-only | Operator discovery and reference | Command documentation |
+
+Windows package actions use `PACKAGE_TRANSPORT=ssh|winrm` from `.env` (default `ssh`). The selected transport is strict: authentication or transfer failures stop the action and do not silently retry through the other transport. WinRM uses the manager credentials and adds only the exact target endpoint to the local TrustedHosts list when it is not already present.
+
+To compare the read-only package status path over both transports, run `tools/benchmark-package-transports.ps1` with one existing target and package. It takes five samples per transport by default, prints medians and ranges, and restores the original `PACKAGE_TRANSPORT` setting afterward.
 
 ### Command Variations By Command
 
@@ -371,7 +375,8 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | --- | --- | --- | --- | --- |
 | `.\cg.cmd package --action=list --catalog=builtin --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists builtin packages and their status | Standard software inventory | Status is detected from validated package.json metadata. |
 | `.\cg.cmd package --action=list --catalog=custom --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, target, platform | Lists custom packages and their status | Operator-added software inventory | The custom and builtin catalogs remain isolated. |
-| `.\cg.cmd package --action=install --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the installer synchronously on the VC | Install or update one package | Disabled packages must be enabled first. |
+| `.\cg.cmd package --action=install --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Installs the package only when it is absent, then verifies status | Install one package | Already-installed packages are reported without reinstalling. Disabled packages must be enabled first. |
+| `.\cg.cmd package --action=update --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the package's distinct update script and verifies status | Update one installed package | Packages that are absent are not implicitly installed. Disabled packages must be enabled first. |
 | `.\cg.cmd package --action=uninstall --catalog=builtin --package=visual-studio-code --group=<resource-group> --vm-name=<vm-name> --windows` | catalog, package id, target | Runs the allow-listed package remover | Remove one package | Requires exact `UNINSTALL` confirmation unless `--yes` is passed. |
 | `.\cg.cmd package --action=disable --catalog=custom --package=my-tool --windows` | catalog, package id | Disables future operations for one custom package | Block an operator package | Typed confirmation updates only its `package.json`. |
 #### `component`
@@ -665,10 +670,10 @@ Purpose: manage the separate builtin and custom package catalogs, and install or
 Behavior notes:
 - `packages/builtin/<platform>/<package-id>/` and `packages/custom/<platform>/<package-id>/` are physically separate catalogs. Each package folder contains `package.json` and its platform installer script.
 - Manage Programs first offers `Builtin package catalog` and `Custom package catalog`. Rows are labeled `[builtin]` or `[custom]`; disabled packages display `(disabled)`.
-- Select a package by number, then choose `e: enable`, `d: disable`, `u: uninstall`, `i: install/update`, or `s: status`. Packages with app-state policies also offer `a: manage package app-state`. Packages with app-state policies also offer `a: manage package app-state`.
+- Select a package by number, then choose `e: enable`, `d: disable`, `u: uninstall`, `i: install`, `v: update`, or `s: status`. Packages with app-state policies also offer `a: manage package app-state`.
 - `e` and `d` update only that package's `package.json` after typed confirmation. The change affects future operations for VCs using this repository; it does not change software already installed on a VC.
-- Status and uninstall remain available while disabled. Install/update is blocked until the package is enabled.
-- Package manifests supply a display name, category, installed-state detector, explicit uninstall action, and optional installer assets, timeout, app-state policy, dependencies, and post-install tasks.
+- Status and uninstall remain available while disabled. Install/update is blocked until the package is enabled. `install` reports and leaves already installed packages alone; `update` only runs for an installed package.
+- Package manifests supply a display name, category, installed-state detector, explicit uninstall action, and optional installer assets, timeout, app-state policy, dependencies, and post-install tasks. Windows builtin manifests name separate `status.ps1`, `update.ps1`, and `uninstall.ps1` scripts with a validated update strategy.
 - Installers run synchronously on the selected VC; uninstalls require confirmation and are verified against the status detector.
 
 ### `component`

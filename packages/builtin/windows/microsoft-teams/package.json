@@ -6,6 +6,10 @@
   "timeout": 120,
   "sortOrder": 114,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "installer",
   "statusCheck": {
     "kind": "appx",
     "value": "MSTeams"

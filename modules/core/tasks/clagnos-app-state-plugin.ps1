@@ -856,7 +856,7 @@ function Invoke-ClagnosTaskAppStatePostProcess {
     param(
         [ValidateSet('windows','linux')]
         [string]$Platform,
-        [ValidateSet('ssh')]
+        [ValidateSet('ssh','winrm')]
         [string]$Transport = 'ssh',
         [string]$RepoRoot,
         [psobject]$TaskBlock,
@@ -903,14 +903,22 @@ function Invoke-ClagnosTaskAppStatePostProcess {
     $remoteZipPath = Get-ClagnosTaskAppStateRemoteZipPath -TaskName $remoteZipTaskName -Platform $Platform
     $remoteGuestHelperPath = Get-ClagnosTaskAppStateRemoteGuestHelperPath -Platform $Platform
     try {
-        if ([string]::IsNullOrWhiteSpace([string]$HostName) -or
+        if ($Transport -eq 'ssh' -and (
+            [string]::IsNullOrWhiteSpace([string]$HostName) -or
             [string]::IsNullOrWhiteSpace([string]$UserName) -or
             [string]::IsNullOrWhiteSpace([string]$Password) -or
-            [string]::IsNullOrWhiteSpace([string]$Port)) {
+            [string]::IsNullOrWhiteSpace([string]$Port))) {
             throw 'SSH-only app-state replay requires host, user, password, and port.'
         }
 
-        Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath ([string]$pluginInfo.ZipPath) -RemotePath $remoteZipPath -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
+        if ($Transport -eq 'winrm') {
+            if ($null -eq $Session) { throw 'WinRM app-state replay requires an active PowerShell remoting session.' }
+            Write-ClagnosActionProgress -Action ("copy package app-state archive for '{0}' over WinRM" -f $taskName)
+            Copy-Item -LiteralPath ([string]$pluginInfo.ZipPath) -Destination $remoteZipPath -ToSession $Session -Force -ErrorAction Stop
+        }
+        else {
+            Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath ([string]$pluginInfo.ZipPath) -RemotePath $remoteZipPath -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
+        }
         $scriptText = ''
         if ($Platform -eq 'windows') {
             $guestHelperPath = [string]$pluginInfo.GuestHelperPath
@@ -919,7 +927,13 @@ function Invoke-ClagnosTaskAppStatePostProcess {
                 return [pscustomobject]@{ Status = 'warning'; Warning = $true; Message = 'guest helper missing' }
             }
 
-            Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath $guestHelperPath -RemotePath $remoteGuestHelperPath -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
+            if ($Transport -eq 'winrm') {
+                Write-ClagnosActionProgress -Action ("copy app-state replay helper for '{0}' over WinRM" -f $taskName)
+                Copy-Item -LiteralPath $guestHelperPath -Destination $remoteGuestHelperPath -ToSession $Session -Force -ErrorAction Stop
+            }
+            else {
+                Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath $guestHelperPath -RemotePath $remoteGuestHelperPath -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
+            }
             $scriptText = Get-ClagnosTaskAppStateGuestScript -TaskName $taskName -RemoteZipPath $remoteZipPath -ManagerUser $ManagerUser -AssistantUser $AssistantUser
         }
         else {
@@ -927,25 +941,32 @@ function Invoke-ClagnosTaskAppStatePostProcess {
             if (-not (Test-Path -LiteralPath $linuxPortabilityModulePath -PathType Leaf)) {
                 throw ("Linux app-state portability helper was not found: {0}" -f $linuxPortabilityModulePath)
             }
+            if ($Transport -eq 'winrm') { throw 'WinRM app-state replay is only supported for Windows package targets.' }
             Copy-ClagnosAssetToVm -PySshPythonPath $PySshPythonPath -PySshClientPath $PySshClientPath -HostName $HostName -UserName $UserName -Password $Password -Port $Port -LocalPath $linuxPortabilityModulePath -RemotePath '/tmp/clagnos-app-state-portability.py' -ConnectTimeoutSeconds $ConnectTimeoutSeconds | Out-Null
             $scriptText = Get-ClagnosTaskAppStateLinuxGuestScript -TaskName $taskName -RemoteZipPath $remoteZipPath -ManagerUser $ManagerUser -AssistantUser $AssistantUser
         }
         $scriptTimeout = $TimeoutSeconds
         if ($scriptTimeout -lt 60) { $scriptTimeout = 60 }
         if ($scriptTimeout -gt 600) { $scriptTimeout = 600 }
-        $result = Invoke-ClagnosSshTaskScript `
-            -Session $Session `
-            -PySshPythonPath $PySshPythonPath `
-            -PySshClientPath $PySshClientPath `
-            -HostName $HostName `
-            -UserName $UserName `
-            -Password $Password `
-            -Port $Port `
-            -Shell $taskShell `
-            -TaskName ("{0} (app-state)" -f $taskName) `
-            -TaskScript $scriptText `
-            -TimeoutSeconds $scriptTimeout `
-            -SkipRemoteCleanup
+        if ($Transport -eq 'winrm') {
+            $remoteAppState = Invoke-ClagnosPackageWinRmTaskScript -Session $Session -TaskName ("{0} (app-state)" -f $taskName) -ScriptText $scriptText -TimeoutSeconds $scriptTimeout
+            $result = [pscustomobject]@{ ExitCode = [int]$remoteAppState.ExitCode; Output = [string]$remoteAppState.Output; OutputRelayedLive = $false }
+        }
+        else {
+            $result = Invoke-ClagnosSshTaskScript `
+                -Session $Session `
+                -PySshPythonPath $PySshPythonPath `
+                -PySshClientPath $PySshClientPath `
+                -HostName $HostName `
+                -UserName $UserName `
+                -Password $Password `
+                -Port $Port `
+                -Shell $taskShell `
+                -TaskName ("{0} (app-state)" -f $taskName) `
+                -TaskScript $scriptText `
+                -TimeoutSeconds $scriptTimeout `
+                -SkipRemoteCleanup
+        }
         $outputWasRelayedLive = ($null -ne $result -and $result.PSObject.Properties.Match('OutputRelayedLive').Count -gt 0 -and [bool]$result.OutputRelayedLive)
         if ($null -eq $result -or [int]$result.ExitCode -ne 0) {
             if (-not $outputWasRelayedLive -and $null -ne $result -and $result.PSObject.Properties.Match('Output').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$result.Output)) {

@@ -6,6 +6,10 @@
   "timeout": 150,
   "sortOrder": 111,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "choco",
   "statusCheck": {
     "kind": "choco",
     "value": "nodejs-lts"

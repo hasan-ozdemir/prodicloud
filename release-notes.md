@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.15.418 - 2026-10-15
+
+### Summary
+Windows builtin packages now have separate, verified status, install, update, and uninstall flows that can run over SSH or WinRM. Manage Programs remains responsive through batched package inventory and cached status, and JAWS app-state replay now works over the selected WinRM session.
+
+### Highlights
+- Added lifecycle dispatch scripts and update strategies for all 36 Windows builtin packages. Install leaves an installed package alone; update runs only for installed packages; status and uninstall remain available for disabled packages.
+- Added strict WinRM package transport, exact-host TrustedHosts management, shared session asset transfer, and WinRM app-state replay. Added a read-only repeated-status benchmark for comparing SSH and WinRM.
+- Chocolatey uninstall preserves other package files and its bootstrap reinstalls the CLI without discarding them.
+- JAWS update checks for a real winget upgrade before invoking its installer, verifies app-state update-files before copying, applies post-logon startup, and reports logon-screen launch as installer-managed.
+
+### Validation
+- Repository quality checks passed, including package app-state and lifecycle contracts, sensitive-content audit, release packaging, and CLI help. Compatibility smoke checks passed 192/192 and fixture-backed TUI checks passed 174/174; the real `cg.cmd` test made zero native Azure CLI calls.
+- Live package checks covered a full Chocolatey uninstall/install/update/status cycle, GitHub Copilot CLI uninstall/install, and JAWS status/install-no-op/update/app-state replay. The 36-package status inventory returned installed; JAWS app-state replay verified 4/4 settings with zero mismatches. During early JAWS update attempts, two guest restarts interrupted WinRM shells; the final update detected there was no vendor upgrade and the packaged files already matched, then completed without another restart.
+- Five read-only status samples per transport measured SSH median 39,310 ms and WinRM median 18,151 ms. The target VM remained running, with no disk, network, or other Azure resource changes.
+
 ## Release 2026.10.14.417 - 2026-10-14
 
 ### Summary

@@ -66,6 +66,7 @@ function Get-ClagnosSupportedDotEnvKeys {
         'LIN_VM_UPDATE_TASK_DIR',
         'VM_TASK_OUTCOME_MODE',
         'SSH_MAX_RETRIES',
+        'PACKAGE_TRANSPORT',
         'PYSSH_CLIENT_PATH',
         'TCP_PORTS'
     )

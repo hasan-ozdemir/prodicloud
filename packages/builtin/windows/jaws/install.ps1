@@ -4,6 +4,8 @@ Write-Host "Update task started: install-jaws-application"
 $taskConfig = [ordered]@{
     PortableWingetPath = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
     PackageId = 'FreedomScientific.JAWS.2025'
+    ManagerUser = '__VM_ADMIN_USER__'
+    AssistantUser = '__ASSISTANT_USER__'
     AcceptableWingetExitCodes = @(0, -1978335189, -2147024894)
     JawsExeCandidates = @(
         "C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe",
@@ -22,6 +24,7 @@ $taskConfig = [ordered]@{
 }
 
 Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
     Refresh-ClagnosSessionPath | Out-Null
@@ -200,6 +203,11 @@ function Install-JawsUpdateFilesFromAppState {
     }
 }
 
+function Set-JawsPostLogonStartup {
+    param([string]$ExecutablePath)
+    Set-ClagnosJawsPostLogonStartup -UserNames @([string]$taskConfig.ManagerUser,[string]$taskConfig.AssistantUser) -Executable $ExecutablePath
+}
+
 function Invoke-WingetCommand {
     param(
         [string]$WingetExe,
@@ -284,6 +292,7 @@ $existingExe = Resolve-JawsExe
 if (-not [string]::IsNullOrWhiteSpace([string]$existingExe)) {
     Write-Host ("Existing JAWS installation is already healthy. Skipping winget install. exe={0}" -f $existingExe)
     Install-JawsUpdateFilesFromAppState
+    Set-JawsPostLogonStartup -ExecutablePath $existingExe
     Write-Host "install-jaws-application-completed"
     Write-Host "Update task completed: install-jaws-application"
     return
@@ -336,5 +345,6 @@ if ([string]::IsNullOrWhiteSpace([string]$installedExe)) {
 }
 
 Install-JawsUpdateFilesFromAppState
+Set-JawsPostLogonStartup -ExecutablePath $installedExe
 Write-Host "install-jaws-application-completed"
 Write-Host "Update task completed: install-jaws-application"

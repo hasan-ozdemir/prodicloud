@@ -6,6 +6,10 @@
   "timeout": 600,
   "sortOrder": 134,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "winget",
   "statusCheck": {
     "kind": "winget",
     "value": "Docker.DockerDesktop"
@@ -21,6 +25,14 @@
     }
   ],
   "appStateKey": "134-install-docker-desktop-application",
+  "startupPolicy": {
+    "machineStartupShortcut": "Docker Desktop.lnk",
+    "roles": [
+      "manager",
+      "assistant"
+    ],
+    "launchArgument": "--minimized"
+  },
   "dependsOn": [
     "windows-subsystem-linux"
   ]

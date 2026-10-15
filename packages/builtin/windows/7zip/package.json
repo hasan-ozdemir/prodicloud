@@ -6,6 +6,10 @@
   "timeout": 120,
   "sortOrder": 106,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "choco",
   "statusCheck": {
     "kind": "choco",
     "value": "7zip"

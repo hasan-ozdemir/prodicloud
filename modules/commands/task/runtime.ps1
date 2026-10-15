@@ -922,6 +922,27 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
         throw "Task execution could not resolve VM SSH host (FQDN/Public IP)."
     }
 
+    if ([string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals([string]$Runtime.Platform,'windows',[System.StringComparison]::OrdinalIgnoreCase) -and
+        (Get-ClagnosPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)) -eq 'winrm') {
+        if ($Runtime.Context.PSObject.Properties.Match('PowerShellPort').Count -eq 0) { $Runtime.Context | Add-Member -NotePropertyName PowerShellPort -NotePropertyValue (Get-ClagnosDefaultPowerShellPortText) }
+        $winrmTaskResult = Invoke-ClagnosWinRmTaskBlocks `
+            -Platform 'windows' `
+            -HostName $sshHost `
+            -Runtime $Runtime `
+            -Target $target `
+            -TaskBlocks @($executionTaskBlocks) `
+            -TaskOutcomeMode $effectiveTaskOutcomeMode `
+            -PerfTaskCategory 'task-run'
+        return [pscustomobject]@{
+            Stage = 'update'
+            Task = $taskBlock
+            TaskBlocks = @($executionTaskBlocks)
+            TaskOutcomeMode = $effectiveTaskOutcomeMode
+            Result = $winrmTaskResult
+        }
+    }
+
     $sshTaskResult = Invoke-ClagnosSshTaskBlocks `
         -Platform ([string]$Runtime.Platform) `
         -RepoRoot (Get-ClagnosRepoRoot) `

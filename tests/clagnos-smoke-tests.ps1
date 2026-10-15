@@ -551,7 +551,7 @@ Invoke-Test -Name ".env.example runtime contract" -Action {
         'AZURE_COMMAND_TIMEOUT_SECONDS','SSH_CONNECT_TIMEOUT_SECONDS','SSH_TASK_TIMEOUT_SECONDS',
         'WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB','LIN_VM_IMAGE','LIN_VM_SIZE','LIN_VM_DISK_SIZE_GB',
         'WIN_VM_INIT_TASK_DIR','WIN_VM_UPDATE_TASK_DIR','LIN_VM_INIT_TASK_DIR','LIN_VM_UPDATE_TASK_DIR',
-        'VM_TASK_OUTCOME_MODE','SSH_MAX_RETRIES','PYSSH_CLIENT_PATH','TCP_PORTS'
+        'VM_TASK_OUTCOME_MODE','SSH_MAX_RETRIES','PACKAGE_TRANSPORT','PYSSH_CLIENT_PATH','TCP_PORTS'
     )
 
     foreach ($requiredKey in $requiredKeys) {
@@ -772,6 +772,14 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
     [System.IO.File]::WriteAllText((Join-Path $builtinFolder 'install.ps1'), "Write-Output 'builtin'`r`n", [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText((Join-Path $customFolder 'install.ps1'), "Write-Output 'custom'`r`n", [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText((Join-Path $customFolder 'helper.ps1'), "Write-Output 'asset'`r`n", [System.Text.UTF8Encoding]::new($false))
+    foreach ($lifecycleAction in @('status','update','uninstall')) {
+        $actionText = switch ($lifecycleAction) {
+            'status' { "`$ErrorActionPreference = 'Stop'`r`nImport-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force`r`nInvoke-ClagnosPackageLifecycle -Action status -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__'`r`n" }
+            'update' { "`$ErrorActionPreference = 'Stop'`r`nImport-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force`r`nInvoke-ClagnosPackageLifecycle -Action update -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'`r`n" }
+            'uninstall' { "`$ErrorActionPreference = 'Stop'`r`nImport-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force`r`nInvoke-ClagnosPackageLifecycle -Action uninstall -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__'`r`n" }
+        }
+        [System.IO.File]::WriteAllText((Join-Path $builtinFolder ("{0}.ps1" -f $lifecycleAction)),$actionText,[System.Text.UTF8Encoding]::new($false))
+    }
     $builtinManifest = [ordered]@{
         id = $packageId
         displayName = 'Builtin Shared Tool'
@@ -780,6 +788,10 @@ Invoke-Test -Name "Builtin and custom package catalogs stay isolated and availab
         timeout = 45
         sortOrder = 1
         installScript = 'install.ps1'
+        statusScript = 'status.ps1'
+        updateScript = 'update.ps1'
+        uninstallScript = 'uninstall.ps1'
+        updateStrategy = 'installer'
         statusCheck = @{ kind = 'command'; value = 'shared-tool' }
         uninstall = @{ kind = 'choco'; value = 'shared-tool' }
     }
@@ -869,6 +881,34 @@ Invoke-Test -Name "Package status catalog payloads flatten Windows PowerShell 5.
     Assert-True -Condition ($flattenedPackages.Count -eq 2 -and [string]$flattenedPackages[0].id -eq 'first-package' -and [string]$flattenedPackages[1].id -eq 'second-package') -Message 'Package status normalization must preserve every JSON package row under Windows PowerShell.'
 }
 
+Invoke-Test -Name "Windows package transport is strict and lifecycle scripts receive structured package inputs" -Action {
+    Assert-True -Condition ((Get-ClagnosPackageTransport -ConfigMap @{ PACKAGE_TRANSPORT = 'ssh' }) -eq 'ssh') -Message 'SSH package transport must be accepted.'
+    Assert-True -Condition ((Get-ClagnosPackageTransport -ConfigMap @{ PACKAGE_TRANSPORT = 'winrm' }) -eq 'winrm') -Message 'WinRM package transport must be accepted.'
+    $invalidTransportRejected = $false
+    try { [void](Get-ClagnosPackageTransport -ConfigMap @{ PACKAGE_TRANSPORT = 'fallback' }) }
+    catch { $invalidTransportRejected = $_.Exception.Message -match 'PACKAGE_TRANSPORT' }
+    Assert-True -Condition $invalidTransportRejected -Message 'Unsupported transports must fail without silent fallback.'
+
+    $fixturePackageTask = [pscustomobject]@{ Name = 'fixture-package'; Script = "Write-Output 'installer body'" }
+    $fixturePackage = [pscustomobject]@{
+        Id = 'fixture-package'
+        DisplayName = 'Fixture Package'
+        StatusCheck = @{ kind = 'winget'; value = 'Contoso.Fixture' }
+        Uninstall = @{ kind = 'winget'; value = 'Contoso.Fixture' }
+        UpdateStrategy = 'winget'
+        StatusScriptText = "Invoke-ClagnosPackageLifecycle -Action status -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__'"
+        UpdateScriptText = "Invoke-ClagnosPackageLifecycle -Action update -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'"
+        UninstallScriptText = "Invoke-ClagnosPackageLifecycle -Action uninstall -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__'"
+        PackageTask = $fixturePackageTask
+    }
+    $generatedUpdate = New-ClagnosPackageLifecycleScript -Action update -Package $fixturePackage
+    Assert-True -Condition ($generatedUpdate -notmatch '__CLAGNOS_') -Message 'Package-specific values must replace all lifecycle-script placeholders.'
+    $packageSpecArgument = [regex]::Match($generatedUpdate,"-PackageSpecBase64 '([^']+)'")
+    $installerArgument = [regex]::Match($generatedUpdate,"-InstallScriptBase64 '([^']+)'")
+    Assert-True -Condition ($packageSpecArgument.Success -and [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($packageSpecArgument.Groups[1].Value)).Contains('Contoso.Fixture')) -Message 'The package status/uninstall identity must be included in the encoded update input.'
+    Assert-True -Condition ($installerArgument.Success -and [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($installerArgument.Groups[1].Value)).Contains('installer body')) -Message 'The installer body must be preserved for update strategies that require it.'
+}
+
 Invoke-Test -Name "Package status cache persists fresh results and SSH bootstrap reuses a successful probe" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-read-cache-' + [guid]::NewGuid().ToString('N'))
     $resolvedTempRoot = [System.IO.Path]::GetFullPath($tempRoot)
@@ -939,8 +979,9 @@ Invoke-Test -Name "Package status cache persists fresh results and SSH bootstrap
 
 Invoke-Test -Name "Package status reads the same ProgramData stores used by installers" -Action {
     $packageRuntimeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\package\runtime.ps1') -Raw -ErrorAction Stop)
+    $packageOperationsText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\package\clagnos-package-operations.psm1') -Raw -ErrorAction Stop)
     Assert-True -Condition ($packageRuntimeText.IndexOf('clagnos\state\store-installs',[System.StringComparison]::Ordinal) -ge 0) -Message 'Store package status must read the shared ProgramData install-state root.'
-    Assert-True -Condition ($packageRuntimeText.IndexOf("ProgramData 'chocolatey'",[System.StringComparison]::Ordinal) -ge 0) -Message 'Chocolatey status must read the Chocolatey ProgramData root.'
+    Assert-True -Condition ($packageOperationsText.IndexOf("ProgramData 'chocolatey'",[System.StringComparison]::Ordinal) -ge 0) -Message 'Chocolatey status must read the Chocolatey ProgramData root.'
     Assert-True -Condition ($packageRuntimeText -notlike '*C:\PackageData\clagnos\state\store-installs*') -Message 'Package status must not use the obsolete PackageData store-state root.'
 
     $windscribe = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'packages\builtin\windows\windscribe\package.json') -Raw) -ErrorAction Stop
@@ -1346,7 +1387,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     Assert-True -Condition (@($builtinPackages | Where-Object { $_.Catalog -ne 'builtin' -or [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Builtin package rows must carry their catalog label and validated package metadata.'
     Assert-True -Condition (@($builtinPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Every package entry must resolve to its package.json and installer script.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape("Join-Path 'packages' (Join-Path `$Catalog `$Platform)")) -Message 'Builtin and custom packages must resolve under separate physical catalog roots.'
-    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -eq 'install' -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/update target resolution.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -in @('install','update') -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/update target resolution.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape("Move-Item -LiteralPath `$tempPath -Destination `$ManifestPath -Force")) -Message 'Package enable/disable must atomically update only package.json.'
     $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'windows\update') -Platform windows -Stage update -SuppressSkipMessages
     Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
@@ -1364,7 +1405,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'package'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install or update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: manage programs','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','u: update VC','m: manage VC components','d: delete VC and its resources','q: exit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','v: update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape('Get-ClagnosUiCachedInventoryRows -TypeName')) -Message 'The inventory submenu must render managed inventory from the validated snapshot.'

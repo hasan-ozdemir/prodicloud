@@ -6,6 +6,10 @@
   "timeout": 360,
   "sortOrder": 133,
   "installScript": "install.ps1",
+  "statusScript": "status.ps1",
+  "updateScript": "update.ps1",
+  "uninstallScript": "uninstall.ps1",
+  "updateStrategy": "winget",
   "statusCheck": {
     "kind": "winget",
     "value": "FreedomScientific.JAWS.2025"
@@ -21,6 +25,13 @@
     }
   ],
   "appStateKey": "133-install-jaws-application",
+  "startupPolicy": {
+    "afterLogonRoles": [
+      "manager",
+      "assistant"
+    ],
+    "logonScreen": "installer-managed"
+  },
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],

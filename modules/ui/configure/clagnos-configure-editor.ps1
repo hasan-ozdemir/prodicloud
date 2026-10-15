@@ -118,6 +118,7 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'LIN_VM_UPDATE_TASK_DIR' -Section 'Advanced' -Label 'Linux vm-update task directory' -EditorKind 'task-dir-picker')
         (New-ClagnosConfigureFieldSpec -Key 'VM_TASK_OUTCOME_MODE' -Section 'Advanced' -Label 'Task outcome mode' -EditorKind 'task-outcome-picker')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_MAX_RETRIES' -Section 'Advanced' -Label 'SSH max retries' -EditorKind 'positive-int')
+        (New-ClagnosConfigureFieldSpec -Key 'PACKAGE_TRANSPORT' -Section 'Advanced' -Label 'Windows package transport' -EditorKind 'package-transport-picker')
         (New-ClagnosConfigureFieldSpec -Key 'PYSSH_CLIENT_PATH' -Section 'Advanced' -Label 'PYSSH client path' -EditorKind 'pyssh-path-picker')
         (New-ClagnosConfigureFieldSpec -Key 'TCP_PORTS' -Section 'Advanced' -Label 'TCP ports' -EditorKind 'tcp-ports-picker')
     )
@@ -517,6 +518,12 @@ function Get-ClagnosConfigureChoiceRows {
                 [pscustomobject]@{ Value = 'strict'; Label = 'strict'; Description = 'Stop the task stage on the first failure.' }
             )
         }
+        'PACKAGE_TRANSPORT' {
+            $rows = @(
+                [pscustomobject]@{ Value = 'ssh'; Label = 'ssh'; Description = 'Use SSH for Windows package operations.' }
+                [pscustomobject]@{ Value = 'winrm'; Label = 'winrm'; Description = 'Use Windows PowerShell remoting for package operations.' }
+            )
+        }
         default {
             if ($Key -in @('WIN_VM_INIT_TASK_DIR','WIN_VM_UPDATE_TASK_DIR','LIN_VM_INIT_TASK_DIR','LIN_VM_UPDATE_TASK_DIR')) {
                 $rows = Get-ClagnosConfigureTaskDirRows -Key $Key -State $State
@@ -903,6 +910,13 @@ function Assert-ClagnosConfigureFieldValue {
         'WIN_VM_DISK_SIZE_GB' { return (Assert-ClagnosConfigurePositiveIntegerValue -Key $Key -Value $text) }
         'LIN_VM_DISK_SIZE_GB' { return (Assert-ClagnosConfigurePositiveIntegerValue -Key $Key -Value $text) }
         'SSH_MAX_RETRIES' { return (Assert-ClagnosConfigurePositiveIntegerValue -Key $Key -Value $text) }
+        'PACKAGE_TRANSPORT' {
+            $transport = ([string]$text).Trim().ToLowerInvariant()
+            if ($transport -notin @('ssh','winrm')) {
+                Throw-FriendlyError -Detail ("Unsupported package transport '{0}'." -f $text) -Code 2 -Summary 'Package transport is invalid.' -Hint 'Select ssh or winrm.'
+            }
+            return $transport
+        }
         'RESOURCE_GROUP_TEMPLATE' { return (Assert-ClagnosConfigureTemplateValue -Key $Key -Value $text) }
         'VNET_NAME_TEMPLATE' { return (Assert-ClagnosConfigureTemplateValue -Key $Key -Value $text) }
         'SUBNET_NAME_TEMPLATE' { return (Assert-ClagnosConfigureTemplateValue -Key $Key -Value $text) }
@@ -1223,6 +1237,7 @@ function Edit-ClagnosConfigureField {
         'security-type-picker' { return (Select-ClagnosConfigureChoiceInteractive -Title ([string]$Field.Label) -Rows (Get-ClagnosConfigureChoiceRows -Key ([string]$Field.Key) -State $State) -CurrentValue $currentValue) }
         'toggle-picker' { return (Select-ClagnosConfigureChoiceInteractive -Title ([string]$Field.Label) -Rows (Get-ClagnosConfigureChoiceRows -Key ([string]$Field.Key) -State $State) -CurrentValue $currentValue) }
         'task-outcome-picker' { return (Select-ClagnosConfigureChoiceInteractive -Title ([string]$Field.Label) -Rows (Get-ClagnosConfigureChoiceRows -Key ([string]$Field.Key) -State $State) -CurrentValue $currentValue) }
+        'package-transport-picker' { return (Select-ClagnosConfigureChoiceInteractive -Title ([string]$Field.Label) -Rows (Get-ClagnosConfigureChoiceRows -Key ([string]$Field.Key) -State $State) -CurrentValue $currentValue) }
         'task-dir-picker' { return (Select-ClagnosConfigureChoiceInteractive -Title ([string]$Field.Label) -Rows (Get-ClagnosConfigureChoiceRows -Key ([string]$Field.Key) -State $State) -CurrentValue $currentValue) }
         'pyssh-path-picker' {
             $raw = Read-Host "Press Enter to keep the current value, 'p' to choose a listed value, or 'm' to enter a path manually"
