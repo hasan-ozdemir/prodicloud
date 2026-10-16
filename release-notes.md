@@ -2,6 +2,18 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.16.424 - 2026-10-16
+
+### Summary
+The interactive CLI status rows now remain quiet while the system is steady, preventing repeated screen-reader announcements.
+
+### Highlights
+- The status renderer skips identical rows during its background polling loop.
+- `Ready` stays stable without a seconds counter; screen, VC, operation, and cache transitions still update the status area.
+
+### Validation
+- PowerShell parsing and `git diff --check` passed. TUI and live Azure tests were not run.
+
 ## Release 2026.10.16.423 - 2026-10-16
 
 ### Summary

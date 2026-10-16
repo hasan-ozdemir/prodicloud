@@ -39,6 +39,8 @@ $script:ClagnosUiCacheRootPath = ''
 $script:ClagnosUiCurrentScreen = 'Starting'
 $script:ClagnosUiCurrentAction = ''
 $script:ClagnosUiScrollRegionActive = $false
+$script:ClagnosUiLastStatusLines = $null
+$script:ClagnosUiLastStatusRenderWidth = -1
 $script:ClagnosUiStatusCallback = $null
 
 if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
@@ -906,8 +908,9 @@ function Get-ClagnosUiStatusText {
     if ([bool]$script:ClagnosUiInventoryCache.IsDirty) { return 'Inventory cache is being revalidated' }
     try {
         $age = [int]([DateTime]::UtcNow - [DateTime]$script:ClagnosUiInventoryCache.LastValidatedAtUtc).TotalSeconds
-        if ($age -ge [int]$script:ClagnosUiInventoryValidationSeconds) { return ('Inventory refresh due; cached snapshot is {0}s old' -f $age) }
-        return ('Ready; inventory checked {0}s ago' -f [Math]::Max($age,0))
+        if ($age -gt [int]$script:ClagnosUiInventoryMaximumStaleSeconds) { return 'Inventory is too old; waiting for refresh' }
+        if ($age -ge [int]$script:ClagnosUiInventoryValidationSeconds) { return 'Refresh pending' }
+        return 'Ready'
     }
     catch { return 'Ready' }
 }
@@ -931,11 +934,24 @@ function Write-ClagnosUiStatusArea {
     param([switch]$InitializeScreen)
 
     $lines = @(Get-ClagnosUiStatusLines)
+    $renderWidth = 0
+    if (-not [Console]::IsOutputRedirected -and -not [bool]$script:ClagnosUiTestMode) {
+        try { $renderWidth = [Math]::Max(1,[Console]::WindowWidth) } catch { $renderWidth = 120 }
+    }
+    # Console rewrites trigger screen-reader announcements, so redraw only on meaningful status changes.
+    if (-not $InitializeScreen -and $null -ne $script:ClagnosUiLastStatusLines -and
+        [int]$script:ClagnosUiLastStatusRenderWidth -eq $renderWidth -and
+        [string]::Equals([string]$script:ClagnosUiLastStatusLines[0],[string]$lines[0],[System.StringComparison]::Ordinal) -and
+        [string]::Equals([string]$script:ClagnosUiLastStatusLines[1],[string]$lines[1],[System.StringComparison]::Ordinal)) {
+        return
+    }
     if ([Console]::IsOutputRedirected -or [bool]$script:ClagnosUiTestMode) {
         if ($InitializeScreen) {
             Write-Host $lines[0] -ForegroundColor Cyan
             Write-Host $lines[1] -ForegroundColor Gray
         }
+        $script:ClagnosUiLastStatusLines = @($lines)
+        $script:ClagnosUiLastStatusRenderWidth = $renderWidth
         return
     }
 
@@ -953,6 +969,8 @@ function Write-ClagnosUiStatusArea {
             $script:ClagnosUiScrollRegionActive = $true
         }
         catch { $script:ClagnosUiScrollRegionActive = $false }
+        $script:ClagnosUiLastStatusLines = @($lines)
+        $script:ClagnosUiLastStatusRenderWidth = $renderWidth
         return
     }
 
@@ -963,6 +981,8 @@ function Write-ClagnosUiStatusArea {
     $padded = @($lines | ForEach-Object { $text = [string]$_; if ($text.Length -gt $width) { $text = $text.Substring(0,$width) }; $text.PadRight($width) })
     try {
         [Console]::Write(('{0}[1;1H{0}[2K{1}{0}[2;1H{0}[2K{2}{0}[{3};{4}H' -f $escape,$padded[0],$padded[1],($cursorTop + 1),($cursorLeft + 1)))
+        $script:ClagnosUiLastStatusLines = @($lines)
+        $script:ClagnosUiLastStatusRenderWidth = $renderWidth
     }
     catch { }
 }

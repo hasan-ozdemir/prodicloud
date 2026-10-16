@@ -3,6 +3,14 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.16.424] - 2026-10-16
+
+### Changed
+- Made the TUI status strip announce only meaningful changes. A steady `Ready` state no longer includes an advancing age counter, and identical status rows are not written back to the console during background polling.
+
+### Validation
+- PowerShell parsing and `git diff --check` passed. TUI and live Azure tests were not run.
+
 ## [2026.10.16.423] - 2026-10-16
 
 ### Changed

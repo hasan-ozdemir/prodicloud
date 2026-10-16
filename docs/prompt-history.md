@@ -5957,3 +5957,12 @@ Performance fix: shorten the startup cache warmup. Reserve the first two console
 **Assistant Summary**
 
 Removed synchronous subscription-list and inventory warmup from the normal TUI startup path. The menu now reads the selected subscription and active VC profile locally, with a single active-account lookup only when no subscription is configured, and starts the subscription-scoped inventory worker without waiting for it. Added a two-row status strip for screen, VC, subscription, current Doing action, and cache state; action progress updates it, and the terminal scroll region keeps it visible. Coalesced duplicate refresh requests, preserved superseding refreshes after mutations, withheld inventory snapshots older than five minutes, and bounded worker replacement/shutdown. PowerShell parsing and git diff --check passed. The commit hooks passed repository quality, sensitive-content, documentation, package-state/lifecycle, Python, packaging, and CLI-help checks; TUI tests and live Azure tests were not run.
+
+### 2026-10-16 00:42 UTC
+**User Prompt**
+
+Accessibility fix: once the status reaches Ready, stop rewriting the status row. The screen reader repeats it because the text was being refreshed as “xxx seconds ago,” which is confusing. Please fix this and similar repeated status announcements.
+
+**Assistant Summary**
+
+Removed the changing age counter from the Ready state and made the status renderer compare both rows with the last rendered content. Background polling now performs no console write when those rows are unchanged; screen, VC, operation, cache, or terminal-width changes still repaint the status area. PowerShell parsing and git diff check passed. TUI and live Azure tests were not run.
