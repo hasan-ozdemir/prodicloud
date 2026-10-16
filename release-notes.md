@@ -2,6 +2,18 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.16.425 - 2026-10-16
+
+### Summary
+The two-row TUI status area is now an opt-in global setting.
+
+### Highlights
+- Added `TOP_STATUS_LINES=false` to the global configuration template and Configure > Advanced.
+- Set the value to `true` to show the persistent screen/VC/subscription/action status rows; `false` uses the compact header.
+
+### Validation
+- PowerShell parsing and `git diff --check` passed. TUI and live Azure tests were not run.
+
 ## Release 2026.10.16.424 - 2026-10-16
 
 ### Summary

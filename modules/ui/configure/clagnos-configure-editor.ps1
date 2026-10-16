@@ -109,6 +109,7 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'AZURE_COMMAND_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'Azure command timeout (seconds)' -EditorKind 'positive-int')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'SSH connect timeout (seconds)' -EditorKind 'positive-int')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_TASK_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'SSH task timeout (seconds)' -EditorKind 'positive-int')
+        (New-ClagnosConfigureFieldSpec -Key 'TOP_STATUS_LINES' -Section 'Advanced' -Label 'Two-row TUI status area' -EditorKind 'toggle-picker')
         (New-ClagnosConfigureFieldSpec -Key 'WIN_VM_INIT_TASK_DIR' -Section 'Advanced' -Label 'Windows vm-init task directory' -EditorKind 'task-dir-picker')
         (New-ClagnosConfigureFieldSpec -Key 'WIN_VM_UPDATE_TASK_DIR' -Section 'Advanced' -Label 'Windows vm-update task directory' -EditorKind 'task-dir-picker')
         (New-ClagnosConfigureFieldSpec -Key 'LIN_VM_INIT_TASK_DIR' -Section 'Advanced' -Label 'Linux vm-init task directory' -EditorKind 'task-dir-picker')
@@ -504,6 +505,7 @@ function Get-ClagnosConfigureChoiceRows {
         'VM_ENABLE_NESTED_VIRTUALIZATION' { $rows = Get-ClagnosConfigureBooleanRows }
         'VM_ENABLE_SECURE_BOOT' { $rows = Get-ClagnosConfigureBooleanRows }
         'VM_ENABLE_VTPM' { $rows = Get-ClagnosConfigureBooleanRows }
+        'TOP_STATUS_LINES' { $rows = Get-ClagnosConfigureBooleanRows }
         'VM_TASK_OUTCOME_MODE' {
             $rows = @(
                 [pscustomobject]@{ Value = 'continue'; Label = 'continue'; Description = 'Log task failures and continue.' }
@@ -866,6 +868,13 @@ function Assert-ClagnosConfigureFieldValue {
         'SELECTED_AZURE_SUBSCRIPTION_ID' {
             if ([string]::IsNullOrWhiteSpace([string]$text)) { return '' }
             return [string](Assert-ClagnosSubscriptionIdFormat -SubscriptionId $text -OptionSource 'configure editor')
+        }
+        'TOP_STATUS_LINES' {
+            $enabledText = ([string]$text).Trim().ToLowerInvariant()
+            if ($enabledText -notin @('true','false')) {
+                Throw-FriendlyError -Detail ("TOP_STATUS_LINES value '{0}' is invalid." -f $text) -Code 2 -Summary 'TUI status preference is invalid.' -Hint 'Choose true or false.'
+            }
+            return $enabledText
         }
         'SELECTED_COMPANY_WEB_ADDRESS' { return (Assert-ClagnosConfigureOptionalUrlValue -Key $Key -Value $text) }
         'SELECTED_COMPANY_EMAIL_ADDRESS' { return (Assert-ClagnosConfigureEmailValue -Key $Key -Value $text) }

@@ -3,6 +3,17 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.16.425] - 2026-10-16
+
+### Added
+- Added the global `TOP_STATUS_LINES` boolean preference to `clagnos.env`, its example, and the Configure > Advanced editor. The default is `false`.
+
+### Changed
+- Made the persistent two-row TUI status area optional. `TOP_STATUS_LINES=false` restores the compact header; `true` enables the status rows and screen-reader-aware redraw behavior.
+
+### Validation
+- PowerShell parsing and `git diff --check` passed. TUI and live Azure tests were not run.
+
 ## [2026.10.16.424] - 2026-10-16
 
 ### Changed

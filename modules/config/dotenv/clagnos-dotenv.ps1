@@ -4,6 +4,7 @@ function Get-ClagnosGlobalEnvKeys {
     return @(
         'ACTIVE_VM_NAME',
         'SELECTED_AZURE_SUBSCRIPTION_ID',
+        'TOP_STATUS_LINES',
         'DEFAULT_VM_OS',
         'DEFAULT_AZURE_REGION',
         'SELECTED_COMPANY_NAME',

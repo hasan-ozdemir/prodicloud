@@ -41,6 +41,7 @@ $script:ClagnosUiCurrentAction = ''
 $script:ClagnosUiScrollRegionActive = $false
 $script:ClagnosUiLastStatusLines = $null
 $script:ClagnosUiLastStatusRenderWidth = -1
+$script:ClagnosUiTopStatusLinesEnabled = $false
 $script:ClagnosUiStatusCallback = $null
 
 if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
@@ -897,6 +898,21 @@ function Show-ClagnosUiCloudSubscriptions {
     }
 }
 
+function Update-ClagnosUiStatusPreference {
+    $enabledText = 'false'
+    try {
+        $config = Read-DotEnvFile -Path (Join-Path $script:ClagnosUiRepoRoot 'clagnos.env') -GlobalOnly
+        if ($null -ne $config -and $config.ContainsKey('TOP_STATUS_LINES')) { $enabledText = [string]$config['TOP_STATUS_LINES'] }
+    }
+    catch { $enabledText = 'false' }
+
+    $enabled = $false
+    if (-not [bool]::TryParse([string]$enabledText,[ref]$enabled)) { $enabled = $false }
+    $script:ClagnosUiTopStatusLinesEnabled = $enabled
+    if ($enabled) { $script:ClagnosUiStatusCallback = { param([string]$Action) Set-ClagnosUiStatusAction -Action $Action } }
+    else { $script:ClagnosUiStatusCallback = $null }
+}
+
 function Get-ClagnosUiStatusText {
     if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCurrentAction)) { return [string]$script:ClagnosUiCurrentAction }
     if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiResourceCacheError)) { return ('Cache unavailable: {0}' -f [string]$script:ClagnosUiResourceCacheError) }
@@ -933,6 +949,7 @@ function Get-ClagnosUiStatusLines {
 function Write-ClagnosUiStatusArea {
     param([switch]$InitializeScreen)
 
+    if (-not [bool]$script:ClagnosUiTopStatusLinesEnabled) { return }
     $lines = @(Get-ClagnosUiStatusLines)
     $renderWidth = 0
     if (-not [Console]::IsOutputRedirected -and -not [bool]$script:ClagnosUiTestMode) {
@@ -993,8 +1010,6 @@ function Set-ClagnosUiStatusAction {
     Write-ClagnosUiStatusArea
 }
 
-$script:ClagnosUiStatusCallback = { param([string]$Action) Set-ClagnosUiStatusAction -Action $Action }
-
 function Reset-ClagnosUiViewport {
     if (-not [Console]::IsOutputRedirected -and -not [bool]$script:ClagnosUiTestMode -and $script:ClagnosUiScrollRegionActive) {
         try { [Console]::Write(([string][char]27 + '[r')) } catch { }
@@ -1006,11 +1021,29 @@ function Write-ClagnosUiHeader {
     param([string]$Title = 'Clagnos')
 
     Reset-ClagnosUiViewport
+    Update-ClagnosUiStatusPreference
     Clear-Host
     $script:ClagnosUiCurrentScreen = if ([string]::IsNullOrWhiteSpace([string]$Title)) { 'Clagnos' } else { [string]$Title }
     $script:ClagnosUiCurrentAction = ''
-    Write-ClagnosUiStatusArea -InitializeScreen
-    Write-Host 'one tool for all common cloud operations' -ForegroundColor DarkCyan
+    if ($script:ClagnosUiTopStatusLinesEnabled) {
+        Write-ClagnosUiStatusArea -InitializeScreen
+        Write-Host 'one tool for all common cloud operations' -ForegroundColor DarkCyan
+    }
+    else {
+        Write-Host 'CLAGNOS' -ForegroundColor Cyan
+        Write-Host 'one tool for all common cloud operations' -ForegroundColor DarkCyan
+        if ($null -ne $script:ClagnosUiSubscription) {
+            Write-Host ('Azure subscription: {0} ({1})' -f [string]$script:ClagnosUiSubscription.SubscriptionName,[string]$script:ClagnosUiSubscription.SubscriptionId) -ForegroundColor Gray
+        }
+        else { Write-Host 'Azure subscription: not signed in' -ForegroundColor Yellow }
+        $cacheStatus = Get-ClagnosUiBackgroundCacheStatus
+        if ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'refreshing') { Write-Host ([string]$cacheStatus.Message) -ForegroundColor DarkGray }
+        elseif ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'error') { Write-Host ('Background inventory cache: {0}' -f [string]$cacheStatus.Message) -ForegroundColor Yellow }
+        if (-not [string]::IsNullOrWhiteSpace([string]$Title)) {
+            Write-Host ''
+            Write-Host $Title -ForegroundColor White
+        }
+    }
     Write-Host ''
 }
 
@@ -3107,8 +3140,15 @@ function Show-ClagnosUiInventoryMenu {
 
 function Show-ClagnosUiHome {
     while ($true) {
-        Write-ClagnosUiHeader -Title 'Main menu'
-        Update-ClagnosUiSubscription
+        Update-ClagnosUiStatusPreference
+        if ($script:ClagnosUiTopStatusLinesEnabled) {
+            Write-ClagnosUiHeader -Title 'Main menu'
+            Update-ClagnosUiSubscription
+        }
+        else {
+            Update-ClagnosUiSubscription
+            Write-ClagnosUiHeader -Title 'Main menu'
+        }
         $script:ClagnosUiResourceCacheError = ''
         try {
             if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {

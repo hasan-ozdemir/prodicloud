@@ -5966,3 +5966,12 @@ Accessibility fix: once the status reaches Ready, stop rewriting the status row.
 **Assistant Summary**
 
 Removed the changing age counter from the Ready state and made the status renderer compare both rows with the last rendered content. Background polling now performs no console write when those rows are unchanged; screen, VC, operation, cache, or terminal-width changes still repaint the status area. PowerShell parsing and git diff check passed. TUI and live Azure tests were not run.
+
+### 2026-10-16 01:02 UTC
+**User Prompt**
+
+Feature update: Add a top_status_lines true/false setting to the global Clagnos environment file. Default it to false so the recently added two-row status display is disabled by default; allow setting it to true to enable it again.
+
+**Assistant Summary**
+
+Added the TOP_STATUS_LINES boolean to the global environment contract and example, set the local clagnos.env value to false, and added a true/false picker under Configure > Advanced. The TUI now reads the preference on screen entry: false restores the compact header and disables status-row redraws; true enables the persistent two-row screen, VC, subscription, action, and cache display. PowerShell parsing and git diff check passed. TUI and live Azure tests were not run.
