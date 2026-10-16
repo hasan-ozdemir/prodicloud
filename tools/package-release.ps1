@@ -63,7 +63,7 @@ function Assert-ClagnosReleaseRepositoryReady {
     $trackedEnvFiles = @(
         & git -C $RootPath ls-files --cached |
             ForEach-Object { [string]$_ } |
-            Where-Object { [System.IO.Path]::GetFileName([string]$_) -eq '.env' }
+            Where-Object { [System.IO.Path]::GetFileName([string]$_).EndsWith('.env',[System.StringComparison]::OrdinalIgnoreCase) }
     )
     if (@($trackedEnvFiles).Count -gt 0) {
         throw ("Refusing to package tracked local environment files: {0}" -f ($trackedEnvFiles -join ', '))

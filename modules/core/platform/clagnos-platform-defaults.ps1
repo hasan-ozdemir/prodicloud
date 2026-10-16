@@ -218,7 +218,7 @@ function Resolve-ClagnosPlatformSelection {
                         $selected = $candidate
                     }
                     else {
-                        Write-Warning ("Invalid SELECTED_VM_OS '{0}' in .env. Expected windows|linux." -f $fromEnv)
+                        Write-Warning ("Invalid VM platform value '{0}' resolved from the VC profile or global default. Expected windows|linux." -f $fromEnv)
                     }
                 }
             }
@@ -227,7 +227,7 @@ function Resolve-ClagnosPlatformSelection {
 
     if ([string]::IsNullOrWhiteSpace($selected)) {
         if ($AutoMode) {
-            Throw-FriendlyError -Detail 'VM OS type is unresolved in auto mode.' -Code 12 -Summary 'Auto mode requires SELECTED_VM_OS.' -Hint 'Set SELECTED_VM_OS=windows|linux in .env, or pass --windows/--linux.'
+            Throw-FriendlyError -Detail 'VM OS type is unresolved in auto mode.' -Code 12 -Summary 'Auto mode requires a platform selection.' -Hint 'Set DEFAULT_VM_OS=windows|linux in clagnos.env for create, or set SELECTED_VM_OS in the target VC profile; you can also pass --windows/--linux.'
         }
 
         while ($true) {

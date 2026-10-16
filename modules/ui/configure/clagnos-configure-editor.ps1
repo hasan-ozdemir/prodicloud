@@ -51,25 +51,24 @@ function Get-ClagnosConfigureFieldSchema {
     $inactiveLabel = if ($platformText -eq 'windows') { 'Linux' } else { 'Windows' }
 
     $fields = @(
-        (New-ClagnosConfigureFieldSpec -Key 'SELECTED_VM_OS' -Section 'Basic' -Label 'Selected VM OS' -EditorKind 'vm-os-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'SELECTED_VM_NAME' -Section 'Basic' -Label 'Selected VM name' -EditorKind 'vm-name')
-        (New-ClagnosConfigureFieldSpec -Key 'SELECTED_RESOURCE_GROUP' -Section 'Basic' -Label 'Selected resource group' -EditorKind 'resource-group-picker' -AzureBacked)
+        (New-ClagnosConfigureFieldSpec -Key 'ACTIVE_VM_NAME' -Section 'Basic' -Label 'Active virtual computer' -EditorKind 'text')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_OS' -Section 'Basic' -Label 'Default create OS' -EditorKind 'vm-os-picker')
         (New-ClagnosConfigureFieldSpec -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Section 'Basic' -Label 'Selected Azure subscription' -EditorKind 'subscription-picker' -AzureBacked)
-        (New-ClagnosConfigureFieldSpec -Key 'SELECTED_AZURE_REGION' -Section 'Basic' -Label 'Selected Azure region' -EditorKind 'region-picker' -AzureBacked)
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_AZURE_REGION' -Section 'Basic' -Label 'Default create region' -EditorKind 'region-picker' -AzureBacked)
 
-        (New-ClagnosConfigureFieldSpec -Key 'VM_STORAGE_SKU' -Section 'Platform & Compute' -Label 'VM storage SKU' -EditorKind 'storage-sku-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_SECURITY_TYPE' -Section 'Platform & Compute' -Label 'VM security type' -EditorKind 'security-type-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ENABLE_HIBERNATION' -Section 'Platform & Compute' -Label 'Enable hibernation' -EditorKind 'toggle-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ENABLE_NESTED_VIRTUALIZATION' -Section 'Platform & Compute' -Label 'Enable nested virtualization' -EditorKind 'toggle-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ENABLE_SECURE_BOOT' -Section 'Platform & Compute' -Label 'Enable secure boot' -EditorKind 'toggle-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ENABLE_VTPM' -Section 'Platform & Compute' -Label 'Enable vTPM' -EditorKind 'toggle-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_STORAGE_SKU' -Section 'Platform & Compute' -Label 'Default VM storage SKU' -EditorKind 'storage-sku-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_SECURITY_TYPE' -Section 'Platform & Compute' -Label 'Default VM security type' -EditorKind 'security-type-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_ENABLE_HIBERNATION' -Section 'Platform & Compute' -Label 'Default hibernation' -EditorKind 'toggle-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION' -Section 'Platform & Compute' -Label 'Default nested virtualization' -EditorKind 'toggle-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_ENABLE_SECURE_BOOT' -Section 'Platform & Compute' -Label 'Default secure boot' -EditorKind 'toggle-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_ENABLE_VTPM' -Section 'Platform & Compute' -Label 'Default vTPM' -EditorKind 'toggle-picker')
         (New-ClagnosConfigureFieldSpec -Key 'VM_PRICE_COUNT_HOURS' -Section 'Platform & Compute' -Label 'Monthly price hour count' -EditorKind 'positive-int')
-        (New-ClagnosConfigureFieldSpec -Key ("{0}_VM_IMAGE" -f $activePrefix) -Section 'Platform & Compute' -Label ("{0} VM image" -f $activeLabel) -EditorKind 'vm-image-picker' -AzureBacked)
-        (New-ClagnosConfigureFieldSpec -Key ("{0}_VM_SIZE" -f $activePrefix) -Section 'Platform & Compute' -Label ("{0} VM size" -f $activeLabel) -EditorKind 'vm-size-picker' -AzureBacked)
-        (New-ClagnosConfigureFieldSpec -Key ("{0}_VM_DISK_SIZE_GB" -f $activePrefix) -Section 'Platform & Compute' -Label ("{0} VM disk size (GB)" -f $activeLabel) -EditorKind 'positive-int')
-        (New-ClagnosConfigureFieldSpec -Key ("{0}_VM_IMAGE" -f $inactivePrefix) -Section 'Platform & Compute' -Label ("{0} VM image" -f $inactiveLabel) -EditorKind 'vm-image-picker' -AzureBacked)
-        (New-ClagnosConfigureFieldSpec -Key ("{0}_VM_SIZE" -f $inactivePrefix) -Section 'Platform & Compute' -Label ("{0} VM size" -f $inactiveLabel) -EditorKind 'vm-size-picker' -AzureBacked)
-        (New-ClagnosConfigureFieldSpec -Key ("{0}_VM_DISK_SIZE_GB" -f $inactivePrefix) -Section 'Platform & Compute' -Label ("{0} VM disk size (GB)" -f $inactiveLabel) -EditorKind 'positive-int')
+        (New-ClagnosConfigureFieldSpec -Key ("DEFAULT_{0}_VM_IMAGE" -f $activePrefix) -Section 'Platform & Compute' -Label ("Default {0} VM image" -f $activeLabel) -EditorKind 'vm-image-picker' -AzureBacked)
+        (New-ClagnosConfigureFieldSpec -Key ("DEFAULT_{0}_VM_SIZE" -f $activePrefix) -Section 'Platform & Compute' -Label ("Default {0} VM size" -f $activeLabel) -EditorKind 'vm-size-picker' -AzureBacked)
+        (New-ClagnosConfigureFieldSpec -Key ("DEFAULT_{0}_VM_DISK_SIZE_GB" -f $activePrefix) -Section 'Platform & Compute' -Label ("Default {0} VM disk size (GB)" -f $activeLabel) -EditorKind 'positive-int')
+        (New-ClagnosConfigureFieldSpec -Key ("DEFAULT_{0}_VM_IMAGE" -f $inactivePrefix) -Section 'Platform & Compute' -Label ("Default {0} VM image" -f $inactiveLabel) -EditorKind 'vm-image-picker' -AzureBacked)
+        (New-ClagnosConfigureFieldSpec -Key ("DEFAULT_{0}_VM_SIZE" -f $inactivePrefix) -Section 'Platform & Compute' -Label ("Default {0} VM size" -f $inactiveLabel) -EditorKind 'vm-size-picker' -AzureBacked)
+        (New-ClagnosConfigureFieldSpec -Key ("DEFAULT_{0}_VM_DISK_SIZE_GB" -f $inactivePrefix) -Section 'Platform & Compute' -Label ("Default {0} VM disk size (GB)" -f $inactiveLabel) -EditorKind 'positive-int')
 
         (New-ClagnosConfigureFieldSpec -Key 'SELECTED_COMPANY_NAME' -Section 'Identity & Secrets' -Label 'Company name' -EditorKind 'text')
         (New-ClagnosConfigureFieldSpec -Key 'SELECTED_COMPANY_WEB_ADDRESS' -Section 'Identity & Secrets' -Label 'Company web address' -EditorKind 'url')
@@ -94,10 +93,8 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_X_URL' -Section 'Identity & Secrets' -Label 'Personal X shortcut URL' -EditorKind 'url')
         (New-ClagnosConfigureFieldSpec -Key 'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_HOME_URL' -Section 'Identity & Secrets' -Label 'Business home shortcut URL' -EditorKind 'url')
         (New-ClagnosConfigureFieldSpec -Key 'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_BLOG_URL' -Section 'Identity & Secrets' -Label 'Business blog shortcut URL' -EditorKind 'url')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ADMIN_USER' -Section 'Identity & Secrets' -Label 'Admin user name' -EditorKind 'text')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ADMIN_PASS' -Section 'Identity & Secrets' -Label 'Admin password' -EditorKind 'secret' -Secret)
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ASSISTANT_USER' -Section 'Identity & Secrets' -Label 'Assistant user name' -EditorKind 'text')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_ASSISTANT_PASS' -Section 'Identity & Secrets' -Label 'Assistant password' -EditorKind 'secret' -Secret)
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_ADMIN_USER' -Section 'Identity & Secrets' -Label 'Default admin user name' -EditorKind 'text')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_ASSISTANT_USER' -Section 'Identity & Secrets' -Label 'Default assistant user name' -EditorKind 'text')
 
         (New-ClagnosConfigureFieldSpec -Key 'RESOURCE_GROUP_TEMPLATE' -Section 'Advanced' -Label 'Resource group template' -EditorKind 'template')
         (New-ClagnosConfigureFieldSpec -Key 'VNET_NAME_TEMPLATE' -Section 'Advanced' -Label 'VNet name template' -EditorKind 'template')
@@ -107,8 +104,8 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'PUBLIC_IP_NAME_TEMPLATE' -Section 'Advanced' -Label 'Public IP name template' -EditorKind 'template')
         (New-ClagnosConfigureFieldSpec -Key 'NIC_NAME_TEMPLATE' -Section 'Advanced' -Label 'NIC name template' -EditorKind 'template')
         (New-ClagnosConfigureFieldSpec -Key 'VM_DISK_NAME_TEMPLATE' -Section 'Advanced' -Label 'VM disk name template' -EditorKind 'template')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_SSH_PORT' -Section 'Advanced' -Label 'SSH port' -EditorKind 'port')
-        (New-ClagnosConfigureFieldSpec -Key 'VM_RDP_PORT' -Section 'Advanced' -Label 'RDP port' -EditorKind 'port')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_SSH_PORT' -Section 'Advanced' -Label 'Default SSH port' -EditorKind 'port')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_VM_RDP_PORT' -Section 'Advanced' -Label 'Default RDP port' -EditorKind 'port')
         (New-ClagnosConfigureFieldSpec -Key 'AZURE_COMMAND_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'Azure command timeout (seconds)' -EditorKind 'positive-int')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'SSH connect timeout (seconds)' -EditorKind 'positive-int')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_TASK_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'SSH task timeout (seconds)' -EditorKind 'positive-int')
@@ -118,9 +115,9 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'LIN_VM_UPDATE_TASK_DIR' -Section 'Advanced' -Label 'Linux vm-update task directory' -EditorKind 'task-dir-picker')
         (New-ClagnosConfigureFieldSpec -Key 'VM_TASK_OUTCOME_MODE' -Section 'Advanced' -Label 'Task outcome mode' -EditorKind 'task-outcome-picker')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_MAX_RETRIES' -Section 'Advanced' -Label 'SSH max retries' -EditorKind 'positive-int')
-        (New-ClagnosConfigureFieldSpec -Key 'PACKAGE_TRANSPORT' -Section 'Advanced' -Label 'Windows package transport' -EditorKind 'package-transport-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_PACKAGE_TRANSPORT' -Section 'Advanced' -Label 'Default Windows package transport' -EditorKind 'package-transport-picker')
         (New-ClagnosConfigureFieldSpec -Key 'PYSSH_CLIENT_PATH' -Section 'Advanced' -Label 'PYSSH client path' -EditorKind 'pyssh-path-picker')
-        (New-ClagnosConfigureFieldSpec -Key 'TCP_PORTS' -Section 'Advanced' -Label 'TCP ports' -EditorKind 'tcp-ports-picker')
+        (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_TCP_PORTS' -Section 'Advanced' -Label 'Default TCP ports' -EditorKind 'tcp-ports-picker')
     )
 
     return @($fields)
@@ -152,7 +149,7 @@ function Get-ClagnosConfigureSelectedPlatform {
         [hashtable]$Values
     )
 
-    $platformText = [string](Get-ConfigValue -Config $Values -Key 'SELECTED_VM_OS' -DefaultValue 'windows')
+    $platformText = [string](Get-ConfigValue -Config $Values -Key 'DEFAULT_VM_OS' -DefaultValue 'windows')
     if ([string]::IsNullOrWhiteSpace([string]$platformText)) {
         return 'windows'
     }
@@ -165,26 +162,20 @@ function Get-ClagnosConfigureSelectedPlatform {
     return $normalized
 }
 
+function ConvertTo-ClagnosConfigureRuntimeKey {
+    param([string]$Key)
+    if ([string]::Equals([string]$Key,'DEFAULT_VM_OS',[System.StringComparison]::OrdinalIgnoreCase)) { return 'SELECTED_VM_OS' }
+    if ([string]::Equals([string]$Key,'DEFAULT_AZURE_REGION',[System.StringComparison]::OrdinalIgnoreCase)) { return 'SELECTED_AZURE_REGION' }
+    if ([string]$Key -match '^DEFAULT_(?<runtimeKey>.+)$') { return [string]$Matches.runtimeKey }
+    return [string]$Key
+}
+
 function Get-ClagnosConfigureCreateCriticalKeys {
     param(
         [hashtable]$Values
     )
 
-    $platform = Get-ClagnosConfigureSelectedPlatform -Values $Values
-    $vmImageKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_IMAGE'
-    $vmSizeKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_SIZE'
-
-    return @(
-        'SELECTED_VM_OS',
-        'SELECTED_VM_NAME',
-        'SELECTED_AZURE_REGION',
-        [string]$vmImageKey,
-        [string]$vmSizeKey,
-        'VM_ADMIN_USER',
-        'VM_ADMIN_PASS',
-        'VM_ASSISTANT_USER',
-        'VM_ASSISTANT_PASS'
-    )
+    return @()
 }
 
 function Test-ClagnosConfigureFieldIsCreateCritical {
@@ -482,7 +473,8 @@ function Get-ClagnosConfigureChoiceRows {
     )
 
     $rows = @()
-    switch ([string]$Key) {
+    $choiceKey = ConvertTo-ClagnosConfigureRuntimeKey -Key $Key
+    switch ([string]$choiceKey) {
         'SELECTED_VM_OS' {
             $rows = @(
                 [pscustomobject]@{ Value = 'windows'; Label = 'windows'; Description = 'Windows platform defaults and task catalogs.' }
@@ -525,8 +517,8 @@ function Get-ClagnosConfigureChoiceRows {
             )
         }
         default {
-            if ($Key -in @('WIN_VM_INIT_TASK_DIR','WIN_VM_UPDATE_TASK_DIR','LIN_VM_INIT_TASK_DIR','LIN_VM_UPDATE_TASK_DIR')) {
-                $rows = Get-ClagnosConfigureTaskDirRows -Key $Key -State $State
+            if ($choiceKey -in @('WIN_VM_INIT_TASK_DIR','WIN_VM_UPDATE_TASK_DIR','LIN_VM_INIT_TASK_DIR','LIN_VM_UPDATE_TASK_DIR')) {
+                $rows = Get-ClagnosConfigureTaskDirRows -Key $choiceKey -State $State
             }
             elseif ($Key -eq 'PYSSH_CLIENT_PATH') {
                 $rows = Get-ClagnosConfigurePySshPathRows -State $State
@@ -850,7 +842,8 @@ function Assert-ClagnosConfigureFieldValue {
 
     $text = if ($null -eq $Value) { '' } else { [string]$Value }
 
-    switch ([string]$Key) {
+    $validationKey = ConvertTo-ClagnosConfigureRuntimeKey -Key $Key
+    switch ([string]$validationKey) {
         'SELECTED_VM_OS' {
             if ([string]::IsNullOrWhiteSpace([string]$text)) {
                 Throw-FriendlyError -Detail 'SELECTED_VM_OS is empty.' -Code 2 -Summary 'Selected VM OS is required.' -Hint 'Choose either windows or linux.'
@@ -863,12 +856,10 @@ function Assert-ClagnosConfigureFieldValue {
 
             return $normalizedPlatform
         }
-        'SELECTED_VM_NAME' {
-            if ([string]::IsNullOrWhiteSpace([string]$text)) {
-                Throw-FriendlyError -Detail 'SELECTED_VM_NAME is empty.' -Code 2 -Summary 'Selected VM name is required.' -Hint 'Enter a valid VM name.'
-            }
+        'ACTIVE_VM_NAME' {
+            if ([string]::IsNullOrWhiteSpace([string]$text)) { return '' }
             if (-not (Test-ClagnosVmNameFormat -VmName $text)) {
-                Throw-FriendlyError -Detail ("VM name '{0}' is invalid." -f $text) -Code 2 -Summary 'VM name value is invalid.' -Hint 'Use 3-16 characters, start with a letter, and keep only letters, numbers, or hyphen.'
+                Throw-FriendlyError -Detail ("Active VM name '{0}' is invalid." -f $text) -Code 2 -Summary 'Active VM name is invalid.' -Hint 'Use 3-16 characters, start with a letter, and keep only letters, numbers, or hyphen.'
             }
             return $text.Trim().ToLowerInvariant()
         }
@@ -957,34 +948,30 @@ function Invoke-ClagnosConfigureAzureValueVerification {
         return $Value
     }
 
-    switch ([string]$Key) {
+    $verificationKey = ConvertTo-ClagnosConfigureRuntimeKey -Key $Key
+    switch ([string]$verificationKey) {
         'SELECTED_AZURE_REGION' {
             Assert-LocationExists -Location $Value
             return $Value.Trim().ToLowerInvariant()
         }
         'WIN_VM_SIZE' {
-            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'DEFAULT_AZURE_REGION' -DefaultValue '')
             Assert-VmSkuAvailableViaRest -Location $location -VmSize $Value
             return $Value.Trim()
         }
         'LIN_VM_SIZE' {
-            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'DEFAULT_AZURE_REGION' -DefaultValue '')
             Assert-VmSkuAvailableViaRest -Location $location -VmSize $Value
             return $Value.Trim()
         }
         'WIN_VM_IMAGE' {
-            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'DEFAULT_AZURE_REGION' -DefaultValue '')
             Assert-VmImageAvailable -Location $location -ImageUrn $Value
             return $Value.Trim()
         }
         'LIN_VM_IMAGE' {
-            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+            $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'DEFAULT_AZURE_REGION' -DefaultValue '')
             Assert-VmImageAvailable -Location $location -ImageUrn $Value
-            return $Value.Trim()
-        }
-        'SELECTED_RESOURCE_GROUP' {
-            if ([string]::IsNullOrWhiteSpace([string]$Value)) { return '' }
-            Assert-ClagnosManagedResourceGroup -ResourceGroup $Value -OperationName 'configure'
             return $Value.Trim()
         }
         'SELECTED_AZURE_SUBSCRIPTION_ID' {
@@ -1117,9 +1104,9 @@ function Select-ClagnosConfigureImageInteractive {
         [hashtable]$State
     )
 
-    $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+    $location = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'DEFAULT_AZURE_REGION' -DefaultValue '')
     if ([string]::IsNullOrWhiteSpace([string]$location)) {
-        Throw-FriendlyError -Detail 'SELECTED_AZURE_REGION is empty.' -Code 2 -Summary 'VM image picker cannot continue.' -Hint 'Set the Azure region first.'
+        Throw-FriendlyError -Detail 'DEFAULT_AZURE_REGION is empty.' -Code 2 -Summary 'VM image picker cannot continue.' -Hint 'Set the default create region first.'
     }
 
     $currentParts = @([string]$CurrentValue -split ':')
@@ -1219,7 +1206,7 @@ function Edit-ClagnosConfigureField {
         'vm-size-picker' {
             $raw = Read-Host "Press Enter to keep the current value, or type 'p' to choose a different value"
             if ([string]::IsNullOrWhiteSpace([string]$raw)) { return $currentValue }
-            $location = [string](Get-ConfigValue -Config $values -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+            $location = [string](Get-ConfigValue -Config $values -Key 'DEFAULT_AZURE_REGION' -DefaultValue '')
             $priceHours = [int](Get-ConfigValue -Config $values -Key 'VM_PRICE_COUNT_HOURS' -DefaultValue '730')
             $selectedSku = Select-VmSkuInteractive -Location $location -DefaultVmSize $currentValue -PriceHours $priceHours
             if ([string]::Equals([string]$selectedSku, (Get-ClagnosSkuPickerRegionBackToken), [System.StringComparison]::Ordinal)) {
@@ -1270,7 +1257,7 @@ function Invoke-ClagnosConfigureSectionEditor {
         [hashtable]$State
     )
 
-    $selectedPlatform = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'SELECTED_VM_OS' -DefaultValue 'windows')
+    $selectedPlatform = [string](Get-ConfigValue -Config ([hashtable]$State['Values']) -Key 'DEFAULT_VM_OS' -DefaultValue 'windows')
     $fields = @(Get-ClagnosConfigureFieldSchema -SelectedPlatform $selectedPlatform | Where-Object { [string]$_.Section -eq [string]$SectionName })
 
     Write-Host ''
@@ -1371,11 +1358,12 @@ function Get-ClagnosConfigureEffectiveTcpPorts {
         [hashtable]$Values
     )
 
-    $platform = [string](Get-ConfigValue -Config $Values -Key 'SELECTED_VM_OS' -DefaultValue 'windows')
-    $sshPort = [string](Get-ConfigValue -Config $Values -Key 'VM_SSH_PORT' -DefaultValue '')
-    $rdpPort = [string](Get-ConfigValue -Config $Values -Key 'VM_RDP_PORT' -DefaultValue '')
+    $runtimeValues = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $Values -IgnoreActiveSelection
+    $platform = [string](Get-ConfigValue -Config $runtimeValues -Key 'SELECTED_VM_OS' -DefaultValue 'windows')
+    $sshPort = [string](Get-ConfigValue -Config $runtimeValues -Key 'VM_SSH_PORT' -DefaultValue '')
+    $rdpPort = [string](Get-ConfigValue -Config $runtimeValues -Key 'VM_RDP_PORT' -DefaultValue '')
     $set = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($port in @(Convert-ClagnosCliTextToTokens -Text (([string](Get-ConfigValue -Config $Values -Key 'TCP_PORTS' -DefaultValue '')) -replace ',', ' '))) {
+    foreach ($port in @(Convert-ClagnosCliTextToTokens -Text (([string](Get-ConfigValue -Config $runtimeValues -Key 'TCP_PORTS' -DefaultValue '')) -replace ',', ' '))) {
         if ($port -match '^\d+$') {
             [void]$set.Add(([string]$port).Trim())
         }
@@ -1396,8 +1384,9 @@ function Get-ClagnosConfigurePreviewMap {
         [hashtable]$AzureState
     )
 
-    $platform = [string](Get-ConfigValue -Config $Values -Key 'SELECTED_VM_OS' -DefaultValue 'windows')
-    $platformMap = Resolve-ClagnosPlatformConfigMap -ConfigMap $Values -Platform $platform
+    $effectiveDefaults = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $Values -IgnoreActiveSelection
+    $platform = [string](Get-ConfigValue -Config $effectiveDefaults -Key 'SELECTED_VM_OS' -DefaultValue 'windows')
+    $platformMap = Resolve-ClagnosPlatformConfigMap -ConfigMap $effectiveDefaults -Platform $platform
     $vmName = [string](Get-ConfigValue -Config $platformMap -Key 'SELECTED_VM_NAME' -DefaultValue '')
     $derivedVmName = Get-ClagnosDerivedVmNameFromEmployeeEmailAddress -EmployeeEmailAddress ([string](Get-ConfigValue -Config $platformMap -Key 'SELECTED_EMPLOYEE_EMAIL_ADDRESS' -DefaultValue ''))
     $effectiveVmName = if ([string]::IsNullOrWhiteSpace([string]$vmName)) { [string]$derivedVmName } else { [string]$vmName }
@@ -1491,8 +1480,8 @@ function Invoke-ClagnosConfigureInteractiveEditor {
         [switch]$Perf
     )
 
-    $defaultConfig = Read-DotEnvFile -Path (Join-Path $RepoRoot '.env.example')
-    $currentConfig = Read-DotEnvFile -Path $EnvFilePath
+    $defaultConfig = Read-DotEnvFile -Path (Join-Path $RepoRoot 'clagnos.env.example')
+    $currentConfig = Read-DotEnvFile -Path $EnvFilePath -GlobalOnly
     $state = @{
         RepoRoot = [string]$RepoRoot
         EnvFilePath = [string]$EnvFilePath
@@ -1502,7 +1491,7 @@ function Invoke-ClagnosConfigureInteractiveEditor {
     $state['Azure'] = Initialize-ClagnosConfigureAzureState -Values ([hashtable]$state['Values'])
 
     Write-Host ''
-    Write-Host 'Interactive .env editor' -ForegroundColor Green
+    Write-Host 'Interactive clagnos.env editor' -ForegroundColor Green
     Write-Host 'Press Enter to keep a current value. Picker-backed fields open only when you ask to change them.' -ForegroundColor DarkGray
 
     foreach ($sectionName in @(Get-ClagnosConfigureSectionNames)) {
@@ -1515,9 +1504,9 @@ function Invoke-ClagnosConfigureInteractiveEditor {
         if ([string]::Equals([string]$action, 'save', [System.StringComparison]::OrdinalIgnoreCase)) {
             try {
                 Assert-ClagnosConfigureSaveReady -State $state
-                Save-ClagnosSupportedDotEnvValues -Path $EnvFilePath -ValueMap ([hashtable]$state['Values']) -TemplatePath (Join-Path $RepoRoot '.env.example')
+                Save-ClagnosSupportedDotEnvValues -Path $EnvFilePath -ValueMap ([hashtable]$state['Values']) -TemplatePath (Join-Path $RepoRoot 'clagnos.env.example')
                 Write-Host ''
-                Write-Host (".env was saved successfully to '{0}'." -f $EnvFilePath) -ForegroundColor Green
+                Write-Host ("clagnos.env was saved successfully to '{0}'." -f $EnvFilePath) -ForegroundColor Green
                 return
             }
             catch {
@@ -1536,7 +1525,7 @@ function Invoke-ClagnosConfigureInteractiveEditor {
         }
         if ([string]::Equals([string]$action, 'cancel', [System.StringComparison]::OrdinalIgnoreCase)) {
             Write-Host ''
-            Write-Host 'Configure was canceled. No .env changes were saved.' -ForegroundColor Yellow
+            Write-Host 'Configure was canceled. No clagnos.env changes were saved.' -ForegroundColor Yellow
             return
         }
 

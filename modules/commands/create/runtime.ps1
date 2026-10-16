@@ -25,10 +25,10 @@ function Assert-ClagnosCreateAutoOptions {
 
     if ([string]::IsNullOrWhiteSpace([string]$platform)) {
         Throw-FriendlyError `
-            -Detail "Create auto mode could not resolve a platform from CLI flags or .env." `
+            -Detail "Create auto mode could not resolve a platform from CLI flags or the global defaults." `
             -Code 2 `
             -Summary "Create auto mode requires platform selection." `
-            -Hint "Set SELECTED_VM_OS=windows|linux in .env, or pass --windows/--linux."
+            -Hint "Set DEFAULT_VM_OS=windows|linux in clagnos.env, or pass --windows/--linux."
     }
 
     $normalizedPlatform = $platform.Trim().ToLowerInvariant()
@@ -37,7 +37,7 @@ function Assert-ClagnosCreateAutoOptions {
             -Detail ("Unsupported platform value '{0}' was resolved for create auto mode." -f [string]$platform) `
             -Code 2 `
             -Summary "Create auto mode requires a supported platform." `
-            -Hint "Set SELECTED_VM_OS=windows|linux in .env, or pass --windows/--linux."
+            -Hint "Set DEFAULT_VM_OS=windows|linux in clagnos.env, or pass --windows/--linux."
     }
 
     $effectiveVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
@@ -66,7 +66,7 @@ function Assert-ClagnosCreateAutoOptions {
             -Detail ("Create auto mode is missing resolvable values: {0}." -f (@($missing) -join ', ')) `
             -Code 2 `
             -Summary "Create auto mode is missing required selection values." `
-            -Hint "Populate the SELECTED_* values in .env together with the platform VM size defaults, or pass the missing CLI options explicitly."
+            -Hint "Pass --vm-name, --vm-region and --vm-size or set the matching DEFAULT_* values in clagnos.env. New VC settings are persisted to <vm-name>.env."
     }
 }
 
@@ -106,7 +106,7 @@ function New-ClagnosCreateResumeTargetOverrides {
             -Detail "Create resume requires an existing managed VM target, but no VM name was resolved." `
             -Code 66 `
             -Summary "Create resume cannot resolve the existing VM target." `
-            -Hint "Set SELECTED_VM_NAME in .env or pass --vm-name before using create --step-from vm-init/vm-update."
+            -Hint "Set ACTIVE_VM_NAME in clagnos.env or pass --vm-name before using create --step-from vm-init/vm-update."
     }
 
     $defaultResourceGroup = [string](Get-ConfigValue -Config $ConfigMap -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
@@ -136,7 +136,7 @@ function New-ClagnosCreateResumeTargetOverrides {
                 -Detail ("Create resume found VM name '{0}' in multiple managed resource groups: {1}." -f [string]$resolvedVmName, ($matchGroups -join ', ')) `
                 -Code 66 `
                 -Summary "Create resume needs one exact managed target." `
-                -Hint "Set SELECTED_RESOURCE_GROUP in .env to the intended managed resource group before retrying create --step-from."
+                -Hint "Set SELECTED_RESOURCE_GROUP in the selected <vm-name>.env profile before retrying create --step-from."
         }
 
         $targetResourceGroup = [string]$matches[0].ResourceGroup
@@ -190,7 +190,7 @@ function New-ClagnosCreateCommandRuntime {
 
     $actionPlan = Resolve-ClagnosActionPlan -CommandName 'create' -Options $Options
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     Assert-ClagnosCreateAutoOptions -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMap $configMap
     $createOverrides = @{}
@@ -217,7 +217,7 @@ function New-ClagnosCreateCommandRuntime {
         $configuredVmName = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_NAME' -DefaultValue '')
         if (-not [string]::IsNullOrWhiteSpace([string]$configuredVmName)) {
             $createOverrides['SELECTED_VM_NAME'] = $configuredVmName.Trim()
-            Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source '.env value'
+            Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'clagnos.env value'
         }
     }
 
@@ -230,7 +230,7 @@ function New-ClagnosCreateCommandRuntime {
         $configuredVmRegion = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
         if (-not [string]::IsNullOrWhiteSpace([string]$configuredVmRegion)) {
             $createOverrides['SELECTED_AZURE_REGION'] = $configuredVmRegion.Trim().ToLowerInvariant()
-            Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source '.env value'
+            Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_REGION' -Source 'clagnos.env value'
         }
     }
 

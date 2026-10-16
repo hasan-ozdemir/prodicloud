@@ -10,7 +10,7 @@ function Invoke-ClagnosDeleteCommand {
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $vmName = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_VM_NAME' -DefaultValue '')
     $defaultResourceGroup = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
@@ -38,7 +38,7 @@ function Invoke-ClagnosDeleteCommand {
                 -Detail "Resource group is required in auto mode when --group is not provided." `
                 -Code 66 `
                 -Summary "Delete command cannot resolve target resource group." `
-                -Hint "Provide --group=<name> or set SELECTED_RESOURCE_GROUP in .env."
+                -Hint "Provide --group=<name> or select ACTIVE_VM_NAME in clagnos.env with that group's name in its <vm-name>.env profile."
         }
         $resourceGroup = $defaultResourceGroup.Trim()
     }
@@ -94,7 +94,7 @@ function Invoke-ClagnosDeleteCommand {
                     -Detail ("Auto mode could not resolve a unique VM in resource group '{0}'." -f $resourceGroup) `
                     -Code 66 `
                     -Summary "Delete command needs an explicit VM in auto mode." `
-                    -Hint "Set SELECTED_VM_NAME in .env to the exact Azure VM name in the selected group."
+                    -Hint "Set ACTIVE_VM_NAME in clagnos.env or provide the exact --vm-name for the selected group."
             }
         }
     }
@@ -164,7 +164,7 @@ function Invoke-ClagnosDeleteCommand {
                 -Detail "OS disk name could not be resolved." `
                 -Code 66 `
                 -Summary "Delete disk target failed before execution." `
-                -Hint "Set VM_DISK_NAME in .env or ensure VM metadata is available."
+                -Hint "Set VM_DISK_NAME in the selected <vm-name>.env profile or ensure VM metadata is available."
         }
 
         $diskExists = Test-ClagnosAzResourceExists -AzArgs @("disk", "show", "-g", $resourceGroup, "-n", $diskName)

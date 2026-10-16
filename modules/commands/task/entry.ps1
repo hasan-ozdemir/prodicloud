@@ -82,7 +82,7 @@ function Invoke-ClagnosTaskCommand {
     }
 
     if ([string]::Equals($mode, 'list', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
         $includeInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init'
         $includeUpdate = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update'
         if (-not $includeInit -and -not $includeUpdate) {
@@ -135,7 +135,7 @@ function Invoke-ClagnosTaskCommand {
 
     if ([string]::Equals($mode, 'enable', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($mode, 'disable', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
         $taskSelection = Resolve-ClagnosTaskStageSelection -Options $Options -AutoMode:$AutoMode
         $stageRoot = if ([string]::Equals([string]$taskSelection.Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
             [string]$runtime.VmInitTaskDir
@@ -159,7 +159,7 @@ function Invoke-ClagnosTaskCommand {
         }
     }
 
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     if ([string]::Equals($mode, 'run-vm-init', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($mode, 'run-vm-update', [System.StringComparison]::OrdinalIgnoreCase)) {
         $runSelection = Resolve-ClagnosTaskRunSelection -Options $Options

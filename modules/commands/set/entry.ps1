@@ -10,7 +10,7 @@ function Invoke-ClagnosSetCommand {
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'set'
     $resourceGroup = [string]$target.ResourceGroup
@@ -152,7 +152,7 @@ function Invoke-ClagnosSetCommand {
     }
 
     if (@($envChanges).Count -gt 0) {
-        Write-Host "Saved .env changes after set:" -ForegroundColor Green
+        Write-Host ("Saved VC settings to {0}.env after set:" -f $vmName) -ForegroundColor Green
         foreach ($change in @($envChanges)) {
             Write-Host ("- {0} = {1}" -f [string]$change.Key, (ConvertTo-ClagnosDisplayValue -Value $change.NewValue))
         }

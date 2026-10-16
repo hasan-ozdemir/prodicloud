@@ -5937,3 +5937,14 @@ Feature update: Ensure disabled packages and the vm-init/vm-update mechanisms ar
 **Assistant Summary**
 
 Moved task roots to vm-init/<platform> and vm-update/<platform>, and package catalogs to vm-packages/{builtin,custom}/<platform>. Added one tasks.toml per builtin/custom catalog as the only enabled-state source, moved task availability changes to TOML without moving folders, removed enabled fields from task/package metadata, and made discovery treat missing tasks as absent, skip unlisted task folders, and reject package catalog mismatches. Removed the old disabled/local task directory layout and moved the previously disabled JAWS maintenance task into the enabled custom vm-update catalog. Updated defaults, local task-directory selectors, tools, tests, and operator documentation. git diff --check passed; automated tests were updated but not run.
+
+### 2026-10-15 23:00 UTC
+**User Prompt**
+
+````text
+Feature update: Store all VC-specific settings for every virtual computer created by this application in a git-ignored `{vc-name}.env` file, such as `vc1.env` or `vc2.env`. Migrate existing VCs and their settings to this structure. Move global Clagnos infrastructure, Azure CLI selection, and app-wide settings into `clagnos.env`. Aggressively cut over from the former `.env` behavior, remove its runtime path and artifacts, and make the new files the sole primary configuration structure. Do not add presence/absence tests for the former structure.
+````
+
+**Assistant Summary**
+
+Separated global settings from per-VC configuration. `clagnos.env` now owns the active VC pointer, Azure subscription, operator identity, naming templates, timeouts, task paths, and non-secret create defaults; each `<vm-name>.env` owns its target identity, group, OS, region, image/SKU/disk, VM features, credentials, ports, and package transport. Added `vc.env.example`, made the configure editor global-only, routed VM settings through the selected profile, and updated the TUI, setup runner, benchmarks, release packaging, live acceptance script, and contract checks. Migrated the local configuration and existing managed VC profiles using read-only Azure inventory, verified identity and key VM properties, and removed the prior local settings file. No Azure resources were changed. PowerShell parsing passed for 49 changed scripts and `git diff --check` passed; automated tests were updated but not run.

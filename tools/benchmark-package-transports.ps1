@@ -9,14 +9,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$envPath = Join-Path $repoRoot '.env'
+$envPath = Join-Path $repoRoot ($VmName + '.env')
 $entryPoint = Join-Path $repoRoot 'clagnos.ps1'
-if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { throw 'The local .env file is required for package transport benchmarking.' }
+if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { throw ("The VC profile '{0}.env' is required for package transport benchmarking." -f $VmName) }
 if (-not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) { throw 'The Clagnos entrypoint was not found.' }
 
 $lines = @([IO.File]::ReadAllLines($envPath))
 $transportLine = @($lines | Where-Object { $_ -match '^\s*PACKAGE_TRANSPORT\s*=' } | Select-Object -First 1)
-if ($transportLine.Count -ne 1 -or $transportLine[0] -notmatch '^\s*PACKAGE_TRANSPORT\s*=(.*)$') { throw 'The local .env file must define PACKAGE_TRANSPORT before benchmarking.' }
+if ($transportLine.Count -ne 1 -or $transportLine[0] -notmatch '^\s*PACKAGE_TRANSPORT\s*=(.*)$') { throw ("The VC profile '{0}.env' must define PACKAGE_TRANSPORT before benchmarking." -f $VmName) }
 $originalTransport = [string]$Matches[1]
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('clagnos-package-benchmark-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $tempRoot -Force

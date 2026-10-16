@@ -1,6 +1,5 @@
 # Ignore sensitive runtime environment files
-.env
-**/.env
+*.env
 
 # Ignore logs and transcripts
 *.log

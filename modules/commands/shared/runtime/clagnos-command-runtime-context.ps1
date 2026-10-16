@@ -15,8 +15,14 @@ function Initialize-ClagnosCommandRuntimeContext {
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
-    $configMap = Read-DotEnvFile -Path $envFilePath
+    $envFilePath = Get-ClagnosGlobalEnvPath
+    $globalConfigMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
+    $profileVmName = ''
+    if ($ConfigMapOverrides -and $ConfigMapOverrides.ContainsKey('SELECTED_VM_NAME')) { $profileVmName = [string]$ConfigMapOverrides['SELECTED_VM_NAME'] }
+    elseif ($script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_VM_NAME')) { $profileVmName = [string]$script:ConfigOverrides['SELECTED_VM_NAME'] }
+    elseif (-not [string]::Equals([string]$OperationName,'create',[System.StringComparison]::OrdinalIgnoreCase)) { $profileVmName = [string]$globalConfigMap['ACTIVE_VM_NAME'] }
+    $requireVmProfile = -not [string]::IsNullOrWhiteSpace([string]$profileVmName) -and -not [string]::Equals([string]$OperationName,'create',[System.StringComparison]::OrdinalIgnoreCase)
+    $configMap = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfigMap -VmName $profileVmName -RequireProfile:$requireVmProfile
     $platformSelectionOverrides = @{}
     foreach ($key in @($script:ConfigOverrides.Keys)) {
         $platformSelectionOverrides[[string]$key] = [string]$script:ConfigOverrides[$key]
@@ -26,7 +32,8 @@ function Initialize-ClagnosCommandRuntimeContext {
     }
 
     $promptForPlatformSelection = (-not $AutoMode) -and [string]::Equals([string]$OperationName, 'create', [System.StringComparison]::OrdinalIgnoreCase)
-    $platform = Resolve-ClagnosPlatformSelection -ConfigMap $configMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $platformSelectionOverrides -DeferEnvWrite:$DeferDotEnvWrites -PromptWhenFlagsMissing:$promptForPlatformSelection
+    $deferPlatformWrite = [bool]$DeferDotEnvWrites -or [string]::Equals([string]$OperationName,'create',[System.StringComparison]::OrdinalIgnoreCase)
+    $platform = Resolve-ClagnosPlatformSelection -ConfigMap $configMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $platformSelectionOverrides -DeferEnvWrite:$deferPlatformWrite -PromptWhenFlagsMissing:$promptForPlatformSelection
     $platformDefaults = Get-ClagnosPlatformDefaults -Platform $platform
     $effectiveConfigMap = Resolve-ClagnosPlatformConfigMap -ConfigMap $configMap -Platform $platform
     foreach ($key in @($ConfigMapOverrides.Keys)) {
@@ -129,17 +136,22 @@ function Initialize-ClagnosTaskExecutionRuntimeContext {
     param(
         [switch]$AutoMode,
         [switch]$WindowsFlag,
-        [switch]$LinuxFlag
+        [switch]$LinuxFlag,
+        [hashtable]$Options = @{}
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
-    $configMap = Read-DotEnvFile -Path $envFilePath
+    $envFilePath = Get-ClagnosGlobalEnvPath
+    $globalConfigMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
+    $requestedVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+    if ([string]::IsNullOrWhiteSpace([string]$requestedVmName) -and $script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_VM_NAME')) { $requestedVmName = [string]$script:ConfigOverrides['SELECTED_VM_NAME'] }
+    if ([string]::IsNullOrWhiteSpace([string]$requestedVmName)) { $requestedVmName = [string]$globalConfigMap['ACTIVE_VM_NAME'] }
+    $configMap = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfigMap -VmName $requestedVmName -RequireProfile:([bool](-not [string]::IsNullOrWhiteSpace([string]$requestedVmName)))
     $platform = Resolve-ClagnosPlatformSelection -ConfigMap $configMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $script:ConfigOverrides
     $platformDefaults = Get-ClagnosPlatformDefaults -Platform $platform
     $effectiveConfigMap = Resolve-ClagnosPlatformConfigMap -ConfigMap $configMap -Platform $platform
 
-    $vmName = [string](Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'SELECTED_VM_NAME' -Summary 'VM name is required.' -Hint 'Set SELECTED_VM_NAME in .env, or pass --vm-name where the command supports it.')
+    $vmName = [string](Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'SELECTED_VM_NAME' -Summary 'VM name is required.' -Hint 'Set ACTIVE_VM_NAME in clagnos.env or pass --vm-name; the selected VM settings are loaded from <vm-name>.env.')
 
     $azLocation = [string](Get-ConfigValue -Config $effectiveConfigMap -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
     $regionCode = ''
@@ -189,10 +201,11 @@ function Initialize-ClagnosTaskExecutionRuntimeContext {
     $shortcutSocialPersonalXUrl = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $effectiveConfigMap -Key 'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_X_URL' -DefaultValue '')) -Tokens $nameTokens
     $shortcutWebBusinessHomeUrl = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $effectiveConfigMap -Key 'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_HOME_URL' -DefaultValue '')) -Tokens $nameTokens
     $shortcutWebBusinessBlogUrl = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $effectiveConfigMap -Key 'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_BLOG_URL' -DefaultValue '')) -Tokens $nameTokens
-    $vmUser = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ADMIN_USER' -Tokens $nameTokens -Summary 'VM admin user is required.' -Hint 'Set VM_ADMIN_USER in .env to the primary VM username.'
-    $vmPass = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ADMIN_PASS' -Tokens $nameTokens -Summary 'VM admin password is required.' -Hint 'Set VM_ADMIN_PASS in .env to a non-placeholder password.'
-    $vmAssistantUser = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ASSISTANT_USER' -Tokens $nameTokens -Summary 'VM assistant user is required.' -Hint 'Set VM_ASSISTANT_USER in .env to the secondary VM username.'
-    $vmAssistantPass = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ASSISTANT_PASS' -Tokens $nameTokens -Summary 'VM assistant password is required.' -Hint 'Set VM_ASSISTANT_PASS in .env to a non-placeholder password.'
+    $vmProfilePath = Get-ClagnosVmEnvPath -VmName $vmName
+    $vmUser = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ADMIN_USER' -Tokens $nameTokens -Summary 'VM admin user is required.' -Hint ("Set VM_ADMIN_USER in '{0}'." -f $vmProfilePath)
+    $vmPass = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ADMIN_PASS' -Tokens $nameTokens -Summary 'VM admin password is required.' -Hint ("Set VM_ADMIN_PASS in '{0}' to a non-placeholder password." -f $vmProfilePath)
+    $vmAssistantUser = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ASSISTANT_USER' -Tokens $nameTokens -Summary 'VM assistant user is required.' -Hint ("Set VM_ASSISTANT_USER in '{0}'." -f $vmProfilePath)
+    $vmAssistantPass = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $effectiveConfigMap -Key 'VM_ASSISTANT_PASS' -Tokens $nameTokens -Summary 'VM assistant password is required.' -Hint ("Set VM_ASSISTANT_PASS in '{0}' to a non-placeholder password." -f $vmProfilePath)
     $sshPort = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $effectiveConfigMap -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))) -Tokens $nameTokens
     $rdpPort = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $effectiveConfigMap -Key 'VM_RDP_PORT' -DefaultValue (Get-ClagnosDefaultRdpPortText))) -Tokens $nameTokens
 
@@ -315,12 +328,17 @@ function Initialize-ClagnosTaskCommandRuntimeContext {
     param(
         [switch]$AutoMode,
         [switch]$WindowsFlag,
-        [switch]$LinuxFlag
+        [switch]$LinuxFlag,
+        [hashtable]$Options = @{}
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
-    $configMap = Read-DotEnvFile -Path $envFilePath
+    $envFilePath = Get-ClagnosGlobalEnvPath
+    $globalConfigMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
+    $requestedVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+    if ([string]::IsNullOrWhiteSpace([string]$requestedVmName) -and $script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_VM_NAME')) { $requestedVmName = [string]$script:ConfigOverrides['SELECTED_VM_NAME'] }
+    if ([string]::IsNullOrWhiteSpace([string]$requestedVmName)) { $requestedVmName = [string]$globalConfigMap['ACTIVE_VM_NAME'] }
+    $configMap = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfigMap -VmName $requestedVmName -RequireProfile:([bool](-not [string]::IsNullOrWhiteSpace([string]$requestedVmName)))
     $platform = Resolve-ClagnosPlatformSelection -ConfigMap $configMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $script:ConfigOverrides
     $platformDefaults = Get-ClagnosPlatformDefaults -Platform $platform
     $effectiveConfigMap = Resolve-ClagnosPlatformConfigMap -ConfigMap $configMap -Platform $platform

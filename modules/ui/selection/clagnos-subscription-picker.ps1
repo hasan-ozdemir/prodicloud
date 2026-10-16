@@ -197,8 +197,8 @@ function Initialize-ClagnosCommandSubscriptionState {
     }
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
-    $configMap = Read-DotEnvFile -Path $envFilePath
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
+    $configMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
     $accessibleRows = @(Get-ClagnosAccessibleSubscriptionRows)
     $cliSubscriptionId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id')
     $configSubscriptionId = ''
@@ -213,7 +213,7 @@ function Initialize-ClagnosCommandSubscriptionState {
         $resolutionSource = 'cli'
     }
     elseif (-not [string]::IsNullOrWhiteSpace([string]$configSubscriptionId)) {
-        $requestedSubscriptionId = [string](Assert-ClagnosSubscriptionIdFormat -SubscriptionId $configSubscriptionId -OptionSource '.env SELECTED_AZURE_SUBSCRIPTION_ID')
+        $requestedSubscriptionId = [string](Assert-ClagnosSubscriptionIdFormat -SubscriptionId $configSubscriptionId -OptionSource 'clagnos.env SELECTED_AZURE_SUBSCRIPTION_ID')
         $resolutionSource = 'env'
     }
 
@@ -225,7 +225,7 @@ function Initialize-ClagnosCommandSubscriptionState {
                 ("CLI subscription id '{0}' is not accessible through the current Azure CLI login." -f [string]$requestedSubscriptionId)
             }
             else {
-                (".env SELECTED_AZURE_SUBSCRIPTION_ID '{0}' is not accessible through the current Azure CLI login." -f [string]$requestedSubscriptionId)
+                ("clagnos.env SELECTED_AZURE_SUBSCRIPTION_ID '{0}' is not accessible through the current Azure CLI login." -f [string]$requestedSubscriptionId)
             }
             Throw-FriendlyError `
                 -Detail $detailText `
@@ -254,7 +254,7 @@ function Initialize-ClagnosCommandSubscriptionState {
     $script:ConfigOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = [string]$selectedRow.id
     $sourceLabel = switch ([string]$resolutionSource) {
         'cli' { 'cli value' }
-        'env' { '.env value' }
+        'env' { 'clagnos.env value' }
         default { 'azure value' }
     }
     Set-ClagnosConfigValueSource -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Source $sourceLabel

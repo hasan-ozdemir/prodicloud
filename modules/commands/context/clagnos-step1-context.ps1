@@ -134,20 +134,72 @@ function Get-ClagnosStep1ContextPersistenceMap {
 
     $persist = [ordered]@{
         SELECTED_VM_OS = [string]$Platform
-        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$Context.AzureSubscriptionId
         SELECTED_AZURE_REGION = [string]$Context.AzLocation
         SELECTED_RESOURCE_GROUP = [string]$Context.ResourceGroup
         SELECTED_VM_NAME = [string]$Context.VmName
         VM_STORAGE_SKU = [string]$Context.VmStorageSku
+        VM_SECURITY_TYPE = [string]$Context.VmSecurityType
+        VM_ENABLE_HIBERNATION = ([bool]$Context.VmEnableHibernation).ToString().ToLowerInvariant()
+        VM_ENABLE_NESTED_VIRTUALIZATION = ([bool]$Context.VmEnableNestedVirtualization).ToString().ToLowerInvariant()
+        VM_ENABLE_SECURE_BOOT = ([bool]$Context.VmEnableSecureBoot).ToString().ToLowerInvariant()
+        VM_ENABLE_VTPM = ([bool]$Context.VmEnableVtpm).ToString().ToLowerInvariant()
+        VM_ADMIN_USER = [string]$Context.VmUser
+        VM_ADMIN_PASS = [string]$Context.VmPass
+        VM_ASSISTANT_USER = [string]$Context.VmAssistantUser
+        VM_ASSISTANT_PASS = [string]$Context.VmAssistantPass
         VM_SSH_PORT = [string]$Context.SshPort
         VM_RDP_PORT = [string]$Context.RdpPort
         TCP_PORTS = [string]$tcpPortsCsv
+        PACKAGE_TRANSPORT = [string]$Context.PackageTransport
     }
 
     $persist[$vmImageConfigKey] = [string]$Context.VmImage
     $persist[$vmSizeConfigKey] = [string]$Context.VmSize
     $persist[$vmDiskSizeConfigKey] = [string]$Context.VmDiskSize
+    $persist['SELECTED_AZURE_SUBSCRIPTION_ID'] = [string]$Context.AzureSubscriptionId
     return $persist
+}
+
+function ConvertFrom-ClagnosStep1SecureString {
+    param([System.Security.SecureString]$Value)
+    if ($null -eq $Value) { return '' }
+    $pointer = [IntPtr]::Zero
+    try {
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    }
+    finally {
+        if ($pointer -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer) }
+    }
+}
+
+function Get-ClagnosStep1PasswordValue {
+    param(
+        [hashtable]$ConfigMap,
+        [hashtable]$ConfigOverrides,
+        [string]$Key,
+        [string]$Label,
+        [string]$VmName,
+        [string]$OperationName,
+        [switch]$AutoMode
+    )
+    $value = [string](Get-ConfigValue -Config $ConfigMap -Key $Key -DefaultValue '')
+    if (-not [string]::IsNullOrWhiteSpace([string]$value) -and -not (Test-ClagnosConfigPlaceholderValue -Value $value)) { return $value }
+    $profilePath = Get-ClagnosVmEnvPath -VmName $VmName
+    if ($AutoMode -or -not [string]::Equals([string]$OperationName,'create',[System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-FriendlyError -Detail ("VC-specific {0} is missing from '{1}'." -f $Label,$profilePath) -Code 14 -Summary 'VC credentials are not configured.' -Hint ("Set {0} in '{1}' before running non-interactive operations." -f $Key,$profilePath)
+    }
+
+    $firstSecure = Read-Host -Prompt ("Enter {0} for VC '{1}'" -f $Label,$VmName) -AsSecureString
+    $confirmSecure = Read-Host -Prompt ("Confirm {0} for VC '{1}'" -f $Label,$VmName) -AsSecureString
+    $first = ConvertFrom-ClagnosStep1SecureString -Value $firstSecure
+    $confirmed = ConvertFrom-ClagnosStep1SecureString -Value $confirmSecure
+    if ([string]::IsNullOrWhiteSpace([string]$first) -or -not [string]::Equals([string]$first,[string]$confirmed,[System.StringComparison]::Ordinal)) {
+        Throw-FriendlyError -Detail ("The {0} was empty or did not match its confirmation." -f $Label) -Code 14 -Summary 'VC credential entry did not verify.' -Hint 'Enter matching, non-empty values and retry create.'
+    }
+    $ConfigMap[$Key] = $first
+    if ($ConfigOverrides) { $ConfigOverrides[$Key] = $first }
+    return [string]$first
 }
 
 function Save-ClagnosStep1ContextPersistenceMap {
@@ -156,16 +208,28 @@ function Save-ClagnosStep1ContextPersistenceMap {
         [System.Collections.IDictionary]$PersistMap
     )
 
+    $vmName = if ($PersistMap.Contains('SELECTED_VM_NAME')) { [string]$PersistMap['SELECTED_VM_NAME'] } else { '' }
+    if ([string]::IsNullOrWhiteSpace([string]$vmName) -and $script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_VM_NAME')) {
+        $vmName = [string]$script:ConfigOverrides['SELECTED_VM_NAME']
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$vmName)) { throw 'Saving VC settings requires a selected VM name.' }
+    $vmEnvPath = Get-ClagnosVmEnvPath -VmName $vmName
+    if (-not (Test-Path -LiteralPath $vmEnvPath -PathType Leaf)) {
+        $templatePath = Join-Path (Get-ClagnosRepoRoot) 'vc.env.example'
+        if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) { throw "VC environment template is missing: $templatePath" }
+        Copy-Item -LiteralPath $templatePath -Destination $vmEnvPath -ErrorAction Stop
+    }
     foreach ($key in @($PersistMap.Keys)) {
         $name = [string]$key
         if ([string]::IsNullOrWhiteSpace([string]$name)) {
             continue
         }
 
-        Set-DotEnvValue -Path $EnvFilePath -Key $name -Value ([string]$PersistMap[$name])
+        Set-DotEnvValue -Path $EnvFilePath -Key $name -Value ([string]$PersistMap[$name]) -VmName $vmName
     }
 
     Remove-ClagnosUnsupportedDotEnvKeys -Path $EnvFilePath
+    Remove-ClagnosUnsupportedDotEnvKeys -Path $vmEnvPath
 }
 
 function New-ClagnosStep1ConfigDisplayMap {
@@ -435,7 +499,7 @@ function Invoke-ClagnosStep1Common {
                     -Detail "SELECTED_VM_NAME is required for this non-interactive command flow." `
                     -Code 2 `
                     -Summary "VM name is required." `
-                    -Hint "Set SELECTED_VM_NAME in .env, or pass --vm-name where the command supports it."
+                    -Hint "Set ACTIVE_VM_NAME in clagnos.env or pass --vm-name; VM-specific settings belong in <vm-name>.env."
             }
             $userInput = $vmNameDefaultResolved
         }
@@ -583,7 +647,7 @@ function Invoke-ClagnosStep1Common {
             -Detail "SELECTED_AZURE_REGION is empty. Region selection is required before resource group creation." `
             -Code 22 `
             -Summary "Azure region is required." `
-            -Hint "Set SELECTED_AZURE_REGION in .env or select a region interactively."
+            -Hint "Set DEFAULT_AZURE_REGION in clagnos.env or select a region interactively; the chosen value is saved in <vm-name>.env."
     }
 
     Assert-LocationExists -Location $azLocation
@@ -828,10 +892,13 @@ function Invoke-ClagnosStep1Common {
     $shortcutSocialPersonalXUrl = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $ConfigMap -Key 'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_X_URL' -DefaultValue '')) -Tokens $baseTokens
     $shortcutWebBusinessHomeUrl = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $ConfigMap -Key 'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_HOME_URL' -DefaultValue '')) -Tokens $baseTokens
     $shortcutWebBusinessBlogUrl = Resolve-ClagnosTemplate -Template ([string](Get-ConfigValue -Config $ConfigMap -Key 'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_BLOG_URL' -DefaultValue '')) -Tokens $baseTokens
-    $vmUser = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $ConfigMap -Key 'VM_ADMIN_USER' -Tokens $baseTokens -Summary 'VM admin user is required.' -Hint 'Set VM_ADMIN_USER in .env to the primary VM username.'
-    $vmPass = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $ConfigMap -Key 'VM_ADMIN_PASS' -Tokens $baseTokens -Summary 'VM admin password is required.' -Hint 'Set VM_ADMIN_PASS in .env to a non-placeholder password.'
-    $vmAssistantUser = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $ConfigMap -Key 'VM_ASSISTANT_USER' -Tokens $baseTokens -Summary 'VM assistant user is required.' -Hint 'Set VM_ASSISTANT_USER in .env to the secondary VM username.'
-    $vmAssistantPass = Get-ClagnosRequiredResolvedConfigValue -ConfigMap $ConfigMap -Key 'VM_ASSISTANT_PASS' -Tokens $baseTokens -Summary 'VM assistant password is required.' -Hint 'Set VM_ASSISTANT_PASS in .env to a non-placeholder password.'
+    $vmUser = [string](Get-ConfigValue -Config $ConfigMap -Key 'VM_ADMIN_USER' -DefaultValue 'manager')
+    $vmAssistantUser = [string](Get-ConfigValue -Config $ConfigMap -Key 'VM_ASSISTANT_USER' -DefaultValue 'assistant')
+    if ([string]::IsNullOrWhiteSpace([string]$vmUser)) { $vmUser = 'manager' }
+    if ([string]::IsNullOrWhiteSpace([string]$vmAssistantUser)) { $vmAssistantUser = 'assistant' }
+    if ($ConfigOverrides) { $ConfigOverrides['VM_ADMIN_USER'] = $vmUser; $ConfigOverrides['VM_ASSISTANT_USER'] = $vmAssistantUser }
+    $vmPass = Get-ClagnosStep1PasswordValue -ConfigMap $ConfigMap -ConfigOverrides $ConfigOverrides -Key 'VM_ADMIN_PASS' -Label 'manager password' -VmName $vmName -OperationName $OperationName -AutoMode:$AutoMode
+    $vmAssistantPass = Get-ClagnosStep1PasswordValue -ConfigMap $ConfigMap -ConfigOverrides $ConfigOverrides -Key 'VM_ASSISTANT_PASS' -Label 'assistant password' -VmName $vmName -OperationName $OperationName -AutoMode:$AutoMode
     $sshPortValue = [string](Get-ConfigValue -Config $ConfigMap -Key "VM_SSH_PORT" -DefaultValue (Get-ClagnosDefaultSshPortText))
     $sshPort = Resolve-ClagnosTemplate -Template $sshPortValue -Tokens $baseTokens
     $rdpPortValue = [string](Get-ConfigValue -Config $ConfigMap -Key "VM_RDP_PORT" -DefaultValue (Get-ClagnosDefaultRdpPortText))
@@ -908,6 +975,7 @@ function Invoke-ClagnosStep1Common {
         VmPass = $vmPass
         VmAssistantUser = $vmAssistantUser
         VmAssistantPass = $vmAssistantPass
+        PackageTransport = [string](Get-ConfigValue -Config $ConfigMap -Key 'PACKAGE_TRANSPORT' -DefaultValue 'ssh')
         SshPort = $sshPort
         RdpPort = $rdpPort
         TcpPorts = @($tcpPorts)
@@ -960,7 +1028,7 @@ function Assert-ClagnosVmNameConflictFree {
             -Detail "VM name is empty." `
             -Code 2 `
             -Summary "VM name validation failed." `
-            -Hint "Provide a valid SELECTED_VM_NAME before continuing."
+            -Hint "Provide a valid VM name before continuing; the configuration will be saved in that VM's profile."
     }
 
     $vmMatchesJson = az resource list --resource-type "Microsoft.Compute/virtualMachines" --query "[?name=='$VmName'].{name:name,resourceGroup:resourceGroup,id:id}" -o json --only-show-errors
@@ -994,7 +1062,7 @@ function Assert-ClagnosVmNameConflictFree {
         -Detail ("VM name '{0}' already exists in target resource group '{1}'." -f [string]$VmName, [string]$TargetResourceGroup) `
         -Code 62 `
         -Summary "VM name already exists in the target resource group." `
-        -Hint "Choose another SELECTED_VM_NAME or choose a different fresh target resource group."
+        -Hint "Choose another VM name or choose a different fresh target resource group."
 }
 
 # Handles Resolve-ClagnosSecurityTypeValue.

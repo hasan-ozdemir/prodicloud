@@ -623,7 +623,7 @@ function Write-ClagnosShowReport {
         }
     }
 
-    Write-ClagnosShowSectionHeader -Text ".env Configuration Values"
+    Write-ClagnosShowSectionHeader -Text "Global And Active VC Configuration Values"
     $envValues = $Dump.Config.DotEnvValues
     if ($envValues -and $envValues.Count -gt 0) {
         foreach ($key in @($envValues.Keys | Sort-Object)) {

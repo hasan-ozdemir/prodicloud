@@ -20,10 +20,10 @@ function Assert-ClagnosUpdateAutoOptions {
 
     if ([string]::IsNullOrWhiteSpace([string]$effectiveGroup)) {
         Throw-FriendlyError `
-            -Detail "Update auto mode could not resolve a managed resource group from CLI or .env SELECTED_RESOURCE_GROUP." `
+            -Detail "Update auto mode could not resolve a managed resource group from CLI or the active VC profile." `
             -Code 2 `
             -Summary "Update auto mode cannot resolve target resource group." `
-            -Hint "Set SELECTED_RESOURCE_GROUP in .env, or pass --group."
+            -Hint "Set ACTIVE_VM_NAME in clagnos.env and SELECTED_RESOURCE_GROUP in that VC's <vm-name>.env profile, or pass --group."
     }
 }
 
@@ -55,7 +55,7 @@ function New-ClagnosUpdateCommandRuntime {
     )
 
     $actionPlan = Resolve-ClagnosActionPlan -CommandName 'update' -Options $Options
-    $envFilePath = Join-Path (Get-ClagnosRepoRoot) '.env'
+    $envFilePath = Join-Path (Get-ClagnosRepoRoot) 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     Assert-ClagnosUpdateAutoOptions -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigMap $configMap
     $cliSubscriptionId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id')

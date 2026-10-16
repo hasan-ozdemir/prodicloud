@@ -245,9 +245,9 @@ function Invoke-ClagnosWorkerPackageStatusRequest {
         $platform = ([string]$request.Platform).ToLowerInvariant()
         if ($platform -notin @('windows','linux')) { throw 'Package status worker received an unsupported guest platform.' }
         $isWindows = $platform -eq 'windows'
-        $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:$isWindows -LinuxFlag:(-not $isWindows)
-        $target = [pscustomobject]@{ ResourceGroup = [string]$request.ResourceGroup; VmName = [string]$request.VmName }
         $options = @{ 'subscription-id' = $SubscriptionId; group = [string]$request.ResourceGroup; 'vm-name' = [string]$request.VmName }
+        $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:$isWindows -LinuxFlag:(-not $isWindows) -Options $options
+        $target = [pscustomobject]@{ ResourceGroup = [string]$request.ResourceGroup; VmName = [string]$request.VmName }
         $previousNoDiskWrite = [string]$env:CLAGNOS_PACKAGE_STATUS_CACHE_NO_DISK_WRITE
         $env:CLAGNOS_PACKAGE_STATUS_CACHE_NO_DISK_WRITE = '1'
         foreach ($catalog in @($request.Catalogs)) {

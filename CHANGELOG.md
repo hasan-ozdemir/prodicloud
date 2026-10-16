@@ -3,6 +3,21 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.16.422] - 2026-10-16
+
+### Added
+- Added `clagnos.env.example` for global settings and `vc.env.example` for target-specific VC profiles. The local `clagnos.env` stores the active VC pointer, subscription, operator identity, infrastructure defaults, and runtime settings; each git-ignored `<vm-name>.env` stores its VM identity/group/region, image/size/disk, feature settings, ports, package transport, and credentials.
+- Added profile-aware configuration loading and persistence across create, initialize/update, package/task, connection, resize/move, feature, and TUI paths. New VC creation writes a named profile and prompts securely for credentials; selecting a VC in the TUI updates `ACTIVE_VM_NAME`.
+
+### Changed
+- Made the `configure` editor global-only and kept VM-specific settings in their VC profiles. VM passwords are not stored in the global settings file.
+- Migrated the local global configuration and current managed VC settings into the new files, verified the profile identity and Azure-derived VM properties, then removed the former local settings file. No Azure resources were changed.
+- Updated setup, benchmark, live-acceptance, release-packaging, documentation, and configuration-contract tooling for the separated files. Runtime readers reject unsupported environment-file paths.
+
+### Validation
+- PowerShell parser accepted all 49 changed scripts; `git diff --check` passed. Automated test suites were updated but not run.
+- Azure reads confirmed that migrated VC profiles match their existing managed groups, regions, SKU, OS disk size, storage SKU, and hibernation state. No Azure mutation was issued.
+
 ## [2026.10.15.421] - 2026-10-15
 
 ### Changed

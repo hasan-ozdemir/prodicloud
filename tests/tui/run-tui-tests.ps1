@@ -389,8 +389,38 @@ function Invoke-ClagnosUiAzJson {
 }
 
 function Read-DotEnvFile {
-    param([string]$Path)
+    param([string]$Path,[switch]$GlobalOnly)
+    $fileName = [System.IO.Path]::GetFileName([string]$Path)
+    if ([string]::Equals($fileName,'clagnos.env',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($fileName,'clagnos.env.example',[System.StringComparison]::OrdinalIgnoreCase)) {
+        $globalConfig = @{
+            ACTIVE_VM_NAME = 'fixture-vc'
+            SELECTED_AZURE_SUBSCRIPTION_ID = 'sub-fixture-enabled'
+            DEFAULT_VM_OS = 'windows'
+            DEFAULT_AZURE_REGION = 'eastus'
+            DEFAULT_VM_STORAGE_SKU = 'StandardSSD_LRS'
+            DEFAULT_VM_SECURITY_TYPE = 'Standard'
+            DEFAULT_VM_ENABLE_HIBERNATION = 'true'
+            DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
+            DEFAULT_VM_ENABLE_SECURE_BOOT = 'true'
+            DEFAULT_VM_ENABLE_VTPM = 'true'
+            DEFAULT_VM_SSH_PORT = '22222'
+            DEFAULT_VM_RDP_PORT = '3390'
+            DEFAULT_VM_ADMIN_USER = 'manager-fixture'
+            DEFAULT_VM_ASSISTANT_USER = 'assistant-fixture'
+            DEFAULT_PACKAGE_TRANSPORT = 'winrm'
+            DEFAULT_TCP_PORTS = '80,443,5985'
+            DEFAULT_WIN_VM_IMAGE = 'publisher:offer:sku:latest'
+            DEFAULT_WIN_VM_SIZE = 'Standard_D2as_v5'
+            DEFAULT_WIN_VM_DISK_SIZE_GB = '128'
+        }
+        if ($null -ne $script:TuiDotEnvOverrides) { foreach ($key in $script:TuiDotEnvOverrides.Keys) { $globalConfig[[string]$key] = [string]$script:TuiDotEnvOverrides[$key] } }
+        return $globalConfig
+    }
     $config = @{
+        SELECTED_VM_NAME = 'fixture-vc'
+        SELECTED_RESOURCE_GROUP = 'rg-fixture-eastus-g1'
+        SELECTED_VM_OS = 'windows'
+        SELECTED_AZURE_REGION = 'eastus'
         VM_ADMIN_USER = 'manager-fixture'
         VM_ADMIN_PASS = '<runtime-secret>'
         VM_ASSISTANT_USER = 'assistant-fixture'
@@ -398,9 +428,6 @@ function Read-DotEnvFile {
         VM_SSH_PORT = '22222'
         VM_RDP_PORT = '3390'
         VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
-    }
-    if ($null -ne $script:TuiDotEnvOverrides) {
-        foreach ($key in $script:TuiDotEnvOverrides.Keys) { $config[[string]$key] = [string]$script:TuiDotEnvOverrides[$key] }
     }
     return $config
 }
@@ -669,12 +696,12 @@ Invoke-TuiTest -Name 'Persisted inventory refresh requests remain dirty until a 
 
 Invoke-TuiTest -Name 'Create wizard applies validated defaults through the real TUI create route' -Action {
     $script:TuiDotEnvOverrides = @{
-        SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'fixture-new-vc'; SELECTED_AZURE_REGION = 'eastus'
-        WIN_VM_SIZE = 'Standard_B2s_v2'; WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; WIN_VM_DISK_SIZE_GB = '128GB'
-        VM_STORAGE_SKU = 'StandardSSD_LRS'; VM_SECURITY_TYPE = 'Standard'; VM_ENABLE_HIBERNATION = 'true'; VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
-        VM_SSH_PORT = '22222'; VM_RDP_PORT = '3390'; TCP_PORTS = '80,3000-3300'
+        DEFAULT_VM_OS = 'windows'; DEFAULT_AZURE_REGION = 'eastus'
+        DEFAULT_WIN_VM_SIZE = 'Standard_B2s_v2'; DEFAULT_WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; DEFAULT_WIN_VM_DISK_SIZE_GB = '128GB'
+        DEFAULT_VM_STORAGE_SKU = 'StandardSSD_LRS'; DEFAULT_VM_SECURITY_TYPE = 'Standard'; DEFAULT_VM_ENABLE_HIBERNATION = 'true'; DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
+        DEFAULT_VM_SSH_PORT = '22222'; DEFAULT_VM_RDP_PORT = '3390'; DEFAULT_TCP_PORTS = '80,3000-3300'
     }
-    Set-TuiChoices -Choices @('a','a','a','a','a','a','a','a','a','a','a','a','a','a')
+    Set-TuiChoices -Choices @('a','fixture-new-vc','a','a','a','a','a','a','a','a','a','a','a','a')
     & $script:TuiOriginalCreateWizard
     $call = Assert-TuiCommand -CommandName 'create'
     Assert-TuiOption -Call $call -Name 'windows' -Expected 'True'
@@ -693,12 +720,12 @@ Invoke-TuiTest -Name 'Create wizard applies validated defaults through the real 
 
 Invoke-TuiTest -Name 'Create wizard skip-all and apply-all controls use validated defaults' -Action {
     $script:TuiDotEnvOverrides = @{
-        SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'fixture-default-vc'; SELECTED_AZURE_REGION = 'eastus'
-        WIN_VM_SIZE = 'Standard_B2s_v2'; WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; WIN_VM_DISK_SIZE_GB = '128GB'
-        VM_STORAGE_SKU = 'StandardSSD_LRS'; VM_SECURITY_TYPE = 'Standard'; VM_ENABLE_HIBERNATION = 'true'; VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
-        VM_SSH_PORT = '22222'; VM_RDP_PORT = '3390'; TCP_PORTS = '80,3000-3300'
+        DEFAULT_VM_OS = 'windows'; DEFAULT_AZURE_REGION = 'eastus'
+        DEFAULT_WIN_VM_SIZE = 'Standard_B2s_v2'; DEFAULT_WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; DEFAULT_WIN_VM_DISK_SIZE_GB = '128GB'
+        DEFAULT_VM_STORAGE_SKU = 'StandardSSD_LRS'; DEFAULT_VM_SECURITY_TYPE = 'Standard'; DEFAULT_VM_ENABLE_HIBERNATION = 'true'; DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
+        DEFAULT_VM_SSH_PORT = '22222'; DEFAULT_VM_RDP_PORT = '3390'; DEFAULT_TCP_PORTS = '80,3000-3300'
     }
-    Set-TuiChoices -Choices @('k','l')
+    Set-TuiChoices -Choices @('k','fixture-default-vc','l')
     & $script:TuiOriginalCreateWizard
     $call = Assert-TuiCommand -CommandName 'create'
     Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-default-vc'
@@ -707,7 +734,7 @@ Invoke-TuiTest -Name 'Create wizard skip-all and apply-all controls use validate
 }
 
 Invoke-TuiTest -Name 'Create wizard s and c controls keep a default then close without dispatch' -Action {
-    $script:TuiDotEnvOverrides = @{ SELECTED_VM_OS = 'windows' }
+    $script:TuiDotEnvOverrides = @{ DEFAULT_VM_OS = 'windows' }
     Set-TuiChoices -Choices @('s','c')
     & $script:TuiOriginalCreateWizard
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Closing the create wizard must never dispatch create.'
@@ -716,12 +743,12 @@ Invoke-TuiTest -Name 'Create wizard s and c controls keep a default then close w
 
 Invoke-TuiTest -Name 'Create wizard recovers from invalid configured security and boolean defaults' -Action {
     $script:TuiDotEnvOverrides = @{
-        SELECTED_VM_OS = 'windows'; SELECTED_VM_NAME = 'recover-vc'; SELECTED_AZURE_REGION = 'eastus'
-        WIN_VM_SIZE = 'Standard_B2s_v2'; WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; WIN_VM_DISK_SIZE_GB = '128GB'
-        VM_STORAGE_SKU = 'StandardSSD_LRS'; VM_SECURITY_TYPE = 'not-a-security-type'; VM_ENABLE_HIBERNATION = 'maybe'
-        VM_ENABLE_NESTED_VIRTUALIZATION = 'maybe'; VM_SSH_PORT = '22222'; VM_RDP_PORT = '3390'; TCP_PORTS = '80,3000-3300'
+        DEFAULT_VM_OS = 'windows'; DEFAULT_AZURE_REGION = 'eastus'
+        DEFAULT_WIN_VM_SIZE = 'Standard_B2s_v2'; DEFAULT_WIN_VM_IMAGE = 'MicrosoftWindowsDesktop:windows-11:win11-24h2-pro:latest'; DEFAULT_WIN_VM_DISK_SIZE_GB = '128GB'
+        DEFAULT_VM_STORAGE_SKU = 'StandardSSD_LRS'; DEFAULT_VM_SECURITY_TYPE = 'not-a-security-type'; DEFAULT_VM_ENABLE_HIBERNATION = 'maybe'
+        DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION = 'maybe'; DEFAULT_VM_SSH_PORT = '22222'; DEFAULT_VM_RDP_PORT = '3390'; DEFAULT_TCP_PORTS = '80,3000-3300'
     }
-    Set-TuiChoices -Choices @('a','a','a','a','a','a','1','2','1','a','a','a','a','a')
+    Set-TuiChoices -Choices @('a','recover-vc','a','a','a','a','1','2','1','a','a','a','a','a')
     & $script:TuiOriginalCreateWizard
     $call = Assert-TuiCommand -CommandName 'create'
     Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.SecurityType -eq 'Standard') -Message 'The invalid security default must be replaced by a numbered choice.'
@@ -912,6 +939,12 @@ Invoke-TuiTest -Name 'Virtual computer list ignores invalid selection input' -Ac
 }
 
 Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, VM features, and both login roles' -Action {
+    $previousUiRepoRoot = [string]$script:ClagnosUiRepoRoot
+    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-vc-profile-fixture-' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $profileRoot -Force
+    $script:ClagnosUiRepoRoot = $profileRoot
+    Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-vc.env') -Value @('SELECTED_VM_NAME=fixture-vc') -Encoding ASCII
+    try {
     $script:TuiWindowsVm | Add-Member -NotePropertyName 'powerState' -NotePropertyValue 'VM running' -Force
     $script:TuiVmDetailRecord | Add-Member -NotePropertyName 'powerState' -NotePropertyValue 'VM running' -Force
     $script:TuiNestedVirtualizationGuestResult = [pscustomobject]@{
@@ -929,7 +962,7 @@ Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, V
     Assert-TuiOutputContains -Text 'disk-fixture-os' -Message 'VC details must show the OS disk.'
     Assert-TuiOutputContains -Text 'disk-fixture-data' -Message 'VC details must show data disks.'
     Assert-TuiOutputContains -Text 'Hibernation enabled: True' -Message 'VC details must show actual Azure hibernation state.'
-    Assert-TuiOutputContains -Text 'Nested virtualization request (.env): true' -Message 'VC details must show configured nested virtualization intent.'
+    Assert-TuiOutputContains -Text 'Nested virtualization request (fixture-vc.env): true' -Message 'VC details must show configured nested virtualization intent.'
     Assert-TuiOutputContains -Text 'Nested virtualization available to guest: unavailable' -Message 'VC details must show live guest capability separately from configured intent.'
     Assert-TuiOutputContains -Text 'CpuVirtualizationExtensionsExposed=False' -Message 'VC details must show why guest nested virtualization is unavailable.'
     & $script:TuiOriginalVmDetails -Vm $script:TuiWindowsVm
@@ -942,6 +975,14 @@ Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, V
     Assert-TuiOutputContains -Text 'NIC: nic-fixture' -Message 'VC details must show the NIC.'
     Assert-TuiOutputContains -Text 'Microsoft.Compute/virtualMachines | fixture-vc' -Message 'VC details must enumerate attached Azure resources.'
     Assert-TuiNoRealCloudCalls
+    }
+    finally {
+        $script:ClagnosUiRepoRoot = $previousUiRepoRoot
+        $resolvedProfileRoot = [System.IO.Path]::GetFullPath($profileRoot)
+        $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'clagnos-vc-profile-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI profile fixture: {0}" -f $resolvedProfileRoot) }
+        if (Test-Path -LiteralPath $resolvedProfileRoot) { Remove-Item -LiteralPath $resolvedProfileRoot -Recurse -Force }
+    }
 }
 
 Invoke-TuiTest -Name 'Linux VC detail screen omits RDP and reports missing public endpoints' -Action {
@@ -1674,9 +1715,21 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         New-Item -ItemType Directory -Path (Join-Path $sandboxRoot '.azure-fixture') -Force | Out-Null
         $envLines = @(
             'SELECTED_AZURE_SUBSCRIPTION_ID=00000000-0000-4000-8000-000000000000',
+            'ACTIVE_VM_NAME=tui-fixture-vc',
+            'SELECTED_AZURE_SUBSCRIPTION_ID=00000000-0000-4000-8000-000000000000',
+            'DEFAULT_VM_OS=windows',
+            'DEFAULT_AZURE_REGION=eastus',
+            'DEFAULT_PACKAGE_TRANSPORT=winrm',
+            'DEFAULT_VM_SSH_PORT=22222',
+            'DEFAULT_VM_RDP_PORT=3390',
+            'DEFAULT_TCP_PORTS=80,443,5985'
+        )
+        Set-Content -LiteralPath (Join-Path $sandboxRoot 'clagnos.env') -Value $envLines -Encoding ASCII
+        $vcEnvLines = @(
+            'SELECTED_VM_NAME=tui-fixture-vc',
+            'SELECTED_RESOURCE_GROUP=rg-fixture-eastus-g1',
             'SELECTED_VM_OS=windows',
             'SELECTED_AZURE_REGION=eastus',
-            'SELECTED_VM_NAME=tui-fixture-vc',
             'VM_ADMIN_USER=fixture-manager',
             'VM_ADMIN_PASS=<runtime-secret>',
             'VM_ASSISTANT_USER=fixture-assistant',
@@ -1686,7 +1739,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'VM_ENABLE_HIBERNATION=true',
             'VM_ENABLE_NESTED_VIRTUALIZATION=true'
         )
-        Set-Content -LiteralPath (Join-Path $sandboxRoot '.env') -Value $envLines -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $sandboxRoot 'tui-fixture-vc.env') -Value $vcEnvLines -Encoding ASCII
         $azLogPath = Join-Path $sandboxRoot 'az-fixture.log'
         $netLogPath = Join-Path $sandboxRoot 'net-fixture.log'
 
@@ -1764,7 +1817,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Public DNS: tui-fixture.eastus.cloudapp.azure.com',
             'SSH endpoint: tui-fixture.eastus.cloudapp.azure.com:22222',
             'PowerShell remoting endpoint: tui-fixture.eastus.cloudapp.azure.com:5985',
-            'Nested virtualization request (.env): true',
+            'Nested virtualization request (tui-fixture-vc.env): true',
             'Nested virtualization available to guest: available',
             'fixture-manager | password: <runtime-secret>',
             'fixture-assistant | password: <runtime-secret>',

@@ -2,7 +2,7 @@
 Script Filename: clagnos.ps1
 Script Description:
 - Unified Azure VM provisioning flow for Windows and Linux.
-- OS selection: --windows or --linux (or SELECTED_VM_OS from .env).
+- OS selection: --windows or --linux (or DEFAULT_VM_OS from clagnos.env for create, or SELECTED_VM_OS from the active VC profile).
 - Init tasks run once on first VM creation via Azure Run Command, one task at a time.
 - Update tasks run task-by-task over the active platform SSH transport.
 #>

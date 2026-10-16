@@ -329,7 +329,8 @@ function Invoke-ClagnosMoveTargetHealthCheck {
     $taskRuntime = Initialize-ClagnosTaskExecutionRuntimeContext `
         -AutoMode:$true `
         -WindowsFlag:([string]::Equals([string]$Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase)) `
-        -LinuxFlag:([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase))
+        -LinuxFlag:([string]::Equals([string]$Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) `
+        -Options @{ group = $ResourceGroup; 'vm-name' = $VmName }
     $execResult = Invoke-ClagnosTaskExecutionWithTarget `
         -Runtime $taskRuntime `
         -Options @{ group = $ResourceGroup; 'vm-name' = $VmName } `
@@ -464,7 +465,7 @@ function Invoke-ClagnosChangeCommand {
             -Detail ("VM '{0}' was not found in resource group '{1}'." -f $vmName, $resourceGroup) `
             -Code 62 `
             -Summary ("{0} command cannot continue because VM does not exist." -f $OperationLabel) `
-            -Hint "Run 'clagnos create' first, or check active naming values in .env."
+            -Hint "Run 'clagnos create' first, or check ACTIVE_VM_NAME and the matching VM profile."
     }
 
     $vmObject = ConvertFrom-JsonCompat -InputObject $vmJson

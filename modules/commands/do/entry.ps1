@@ -7,7 +7,7 @@ function Invoke-ClagnosDoCommand {
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'do'
     $action = Resolve-ClagnosDoActionName -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-action')) -AllowEmpty

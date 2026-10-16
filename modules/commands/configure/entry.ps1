@@ -10,6 +10,6 @@ function Invoke-ClagnosConfigureCommand {
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     Invoke-ClagnosConfigureInteractiveEditor -RepoRoot $repoRoot -EnvFilePath $envFilePath -Perf:$PerfMode
 }

@@ -329,7 +329,8 @@ function Resolve-ClagnosConfigValueSourceLabel {
     }
 
     if (Test-ClagnosDictionaryHasNonBlankValue -Dictionary $ConfigMap -Key $Key) {
-        return '.env value'
+        if (@(Get-ClagnosVmScopedEnvKeys) -contains [string]$Key) { return 'VC profile or global create default' }
+        return 'clagnos.env value'
     }
 
     return [string]$FallbackSource
@@ -367,11 +368,11 @@ function New-ClagnosRuntimeConfigurationRows {
         @{ Key = 'VM_SSH_PORT'; Value = [string]$Context.SshPort; FallbackSource = 'default value' },
         @{ Key = 'VM_RDP_PORT'; Value = [string]$Context.RdpPort; FallbackSource = 'default value' },
         @{ Key = 'TCP_PORTS'; Value = [string]$Context.TcpPortsConfiguredCsv; FallbackSource = 'default value' },
-        @{ Key = 'SELECTED_COMPANY_NAME'; Value = [string]$Context.CompanyName; FallbackSource = '.env value' },
-        @{ Key = 'SELECTED_COMPANY_WEB_ADDRESS'; Value = [string]$Context.CompanyWebAddress; FallbackSource = '.env value' },
-        @{ Key = 'SELECTED_COMPANY_EMAIL_ADDRESS'; Value = [string]$Context.CompanyEmailAddress; FallbackSource = '.env value' },
-        @{ Key = 'SELECTED_EMPLOYEE_EMAIL_ADDRESS'; Value = [string]$Context.EmployeeEmailAddress; FallbackSource = '.env value' },
-        @{ Key = 'SELECTED_EMPLOYEE_FULL_NAME'; Value = [string]$Context.EmployeeFullName; FallbackSource = '.env value' },
+        @{ Key = 'SELECTED_COMPANY_NAME'; Value = [string]$Context.CompanyName; FallbackSource = 'clagnos.env value' },
+        @{ Key = 'SELECTED_COMPANY_WEB_ADDRESS'; Value = [string]$Context.CompanyWebAddress; FallbackSource = 'clagnos.env value' },
+        @{ Key = 'SELECTED_COMPANY_EMAIL_ADDRESS'; Value = [string]$Context.CompanyEmailAddress; FallbackSource = 'clagnos.env value' },
+        @{ Key = 'SELECTED_EMPLOYEE_EMAIL_ADDRESS'; Value = [string]$Context.EmployeeEmailAddress; FallbackSource = 'clagnos.env value' },
+        @{ Key = 'SELECTED_EMPLOYEE_FULL_NAME'; Value = [string]$Context.EmployeeFullName; FallbackSource = 'clagnos.env value' },
         @{ Key = [string]$platformInitDirKey; Value = [string]$Context.VmInitTaskDir; FallbackSource = 'default value' },
         @{ Key = [string]$platformUpdateDirKey; Value = [string]$Context.VmUpdateTaskDir; FallbackSource = 'default value' },
         @{ Key = 'AZURE_COMMAND_TIMEOUT_SECONDS'; Value = [string]$Context.AzCommandTimeoutSeconds; FallbackSource = 'default value' },

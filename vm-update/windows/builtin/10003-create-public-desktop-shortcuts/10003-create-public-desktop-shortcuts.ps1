@@ -226,13 +226,13 @@ function Resolve-OptionalShortcutUrl {
 }
 
 if (Test-InvalidCompanyName -Value $companyName) {
-    throw "SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow. Set SELECTED_COMPANY_NAME in .env before running 10002-create-public-desktop-shortcuts."
+    throw "SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow. Set SELECTED_COMPANY_NAME in clagnos.env before running 10002-create-public-desktop-shortcuts."
 }
 if (Test-InvalidEmployeeEmailAddress -Value $employeeEmailAddress) {
-    throw "SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_EMAIL_ADDRESS in .env before running 10002-create-public-desktop-shortcuts."
+    throw "SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_EMAIL_ADDRESS in clagnos.env before running 10002-create-public-desktop-shortcuts."
 }
 if (Test-InvalidEmployeeFullName -Value $employeeFullName) {
-    throw "SELECTED_EMPLOYEE_FULL_NAME is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_FULL_NAME in .env before running 10002-create-public-desktop-shortcuts."
+    throw "SELECTED_EMPLOYEE_FULL_NAME is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_FULL_NAME in clagnos.env before running 10002-create-public-desktop-shortcuts."
 }
 
 $companyName = $companyName.Trim()

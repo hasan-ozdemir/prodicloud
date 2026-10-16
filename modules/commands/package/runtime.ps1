@@ -221,8 +221,12 @@ function Get-ClagnosPackageStatusCacheKey {
     param([object[]]$Packages, [hashtable]$Options, [string]$Platform)
     $transport = 'ssh'
     try {
-        $configPath = Join-Path (Get-ClagnosRepoRoot) '.env'
-        if (Test-Path -LiteralPath $configPath -PathType Leaf) { $transport = Get-ClagnosPackageTransport -ConfigMap (Read-DotEnvFile -Path $configPath) }
+        $configPath = Get-ClagnosGlobalEnvPath
+        $globalConfig = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Read-DotEnvFile -Path $configPath -GlobalOnly } else { @{} }
+        $targetVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+        if ([string]::IsNullOrWhiteSpace([string]$targetVmName)) { $targetVmName = [string]$globalConfig['ACTIVE_VM_NAME'] }
+        $targetConfig = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfig -VmName $targetVmName
+        $transport = Get-ClagnosPackageTransport -ConfigMap $targetConfig
     }
     catch { $transport = 'invalid' }
     $catalogIdentity = @($Packages | ForEach-Object {
@@ -706,7 +710,7 @@ function Invoke-ClagnosPackageGuestScript {
     )
 
     if ($null -eq $Runtime) {
-        $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux')
+        $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') -Options $Options
     }
     if ($null -eq $Target) {
         $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package'
@@ -789,7 +793,7 @@ function Get-ClagnosPackageStatusSnapshot {
     $cacheInfo = Get-ClagnosPackageStatusCacheEntry -Packages $Packages -Options $Options -Platform $Platform
     $key = if ($null -ne $cacheInfo) { [string]$cacheInfo.Key } else { Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform }
     if (-not $Force -and $null -ne $cacheInfo -and [bool]$cacheInfo.IsFresh) { return $cacheInfo.Entry.StatusByPackage }
-    if ($null -eq $Runtime) { $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') }
+    if ($null -eq $Runtime) { $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') -Options $Options }
     if ($null -eq $Target) { $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package' }
     $Runtime.Context.ResourceGroup = [string]$Target.ResourceGroup
     $Runtime.Context.VmName = [string]$Target.VmName
@@ -903,7 +907,7 @@ function New-ClagnosPackageSetupPlan {
         [switch]$LinuxFlag
     )
 
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $runtime.Context.VmName = [string]$target.VmName
@@ -1089,7 +1093,7 @@ function Invoke-ClagnosPackageSetupAll {
     )
 
     Write-ClagnosActionProgress -Action 'review enabled builtin and custom packages for setup-all'
-    $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $platform = [string]$runtime.Platform
     $packages = @(
         @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'builtin') +
@@ -1141,7 +1145,7 @@ function Invoke-ClagnosPackageOperation {
     if ([string]::IsNullOrWhiteSpace($PackageId) -and $Action -ne 'list') { throw 'A package id is required for this action.' }
     $packageProgressTarget = if ([string]::IsNullOrWhiteSpace($PackageId)) { 'catalog' } else { "package '$PackageId'" }
     Write-ClagnosActionProgress -Action ("{0} {1} in {2} catalog" -f [string]$Action,[string]$packageProgressTarget,[string]$Catalog)
-    $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $platform = [string]$taskRuntime.Platform
     $packagesInCatalog = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
     if (@($packagesInCatalog).Count -eq 0 -and $Action -eq 'list') { Write-Host ("The {0} package catalog is empty for '{1}'." -f $Catalog, $platform) -ForegroundColor Yellow; return }
@@ -1169,7 +1173,7 @@ function Invoke-ClagnosPackageOperation {
 
     $catalogRuntime = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
     if ($Action -eq 'list') {
-        $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
         $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
         $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
         $runtime.Context.VmName = [string]$target.VmName
@@ -1190,7 +1194,7 @@ function Invoke-ClagnosPackageOperation {
         throw ("'{0}' is disabled in the {1} package catalog. Enable it before installing, repairing, or updating it." -f [string]$package.DisplayName,$Catalog)
     }
     if ($Action -notin @('status','install','repair','update','uninstall')) { throw ("Unsupported package action '{0}'." -f $Action) }
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $runtime.Context.VmName = [string]$target.VmName

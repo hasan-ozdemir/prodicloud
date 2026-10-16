@@ -93,7 +93,7 @@ function Update-ClagnosUiSubscription {
         $script:ClagnosUiSubscriptionError = [string]$_.Exception.Message
     }
 
-    $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
+    $envPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.env'
     $config = Read-DotEnvFile -Path $envPath
     $script:ClagnosUiSelectedResourceGroup = [string](Get-ConfigValue -Config $config -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
     $script:ClagnosUiSelectedVmName = [string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_NAME' -DefaultValue '')
@@ -725,7 +725,7 @@ function Set-ClagnosUiActiveSubscription {
 
     try {
         Save-ClagnosSubscriptionIdToDotEnv `
-            -EnvFilePath (Join-Path $script:ClagnosUiRepoRoot '.env') `
+            -EnvFilePath (Join-Path $script:ClagnosUiRepoRoot 'clagnos.env') `
             -SubscriptionId $subscriptionId
     }
     catch {
@@ -1248,8 +1248,9 @@ function Show-ClagnosUiVmDetails {
     $memoryGb = if ($facts.MemoryMb -match '^\d+$') { ('{0:N1} GB' -f ([double]$facts.MemoryMb / 1024)) } else { 'Unknown' }
     $power = Get-ClagnosUiPowerState -ResourceGroup $group -VmName $name -CachedPowerState ([string]$full.powerState)
     $nestedStatus = Get-ClagnosUiNestedVirtualizationGuestStatus -Vm $Vm -PowerState $power
-    $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
-    $config = Read-DotEnvFile -Path $envPath
+    $envPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.env'
+    $globalConfig = Read-DotEnvFile -Path $envPath -GlobalOnly
+    $config = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfig -VmName $name -VmEnvRoot $script:ClagnosUiRepoRoot -RequireProfile
 
     $privateAddresses = @()
     $publicAddresses = @()
@@ -1444,7 +1445,7 @@ function Show-ClagnosUiVmDetails {
     if ([string]::IsNullOrWhiteSpace($nestedVirtualization)) { $nestedVirtualization = '(not configured)' }
     Write-Host 'Security and VM features:' -ForegroundColor Cyan
     Write-Host ('  Hibernation enabled: {0}' -f (Format-ClagnosUiDetailValue -Value $hibernationEnabled -EmptyText 'false'))
-    Write-Host ('  Nested virtualization request (.env): {0}' -f $nestedVirtualization)
+    Write-Host ('  Nested virtualization request ({0}.env): {1}' -f $name,$nestedVirtualization)
     $nestedStatusText = if ([string]$power -match '(?i)running') {
         if (-not [bool]$nestedStatus.Known) { 'unknown' }
         elseif ([bool]$nestedStatus.AvailableToGuest) { 'available' }
@@ -1477,7 +1478,7 @@ function Show-ClagnosUiVmDetails {
     elseif ($publicAddresses.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$publicAddresses[0].IpAddress)) { [string]$publicAddresses[0].IpAddress }
     elseif ($privateAddresses.Count -gt 0) { [string]$privateAddresses[0] }
     else { '(no reachable address reported)' }
-    Write-Host 'Connection and login credentials (.env):' -ForegroundColor Cyan
+    Write-Host 'Connection and login credentials:' -ForegroundColor Cyan
     Write-Host ('  SSH endpoint: {0}:{1} | default role: manager' -f $connectionHost, $sshPort)
     Write-Host ('    manager username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $adminUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $adminPass -EmptyText '(not configured)'))
     Write-Host ('    assistant username: {0} | password: {1}' -f (Format-ClagnosUiDetailValue -Value $assistantUser -EmptyText '(not configured)'), (Format-ClagnosUiDetailValue -Value $assistantPass -EmptyText '(not configured)'))
@@ -1488,7 +1489,7 @@ function Show-ClagnosUiVmDetails {
         Write-Host ('  PowerShell remoting endpoint: {0}:{1} | roles: manager and assistant | authentication: Negotiate' -f $connectionHost, $powerShellPort)
     }
     else { Write-Host '  RDP: not applicable to this Linux VC.' }
-    Write-Host '  Credentials are read from .env; passwords are excluded from progress and operation log messages.' -ForegroundColor Gray
+    Write-Host ('  Credentials and VC-specific settings are read from {0}.env; passwords are excluded from progress and operation log messages.' -f $name) -ForegroundColor Gray
     Write-Host ''
 
     Write-Host 'Attached resources:' -ForegroundColor Cyan
@@ -1852,11 +1853,12 @@ function Get-ClagnosUiTaskRowsForStage {
     param([psobject]$Vm, [ValidateSet('init','update')][string]$Stage)
 
     $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType, 'Windows', [System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
+    $options = New-ClagnosUiTargetOptions -Vm $Vm
     $runtime = if ($platform -eq 'windows') {
-        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -WindowsFlag
+        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -WindowsFlag -Options $options
     }
     else {
-        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -LinuxFlag
+        Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$false -LinuxFlag -Options $options
     }
     $stageRoot = if ($Stage -eq 'init') { [string]$runtime.VmInitTaskDir } else { [string]$runtime.VmUpdateTaskDir }
     $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $platform -Stage $Stage -SuppressSkipMessages
@@ -2196,7 +2198,7 @@ function Show-ClagnosUiVmMenu {
         catch { Write-ClagnosUiHeader -Title ('Virtual computer: {0}' -f [string]$Vm.name); Write-ClagnosUiError -ErrorRecord $_ }
         Write-Host 'p: setup all program packages'
         Write-Host 'i: initialize VC'
-        Write-Host 'k: reset managed-user passwords from .env'
+        Write-Host ("k: reset managed-user passwords from {0}.env" -f [string]$Vm.name)
         Write-Host 'u: update VC'
         Write-Host 'm: manage program packages'
         Write-Host 'x: manage VC components'
@@ -2337,8 +2339,9 @@ function Read-ClagnosUiWizardTextStep {
 }
 
 function Show-ClagnosUiCreateWizard {
-    $envPath = Join-Path $script:ClagnosUiRepoRoot '.env'
-    $config = Read-DotEnvFile -Path $envPath
+    $envPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.env'
+    $globalConfig = Read-DotEnvFile -Path $envPath -GlobalOnly
+    $config = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfig -IgnoreActiveSelection
     $subscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
     if ([string]::IsNullOrWhiteSpace([string]$subscriptionId)) {
         Write-ClagnosUiError -ErrorRecord ([System.Exception]::new("Select an active Azure subscription and run 'az login' before creating a virtual computer."))
@@ -2421,7 +2424,7 @@ function Show-ClagnosUiCreateWizard {
     if ($platform -eq 'windows' -and -not [string]::IsNullOrWhiteSpace([string]$rdpPortDefault)) { $wizardSources['VM_RDP_PORT'] = 'default' }
     if (-not [string]::IsNullOrWhiteSpace([string]$portsDefault)) { $wizardSources['TCP_PORTS'] = 'default' }
 
-    if (-not $skipRemaining) {
+    if (-not $skipRemaining -or [string]::IsNullOrWhiteSpace([string]$vmNameDefault)) {
         $nameResult = Read-ClagnosUiWizardTextStep -Title 'Virtual computer name' -DefaultValue $vmNameDefault -Example '3-16 characters, starts with a letter' -Required -Validator {
             param($value)
             $candidate = ([string]$value).Trim()
@@ -2442,7 +2445,7 @@ function Show-ClagnosUiCreateWizard {
     $regionValue = $regionDefault
     $sizeValue = $vmSizeDefault
 
-    if (-not $skipRemaining) {
+    if (-not $skipRemaining -or [string]::IsNullOrWhiteSpace([string]$regionDefault)) {
         try { $locations = @(Get-AzLocationCatalog) }
         catch {
             Write-ClagnosUiError -ErrorRecord $_
@@ -2562,7 +2565,7 @@ function Show-ClagnosUiCreateWizard {
             [pscustomobject]@{ Value = 'StandardSSD_LRS'; Label = 'Standard SSD'; Detail = 'StandardSSD_LRS' },
             [pscustomobject]@{ Value = 'Premium_LRS'; Label = 'Premium SSD'; Detail = 'Premium_LRS' }
         )
-        if ($storageSkuDefault -notin @($storageOptions | ForEach-Object { [string]$_.Value })) { $storageOptions = @([pscustomobject]@{ Value = $storageSkuDefault; Label = ('Configured: {0}' -f $storageSkuDefault); Detail = 'current .env default' }) + @($storageOptions) }
+        if ($storageSkuDefault -notin @($storageOptions | ForEach-Object { [string]$_.Value })) { $storageOptions = @([pscustomobject]@{ Value = $storageSkuDefault; Label = ('Configured: {0}' -f $storageSkuDefault); Detail = 'current global create default' }) + @($storageOptions) }
         $storageResult = Resolve-ClagnosUiWizardPageStep -Options $storageOptions -Prompt 'OS disk storage performance tier' -DefaultValue $storageSkuDefault -Required
         if ($storageResult.Action -eq 'close') { return }
         $storageSkuValue = [string]$storageResult.Value
@@ -2790,7 +2793,13 @@ function Show-ClagnosUiVirtualComputers {
             [string]::Equals([string]$_.ClagnosResourceGroup, [string]$selectedParts[0], [System.StringComparison]::OrdinalIgnoreCase) -and
             [string]::Equals([string]$_.name, [string]$selectedParts[1], [System.StringComparison]::OrdinalIgnoreCase)
         } | Select-Object -First 1)
-        if (@($selectedVm).Count -gt 0) { Show-ClagnosUiVmMenu -Vm $selectedVm[0] }
+        if (@($selectedVm).Count -gt 0) {
+            $selectedVmName = [string]$selectedVm[0].name
+            Set-DotEnvValue -Path (Join-Path $script:ClagnosUiRepoRoot 'clagnos.env') -Key 'ACTIVE_VM_NAME' -Value $selectedVmName
+            $script:ClagnosUiSelectedVmName = $selectedVmName
+            $script:ClagnosUiSelectedResourceGroup = [string]$selectedVm[0].ClagnosResourceGroup
+            Show-ClagnosUiVmMenu -Vm $selectedVm[0]
+        }
     }
 }
 

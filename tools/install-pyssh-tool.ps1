@@ -217,7 +217,7 @@ if (-not (Test-Path -LiteralPath $clientPath)) {
     throw "Expected SSH client script is missing: $clientPath"
 }
 
-$envMap = Get-DotEnvMap -Path (Join-Path $RepoRoot ".env")
+$envMap = Get-DotEnvMap -Path (Join-Path $RepoRoot "clagnos.env")
 if ([string]::IsNullOrWhiteSpace([string]$TestUser)) {
     $TestUser = Get-MapValue -Map $envMap -Key "VM_ADMIN_USER" -DefaultValue ""
 }

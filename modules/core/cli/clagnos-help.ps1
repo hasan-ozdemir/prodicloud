@@ -32,7 +32,7 @@ function Show-ClagnosCommandHelpOverview {
         'Usage: clagnos <command> [--option value] [--option=value]'
         ''
         'Commands (full details: clagnos help <command>):'
-        '  configure  Open the interactive .env editor and validate saved settings safely.'
+        '  configure  Open the interactive global clagnos.env editor and validate saved settings safely.'
         '  create     Create a fresh managed resource group, network, and VM.'
         '  initialize Run vm-init tasks on one existing managed virtual computer.'
         '  update     Run non-package maintenance tasks on one existing managed VM.'
@@ -116,7 +116,7 @@ function Show-ClagnosCommandHelpDetailed {
             "  configure opens without az login; Azure-backed configure fields require az login to edit or verify."
             ''
             'Command reference:'
-            '  configure  : interactive .env editor with validation and next-create preview'
+            '  configure  : interactive global settings editor with validation and next-create preview'
             '  create     : fresh infrastructure and VM deployment flow'
             '  initialize : vm-init tasks for one existing managed VM'
             '  update     : non-package vm-update maintenance flow'
@@ -150,12 +150,12 @@ function Show-ClagnosCommandHelpDetailed {
         'configure' {
             Write-ClagnosHelpLines @(
                 'Command: configure'
-                'Description: open the interactive .env editor, validate field values safely, preview the next create naming plan, and save the updated .env contract.'
+                'Description: open the interactive global clagnos.env editor, validate global values, preview the next create naming plan, and save the supported global contract.'
                 'Usage:'
                 '  clagnos configure [--perf]'
                 'Examples:'
                 '  clagnos configure'
-                'Notes: configure is interactive-only. It edits supported .env keys in sections, uses pickers for every finite or discoverable multi-option field, validates before save, stages changes in memory until final confirmation, and shows a next-create preview before writing .env. configure opens without az login, but Azure-backed fields become read-only and advise running az login when Azure validation is unavailable. Blank-permitted fields recover softly, and save is blocked only when create-critical values remain unresolved.'
+                'Notes: configure is interactive-only and edits global clagnos.env keys. It stages edits until final confirmation and shows a next-create preview. VM-specific values remain in each <vm-name>.env profile. configure opens without az login; Azure-backed fields stay read-only until Azure validation is available.'
             )
             return
         }
@@ -177,7 +177,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos create --auto --windows --vm-name <vm-name> --vm-region <azure-region> --vm-size <vm-sku> -s <subscription-guid>'
                 '  clagnos initialize --group <resource-group> --vm-name <vm-name>'
                 'Allowed steps: configure, group, network, vm-deploy, vm-summary'
-                'Notes: create targets a fresh managed resource group, its initial network resources, and one fresh VM. It never reuses existing resource groups or names and stops after the read-only VM summary; run initialize for vm-init tasks and use package for catalogued software. Interactive mode prompts for Azure subscription when --subscription-id is omitted, asks for VM OS type first when --windows/--linux is omitted, proposes the next global gX name plus globally unique nX resource ids, and asks yes/no/cancel only before group creation and VM deployment. Auto mode runs from the fully resolved selection set: CLI overrides win, otherwise .env SELECTED_* values plus platform defaults must resolve platform, VM name, Azure region, and VM size. Use initialize and update for guest stages; use do for explicit lifecycle and repair actions. vm-summary always renders, even for partial step windows. For a destructive rebuild, run delete first and then create again.'
+                'Notes: create targets a fresh managed resource group, its initial network resources, and one fresh VM. It never reuses existing resource groups or names and stops after the read-only VM summary; run initialize for vm-init tasks and use package for catalogued software. Interactive mode prompts for Azure subscription when --subscription-id is omitted, asks for VM OS type first when --windows/--linux is omitted, proposes the next global gX name plus globally unique nX resource ids, and asks yes/no/cancel only before group creation and VM deployment. Auto mode resolves platform, name, region, and size from CLI overrides plus global DEFAULT_* create values. Resolved VM settings and credentials are stored in the matching <vm-name>.env profile. Use initialize and update for guest stages; use do for explicit lifecycle and repair actions. vm-summary always renders, even for partial step windows. For a destructive rebuild, run delete first and then create again.'
             )
             return
         }
@@ -189,7 +189,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos initialize [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--windows|--linux] [--auto] [--perf] [--reset-managed-user-passwords]'
                 'Examples:'
                 '  clagnos initialize --group <resource-group> --vm-name <vm-name>'
-                'Notes: initialize never creates Azure resources and runs only enabled vm-init tasks. Interactive mode prompts for Azure subscription when --subscription-id is omitted. Existing managed-user passwords are preserved by default. --reset-managed-user-passwords is interactive-only and requires typing RESET MANAGED USER PASSWORDS before the configured .env passwords are applied to both accounts.'
+                'Notes: initialize never creates Azure resources and runs only enabled vm-init tasks. Interactive mode prompts for Azure subscription when --subscription-id is omitted. Existing managed-user passwords are preserved by default. --reset-managed-user-passwords is interactive-only and requires typing RESET MANAGED USER PASSWORDS before that VC profile passwords are applied to both accounts.'
             )
             return
         }
@@ -209,7 +209,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos update --group <resource-group>'
                 '  clagnos update --auto -s <subscription-guid>'
                 '  clagnos update --auto --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
-                'Notes: update requires an existing managed resource group and VM. It does not create, redeploy, or initialize Azure resources; it runs enabled non-package vm-update maintenance tasks and then renders the read-only summary. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise .env SELECTED_RESOURCE_GROUP and SELECTED_VM_NAME are used, with single-VM resolution allowed when the selected managed group contains exactly one VM. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-package maintenance tasks. vm-summary always renders, even for partial step windows.'
+                'Notes: update requires an existing managed resource group and VM. It does not create, redeploy, or initialize Azure resources; it runs enabled non-package vm-update maintenance tasks and then renders the read-only summary. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise ACTIVE_VM_NAME selects the VC profile containing the target group and VM name. Single-VM resolution remains available for an explicitly selected managed group. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-package maintenance tasks. vm-summary always renders, even for partial step windows.'
             )
             return
         }
@@ -238,7 +238,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos show'
                 '  clagnos show --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
                 '  clagnos show --group <resource-group> --vm-name <vm-name> --export-json .\reports\vm.json'
-                'Notes: password-bearing .env values are redacted in rendered and exported reports. JSON export refuses to overwrite an existing file unless --overwrite is provided. When show can resolve exactly one managed VM target, it also prints a read-only target-derived configuration section using actual Azure state without writing .env. When the VM is running, nested virtualization is shown from guest validation evidence.'
+                'Notes: password-bearing VC profile values are redacted in rendered and exported reports. JSON export refuses to overwrite an existing file unless --overwrite is provided. When show can resolve exactly one managed VM target, it also prints a read-only target-derived configuration section using actual Azure state without writing either config file. When the VM is running, nested virtualization is shown from guest validation evidence.'
             )
             return
         }
@@ -301,7 +301,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos package --action status|install|repair|update|uninstall --catalog <builtin|custom> --package <package-id> --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
                 '  clagnos package --action setup-all --catalog all --group <resource-group> --vm-name <vm-name> [--windows|--linux] [--yes]'
                 '  clagnos package --action enable|disable --catalog <builtin|custom> --package <package-id> [--windows|--linux]'
-                '  Windows package transport: set PACKAGE_TRANSPORT=ssh or PACKAGE_TRANSPORT=winrm in .env. The selected transport is strict; failures do not fall back silently.'
+                '  Windows package transport: set PACKAGE_TRANSPORT=ssh or PACKAGE_TRANSPORT=winrm in the VC profile; DEFAULT_PACKAGE_TRANSPORT in clagnos.env seeds new VCs. The selected transport is strict; failures do not fall back silently.'
                 'Examples:'
                 '  clagnos package --action list --catalog builtin --group <resource-group> --vm-name <vm-name> --windows'
                 '  clagnos package --action install --catalog builtin --package visual-studio-code --group <resource-group> --vm-name <vm-name> --windows'
@@ -376,7 +376,7 @@ function Show-ClagnosCommandHelpDetailed {
         'set' {
             Write-ClagnosHelpLines @(
                 'Command: set'
-                'Description: apply hibernation changes and validate or store nested virtualization settings in .env.'
+                'Description: apply hibernation changes and validate or store nested virtualization intent in the selected VC profile.'
                 'Usage:'
                 '  clagnos set --group <resource-group> --vm-name <vm-name> --hibernation on|off [--subscription-id <subscription-id>]'
                 '  clagnos set --group <resource-group> --vm-name <vm-name> --nested-virtualization on|off [--subscription-id <subscription-id>]'
@@ -384,7 +384,7 @@ function Show-ClagnosCommandHelpDetailed {
                 'Examples:'
                 '  clagnos set --group <resource-group> --vm-name <vm-name> --hibernation off'
                 '  clagnos set --group <resource-group> --vm-name <vm-name> --nested-virtualization off'
-                'Notes: hibernation is changed through Azure. The nested-virtualization option stores Clagnos intent in .env because this workflow has no separate per-VM Azure hardware-exposure toggle. Turning it on requires a running VM and validates guest CPU virtualization extensions; it does not install or configure Hyper-V inside the guest.'
+                'Notes: hibernation is changed through Azure. The nested-virtualization option stores Clagnos intent in the selected <vm-name>.env profile because this workflow has no separate per-VM Azure hardware-exposure toggle. Turning it on requires a running VM and validates guest CPU virtualization extensions; it does not install or configure Hyper-V inside the guest.'
             )
             return
         }

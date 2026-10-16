@@ -14,7 +14,9 @@ function Invoke-ClagnosInitializeCommand {
     }
     $runtime = New-ClagnosUpdateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode
     if ($resetManagedUserPasswords) {
-        $confirmation = Read-Host 'This will reset the manager and assistant passwords to the values in .env. Type RESET MANAGED USER PASSWORDS to continue'
+        $profileName = [string]$runtime.InitialConfigOverrides['SELECTED_VM_NAME']
+        if ([string]::IsNullOrWhiteSpace([string]$profileName)) { $profileName = 'the selected VC' }
+        $confirmation = Read-Host ("This will reset the manager and assistant passwords to the values in {0}.env. Type RESET MANAGED USER PASSWORDS to continue" -f $profileName)
         if (-not [string]::Equals([string]$confirmation,'RESET MANAGED USER PASSWORDS',[System.StringComparison]::Ordinal)) {
             Write-Host 'Managed-user password reset canceled; no guest task was run.' -ForegroundColor Yellow
             return

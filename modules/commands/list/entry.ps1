@@ -6,7 +6,7 @@ function Invoke-ClagnosListCommand {
     )
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $requestedTypes = @(Resolve-ClagnosListRequestedTypes -Options $Options)
     $managedGroupRows = @()

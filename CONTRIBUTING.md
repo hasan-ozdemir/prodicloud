@@ -27,7 +27,7 @@
 
 - Update docs and tests in the same change when the contract changes.
 - Update `CHANGELOG.md` and `release-notes.md` in the same final change set for shipped behavior, docs, workflow, or configuration changes.
-- Keep `.env.example` current when the committed configuration contract changes.
+- Keep `clagnos.env.example` and `vc.env.example` current when the global or per-VC configuration contract changes.
 - Keep `docs/prompt-history.md` aligned when the delivered repo change came from a maintainer-directed prompt workflow.
 
 ## Validation

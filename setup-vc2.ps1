@@ -9,10 +9,10 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $script:SetupRepoRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path
-$script:SetupEnvPath = Join-Path $script:SetupRepoRoot '.env'
+$script:SetupGlobalEnvPath = Join-Path $script:SetupRepoRoot 'clagnos.env'
+$script:SetupVmEnvPath = Join-Path $script:SetupRepoRoot 'vc2.env'
 $script:SetupLauncherPath = Join-Path $script:SetupRepoRoot 'cg.cmd'
-$script:SetupOriginalEnvBytes = $null
-$script:SetupEnvWasOverridden = $false
+$script:SetupTemporaryEnvValues = @{}
 $script:SetupSubscriptionId = ''
 $script:SetupResourceGroup = ''
 $script:SetupDidPushLocation = $false
@@ -26,11 +26,47 @@ function Write-SetupDoing {
     Write-Host ("Doing: {0}" -f $Action) -ForegroundColor Cyan
 }
 
+function Get-SetupEnvPathForKey {
+    param([Parameter(Mandatory = $true)][string]$Key)
+    if ($Key -eq 'SELECTED_AZURE_SUBSCRIPTION_ID' -or $Key -like 'DEFAULT_*' -or $Key -in @('RESOURCE_GROUP_TEMPLATE','VNET_NAME_TEMPLATE','SUBNET_NAME_TEMPLATE','NSG_NAME_TEMPLATE','NSG_RULE_NAME_TEMPLATE','PUBLIC_IP_NAME_TEMPLATE','NIC_NAME_TEMPLATE','VM_DISK_NAME_TEMPLATE','AZURE_COMMAND_TIMEOUT_SECONDS','SSH_CONNECT_TIMEOUT_SECONDS','SSH_TASK_TIMEOUT_SECONDS','VM_TASK_OUTCOME_MODE','SSH_MAX_RETRIES','PYSSH_CLIENT_PATH','VM_PRICE_COUNT_HOURS') -or $Key -like 'SELECTED_COMPANY_*' -or $Key -like 'SELECTED_EMPLOYEE_*' -or $Key -like 'WIN_PUBLIC_SHORTCUT_*') {
+        return $script:SetupGlobalEnvPath
+    }
+    return $script:SetupVmEnvPath
+}
+
 function Get-SetupEnvValue {
     param([Parameter(Mandatory = $true)][string]$Key)
-    $text = [System.IO.File]::ReadAllText($script:SetupEnvPath)
+    $path = Get-SetupEnvPathForKey -Key $Key
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return '' }
+    $text = [System.IO.File]::ReadAllText($path)
     $match = [regex]::Match($text, '(?m)^\s*' + [regex]::Escape($Key) + '\s*=(.*)$')
-    if (-not $match.Success) { return '' }
+    if (-not $match.Success) {
+        $defaultKey = switch -Exact ($Key) {
+            'SELECTED_VM_OS' { 'DEFAULT_VM_OS' }
+            'SELECTED_AZURE_REGION' { 'DEFAULT_AZURE_REGION' }
+            'VM_STORAGE_SKU' { 'DEFAULT_VM_STORAGE_SKU' }
+            'VM_SECURITY_TYPE' { 'DEFAULT_VM_SECURITY_TYPE' }
+            'VM_ENABLE_HIBERNATION' { 'DEFAULT_VM_ENABLE_HIBERNATION' }
+            'VM_ENABLE_NESTED_VIRTUALIZATION' { 'DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION' }
+            'VM_ENABLE_SECURE_BOOT' { 'DEFAULT_VM_ENABLE_SECURE_BOOT' }
+            'VM_ENABLE_VTPM' { 'DEFAULT_VM_ENABLE_VTPM' }
+            'VM_ADMIN_USER' { 'DEFAULT_VM_ADMIN_USER' }
+            'VM_ASSISTANT_USER' { 'DEFAULT_VM_ASSISTANT_USER' }
+            'VM_SSH_PORT' { 'DEFAULT_VM_SSH_PORT' }
+            'VM_RDP_PORT' { 'DEFAULT_VM_RDP_PORT' }
+            'TCP_PORTS' { 'DEFAULT_TCP_PORTS' }
+            'PACKAGE_TRANSPORT' { 'DEFAULT_PACKAGE_TRANSPORT' }
+            'WIN_VM_IMAGE' { 'DEFAULT_WIN_VM_IMAGE' }
+            'WIN_VM_SIZE' { 'DEFAULT_WIN_VM_SIZE' }
+            'WIN_VM_DISK_SIZE_GB' { 'DEFAULT_WIN_VM_DISK_SIZE_GB' }
+            'LIN_VM_IMAGE' { 'DEFAULT_LIN_VM_IMAGE' }
+            'LIN_VM_SIZE' { 'DEFAULT_LIN_VM_SIZE' }
+            'LIN_VM_DISK_SIZE_GB' { 'DEFAULT_LIN_VM_DISK_SIZE_GB' }
+            default { '' }
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$defaultKey)) { return (Get-SetupEnvValue -Key $defaultKey) }
+        return ''
+    }
     $value = [string]$match.Groups[1].Value.Trim()
     if ($value.Length -ge 2 -and (($value[0] -eq '"' -and $value[$value.Length - 1] -eq '"') -or ($value[0] -eq "'" -and $value[$value.Length - 1] -eq "'"))) {
         $value = $value.Substring(1, $value.Length - 2)
@@ -38,35 +74,47 @@ function Get-SetupEnvValue {
     return $value
 }
 
-function Set-SetupTemporaryEnvValues {
-    param([Parameter(Mandatory = $true)][hashtable]$Values)
-    if ($null -eq $script:SetupOriginalEnvBytes) {
-        $script:SetupOriginalEnvBytes = [System.IO.File]::ReadAllBytes($script:SetupEnvPath)
+function Set-SetupEnvValue {
+    param([Parameter(Mandatory = $true)][string]$Key,[AllowEmptyString()][string]$Value)
+    $path = Get-SetupEnvPathForKey -Key $Key
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        if ($path -eq $script:SetupVmEnvPath) {
+            $template = Join-Path $script:SetupRepoRoot 'vc.env.example'
+            if (-not (Test-Path -LiteralPath $template -PathType Leaf)) { throw 'vc.env.example was not found.' }
+            Copy-Item -LiteralPath $template -Destination $path -ErrorAction Stop
+        }
+        else { throw ("Required local configuration file was not found: {0}" -f $path) }
     }
-    $text = [System.IO.File]::ReadAllText($script:SetupEnvPath)
+    $text = [System.IO.File]::ReadAllText($path)
     $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
     $lines = [System.Collections.Generic.List[string]]::new()
     foreach ($line in @([regex]::Split($text, "\r\n|\n|\r"))) { $lines.Add([string]$line) }
-    foreach ($key in @($Values.Keys)) {
-        $pattern = '^\s*' + [regex]::Escape([string]$key) + '\s*=.*$'
-        $found = $false
-        for ($index = 0; $index -lt $lines.Count; $index++) {
-            if ($lines[$index] -match $pattern) {
-                $lines[$index] = ('{0}={1}' -f [string]$key,[string]$Values[$key])
-                $found = $true
-            }
+    $pattern = '^\s*' + [regex]::Escape($Key) + '\s*=.*$'
+    $found = $false
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -match $pattern) {
+            $lines[$index] = ('{0}={1}' -f $Key,$Value)
+            $found = $true
         }
-        if (-not $found) { $lines.Add(('{0}={1}' -f [string]$key,[string]$Values[$key])) }
     }
-    [System.IO.File]::WriteAllText($script:SetupEnvPath,($lines -join $newline),[System.Text.UTF8Encoding]::new($false))
-    $script:SetupEnvWasOverridden = $true
+    if (-not $found) { $lines.Add(('{0}={1}' -f $Key,$Value)) }
+    [System.IO.File]::WriteAllText($path,($lines -join $newline),[System.Text.UTF8Encoding]::new($false))
+}
+
+function Set-SetupTemporaryEnvValues {
+    param([Parameter(Mandatory = $true)][hashtable]$Values)
+    foreach ($key in @($Values.Keys)) {
+        $name = [string]$key
+        if (-not $script:SetupTemporaryEnvValues.ContainsKey($name)) { $script:SetupTemporaryEnvValues[$name] = [string](Get-SetupEnvValue -Key $name) }
+        Set-SetupEnvValue -Key $name -Value ([string]$Values[$key])
+    }
 }
 
 function Restore-SetupOriginalEnv {
-    if ($script:SetupEnvWasOverridden -and $null -ne $script:SetupOriginalEnvBytes) {
-        Write-SetupDoing 'restore the original local .env file exactly'
-        [System.IO.File]::WriteAllBytes($script:SetupEnvPath,$script:SetupOriginalEnvBytes)
-        $script:SetupEnvWasOverridden = $false
+    if (@($script:SetupTemporaryEnvValues.Keys).Count -gt 0) {
+        Write-SetupDoing 'restore temporary VC setting overrides'
+        foreach ($key in @($script:SetupTemporaryEnvValues.Keys)) { Set-SetupEnvValue -Key ([string]$key) -Value ([string]$script:SetupTemporaryEnvValues[$key]) }
+        $script:SetupTemporaryEnvValues = @{}
     }
 }
 
@@ -198,7 +246,7 @@ function Stage-SetupAnyDeskInstaller {
     if ([string]::IsNullOrWhiteSpace($connectionHost)) { throw "Azure did not return an FQDN or public IP for VM 'vc2' WinRM staging." }
     $managerUser = (Get-SetupEnvValue -Key 'VM_ADMIN_USER').Trim()
     $managerPassword = Get-SetupEnvValue -Key 'VM_ADMIN_PASS'
-    if ([string]::IsNullOrWhiteSpace($managerUser) -or [string]::IsNullOrWhiteSpace($managerPassword)) { throw 'WinRM staging requires the configured manager credential in local .env.' }
+    if ([string]::IsNullOrWhiteSpace($managerUser) -or [string]::IsNullOrWhiteSpace($managerPassword)) { throw "WinRM staging requires the manager credential in local 'vc2.env'." }
     if (Get-Command Add-ClagnosPackageTrustedHost -ErrorAction SilentlyContinue) { Add-ClagnosPackageTrustedHost -HostName $connectionHost }
     $connectionRuntime = [pscustomobject]@{
         ConnectionHost = $connectionHost
@@ -305,7 +353,6 @@ function Invoke-SetupConnectionChecks {
 function Invoke-SetupCreate {
     param([switch]$ConfigureOnly)
     $config = @{
-        SELECTED_AZURE_SUBSCRIPTION_ID = $script:SetupSubscriptionId
         SELECTED_VM_OS = 'windows'
         SELECTED_VM_NAME = 'vc2'
         SELECTED_RESOURCE_GROUP = ''
@@ -315,21 +362,25 @@ function Invoke-SetupCreate {
         VM_ENABLE_HIBERNATION = 'true'
         VM_ENABLE_NESTED_VIRTUALIZATION = 'false'
     }
-    Set-SetupTemporaryEnvValues -Values $config
-    try {
-        $createArgs = @('create','--auto','--windows','--vm-name','vc2','--vm-region','germanywestcentral','--vm-size','Standard_B2s_v2','--subscription-id',$script:SetupSubscriptionId)
-        if ($ConfigureOnly) { $createArgs += @('--step','configure') }
-        $action = if ($ConfigureOnly) { "run read-only create configuration preflight for VM 'vc2'" } else { "create fresh managed VM 'vc2' with its default Windows image, 160 GB disk, and hibernation enabled" }
-        if (-not $ConfigureOnly) {
-            Write-Host 'Nested virtualization is disabled for this VM because Standard_B2s_v2 does not expose the required guest CPU virtualization extensions.' -ForegroundColor Yellow
-        }
-        Invoke-SetupCg -Arguments $createArgs -Action $action
+    foreach ($key in @($config.Keys)) { Set-SetupEnvValue -Key ([string]$key) -Value ([string]$config[$key]) }
+    Set-SetupEnvValue -Key 'SELECTED_VM_NAME' -Value 'vc2'
+    $createArgs = @('create','--auto','--windows','--vm-name','vc2','--vm-region','germanywestcentral','--vm-size','Standard_B2s_v2','--subscription-id',$script:SetupSubscriptionId)
+    if ($ConfigureOnly) { $createArgs += @('--step','configure') }
+    $action = if ($ConfigureOnly) { "run read-only create configuration preflight for VM 'vc2'" } else { "create fresh managed VM 'vc2' with its default Windows image, 160 GB disk, and hibernation enabled" }
+    if (-not $ConfigureOnly) {
+        Write-Host 'Nested virtualization is disabled for this VM because Standard_B2s_v2 does not expose the required guest CPU virtualization extensions.' -ForegroundColor Yellow
     }
-    finally { Restore-SetupOriginalEnv }
+    Invoke-SetupCg -Arguments $createArgs -Action $action
 }
 
 try {
-    if (-not (Test-Path -LiteralPath $script:SetupEnvPath -PathType Leaf)) { throw "Local .env was not found. Run cg.cmd configure and select an Azure subscription before setup." }
+    if (-not (Test-Path -LiteralPath $script:SetupGlobalEnvPath -PathType Leaf)) { throw "Local clagnos.env was not found. Run cg.cmd configure and select an Azure subscription before setup." }
+    if (-not (Test-Path -LiteralPath $script:SetupVmEnvPath -PathType Leaf)) {
+        $vmTemplate = Join-Path $script:SetupRepoRoot 'vc.env.example'
+        if (-not (Test-Path -LiteralPath $vmTemplate -PathType Leaf)) { throw 'vc.env.example was not found.' }
+        Copy-Item -LiteralPath $vmTemplate -Destination $script:SetupVmEnvPath -ErrorAction Stop
+        Set-SetupEnvValue -Key 'SELECTED_VM_NAME' -Value 'vc2'
+    }
     if (-not (Test-Path -LiteralPath $script:SetupLauncherPath -PathType Leaf)) { throw "cg.cmd was not found at the repository root." }
     Push-Location $script:SetupRepoRoot
     $script:SetupDidPushLocation = $true
@@ -338,7 +389,7 @@ try {
     Write-Host ("Setup transcript: {0}" -f $script:SetupTranscriptPath) -ForegroundColor DarkGray
 
     $script:SetupSubscriptionId = if (-not [string]::IsNullOrWhiteSpace($SubscriptionId)) { $SubscriptionId.Trim() } else { (Get-SetupEnvValue -Key 'SELECTED_AZURE_SUBSCRIPTION_ID').Trim() }
-    if ([string]::IsNullOrWhiteSpace($script:SetupSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in .env or pass -SubscriptionId.' }
+    if ([string]::IsNullOrWhiteSpace($script:SetupSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in clagnos.env or pass -SubscriptionId.' }
     $account = Invoke-SetupAzJson -Arguments @('account','show','--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action 'verify Azure CLI authentication and selected subscription'
     if (-not [string]::Equals([string]$account.name,'az2vs',[System.StringComparison]::OrdinalIgnoreCase)) {
         throw ("The selected subscription is '{0}'; this setup requires the 'az2vs' subscription." -f [string]$account.name)
@@ -351,7 +402,7 @@ try {
     $target = Get-SetupManagedVc2
     if ($PreflightOnly) {
         if ($null -eq $target) {
-            if ([string]::IsNullOrWhiteSpace((Get-SetupEnvValue -Key 'WIN_VM_IMAGE'))) { throw 'WIN_VM_IMAGE is empty; select a Windows image in .env before running the preflight.' }
+            if ([string]::IsNullOrWhiteSpace((Get-SetupEnvValue -Key 'WIN_VM_IMAGE'))) { throw 'WIN_VM_IMAGE is empty; select a Windows image in clagnos.env before running the preflight.' }
             Invoke-SetupCreate -ConfigureOnly
         }
         else {
@@ -363,7 +414,7 @@ try {
 
     if ($null -eq $target -and $ResumeAtPackageStage) { throw '-ResumeAtPackageStage requires an existing Clagnos-managed VM named vc2; no resources were created.' }
     if ($null -eq $target) {
-        if ([string]::IsNullOrWhiteSpace((Get-SetupEnvValue -Key 'WIN_VM_IMAGE'))) { throw 'WIN_VM_IMAGE is empty; select a Windows image in .env before creating vc2.' }
+        if ([string]::IsNullOrWhiteSpace((Get-SetupEnvValue -Key 'WIN_VM_IMAGE'))) { throw 'WIN_VM_IMAGE is empty; select a Windows image in clagnos.env before creating vc2.' }
         Invoke-SetupCreate
         $target = Get-SetupManagedVc2
         if ($null -eq $target) { throw "The create command completed but Azure inventory did not find managed VM 'vc2'." }

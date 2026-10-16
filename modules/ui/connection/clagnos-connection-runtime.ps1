@@ -59,7 +59,7 @@ function Resolve-ClagnosConnectionPortText {
             -Detail ("Config value '{0}' is invalid for {1}: '{2}'." -f $Key, $Label, $rawValue) `
             -Code 66 `
             -Summary ("{0} port is invalid." -f $Label) `
-            -Hint ("Set {0} to a numeric TCP port value in .env." -f $Key)
+            -Hint ("Set {0} to a numeric TCP port value in the selected <vm-name>.env profile." -f $Key)
     }
 
     return $portText
@@ -194,7 +194,7 @@ function Initialize-ClagnosConnectionCommandContext {
     }
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName $OperationName
     $lifecycleWaitResult = Wait-ClagnosProvisioningReadyOrRepair -ResourceGroup ([string]$target.ResourceGroup) -VmName ([string]$target.VmName)
@@ -290,7 +290,7 @@ function Resolve-ClagnosConnectionPortNumber {
             -Detail ("{0} port value '{1}' is invalid." -f [string]$PortLabel, [string]$PortText) `
             -Code 66 `
             -Summary ("{0} port configuration is invalid." -f [string]$PortLabel) `
-            -Hint ("Set a valid {0} port in .env and retry." -f [string]$PortLabel)
+            -Hint ("Set a valid {0} port in the selected <vm-name>.env profile and retry." -f [string]$PortLabel)
     }
 
     return [int]$resolvedPort

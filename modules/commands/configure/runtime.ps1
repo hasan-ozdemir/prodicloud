@@ -77,7 +77,7 @@ function Resolve-ClagnosConfigureMarketplaceImage {
             -Detail ("VM '{0}' in resource group '{1}' does not expose a marketplace image reference." -f [string]$VmName, [string]$ResourceGroup) `
             -Code 66 `
             -Summary 'Configure command could not persist VM image.' `
-            -Hint 'Use a VM created from an exact marketplace image, or set the platform image manually in .env.'
+            -Hint 'Use a VM created from an exact marketplace image, or set the platform image manually in clagnos.env.'
     }
 
     $imageReference = $VmObject.storageProfile.imageReference
@@ -93,7 +93,7 @@ function Resolve-ClagnosConfigureMarketplaceImage {
             -Detail ("VM '{0}' in resource group '{1}' is not backed by an exact marketplace image reference." -f [string]$VmName, [string]$ResourceGroup) `
             -Code 66 `
             -Summary 'Configure command could not persist VM image.' `
-            -Hint 'Use a VM created from an exact marketplace image, or update the platform image keys manually in .env.'
+            -Hint 'Use a VM created from an exact marketplace image, or update the platform image keys manually in clagnos.env.'
     }
 
     return ("{0}:{1}:{2}:{3}" -f $publisher.Trim(), $offer.Trim(), $sku.Trim(), $version.Trim())
@@ -476,6 +476,10 @@ function Save-ClagnosConfigToDotEnv {
         [hashtable]$ClearReasonMap = @{}
     )
 
+    $vmName = if ($PersistMap -and $PersistMap.ContainsKey('SELECTED_VM_NAME')) { [string]$PersistMap['SELECTED_VM_NAME'] } else { '' }
+    if ([string]::IsNullOrWhiteSpace([string]$vmName) -and $ConfigBefore -and $ConfigBefore.ContainsKey('SELECTED_VM_NAME')) { $vmName = [string]$ConfigBefore['SELECTED_VM_NAME'] }
+    if ([string]::IsNullOrWhiteSpace([string]$vmName) -and $script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_VM_NAME')) { $vmName = [string]$script:ConfigOverrides['SELECTED_VM_NAME'] }
+
     $before = @{}
     if ($ConfigBefore) {
         foreach ($key in @($ConfigBefore.Keys)) {
@@ -500,7 +504,7 @@ function Save-ClagnosConfigToDotEnv {
             continue
         }
 
-        Set-DotEnvValue -Path $EnvFilePath -Key $name -Value $newValue
+        Set-DotEnvValue -Path $EnvFilePath -Key $name -Value $newValue -VmName $vmName
         $changeKind = if ([string]::IsNullOrWhiteSpace([string]$newValue)) { 'cleared' } else { 'updated' }
         $reason = ''
         if ($ClearReasonMap -and $ClearReasonMap.ContainsKey($name)) {
@@ -517,6 +521,7 @@ function Save-ClagnosConfigToDotEnv {
     }
 
     Remove-ClagnosUnsupportedDotEnvKeys -Path $EnvFilePath
+    if (-not [string]::IsNullOrWhiteSpace([string]$vmName)) { Remove-ClagnosUnsupportedDotEnvKeys -Path (Get-ClagnosVmEnvPath -VmName $vmName) }
 
     return @($changes)
 }

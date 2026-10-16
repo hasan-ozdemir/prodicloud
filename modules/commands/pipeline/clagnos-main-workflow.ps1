@@ -172,7 +172,7 @@ function Invoke-ClagnosPersistPendingSelections {
 
     Save-ClagnosStep1ContextPersistenceMap -EnvFilePath $EnvFilePath -PersistMap $pendingMap
     $Context['PendingEnvUpdates'] = [ordered]@{}
-    Write-Host "Saved selected configuration values to .env." -ForegroundColor Green
+    Write-Host "Saved VC settings to the selected <vm-name>.env profile and global settings to clagnos.env." -ForegroundColor Green
 }
 
 function Get-ClagnosWorkflowSummaryReadbackScriptPath {

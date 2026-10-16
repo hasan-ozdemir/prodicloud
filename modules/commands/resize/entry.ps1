@@ -17,7 +17,7 @@ function Invoke-ClagnosResizeCommand {
     }
 
     $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot '.env'
+    $envFilePath = Join-Path $repoRoot 'clagnos.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
     $operationRequest = Resolve-ClagnosResizeOperationRequest -Options $Options
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'resize'

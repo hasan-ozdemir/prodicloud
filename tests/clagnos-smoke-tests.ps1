@@ -562,57 +562,51 @@ Invoke-Test -Name "Platform task catalog keys stay platform-specific" -Action {
     Assert-True -Condition ([string](Get-ConfigValue -Config $config -Key $linUpdateKey -DefaultValue '') -eq 'vm-update/linux') -Message "Linux update catalog path lookup failed."
 }
 
-Invoke-Test -Name ".env.example runtime contract" -Action {
-    $envExamplePath = Join-Path $RepoRoot '.env.example'
-    Assert-True -Condition (Test-Path -LiteralPath $envExamplePath) -Message ".env.example was not found."
+Invoke-Test -Name "global and VC environment profile contracts" -Action {
+    $globalExamplePath = Join-Path $RepoRoot 'clagnos.env.example'
+    $vmExamplePath = Join-Path $RepoRoot 'vc.env.example'
+    Assert-True -Condition (Test-Path -LiteralPath $globalExamplePath) -Message 'clagnos.env.example was not found.'
+    Assert-True -Condition (Test-Path -LiteralPath $vmExamplePath) -Message 'vc.env.example was not found.'
 
-    $envExampleKeys = @(Get-Content $envExamplePath | Where-Object { $_ -match '^[A-Za-z0-9_]+=' } | ForEach-Object { ($_ -split '=', 2)[0] })
-    $requiredKeys = @(
-        'SELECTED_VM_OS','SELECTED_VM_NAME','SELECTED_RESOURCE_GROUP','SELECTED_COMPANY_NAME','SELECTED_COMPANY_WEB_ADDRESS','SELECTED_COMPANY_EMAIL_ADDRESS','SELECTED_EMPLOYEE_EMAIL_ADDRESS','SELECTED_EMPLOYEE_FULL_NAME','SELECTED_AZURE_SUBSCRIPTION_ID','SELECTED_AZURE_REGION',
-        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_LINKEDIN_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_YOUTUBE_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_GITHUB_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_TIKTOK_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_INSTAGRAM_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_FACEBOOK_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_X_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_SNAPCHAT_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_NEXTSOSYAL_URL',
-        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_LINKEDIN_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_YOUTUBE_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_GITHUB_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_TIKTOK_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_INSTAGRAM_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_FACEBOOK_URL','WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_X_URL',
-        'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_HOME_URL','WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_BLOG_URL',
-        'RESOURCE_GROUP_TEMPLATE','VNET_NAME_TEMPLATE','SUBNET_NAME_TEMPLATE','NSG_NAME_TEMPLATE','NSG_RULE_NAME_TEMPLATE','PUBLIC_IP_NAME_TEMPLATE','NIC_NAME_TEMPLATE','VM_DISK_NAME_TEMPLATE',
-        'VM_STORAGE_SKU','VM_SECURITY_TYPE','VM_ENABLE_HIBERNATION','VM_ENABLE_NESTED_VIRTUALIZATION','VM_ENABLE_SECURE_BOOT','VM_ENABLE_VTPM','VM_PRICE_COUNT_HOURS','VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','VM_SSH_PORT','VM_RDP_PORT',
-        'AZURE_COMMAND_TIMEOUT_SECONDS','SSH_CONNECT_TIMEOUT_SECONDS','SSH_TASK_TIMEOUT_SECONDS',
-        'WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB','LIN_VM_IMAGE','LIN_VM_SIZE','LIN_VM_DISK_SIZE_GB',
-        'WIN_VM_INIT_TASK_DIR','WIN_VM_UPDATE_TASK_DIR','LIN_VM_INIT_TASK_DIR','LIN_VM_UPDATE_TASK_DIR',
-        'VM_TASK_OUTCOME_MODE','SSH_MAX_RETRIES','PACKAGE_TRANSPORT','PYSSH_CLIENT_PATH','TCP_PORTS'
-    )
-
-    foreach ($requiredKey in $requiredKeys) {
-        Assert-True -Condition ($envExampleKeys -contains $requiredKey) -Message (".env.example is missing required key '{0}'." -f $requiredKey)
+    $globalKeys = @(Get-Content $globalExamplePath | Where-Object { $_ -match '^[A-Za-z0-9_]+=' } | ForEach-Object { ($_ -split '=', 2)[0] })
+    $vmKeys = @(Get-Content $vmExamplePath | Where-Object { $_ -match '^[A-Za-z0-9_]+=' } | ForEach-Object { ($_ -split '=', 2)[0] })
+    foreach ($key in @('ACTIVE_VM_NAME','SELECTED_AZURE_SUBSCRIPTION_ID','DEFAULT_VM_OS','DEFAULT_AZURE_REGION','DEFAULT_VM_ADMIN_USER','DEFAULT_VM_ASSISTANT_USER','DEFAULT_WIN_VM_IMAGE','DEFAULT_WIN_VM_SIZE','DEFAULT_TCP_PORTS','RESOURCE_GROUP_TEMPLATE','AZURE_COMMAND_TIMEOUT_SECONDS','PYSSH_CLIENT_PATH')) {
+        Assert-True -Condition ($globalKeys -contains $key) -Message ("clagnos.env.example is missing global key '{0}'." -f $key)
     }
+    foreach ($key in @('SELECTED_VM_NAME','SELECTED_RESOURCE_GROUP','SELECTED_VM_OS','SELECTED_AZURE_REGION','VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','VM_ENABLE_HIBERNATION','VM_ENABLE_NESTED_VIRTUALIZATION','VM_SSH_PORT','VM_RDP_PORT','PACKAGE_TRANSPORT','WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB')) {
+        Assert-True -Condition ($vmKeys -contains $key) -Message ("vc.env.example is missing VC key '{0}'." -f $key)
+    }
+    Assert-True -Condition ((Get-ClagnosSupportedDotEnvKeys) -contains 'SELECTED_AZURE_SUBSCRIPTION_ID') -Message 'Global settings must include the Azure subscription selector.'
+    Assert-True -Condition ((Get-ClagnosSupportedVmEnvKeys) -contains 'VM_ADMIN_PASS') -Message 'VC credentials must be part of the per-VC config contract.'
+    $globalText = Get-Content -LiteralPath $globalExamplePath -Raw
+    $vmText = Get-Content -LiteralPath $vmExamplePath -Raw
+    Assert-True -Condition ($vmText -match [regex]::Escape('VM_ADMIN_PASS=<CHANGE_ME_STRONG_ADMIN_PASSWORD>')) -Message 'The VC example must keep a safe admin password placeholder.'
+    Assert-True -Condition ($globalText -match [regex]::Escape('NSG_RULE_NAME_TEMPLATE=nsg-rule-{SELECTED_VM_NAME}-{REGION_CODE}-n{N}')) -Message 'The global example must preserve managed resource naming.'
+    Assert-True -Condition ($globalText -match [regex]::Escape('SELECTED_COMPANY_WEB_ADDRESS=<https-url>')) -Message 'The global example must keep the company URL as a placeholder.'
 
-    $legacyInitTaskDirKey = (@('VM','INIT','TASK','DIR') -join '_')
-    $legacyUpdateTaskDirKey = (@('VM','UPDATE','TASK','DIR') -join '_')
-    $legacySshPortKey = (@('SSH','PORT') -join '_')
-    Assert-True -Condition (-not ($envExampleKeys -contains $legacyInitTaskDirKey)) -Message ".env.example must not contain the legacy generic init task dir key."
-    Assert-True -Condition (-not ($envExampleKeys -contains $legacyUpdateTaskDirKey)) -Message ".env.example must not contain the legacy generic update task dir key."
-    Assert-True -Condition (-not ($envExampleKeys -contains $legacySshPortKey)) -Message ".env.example must not contain the legacy SSH_PORT key."
-
-    $envExampleText = Get-Content -LiteralPath $envExamplePath -Raw
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('VM_ADMIN_PASS=<CHANGE_ME_STRONG_ADMIN_PASSWORD>')) -Message '.env.example must keep the admin password as a placeholder.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('VM_ASSISTANT_PASS=<CHANGE_ME_STRONG_ASSISTANT_PASSWORD>')) -Message '.env.example must keep the assistant password as a placeholder.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_* values are the committed active-selection contract.')) -Message '.env.example must document the selected-only contract.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_RESOURCE_GROUP=')) -Message '.env.example must expose SELECTED_RESOURCE_GROUP.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('VM_ENABLE_HIBERNATION=true')) -Message '.env.example must expose VM_ENABLE_HIBERNATION as a shared feature toggle.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('VM_ENABLE_NESTED_VIRTUALIZATION=true')) -Message '.env.example must expose VM_ENABLE_NESTED_VIRTUALIZATION as a shared feature toggle.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('NSG_RULE_NAME_TEMPLATE=nsg-rule-{SELECTED_VM_NAME}-{REGION_CODE}-n{N}')) -Message '.env.example must keep the nsg-rule naming prefix on the selected VM placeholder.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('PYSSH_CLIENT_PATH=tools/pyssh/ssh_client.py')) -Message '.env.example must keep a non-empty repo-relative PYSSH client default.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_COMPANY_NAME controls the default Google Chrome profile directory for repo-managed Windows business web shortcuts.')) -Message '.env.example must document SELECTED_COMPANY_NAME for the Windows business public desktop shortcut flow.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('Repo-managed Chrome profile-directory values are normalized to lowercase.')) -Message '.env.example must document lowercase Chrome profile-directory normalization.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('# Optional Windows Public Desktop social/web URL overrides.')) -Message '.env.example must document the optional Windows social/web override block.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_LINKEDIN_URL=')) -Message '.env.example must expose the business LinkedIn shortcut override key.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_X_URL=')) -Message '.env.example must expose the personal X shortcut override key.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_HOME_URL=')) -Message '.env.example must expose the business home shortcut override key.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_COMPANY_WEB_ADDRESS=<https-url>')) -Message '.env.example must keep the committed SELECTED_COMPANY_WEB_ADDRESS default.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_COMPANY_EMAIL_ADDRESS=<email>')) -Message '.env.example must keep the committed SELECTED_COMPANY_EMAIL_ADDRESS default.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_EMPLOYEE_EMAIL_ADDRESS=<email>')) -Message '.env.example must keep the committed SELECTED_EMPLOYEE_EMAIL_ADDRESS default.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('SELECTED_EMPLOYEE_FULL_NAME=<person-name>')) -Message '.env.example must keep the committed SELECTED_EMPLOYEE_FULL_NAME default.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('VM_PRICE_COUNT_HOURS=730')) -Message '.env.example must expose VM_PRICE_COUNT_HOURS.'
-    Assert-True -Condition ($envExampleText -match [regex]::Escape('AZURE_COMMAND_TIMEOUT_SECONDS=1800')) -Message '.env.example must expose AZURE_COMMAND_TIMEOUT_SECONDS.'
-    Assert-True -Condition (-not ($envExampleText -match [regex]::Escape('<runtime-secret>'))) -Message '.env.example must not keep the old committed assistant password.'
+    $sandbox = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-env-profile-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
+    try {
+        $globalPath = Join-Path $sandbox 'clagnos.env'
+        $profilePath = Join-Path $sandbox 'vc1.env'
+        Set-Content -LiteralPath $globalPath -Value @('SELECTED_AZURE_SUBSCRIPTION_ID=subscription-test','DEFAULT_PACKAGE_TRANSPORT=ssh','RESOURCE_GROUP_TEMPLATE=rg-{SELECTED_VM_NAME}-{REGION_CODE}-g{N}') -Encoding ASCII
+        Set-Content -LiteralPath $profilePath -Value @('SELECTED_VM_NAME=vc1','SELECTED_RESOURCE_GROUP=rg-vc1','SELECTED_VM_OS=windows','SELECTED_AZURE_REGION=eastus','VM_ADMIN_USER=manager','VM_ADMIN_PASS=placeholder','PACKAGE_TRANSPORT=winrm') -Encoding ASCII
+        $globalMap = Read-DotEnvFile -Path $globalPath -GlobalOnly
+        $effective = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalMap -VmName 'vc1' -VmEnvRoot $sandbox -RequireProfile
+        Assert-True -Condition ([string]$effective.SELECTED_AZURE_SUBSCRIPTION_ID -eq 'subscription-test') -Message 'Effective VC config must inherit the global subscription.'
+        Assert-True -Condition ([string]$effective.SELECTED_RESOURCE_GROUP -eq 'rg-vc1') -Message 'Effective VC config must load the selected VM resource group.'
+        Assert-True -Condition ([string]$effective.PACKAGE_TRANSPORT -eq 'winrm') -Message 'The VC transport must override the global create default.'
+        Set-DotEnvValue -Path $globalPath -Key 'VM_ADMIN_USER' -Value 'updated-manager' -VmName 'vc1'
+        $savedProfile = Read-DotEnvFile -Path $profilePath -GlobalOnly
+        Assert-True -Condition ([string]$savedProfile.VM_ADMIN_USER -eq 'updated-manager') -Message 'VM-scoped writes must update the selected VC profile.'
+        Assert-True -Condition (-not ((Read-DotEnvFile -Path $globalPath -GlobalOnly).ContainsKey('VM_ADMIN_USER'))) -Message 'VM-scoped writes must not enter the global configuration file.'
+    }
+    finally {
+        $resolvedSandbox = [System.IO.Path]::GetFullPath($sandbox)
+        $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedSandbox.StartsWith(($tempPrefix + 'clagnos-env-profile-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected profile fixture path: {0}" -f $resolvedSandbox) }
+        if (Test-Path -LiteralPath $resolvedSandbox) { Remove-Item -LiteralPath $resolvedSandbox -Recurse -Force }
+    }
 }
 
 Invoke-Test -Name "Shared feature toggles and pyssh path are wired into runtime defaults" -Action {
@@ -1421,7 +1415,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'package'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from .env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from <vm-name>.env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape('Get-ClagnosUiCachedInventoryRows -TypeName')) -Message 'The inventory submenu must render managed inventory from the validated snapshot.'
@@ -1500,7 +1494,7 @@ Invoke-Test -Name "Configure rejects retired targeting flags with interactive ed
     }
 }
 
-Invoke-Test -Name "Configure field schema covers supported dotenv keys and picker-backed multi-option fields" -Action {
+Invoke-Test -Name "Configure schema covers global settings and create defaults" -Action {
     $schema = @(Get-ClagnosConfigureFieldSchema -SelectedPlatform 'windows')
     $schemaKeys = @($schema | ForEach-Object { [string]$_.Key } | Sort-Object -Unique)
     $supportedKeys = @(Get-ClagnosSupportedDotEnvKeys | Sort-Object -Unique)
@@ -1508,7 +1502,6 @@ Invoke-Test -Name "Configure field schema covers supported dotenv keys and picke
 
     foreach ($pickerKind in @(
         'vm-os-picker',
-        'resource-group-picker',
         'subscription-picker',
         'region-picker',
         'storage-sku-picker',
@@ -1563,134 +1556,15 @@ Invoke-Test -Name "Configure choice picker rejects stale current values and supp
     }
 }
 
-Invoke-Test -Name "Configure managed resource group picker clears when the managed list is empty" -Action {
-    $field = [pscustomobject]@{
-        Key = 'SELECTED_RESOURCE_GROUP'
-        Label = 'Selected resource group'
-        EditorKind = 'resource-group-picker'
-        AzureBacked = $true
-        Secret = $false
+Invoke-Test -Name "Configure saves global defaults without an existing VC target" -Action {
+    $state = @{
+        RepoRoot = $RepoRoot
+        Values = @{ DEFAULT_VM_OS = 'windows'; DEFAULT_AZURE_REGION = ''; DEFAULT_WIN_VM_IMAGE = ''; DEFAULT_WIN_VM_SIZE = '' }
+        Azure = @{ Available = $false; Hint = 'Run az login to validate Azure-backed defaults.' }
     }
-
-    try {
-        function Get-ClagnosManagedResourceGroupRows { return @() }
-
-        $state = @{
-            RepoRoot = $RepoRoot
-            Values = @{ SELECTED_RESOURCE_GROUP = 'rg-stale-ate1-g1' }
-            Azure = @{ Available = $true; Hint = ''; SubscriptionRows = @() }
-        }
-
-        $selectedGroup = Edit-ClagnosConfigureField -Field $field -State $state
-        Assert-True -Condition ([string]::IsNullOrWhiteSpace([string]$selectedGroup)) -Message 'Configure must clear SELECTED_RESOURCE_GROUP when no managed resource groups exist.'
-    }
-    finally {
-        Remove-Item Function:\global:Get-ClagnosManagedResourceGroupRows -ErrorAction SilentlyContinue
-        Remove-Item Function:\Get-ClagnosManagedResourceGroupRows -ErrorAction SilentlyContinue
-    }
+    Assert-True -Condition (@(Get-ClagnosConfigureCreateCriticalKeys -Values ([hashtable]$state.Values)).Count -eq 0) -Message 'Global configure must not require a VM name, target region, or VM credentials.'
+    Assert-ClagnosConfigureSaveReady -State $state
 }
-
-Invoke-Test -Name "Configure managed resource group picker forces reselection when the current group is stale" -Action {
-    $field = [pscustomobject]@{
-        Key = 'SELECTED_RESOURCE_GROUP'
-        Label = 'Selected resource group'
-        EditorKind = 'resource-group-picker'
-        AzureBacked = $true
-        Secret = $false
-    }
-
-    try {
-        $script:ConfigureRgResponses = New-Object 'System.Collections.Generic.Queue[string]'
-        foreach ($response in @('', 'f', 'ate1', '1')) {
-            $script:ConfigureRgResponses.Enqueue([string]$response)
-        }
-
-        function Read-Host {
-            param([string]$Prompt)
-            if ($script:ConfigureRgResponses.Count -le 0) {
-                throw "No queued Read-Host response remained for prompt '$Prompt'."
-            }
-            return [string]$script:ConfigureRgResponses.Dequeue()
-        }
-
-        function Get-ClagnosManagedResourceGroupRows {
-            return @(
-                [pscustomobject]@{ name = 'rg-samplevm-ate1-g2'; location = 'austriaeast'; id = '/subscriptions/example/resourceGroups/rg-samplevm-ate1-g2' }
-                [pscustomobject]@{ name = 'rg-samplevm-cin1-g3'; location = 'centralindia'; id = '/subscriptions/example/resourceGroups/rg-samplevm-cin1-g3' }
-            )
-        }
-
-        $state = @{
-            RepoRoot = $RepoRoot
-            Values = @{ SELECTED_RESOURCE_GROUP = 'rg-samplevm-ate1-g1' }
-            Azure = @{ Available = $true; Hint = ''; SubscriptionRows = @() }
-        }
-
-        $selectedGroup = Edit-ClagnosConfigureField -Field $field -State $state
-        Assert-True -Condition ([string]$selectedGroup -eq 'rg-samplevm-ate1-g2') -Message 'Configure must force the operator to choose a real managed resource group when the current value is stale.'
-    }
-    finally {
-        Remove-Item Function:\global:Read-Host -ErrorAction SilentlyContinue
-        Remove-Item Function:\Read-Host -ErrorAction SilentlyContinue
-        Remove-Item Function:\global:Get-ClagnosManagedResourceGroupRows -ErrorAction SilentlyContinue
-        Remove-Item Function:\Get-ClagnosManagedResourceGroupRows -ErrorAction SilentlyContinue
-        Remove-Variable -Name ConfigureRgResponses -Scope Script -ErrorAction SilentlyContinue
-    }
-}
-
-Invoke-Test -Name "Configure save readiness blocks unresolved create-critical values but ignores blank resource-group defaults" -Action {
-    $baseValues = @{
-        SELECTED_VM_OS = 'windows'
-        SELECTED_VM_NAME = 'samplevm'
-        SELECTED_RESOURCE_GROUP = ''
-        SELECTED_AZURE_SUBSCRIPTION_ID = ''
-        SELECTED_AZURE_REGION = 'austriaeast'
-        WIN_VM_IMAGE = 'publisher:offer:sku:latest'
-        WIN_VM_SIZE = 'Standard_B4as_v2'
-        VM_ADMIN_USER = 'manager'
-        VM_ADMIN_PASS = 'secret-value'
-        VM_ASSISTANT_USER = 'assistant'
-        VM_ASSISTANT_PASS = 'secret-value'
-    }
-
-    try {
-        $blockedState = @{
-            RepoRoot = $RepoRoot
-            Values = $baseValues.Clone()
-            Azure = @{ Available = $false; Hint = 'Run az login to edit or verify this field.' }
-        }
-
-        $threw = $false
-        try {
-            Assert-ClagnosConfigureSaveReady -State $blockedState
-        }
-        catch {
-            $threw = $true
-            Assert-True -Condition ([string]$_.Exception.Data['Summary'] -eq 'Configure cannot save until all create-critical values are valid.') -Message 'Configure save gating must identify unresolved create-critical values.'
-            Assert-True -Condition ([string]$_.Exception.Message -notlike '*SELECTED_RESOURCE_GROUP*') -Message 'Blank SELECTED_RESOURCE_GROUP must not block configure save readiness.'
-        }
-        Assert-True -Condition $threw -Message 'Configure save readiness must block unresolved Azure-backed create-critical values.'
-
-        function Assert-LocationExists { param([string]$Location) }
-        function Assert-VmSkuAvailableViaRest { param([string]$Location, [string]$VmSize) }
-        function Assert-VmImageAvailable { param([string]$Location, [string]$ImageUrn) }
-
-        $readyState = @{
-            RepoRoot = $RepoRoot
-            Values = $baseValues.Clone()
-            Azure = @{ Available = $true; Hint = '' }
-        }
-
-        Assert-ClagnosConfigureSaveReady -State $readyState
-    }
-    finally {
-        foreach ($functionName in @('Assert-LocationExists','Assert-VmSkuAvailableViaRest','Assert-VmImageAvailable')) {
-            Remove-Item ("Function:\global:{0}" -f $functionName) -ErrorAction SilentlyContinue
-            Remove-Item ("Function:\{0}" -f $functionName) -ErrorAction SilentlyContinue
-        }
-    }
-}
-
 Invoke-Test -Name "SKU precheck rejects subscription-restricted sizes before VM mutation" -Action {
     $script:SkuPrecheckCalls = @()
     $script:SkuPrecheckAvailable = $true
@@ -1902,7 +1776,7 @@ Invoke-Test -Name "Precheck step validates feature compatibility before deployme
 Invoke-Test -Name "Subscription resolver uses CLI then env then active precedence and persists CLI overrides" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-subscription-test-" + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $tempRoot -Force
-    $envFilePath = Join-Path $tempRoot '.env'
+    $envFilePath = Join-Path $tempRoot 'clagnos.env'
     Write-TextFileNormalized -Path $envFilePath -Content "SELECTED_AZURE_SUBSCRIPTION_ID=33333333-3333-3333-3333-333333333333" -Encoding 'utf8NoBom' -LineEnding 'crlf' -EnsureTrailingNewline
 
     try {
@@ -1929,12 +1803,12 @@ Invoke-Test -Name "Subscription resolver uses CLI then env then active precedenc
         Assert-True -Condition ([string]$cliContext.SubscriptionId -eq '11111111-1111-1111-1111-111111111111') -Message 'CLI subscription must win.'
         Assert-True -Condition ([string]$cliContext.ResolutionSource -eq 'cli') -Message 'CLI resolution source must be recorded.'
         $envAfterCli = Read-DotEnvFile -Path $envFilePath
-        Assert-True -Condition ([string]$envAfterCli['SELECTED_AZURE_SUBSCRIPTION_ID'] -eq '11111111-1111-1111-1111-111111111111') -Message 'CLI subscription must persist into .env.'
+        Assert-True -Condition ([string]$envAfterCli['SELECTED_AZURE_SUBSCRIPTION_ID'] -eq '11111111-1111-1111-1111-111111111111') -Message 'CLI subscription must persist into clagnos.env.'
 
         Set-DotEnvValue -Path $envFilePath -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Value '33333333-3333-3333-3333-333333333333'
         $envContext = Initialize-ClagnosCommandSubscriptionState -CommandName 'show' -Options @{}
-        Assert-True -Condition ([string]$envContext.SubscriptionId -eq '33333333-3333-3333-3333-333333333333') -Message '.env subscription must win when CLI is absent.'
-        Assert-True -Condition ([string]$envContext.ResolutionSource -eq 'env') -Message '.env resolution source must be recorded.'
+        Assert-True -Condition ([string]$envContext.SubscriptionId -eq '33333333-3333-3333-3333-333333333333') -Message 'clagnos.env subscription must win when CLI is absent.'
+        Assert-True -Condition ([string]$envContext.ResolutionSource -eq 'env') -Message 'clagnos.env resolution source must be recorded.'
 
         Set-DotEnvValue -Path $envFilePath -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Value ''
         $activeContext = Initialize-ClagnosCommandSubscriptionState -CommandName 'show' -Options @{}
@@ -2087,7 +1961,7 @@ Invoke-Test -Name "Interactive create platform prompt ignores persisted SELECTED
         $configOverrides = @{}
         $promptedPlatform = Resolve-ClagnosPlatformSelection `
             -ConfigMap @{ SELECTED_VM_OS = 'linux' } `
-            -EnvFilePath 'ignored.env' `
+            -EnvFilePath 'clagnos.env' `
             -AutoMode:$false `
             -WindowsFlag:$false `
             -LinuxFlag:$false `
@@ -2099,13 +1973,13 @@ Invoke-Test -Name "Interactive create platform prompt ignores persisted SELECTED
 
         $envDrivenPlatform = Resolve-ClagnosPlatformSelection `
             -ConfigMap @{ SELECTED_VM_OS = 'linux' } `
-            -EnvFilePath 'ignored.env' `
+            -EnvFilePath 'clagnos.env' `
             -AutoMode:$false `
             -WindowsFlag:$false `
             -LinuxFlag:$false `
             -ConfigOverrides @{} `
             -DeferEnvWrite
-        Assert-True -Condition ([string]$envDrivenPlatform -eq 'linux') -Message 'Platform selection without PromptWhenFlagsMissing must still honor .env SELECTED_VM_OS.'
+        Assert-True -Condition ([string]$envDrivenPlatform -eq 'linux') -Message 'Platform selection without PromptWhenFlagsMissing must honor the effective platform selection.'
     }
     finally {
         Remove-Item Function:\Read-Host -ErrorAction SilentlyContinue
@@ -2470,15 +2344,12 @@ Invoke-Test -Name "Task command lists discovered tasks in runtime order" -Action
     }
 }
 
-Invoke-Test -Name "Set command applies both toggles and persists them to .env" -Action {
+Invoke-Test -Name "Set command applies both toggles and persists them to the selected VC profile" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-set-test-" + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $tempRoot -Force
-    $envFilePath = Join-Path $tempRoot '.env'
+    $envFilePath = Join-Path $tempRoot 'clagnos.env'
     Write-TextFileNormalized -Path $envFilePath -Content @"
-SELECTED_RESOURCE_GROUP=rg-old
-SELECTED_VM_NAME=oldvm
-VM_ENABLE_HIBERNATION=false
-VM_ENABLE_NESTED_VIRTUALIZATION=true
+ACTIVE_VM_NAME=oldvm
 "@ -Encoding 'utf8NoBom' -LineEnding 'crlf' -EnsureTrailingNewline
 
     try {
@@ -2511,7 +2382,8 @@ VM_ENABLE_NESTED_VIRTUALIZATION=true
             'nested-virtualization' = 'off'
         } -AutoMode:$false -WindowsFlag:$false -LinuxFlag:$false
 
-        $envMap = Read-DotEnvFile -Path $envFilePath
+        $vmEnvPath = Join-Path $tempRoot 'targetvm.env'
+        $envMap = Read-DotEnvFile -Path $vmEnvPath -GlobalOnly
         Assert-True -Condition ([string]$envMap['SELECTED_RESOURCE_GROUP'] -eq 'rg-target') -Message 'Set command must persist the resolved selected resource group.'
         Assert-True -Condition ([string]$envMap['SELECTED_VM_NAME'] -eq 'targetvm') -Message 'Set command must persist the resolved selected VM name.'
         Assert-True -Condition ([string]$envMap['VM_ENABLE_HIBERNATION'] -eq 'true') -Message 'Set command must persist VM_ENABLE_HIBERNATION=true when hibernation is turned on.'
@@ -2538,10 +2410,13 @@ VM_ENABLE_NESTED_VIRTUALIZATION=true
 Invoke-Test -Name "Set command persists successful updates before a later toggle failure" -Action {
     $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("clagnos-set-failover-test-" + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $tempRoot -Force
-    $envFilePath = Join-Path $tempRoot '.env'
+    $envFilePath = Join-Path $tempRoot 'clagnos.env'
     Write-TextFileNormalized -Path $envFilePath -Content @"
-SELECTED_RESOURCE_GROUP=rg-old
-SELECTED_VM_NAME=oldvm
+ACTIVE_VM_NAME=oldvm
+"@ -Encoding 'utf8NoBom' -LineEnding 'crlf' -EnsureTrailingNewline
+    $targetProfilePath = Join-Path $tempRoot 'targetvm.env'
+    Write-TextFileNormalized -Path $targetProfilePath -Content @"
+SELECTED_VM_NAME=targetvm
 VM_ENABLE_HIBERNATION=false
 VM_ENABLE_NESTED_VIRTUALIZATION=true
 "@ -Encoding 'utf8NoBom' -LineEnding 'crlf' -EnsureTrailingNewline
@@ -2609,11 +2484,12 @@ VM_ENABLE_NESTED_VIRTUALIZATION=true
 
         Assert-True -Condition $threw -Message 'Set command must fail when nested virtualization guest validation fails.'
         Assert-True -Condition ([bool]$script:SetCommandNestedValidationCalled) -Message 'Set command must validate nested virtualization through guest checks when turning it on.'
-        $envMap = Read-DotEnvFile -Path $envFilePath
+        $vmEnvPath = Join-Path $tempRoot 'targetvm.env'
+        $envMap = Read-DotEnvFile -Path $vmEnvPath -GlobalOnly
         Assert-True -Condition ([string]$envMap['SELECTED_RESOURCE_GROUP'] -eq 'rg-target') -Message 'Set command must still persist the resolved selected resource group after a partial update.'
         Assert-True -Condition ([string]$envMap['SELECTED_VM_NAME'] -eq 'targetvm') -Message 'Set command must still persist the resolved selected VM name after a partial update.'
         Assert-True -Condition ([string]$envMap['VM_ENABLE_HIBERNATION'] -eq 'true') -Message 'Set command must persist the successful hibernation update even if a later toggle fails.'
-        Assert-True -Condition ([string]$envMap['VM_ENABLE_NESTED_VIRTUALIZATION'] -eq 'true') -Message 'Set command must not overwrite nested virtualization in .env when the Azure update failed.'
+        Assert-True -Condition ([string]$envMap['VM_ENABLE_NESTED_VIRTUALIZATION'] -eq 'true') -Message 'Set command must not overwrite nested virtualization in the VC profile when the Azure update failed.'
     }
     finally {
         foreach ($functionName in @(
@@ -3737,7 +3613,7 @@ Invoke-Test -Name "Create update and resize docs reflect the current operator co
         'proposes the next global gX name plus globally unique nX resource ids',
         'Auto mode runs from the fully resolved selection set',
         'Auto mode runs from the resolved managed target',
-        'interactive-only. It edits supported .env keys in sections',
+        'interactive-only and edits global clagnos.env keys',
         'supports --type and --group for managed inventory output',
         'show --group <resource-group> [--vm-name <vm-name>] [--subscription-id <subscription-id>]',
         'vm-summary always renders, even for partial step windows',
@@ -3748,9 +3624,9 @@ Invoke-Test -Name "Create update and resize docs reflect the current operator co
 
     foreach ($fragment in @(
         '`create` now stays dedicated to one fresh managed resource group plus one fresh managed VM; use `delete` and then `create` when a destructive rebuild is intentional.',
-        'Auto `create` succeeds when CLI overrides or `.env` `SELECTED_*` values plus the platform defaults resolve platform, VM name, Azure region, and VM size.',
-        'Auto `update` resolves its target from CLI overrides first, then `.env` `SELECTED_RESOURCE_GROUP` and `SELECTED_VM_NAME`',
-        'Purpose: review, edit, validate, preview, and save the supported `.env` contract through one interactive frontend.',
+        'Auto `create` succeeds when CLI overrides plus `DEFAULT_*` global values resolve platform, VM name, Azure region, and VM size.',
+        'Auto `update` resolves its target from CLI overrides first, then `ACTIVE_VM_NAME` and that VM''s `SELECTED_RESOURCE_GROUP` in `<vm-name>.env`',
+        'Purpose: review, edit, validate, preview, and save the global `clagnos.env` contract through one interactive frontend.',
         'uses a picker for every finite or discoverable multi-option field',
         '`configure` can open without Azure sign-in, but its Azure-backed pickers stay read-only until `az login` is available',
         'Purpose: print read-only managed inventory sections for clagnos-tagged resource groups and resources.',
@@ -3762,7 +3638,7 @@ Invoke-Test -Name "Create update and resize docs reflect the current operator co
         'Managed resource ids use a global `nX` suffix that increments across all generated managed resources and is never reused by another managed resource of any type.',
         '`create` never reuses an existing managed resource group or existing managed resource names, and `update` never falls through to an implicit fresh-create path.',
         '`list` gives a read-only managed inventory view across groups and resource types',
-        '`configure` gives a safe interactive frontend for every supported `.env` key',
+        '`configure` gives a safe interactive frontend for every supported global `clagnos.env` key',
         '`--disk-size=... --shrink` is a non-mutating guidance path because Azure does not support shrinking an existing managed OS disk in place; the command prints supported rebuild and migration alternatives instead of risking disk integrity'
     )) {
         Assert-True -Condition ($readmeText -match [regex]::Escape([string]$fragment)) -Message ("README must include fragment '{0}'." -f [string]$fragment)
@@ -3921,7 +3797,7 @@ Invoke-Test -Name "Resize shrink path is non-mutating and prints supported alter
         $script:ResizeShrinkAlternativesShown = $true
     }
     function Set-DotEnvValue {
-        throw 'Shrink guidance must not persist .env changes.'
+        throw 'Shrink guidance must not persist VC profile changes.'
     }
     function az {
         $line = @($args) -join ' '
@@ -5259,7 +5135,7 @@ Invoke-Test -Name "Show report redacts password-bearing config values and prints
             Command = 'show'
             Mode = 'auto'
             RequestedPlatform = 'windows'
-            EnvFilePath = 'C:\repo\.env'
+            EnvFilePath = 'C:\repo\clagnos.env'
             AzureAccount = [ordered]@{
                 SubscriptionName = 'sub'
                 SubscriptionId = 'sub-id'
@@ -5368,7 +5244,7 @@ Invoke-Test -Name "Show JSON export redacts passwords, tokens, and refuses impli
         Export-ClagnosShowReportJson -Dump $dump -OutputPath $exportPath | Out-Null
         $jsonText = [string](Get-Content -LiteralPath $exportPath -Raw)
         $export = ConvertFrom-JsonCompat -InputObject $jsonText
-        Assert-True -Condition ([string]$export.Config.DotEnvValues.VM_ADMIN_PASS -eq '[redacted]') -Message 'Show JSON export must redact passwords in .env values.'
+        Assert-True -Condition ([string]$export.Config.DotEnvValues.VM_ADMIN_PASS -eq '[redacted]') -Message 'Show JSON export must redact passwords in VC profile values.'
         Assert-True -Condition ([string]$export.Config.RuntimeOverrides.MAP_ACCESS_TOKEN -eq '[redacted]') -Message 'Show JSON export must redact tokens in runtime overrides.'
         Assert-True -Condition ([string]$export.TargetDerivedConfiguration.Summary.VM_ASSISTANT_PASS -eq '[redacted]') -Message 'Show JSON export must redact sensitive target-derived values.'
         Assert-True -Condition (-not ($jsonText -match 'runtime-secret')) -Message 'Show JSON export must not contain raw secrets.'
@@ -5886,7 +5762,7 @@ Invoke-Test -Name "Task command run-vm-init uses the isolated task execution pat
         function Initialize-ClagnosTaskExecutionRuntimeContext {
             param([switch]$AutoMode, [switch]$WindowsFlag, [switch]$LinuxFlag)
             return [pscustomobject]@{
-                EnvFilePath = (Join-Path $RepoRoot '.env')
+                EnvFilePath = (Join-Path $RepoRoot 'clagnos.env')
                 ConfigMap = @{ RESOURCE_GROUP = 'rg-samplevm-ate1-g1'; VM_NAME = 'samplevm' }
                 EffectiveConfigMap = @{ RESOURCE_GROUP = 'rg-samplevm-ate1-g1'; VM_NAME = 'samplevm' }
                 Platform = 'windows'
@@ -6629,7 +6505,7 @@ Invoke-Test -Name "Required config helper rejects empty and placeholder values" 
 
     $missingFailed = $false
     try {
-        $null = Get-ClagnosRequiredResolvedConfigValue -ConfigMap @{} -Key 'VM_ADMIN_PASS' -Tokens $tokens -Summary 'VM admin password is required.' -Hint 'Set VM_ADMIN_PASS in .env to a non-placeholder password.'
+        $null = Get-ClagnosRequiredResolvedConfigValue -ConfigMap @{} -Key 'VM_ADMIN_PASS' -Tokens $tokens -Summary 'VM admin password is required.' -Hint 'Set VM_ADMIN_PASS in the selected <vm-name>.env profile to a non-placeholder password.'
     }
     catch {
         $missingFailed = $true
@@ -6639,7 +6515,7 @@ Invoke-Test -Name "Required config helper rejects empty and placeholder values" 
 
     $placeholderFailed = $false
     try {
-        $null = Get-ClagnosRequiredResolvedConfigValue -ConfigMap @{ VM_ADMIN_PASS = '<CHANGE_ME_STRONG_ADMIN_PASSWORD>' } -Key 'VM_ADMIN_PASS' -Tokens $tokens -Summary 'VM admin password is required.' -Hint 'Set VM_ADMIN_PASS in .env to a non-placeholder password.'
+        $null = Get-ClagnosRequiredResolvedConfigValue -ConfigMap @{ VM_ADMIN_PASS = '<CHANGE_ME_STRONG_ADMIN_PASSWORD>' } -Key 'VM_ADMIN_PASS' -Tokens $tokens -Summary 'VM admin password is required.' -Hint 'Set VM_ADMIN_PASS in the selected <vm-name>.env profile to a non-placeholder password.'
     }
     catch {
         $placeholderFailed = $true
@@ -9109,7 +8985,7 @@ Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Actio
     $guestRuntimePath = Join-Path $RepoRoot 'modules\platform\clagnos-guest-runtime.ps1'
     $mainCommandPath = Join-Path $RepoRoot 'modules\commands\pipeline\clagnos-main-command.ps1'
     $platformDefaultsPath = Join-Path $RepoRoot 'modules\core\platform\clagnos-platform-defaults.ps1'
-    $envExamplePath = Join-Path $RepoRoot '.env.example'
+    $envExamplePath = Join-Path $RepoRoot 'clagnos.env.example'
 
     Assert-True -Condition (Test-Path -LiteralPath $remotingTaskPath) -Message 'PowerShell remoting init task file was not found.'
     Assert-True -Condition (Test-Path -LiteralPath $remotingTaskJsonPath) -Message 'PowerShell remoting init task json was not found.'
@@ -9146,7 +9022,7 @@ Invoke-Test -Name "Windows PowerShell remoting init and summary contract" -Actio
     Assert-True -Condition ($remotingTaskJsonText -like '*05-configure-firewall-settings*') -Message 'PowerShell remoting init task must depend on firewall configuration.'
     Assert-True -Condition (($remotingTaskText -like "*Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName `$managerUser*") -and ($remotingTaskText -like "*Ensure-LocalGroupMember -GroupName 'Remote Management Users' -MemberName `$assistantUser*")) -Message 'PowerShell remoting init task must grant both managed users access.'
     Assert-True -Condition ($platformDefaultsText -like '*5985*') -Message 'Default TCP ports must include 5985 for WinRM.'
-    Assert-True -Condition ($envExampleText -like '*5985*') -Message '.env.example TCP port defaults must include 5985 for WinRM.'
+    Assert-True -Condition ($envExampleText -like '*DEFAULT_TCP_PORTS*5985*') -Message 'clagnos.env.example TCP port defaults must include 5985 for WinRM.'
 
     foreach ($fragment in @(
         'PowerShell remoting commands:',

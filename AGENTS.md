@@ -7,8 +7,8 @@ This repository manages Azure VM provisioning and lifecycle operations for Windo
 Use these sources in this order when maintaining the repo:
 1. Current code and task-folder manifests for runtime behavior.
 2. Current CLI/help output for command-surface truth.
-3. Current `.env.example` for committed configuration contract.
-4. Current local `.env` only when a user explicitly states that their local runtime configuration is the temporary source of truth for alignment work.
+3. Current `clagnos.env.example` and `vc.env.example` for committed global and per-VC configuration contracts.
+4. Current local `clagnos.env` and explicitly selected `<vm-name>.env` only when the user names them as temporary alignment sources.
 5. Git history for project evolution.
 6. Relevant `.codex` session JSONL files for workflow, decision, and prompt-history reconstruction.
 
@@ -70,9 +70,9 @@ Use these sources in this order when maintaining the repo:
 - `update` is existing-managed-target only: it requires one existing managed resource group plus one existing VM and must not fall through to implicit fresh-create behavior. It runs enabled `vm-update` maintenance tasks; packages are isolated under `package` catalogs and never discovered as stage tasks.
 - `package` owns status, install/repair/update, uninstall, and availability for validated packages in the isolated `builtin` and `custom` catalogs. Every operation names exactly one catalog.
 - `component` owns CRUD for Clagnos-managed resource groups, VMs, managed disks, VNets, subnets, NICs, public IPs, NSGs, and NSG rules. It must not expose generic CRUD for unrelated subscription resources.
-- `configure` is the interactive `.env` frontend: it must stay focused on reviewing, editing, validating, previewing, and saving supported `.env` values, and it must not sync `.env` from a live Azure target.
-- `configure` must recover softly for blank-permitted fields: stale or empty picker-backed values should guide the operator back to a valid choice when possible, otherwise clear the staged value and continue; save may be blocked only by unresolved create-critical values.
-- Azure-touching commands support `--subscription-id` plus `-s`; resolution precedence is CLI override -> `.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
+- `configure` is the interactive global `clagnos.env` frontend: it edits only supported global settings/defaults and must not sync configuration from a live Azure target. VM-targeted settings belong in the selected `<vm-name>.env` profile.
+- `configure` edits global settings and create defaults only. Blank-permitted global defaults may stay empty so the VC creation wizard can ask for them; save validation must not require an existing VC name, group, region, or credentials.
+- Azure-touching commands support `--subscription-id` plus `-s`; resolution precedence is CLI override -> `clagnos.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
 - Azure-touching commands require an authenticated Azure CLI session; help, README, and runtime errors must say `az login` is required. `configure` is the exception: it may open without `az login`, but Azure-backed configure fields must stay read-only until Azure validation is available.
 - Interactive `create` and `update` must prompt for Azure subscription selection when `--subscription-id` is omitted.
 - Interactive `initialize` must also prompt for Azure subscription selection when `--subscription-id` is omitted.
@@ -80,29 +80,32 @@ Use these sources in this order when maintaining the repo:
 - `list` is the managed inventory command: it must stay Azure-read-only, must not mutate Azure resources, and must expose managed resource listings through `--type` plus optional exact `--group` filtering.
 - Managed inventory and target validation recognize both `managed-by=clagnos` and the legacy `managed-by=az-vm` tag until the interactive first-inventory migration is accepted and completed. New groups use `managed-by=clagnos`.
 - Component deletion must show every resource in the dependency chain before mutation, delete dependents before dependencies, verify Azure resource absence, and attempt provider-specific purge only where supported. Never claim universal immediate name reuse when Azure retention or provider rules prevent it.
-- Auto-mode strictness is part of the public contract: `create --auto` must resolve platform, VM name, Azure region, and platform VM size from CLI or `SELECTED_*` plus platform defaults in `.env`; `update --auto` must resolve one managed target from CLI or the selected target values in `.env`.
+- Auto-mode strictness is part of the public contract: `create --auto` must resolve platform, VM name, Azure region, and platform VM size from CLI plus `DEFAULT_*` values in `clagnos.env`; `update --auto` must resolve one managed target from CLI or `ACTIVE_VM_NAME` and its required `<vm-name>.env` profile.
 - `resize --disk-size` requires exactly one intent flag, `--expand` or `--shrink`; shrink remains a non-mutating guidance path when Azure cannot perform the requested change safely.
 
 ## Configuration Rules
-- Runtime precedence is: CLI override > `.env` value > hard-coded default.
-- `.env` is local-only and must remain untracked.
-- `.env.example` is the committed configuration contract and must stay current.
-- Keep app-wide customization, secrets, operator identity, and reusable overrides in `.env`.
+- Runtime precedence is: CLI override > selected VC `<vm-name>.env` value > global `clagnos.env` default > hard-coded default. New VC passwords are prompted for during interactive create and stored only in that VC's profile.
+- `clagnos.env` is local-only and must remain untracked.
+- `clagnos.env.example` is the committed configuration contract and must stay current.
+- `<vm-name>.env` files are the local-only source of truth for VM name/group/OS/region, VM features, credentials, ports, transport, image, SKU, and disk size. Every managed VC must have an identity-matching profile before target operations run.
+- `vc.env.example` is the committed per-VC profile template. Git-ignore all `*.env` runtime files.
+- Keep app-wide customization, Azure subscription selection, operator identity, naming templates, Azure/SSH timeouts, task paths, and non-secret `DEFAULT_*` create defaults in `clagnos.env`. Never store VM passwords in the global file.
+- `ACTIVE_VM_NAME` in `clagnos.env` selects the default VC profile when a command has no explicit target. Selecting a VC in the TUI updates this pointer.
 - Keep task-only customization in a clearly labeled config block at the top of the owning `vm-init` or `vm-update` script.
 - Do not hard-code personal, company-specific, or secret fallback values in runtime code or shared orchestration paths.
 - Use generic env keys whenever possible.
-- Treat `SELECTED_*` keys as the only persisted active-selection contract in `.env`.
-- Use `SELECTED_AZURE_SUBSCRIPTION_ID` as the shared default Azure subscription selector for Azure-touching commands.
+- Keep `ACTIVE_VM_NAME` as the global VC pointer; persist `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, `SELECTED_VM_OS`, and `SELECTED_AZURE_REGION` only in the owning VC profile.
+- Use `SELECTED_AZURE_SUBSCRIPTION_ID` in `clagnos.env` as the shared default Azure subscription selector for Azure-touching commands.
 - Use `SELECTED_COMPANY_NAME` for repo-managed Windows business web shortcuts and `SELECTED_EMPLOYEE_EMAIL_ADDRESS` local-part for repo-managed Windows personal web shortcuts.
-- Normalize repo-managed Windows Chrome `--profile-directory` values to lowercase even when `.env` casing differs.
-- Keep `SELECTED_EMPLOYEE_FULL_NAME` in `.env` as required operator identity metadata for the Windows public desktop shortcut contract.
+- Normalize repo-managed Windows Chrome `--profile-directory` values to lowercase even when global identity casing differs.
+- Keep `SELECTED_EMPLOYEE_FULL_NAME` in `clagnos.env` as required operator identity metadata for the Windows public desktop shortcut contract.
 - Use shared keys such as `VM_ENABLE_HIBERNATION` and `VM_ENABLE_NESTED_VIRTUALIZATION` for cross-platform VM feature intent instead of inventing platform-specific duplicates.
 - Use `WIN_` or `LIN_` keys only for true platform-specific settings.
 - Remove deprecated env keys instead of keeping compatibility fallbacks.
 - Validate region, VM naming, SKU, image, and other mutation-critical config before Azure create/update/delete operations.
 
 ## Naming and Resource Rules
-- `SELECTED_VM_NAME` is the persisted naming seed.
+- The effective VC profile's `SELECTED_VM_NAME` is the persisted naming seed.
 - Template-driven resource names must derive from the effective `SELECTED_VM_NAME` runtime value, region code, and the committed templates.
 - Resource-group uniqueness is suffix-based and deterministic.
 - Managed resource name generation must remain explicit, predictable, and validation-backed.
@@ -152,7 +155,7 @@ Use these sources in this order when maintaining the repo:
 - Re-running init/update must preserve existing managed-user passwords and user-owned profile data. It must not force a service or VM restart when no relevant configuration changed and no task requested a reboot.
 - Managed-user password reset is an explicit interactive `initialize --reset-managed-user-passwords` operation with typed confirmation; default `initialize` never changes existing passwords.
 - Windows builtin package status, update, and uninstall scripts emit one `CLAGNOS_PACKAGE_RESULT:` JSON record. Uninstall uses only its validated manifest action and verifies absence. Update is a separate operation and verifies the resulting installed state.
-- Windows package operations honor `PACKAGE_TRANSPORT=ssh|winrm` (default `ssh`) without silent fallback. WinRM may add only the exact managed VM endpoint to the local WSMan TrustedHosts list, preserving existing entries; credentials must never appear in progress or result logs.
+- Windows package operations honor the selected VC profile's `PACKAGE_TRANSPORT=ssh|winrm`, falling back to global `DEFAULT_PACKAGE_TRANSPORT`, without silent fallback. WinRM may add only the exact managed VM endpoint to the local WSMan TrustedHosts list, preserving existing entries; credentials must never appear in progress or result logs.
 - Init and update task inventories may diverge by platform, but the orchestration model should remain parallel in concept.
 
 ## Reliability and Error-Handling Rules

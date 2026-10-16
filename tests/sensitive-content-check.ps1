@@ -59,7 +59,7 @@ function Get-TrackedAuditPaths {
         '.ps1', '.psm1', '.psd1', '.cmd', '.sh', '.py', '.md', '.yml', '.yaml', '.json', '.toml', '.txt'
     )
     $explicitFileNames = @(
-        '.env.example', '.gitignore', '.gitattributes'
+        'clagnos.env.example', 'vc.env.example', '.gitignore', '.gitattributes'
     )
 
     $trackedPaths = @(& git -C $RepositoryRoot ls-files)
@@ -142,12 +142,15 @@ function Assert-EnvExampleSensitivePlaceholders {
         [string]$RepositoryRoot
     )
 
-    $envExamplePath = Join-Path $RepositoryRoot '.env.example'
+    $envExamplePath = Join-Path $RepositoryRoot 'clagnos.env.example'
     if (-not (Test-Path -LiteralPath $envExamplePath)) {
-        throw ".env.example was not found."
+        throw "clagnos.env.example was not found."
     }
 
-    $envMap = @{}
+    $vmEnvExamplePath = Join-Path $RepositoryRoot 'vc.env.example'
+    if (-not (Test-Path -LiteralPath $vmEnvExamplePath)) { throw 'vc.env.example was not found.' }
+
+    $globalEnvMap = @{}
     foreach ($line in @(Get-Content -LiteralPath $envExamplePath -ErrorAction Stop)) {
         if ($line -match '^\s*#' -or -not ($line -match '=')) {
             continue
@@ -156,29 +159,36 @@ function Assert-EnvExampleSensitivePlaceholders {
         $parts = $line -split '=', 2
         $key = ([string]$parts[0]).Trim()
         $value = if ($parts.Count -gt 1) { [string]$parts[1] } else { '' }
-        $envMap[$key] = $value.Trim()
+        $globalEnvMap[$key] = $value.Trim()
     }
 
-    if ([string]$envMap['VM_ADMIN_PASS'] -ne '<CHANGE_ME_STRONG_ADMIN_PASSWORD>') {
-        throw ".env.example must keep VM_ADMIN_PASS as the committed placeholder."
+    $vmEnvMap = @{}
+    foreach ($line in @(Get-Content -LiteralPath $vmEnvExamplePath -ErrorAction Stop)) {
+        if ($line -match '^\s*#' -or -not ($line -match '=')) { continue }
+        $parts = $line -split '=', 2
+        $vmEnvMap[([string]$parts[0]).Trim()] = ([string]$parts[1]).Trim()
     }
-    if ([string]$envMap['VM_ASSISTANT_PASS'] -ne '<CHANGE_ME_STRONG_ASSISTANT_PASSWORD>') {
-        throw ".env.example must keep VM_ASSISTANT_PASS as the committed placeholder."
+
+    if ([string]$vmEnvMap['VM_ADMIN_PASS'] -ne '<CHANGE_ME_STRONG_ADMIN_PASSWORD>') {
+        throw "vc.env.example must keep VM_ADMIN_PASS as the committed placeholder."
     }
-    if ([string]$envMap['SELECTED_COMPANY_WEB_ADDRESS'] -ne '<https-url>') {
-        throw ".env.example must keep SELECTED_COMPANY_WEB_ADDRESS as the committed placeholder."
+    if ([string]$vmEnvMap['VM_ASSISTANT_PASS'] -ne '<CHANGE_ME_STRONG_ASSISTANT_PASSWORD>') {
+        throw "vc.env.example must keep VM_ASSISTANT_PASS as the committed placeholder."
     }
-    if ([string]$envMap['SELECTED_COMPANY_EMAIL_ADDRESS'] -ne '<email>') {
-        throw ".env.example must keep SELECTED_COMPANY_EMAIL_ADDRESS as the committed placeholder."
+    if ([string]$globalEnvMap['SELECTED_COMPANY_WEB_ADDRESS'] -ne '<https-url>') {
+        throw "clagnos.env.example must keep SELECTED_COMPANY_WEB_ADDRESS as the committed placeholder."
     }
-    if ([string]$envMap['SELECTED_EMPLOYEE_EMAIL_ADDRESS'] -ne '<email>') {
-        throw ".env.example must keep SELECTED_EMPLOYEE_EMAIL_ADDRESS as the committed placeholder."
+    if ([string]$globalEnvMap['SELECTED_COMPANY_EMAIL_ADDRESS'] -ne '<email>') {
+        throw "clagnos.env.example must keep SELECTED_COMPANY_EMAIL_ADDRESS as the committed placeholder."
     }
-    if ([string]$envMap['SELECTED_EMPLOYEE_FULL_NAME'] -ne '<person-name>') {
-        throw ".env.example must keep SELECTED_EMPLOYEE_FULL_NAME as the committed placeholder."
+    if ([string]$globalEnvMap['SELECTED_EMPLOYEE_EMAIL_ADDRESS'] -ne '<email>') {
+        throw "clagnos.env.example must keep SELECTED_EMPLOYEE_EMAIL_ADDRESS as the committed placeholder."
     }
-    if (-not [string]::IsNullOrWhiteSpace([string]$envMap['SELECTED_AZURE_SUBSCRIPTION_ID'])) {
-        throw ".env.example must not commit a concrete SELECTED_AZURE_SUBSCRIPTION_ID value."
+    if ([string]$globalEnvMap['SELECTED_EMPLOYEE_FULL_NAME'] -ne '<person-name>') {
+        throw "clagnos.env.example must keep SELECTED_EMPLOYEE_FULL_NAME as the committed placeholder."
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$globalEnvMap['SELECTED_AZURE_SUBSCRIPTION_ID'])) {
+        throw "clagnos.env.example must not commit a concrete SELECTED_AZURE_SUBSCRIPTION_ID value."
     }
 }
 

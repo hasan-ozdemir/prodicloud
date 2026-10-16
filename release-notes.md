@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.16.422 - 2026-10-16
+
+### Summary
+Clagnos now separates global application settings from the configuration for each virtual computer.
+
+### Highlights
+- `clagnos.env` holds the active VC pointer, Azure subscription, operator identity, naming templates, timeouts, task paths, and non-secret `DEFAULT_*` values. `configure` edits this global contract only.
+- Each managed VC reads and writes its own ignored `<vm-name>.env` profile, including resource group, platform, region, image/SKU/disk, VM features, login credentials, ports, and package transport. `vc.env.example` documents that profile contract; VM passwords are never kept in the global file.
+- The TUI updates `ACTIVE_VM_NAME` when an operator selects a VC. Target operations validate the profile identity before using it. Setup, transport benchmarking, live acceptance, and release packaging follow the new layout.
+- Migrated current local settings and the existing managed VC profiles; the prior local settings file was removed after verification. No Azure resources were changed.
+
+### Validation
+- PowerShell parser accepted all 49 changed scripts; `git diff --check` passed. Automated tests were updated but not run.
+
 ## Release 2026.10.15.421 - 2026-10-15
 
 ### Summary

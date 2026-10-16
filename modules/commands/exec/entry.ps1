@@ -50,14 +50,14 @@ function Invoke-ClagnosExecCommand {
             -Detail "VM admin user is missing for exec." `
             -Code 61 `
             -Summary "Exec requires VM admin credentials." `
-            -Hint "Set VM_ADMIN_USER in .env before using exec."
+            -Hint "Set VM_ADMIN_USER in the selected <vm-name>.env profile before using exec."
     }
     if ([string]::IsNullOrWhiteSpace([string]$vmPass)) {
         Throw-FriendlyError `
             -Detail "VM admin password is missing for exec." `
             -Code 61 `
             -Summary "Exec requires VM admin credentials." `
-            -Hint "Set VM_ADMIN_PASS in .env before using exec."
+            -Hint "Set VM_ADMIN_PASS in the selected <vm-name>.env profile before using exec."
     }
 
     $vmJson = az vm show -g $selectedResourceGroup -n $selectedVmName -o json --only-show-errors

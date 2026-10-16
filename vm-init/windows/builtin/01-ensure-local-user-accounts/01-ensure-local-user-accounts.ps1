@@ -84,7 +84,7 @@ function Ensure-LocalPowerAdmin {
             Write-Host ("Doing: reset the explicitly requested password for managed user '{0}'" -f $UserName)
             $securePass = ConvertTo-SecureString $Password -AsPlainText -Force
             Set-LocalUser -Name $UserName -Password $securePass -ErrorAction Stop
-            Write-Host ("Managed user '{0}' password was reset from the current .env value." -f $UserName)
+            Write-Host ("Managed user '{0}' password was reset from the current clagnos.env value." -f $UserName)
         }
         else {
             Write-Host "Managed user '$UserName' already exists; preserving its current password."

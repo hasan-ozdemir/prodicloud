@@ -22,6 +22,11 @@ function Invoke-ClagnosCommandDispatcher {
     $script:ConfigOverrides = @{}
     $script:ClagnosConfigValueSources = @{}
     $script:ActiveCommand = [string]$CommandName
+    $explicitVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+    if (-not [string]::IsNullOrWhiteSpace([string]$explicitVmName)) {
+        $script:ConfigOverrides['SELECTED_VM_NAME'] = $explicitVmName.Trim()
+        Set-ClagnosConfigValueSource -Key 'SELECTED_VM_NAME' -Source 'cli value'
+    }
     $helpRequested = Get-ClagnosCliOptionBool -Options $Options -Name 'help' -DefaultValue $false
 
     $commandPerfWatch = $null

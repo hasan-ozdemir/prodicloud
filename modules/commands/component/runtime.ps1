@@ -57,7 +57,7 @@ function Get-ClagnosComponentScopedGroups {
         Assert-ClagnosManagedResourceGroup -ResourceGroup $requested -OperationName 'component management'
         return @($requested.Trim())
     }
-    $config = Read-DotEnvFile -Path (Join-Path (Get-ClagnosRepoRoot) '.env')
+    $config = Read-DotEnvFile -Path (Join-Path (Get-ClagnosRepoRoot) 'clagnos.env')
     $defaultGroup = [string](Get-ConfigValue -Config $config -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
     if (-not [string]::IsNullOrWhiteSpace($defaultGroup)) {
         Assert-ClagnosManagedResourceGroup -ResourceGroup $defaultGroup -OperationName 'component management'
@@ -168,7 +168,7 @@ function Get-ClagnosComponentLocation {
 
 function Get-ClagnosComponentGeneratedName {
     param([string]$ResourceGroup, [string]$ResourceType)
-    $config = Read-DotEnvFile -Path (Join-Path (Get-ClagnosRepoRoot) '.env')
+    $config = Read-DotEnvFile -Path (Join-Path (Get-ClagnosRepoRoot) 'clagnos.env')
     $vmName = [string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_NAME' -DefaultValue '')
     if ([string]::IsNullOrWhiteSpace($vmName)) { $vmName = Read-Host 'Virtual computer name seed' }
     $location = Get-ClagnosComponentLocation -ResourceGroup $ResourceGroup

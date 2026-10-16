@@ -94,7 +94,7 @@ function Resolve-ClagnosTargetResourceGroup {
                 -Detail ("No active resource group is configured for auto mode in {0} command." -f $OperationName) `
                 -Code 66 `
                 -Summary ("{0} command cannot resolve target resource group." -f $OperationName) `
-                -Hint "Set SELECTED_RESOURCE_GROUP in .env or provide --group=<name>."
+                -Hint "Set ACTIVE_VM_NAME in clagnos.env with the group's name in that VC's <vm-name>.env, or provide --group=<name>."
         }
     }
     else {
@@ -305,7 +305,7 @@ function Resolve-ClagnosTargetVmName {
             -Detail ("Auto mode could not resolve one VM in resource group '{0}'." -f $ResourceGroup) `
             -Code 65 `
             -Summary ("{0} command cannot resolve target VM in auto mode." -f $OperationName) `
-            -Hint "Set SELECTED_VM_NAME in .env to the exact Azure VM name, provide a command-specific VM parameter, or use interactive mode."
+            -Hint "Set ACTIVE_VM_NAME in clagnos.env, provide --vm-name, or use interactive mode. The target's settings are read from <vm-name>.env."
     }
 
     return (Select-ClagnosVmInteractive -ResourceGroup $ResourceGroup -DefaultVmName $DefaultVmName)
@@ -420,6 +420,26 @@ function Get-ClagnosManagedVmMatchRows {
     return @($matches)
 }
 
+# Handles Set-ClagnosResolvedVmProfile.
+function Set-ClagnosResolvedVmProfile {
+    param([hashtable]$TargetConfigMap,[string]$TargetVmName,[string]$TargetGroup)
+
+    $profilePath = Get-ClagnosVmEnvPath -VmName $TargetVmName
+    if (-not (Test-Path -LiteralPath $profilePath -PathType Leaf)) {
+        Throw-FriendlyError -Detail ("The VC-specific environment file for '{0}' is missing: {1}." -f $TargetVmName,$profilePath) -Code 66 -Summary 'VC configuration is missing.' -Hint ("Create or restore '{0}.env' from vc.env.example before running operations on this VM." -f $TargetVmName)
+    }
+    $profile = Read-DotEnvFile -Path $profilePath -GlobalOnly
+    if (-not $profile.ContainsKey('SELECTED_VM_NAME') -or -not [string]::Equals([string]$profile['SELECTED_VM_NAME'],[string]$TargetVmName,[System.StringComparison]::OrdinalIgnoreCase)) {
+        throw ("VC environment identity does not match its filename: {0}" -f $profilePath)
+    }
+    foreach ($key in @(Get-ClagnosVmScopedEnvKeys)) {
+        if ($profile.ContainsKey([string]$key)) { $TargetConfigMap[[string]$key] = [string]$profile[[string]$key] }
+    }
+    $TargetConfigMap['SELECTED_VM_NAME'] = [string]$TargetVmName
+    $TargetConfigMap['SELECTED_RESOURCE_GROUP'] = [string]$TargetGroup
+    if ($script:ConfigOverrides) { $script:ConfigOverrides['SELECTED_VM_NAME'] = [string]$TargetVmName }
+}
+
 # Handles Resolve-ClagnosManagedVmTarget.
 function Resolve-ClagnosManagedVmTarget {
     param(
@@ -453,6 +473,7 @@ function Resolve-ClagnosManagedVmTarget {
             -FailIfMultipleWithoutExplicitVm:$FailIfMultipleWithoutExplicitVmForExplicitGroup `
             -OperationName $OperationName
 
+        Set-ClagnosResolvedVmProfile -TargetConfigMap $ConfigMap -TargetVmName $vmName -TargetGroup $resourceGroup
         return [pscustomobject]@{
             ResourceGroup = $resourceGroup
             VmName = $vmName
@@ -465,6 +486,7 @@ function Resolve-ClagnosManagedVmTarget {
             $activeVmNames = @(Get-ClagnosVmNamesForResourceGroup -ResourceGroup $defaultResourceGroup)
             foreach ($candidateVmName in @($activeVmNames)) {
                 if ([string]::Equals([string]$candidateVmName, $requestedVmName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    Set-ClagnosResolvedVmProfile -TargetConfigMap $ConfigMap -TargetVmName $requestedVmName -TargetGroup $defaultResourceGroup
                     return [pscustomobject]@{
                         ResourceGroup = $defaultResourceGroup
                         VmName = [string]$candidateVmName
@@ -476,6 +498,7 @@ function Resolve-ClagnosManagedVmTarget {
 
         $matches = @(Get-ClagnosManagedVmMatchRows -VmName $requestedVmName)
         if (@($matches).Count -eq 1) {
+            Set-ClagnosResolvedVmProfile -TargetConfigMap $ConfigMap -TargetVmName ([string]$matches[0].VmName) -TargetGroup ([string]$matches[0].ResourceGroup)
             return [pscustomobject]@{
                 ResourceGroup = [string]$matches[0].ResourceGroup
                 VmName = [string]$matches[0].VmName
@@ -512,6 +535,7 @@ function Resolve-ClagnosManagedVmTarget {
         -DefaultVmName $defaultVmName `
         -AutoSelectSingleVm:$AutoSelectSingleVm `
         -OperationName $OperationName
+    Set-ClagnosResolvedVmProfile -TargetConfigMap $ConfigMap -TargetVmName $vmName -TargetGroup $resourceGroup
     return [pscustomobject]@{
         ResourceGroup = $resourceGroup
         VmName = $vmName

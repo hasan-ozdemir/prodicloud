@@ -41,7 +41,7 @@ $appStatePluginText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepo
 $operationModuleText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'modules/commands/package/clagnos-package-operations.psm1') -Raw)
 $uiText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'scripts/clagnos-cli.ps1') -Raw)
 $contractText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'modules/commands/package/contract.ps1') -Raw)
-$envText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot '.env.example') -Raw)
+$envText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'clagnos.env.example') -Raw)
 $benchmarkText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'tools/benchmark-package-transports.ps1') -Raw)
 $setupVc2Text = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'setup-vc2.ps1') -Raw)
 $setupVc2CmdText = [string](Get-Content -LiteralPath (Join-Path $resolvedRepoRoot 'setup-vc2.cmd') -Raw)
@@ -112,7 +112,7 @@ foreach ($packageId in @('be-my-eyes','whatsapp','codex-app','icloud','windows-s
 }
 Assert-PackageLifecycle -Condition ($slowStoreTimeouts['be-my-eyes'] -ge 600 -and $slowStoreTimeouts['whatsapp'] -ge 600 -and $slowStoreTimeouts['codex-app'] -ge 600 -and $slowStoreTimeouts['icloud'] -ge 600 -and $slowStoreTimeouts['windows-subsystem-linux'] -ge 600) -Message 'WinRM Store-backed and WSL bootstrap package jobs must receive a bounded timeout that covers first-install work.'
 Assert-PackageLifecycle -Condition ($contractText.Contains("'update'")) -Message 'The package CLI contract must accept update.'
-Assert-PackageLifecycle -Condition ($envText -match '(?m)^PACKAGE_TRANSPORT=ssh\s*$') -Message '.env.example must document the default Windows package transport.'
+Assert-PackageLifecycle -Condition ($envText -match '(?m)^DEFAULT_PACKAGE_TRANSPORT=ssh\s*$') -Message 'clagnos.env.example must document the default Windows package transport.'
 Assert-PackageLifecycle -Condition ($benchmarkText.Contains("@('ssh','winrm')") -and $benchmarkText.Contains("'PACKAGE_TRANSPORT=' + $Value") -and $benchmarkText.Contains('BENCHMARK {0}')) -Message 'The live read-only package transport benchmark must compare SSH and WinRM and report both results.'
 
 $jawsManifest = Get-Content -LiteralPath (Join-Path $catalogRoot 'jaws/package.json') -Raw | ConvertFrom-Json

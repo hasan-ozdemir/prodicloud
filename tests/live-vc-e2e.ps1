@@ -279,17 +279,45 @@ if ($ResumeAfterUpdate -and ($ResumeFromUpdate -or -not [string]::IsNullOrWhiteS
 if ($RunLive -and ([string]$env:CI -eq 'true' -or [string]$env:GITHUB_ACTIONS -eq 'true')) { throw 'The live Azure E2E test is disabled in CI.' }
 
 $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
-$envPath = Join-Path $resolvedRepoRoot '.env'
-if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { throw 'The live E2E test requires a local .env file.' }
-$config = Read-ClagnosE2eDotEnv -Path $envPath
+$globalEnvPath = Join-Path $resolvedRepoRoot 'clagnos.env'
+$vmEnvPath = Join-Path $resolvedRepoRoot ($VmName + '.env')
+if (-not (Test-Path -LiteralPath $globalEnvPath -PathType Leaf)) { throw 'The live E2E test requires a local clagnos.env file.' }
+if (-not (Test-Path -LiteralPath $vmEnvPath -PathType Leaf)) { throw ("The live E2E test requires the target VC profile '{0}.env'." -f $VmName) }
+$globalConfig = Read-ClagnosE2eDotEnv -Path $globalEnvPath
+$vmConfig = Read-ClagnosE2eDotEnv -Path $vmEnvPath
+if ([string]$vmConfig['SELECTED_VM_NAME'] -cne $VmName) { throw ("VC profile identity does not match its filename: {0}" -f $vmEnvPath) }
+$config = @{}
+foreach ($key in @($globalConfig.Keys)) { $config[[string]$key] = [string]$globalConfig[$key] }
+$runtimeDefaults = @{
+    DEFAULT_VM_OS = 'SELECTED_VM_OS'
+    DEFAULT_AZURE_REGION = 'SELECTED_AZURE_REGION'
+    DEFAULT_VM_ENABLE_HIBERNATION = 'VM_ENABLE_HIBERNATION'
+    DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION = 'VM_ENABLE_NESTED_VIRTUALIZATION'
+    DEFAULT_VM_ADMIN_USER = 'VM_ADMIN_USER'
+    DEFAULT_VM_ASSISTANT_USER = 'VM_ASSISTANT_USER'
+    DEFAULT_VM_SSH_PORT = 'VM_SSH_PORT'
+    DEFAULT_VM_RDP_PORT = 'VM_RDP_PORT'
+    DEFAULT_TCP_PORTS = 'TCP_PORTS'
+    DEFAULT_PACKAGE_TRANSPORT = 'PACKAGE_TRANSPORT'
+    DEFAULT_WIN_VM_IMAGE = 'WIN_VM_IMAGE'
+    DEFAULT_WIN_VM_SIZE = 'WIN_VM_SIZE'
+    DEFAULT_WIN_VM_DISK_SIZE_GB = 'WIN_VM_DISK_SIZE_GB'
+}
+foreach ($key in @($runtimeDefaults.Keys)) {
+    $runtimeKey = [string]$runtimeDefaults[$key]
+    if (-not [string]::IsNullOrWhiteSpace([string]$globalConfig[[string]$key])) { $config[$runtimeKey] = [string]$globalConfig[[string]$key] }
+}
+foreach ($key in @($vmConfig.Keys)) {
+    if (-not [string]::IsNullOrWhiteSpace([string]$vmConfig[$key])) { $config[[string]$key] = [string]$vmConfig[$key] }
+}
 if ([string]::IsNullOrWhiteSpace($SubscriptionId)) { $SubscriptionId = [string]$config['SELECTED_AZURE_SUBSCRIPTION_ID'] }
 if ([string]::IsNullOrWhiteSpace($SubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID or pass -SubscriptionId.' }
 if ([string]::IsNullOrWhiteSpace($Region)) { $Region = [string]$config['SELECTED_AZURE_REGION'] }
 if ([string]::IsNullOrWhiteSpace($Region)) { throw 'Set SELECTED_AZURE_REGION or pass -Region.' }
 if ([string]$config['SELECTED_VM_OS'] -notmatch '(?i)^windows$') { throw 'This end-to-end scenario requires SELECTED_VM_OS=windows.' }
-if ([string]$config['VM_ENABLE_HIBERNATION'] -notmatch '(?i)^true$') { throw 'The current default VM_ENABLE_HIBERNATION must be true for this acceptance scenario.' }
+if ([string]$config['VM_ENABLE_HIBERNATION'] -notmatch '(?i)^true$') { throw 'The target VC profile must set VM_ENABLE_HIBERNATION=true for this acceptance scenario.' }
 foreach ($key in @('VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','SELECTED_COMPANY_NAME','SELECTED_COMPANY_WEB_ADDRESS','SELECTED_EMPLOYEE_EMAIL_ADDRESS','SELECTED_EMPLOYEE_FULL_NAME')) {
-    if ([string]::IsNullOrWhiteSpace([string]$config[$key])) { throw ("The current .env is missing a required value for '{0}'." -f $key) }
+    if ([string]::IsNullOrWhiteSpace([string]$config[$key])) { throw ("The global configuration or target VC profile is missing a required value for '{0}'." -f $key) }
 }
 
 $script:PowerShellExecutable = (Get-Command pwsh.exe -ErrorAction Stop).Source
@@ -317,7 +345,7 @@ Write-Host ("Local preflight passed: init={0}, update={1}, enabled packages={2},
 
 $account = Invoke-ClagnosE2eAzJson -Arguments @('account','show','--subscription',$SubscriptionId) -Description 'selected Azure subscription'
 $activeAccount = Invoke-ClagnosE2eAzJson -Arguments @('account','show') -Description 'active Azure CLI subscription'
-if (-not [string]::Equals([string]$account.id,[string]$activeAccount.id,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The selected .env subscription is not the active Azure CLI subscription.' }
+if (-not [string]::Equals([string]$account.id,[string]$activeAccount.id,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The selected clagnos.env subscription is not the active Azure CLI subscription.' }
 if ([string]$account.state -ne 'Enabled') { throw 'The selected Azure subscription is not enabled.' }
 $existingVm = @(Invoke-ClagnosE2eAzJson -Arguments @('vm','list','--subscription',$SubscriptionId,'--query',("[?name=='{0}'].{{name:name,resourceGroup:resourceGroup,location:location}}" -f $VmName)) -Description 'fresh or resume target-name check')
 if ($ResumeExisting) {

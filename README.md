@@ -69,7 +69,7 @@ At a glance:
   - [Direct Task Execution With `task`](#direct-task-execution-with-task)
 - [Configuration Guide](#configuration-guide)
   - [Runtime Precedence](#runtime-precedence)
-  - [High-Value `.env` Keys](#high-value-env-keys)
+  - [Global And VC Environment Files](#global-and-vc-environment-files)
   - [Shared VM Feature Toggles](#shared-vm-feature-toggles)
   - [Platform-Specific Settings](#platform-specific-settings)
   - [Connection And Task Settings](#connection-and-task-settings)
@@ -117,7 +117,7 @@ The workflow separates infrastructure creation, initial guest setup, maintenance
 ### Interactive CLI
 Run `.\cg.cmd` to open the menu. The welcome screen shows the `one tool for all common cloud operations` line, the selected Azure subscription name/id. The main menu offers `1. Virtual computers`, `2. Managed resource inventory`, and `3. Cloud subscriptions`; choose a subscription by number to update both the Azure CLI default and Clagnos's saved subscription. Use numbers or the shown letter shortcuts and press Enter. Press Escape or enter `b` to return one level, `c` to close a submenu flow, or `q` to exit. `.\cg.cmd <command> ...` forwards a direct command to the same `clagnos.ps1` runtime.
 
-The selected virtual computer opens with compute, CPU/RAM, OS image, disks, security/feature settings, NIC/VNet/subnet/NSG, private/public IP, public DNS, tags, and attached-resource details. It also shows SSH/RDP endpoints, the Windows PowerShell remoting endpoint, and the configured manager and assistant usernames/passwords read from local `.env`; passwords are not included in progress or operation log messages. Its menus expose initialization, explicit managed-user password reset, maintenance, reviewed package setup-all, builtin/custom package status/install/repair/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP/PowerShell remoting, remote commands, active and disabled tasks, package app-state, reports, and deletion. Select `o: operations` for numbered power actions (including graceful shutdown, hibernate/resume, immediate power-off, and force reset), feature toggles, resizing, and the other advanced operations.
+The selected virtual computer opens with compute, CPU/RAM, OS image, disks, security/feature settings, NIC/VNet/subnet/NSG, private/public IP, public DNS, tags, and attached-resource details. It also shows SSH/RDP endpoints, the Windows PowerShell remoting endpoint, and the configured manager and assistant usernames/passwords read from that VC's local `<vm-name>.env` profile; passwords are not included in progress or operation log messages. Its menus expose initialization, explicit managed-user password reset, maintenance, reviewed package setup-all, builtin/custom package status/install/repair/update/uninstall and enable/disable, component list/show/CRUD and disk/NIC attachment, lifecycle/repair, resize/move, VM features, SSH/RDP/PowerShell remoting, remote commands, active and disabled tasks, package app-state, reports, and deletion. Select `o: operations` for numbered power actions (including graceful shutdown, hibernate/resume, immediate power-off, and force reset), feature toggles, resizing, and the other advanced operations.
 
 On the first signed-in launch, a hidden background worker reads managed resource groups, their resources, and detailed VM state into a subscription-scoped local snapshot without blocking the welcome screen. An exclusive per-subscription worker lock prevents concurrent TUI instances from duplicating inventory calls. Later launches can reuse the snapshot immediately. The worker revalidates it every 60 seconds; `r: check or refresh managed resource cache`, a subscription change, or a command that may mutate Azure state requests an earlier refresh. A persisted refresh request survives closing the TUI, and snapshots older than five minutes are not used. Azure ETags detect changes, with resource-content signatures as a fallback when ETags are absent; unchanged validation preserves the current snapshot. Inventory and component list/show screens read this cache instead of repeating Azure list calls. If Azure CLI reads fail, the worker reports the error and retries with a bounded backoff.
 
@@ -151,23 +151,17 @@ The wizard accepts inbound TCP ports as comma-separated numbers and ascending ra
 - `docs/prompt-history.md`: English-normalized historical ledger of completed prompt/summary pairs.
 
 ### First Configuration Pass
-1. Copy `.env.example` to `.env`.
-2. Set the minimum values:
-   - `SELECTED_VM_OS`
-   - `SELECTED_VM_NAME`
-   - `SELECTED_AZURE_REGION`
-   - `SELECTED_AZURE_SUBSCRIPTION_ID` when you want a repo-local default Azure subscription id for Azure-touching commands
-   - `VM_ADMIN_USER`, `VM_ADMIN_PASS`
-   - `VM_ASSISTANT_USER`, `VM_ASSISTANT_PASS`
-   - platform-specific image and size keys as needed
-3. Set `SELECTED_COMPANY_NAME`, `SELECTED_COMPANY_WEB_ADDRESS`, `SELECTED_COMPANY_EMAIL_ADDRESS`, `SELECTED_EMPLOYEE_EMAIL_ADDRESS`, and `SELECTED_EMPLOYEE_FULL_NAME` for Windows flows. Repo-managed public desktop web shortcuts require the company and employee identity inputs; business shortcuts use `SELECTED_COMPANY_NAME` plus `SELECTED_COMPANY_WEB_ADDRESS`, personal shortcuts use the email local-part from `SELECTED_EMPLOYEE_EMAIL_ADDRESS` as the Chrome `--profile-directory`, and future mail-facing shortcuts can reuse `SELECTED_COMPANY_EMAIL_ADDRESS`. The task normalizes profile-directory sources to lowercase before writing the Chrome profile name.
-4. Treat `.env` as the home for app-wide identity, secrets, and reusable overrides. Task-only constants should stay in the owning task script's top config block.
+1. Copy `clagnos.env.example` to `clagnos.env`.
+2. Use `clagnos.env` for `SELECTED_AZURE_SUBSCRIPTION_ID`, operator identity, naming templates, Azure/SSH timeouts, task paths, and `DEFAULT_*` values used only when creating a VC.
+3. Copy `vc.env.example` to `<vm-name>.env` only when preparing a profile manually. It contains that VC's resource group, OS, region, compute/image/disk, feature flags, connection ports, package transport, usernames, and passwords. The create wizard creates and saves this file for new VCs; existing VCs load their own profile by name.
+4. Set `SELECTED_COMPANY_NAME`, `SELECTED_COMPANY_WEB_ADDRESS`, `SELECTED_COMPANY_EMAIL_ADDRESS`, `SELECTED_EMPLOYEE_EMAIL_ADDRESS`, and `SELECTED_EMPLOYEE_FULL_NAME` in `clagnos.env` for Windows flows. Repo-managed public desktop web shortcuts require the company and employee identity inputs; business shortcuts use `SELECTED_COMPANY_NAME` plus `SELECTED_COMPANY_WEB_ADDRESS`, personal shortcuts use the email local-part from `SELECTED_EMPLOYEE_EMAIL_ADDRESS` as the Chrome `--profile-directory`, and future mail-facing shortcuts can reuse `SELECTED_COMPANY_EMAIL_ADDRESS`. The task normalizes profile-directory sources to lowercase before writing the Chrome profile name.
+5. Keep task-only constants in the owning task script's top config block. Runtime `*.env` files are local and git-ignored.
 
 ### Fastest Safe Path To Value
 If you want the fastest safe path to value, use this order. The target outcome is not only "the VM exists"; it is "someone can connect and start real work quickly" with a machine that already looks curated. On the current Windows path that includes Store-aware public desktop shortcuts, managed short-launcher wrapping for overlong Chrome/Edge-style shortcut invocations, git-ignored task app-state plugins, sanitized package app-state archives versioned beside their package manifests, and WSL2 plus Docker Desktop prerequisite hardening before developer-runtime health is considered ready:
-1. Open `.\cg.cmd`, choose `c: configure settings`, and review the `.env` values and next-create preview.
+1. Open `.\cg.cmd`, choose `c: configure settings`, and review global `clagnos.env` values and the next-create preview.
 2. Choose Virtual computers, then `c: create virtual computer`. This creates the managed group, network, and VM only.
-3. Select the new VM and use `i: initialize VC` to run its enabled `vm-init` tasks. Existing manager/assistant passwords are preserved on later init runs; use `k: reset managed-user passwords from .env` for the separate, typed-confirmation reset operation.
+3. Select the new VM and use `i: initialize VC` to run its enabled `vm-init` tasks. Existing manager/assistant passwords are preserved on later init runs; use `k: reset managed-user passwords from <vm-name>.env` for the separate, typed-confirmation reset operation.
 4. Use `p: setup all program packages` to review enabled packages from both catalogs, install missing packages, and repair detected Clagnos-managed startup drift, or use `m: manage program packages` to inspect a catalog and run individual package actions.
 5. Use `u: update VC` for vm-update maintenance, then verify the VM with its report and connection tests.
 
@@ -190,7 +184,7 @@ For a live acceptance run that creates a fresh Windows VC, installs every enable
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\tests\live-vc-e2e.ps1 -RunLive -VmName <unused-vm-name> -VmSize <compatible-azure-vm-size>
 ```
 
-The test requires an unused VM name, a VM size and image that support the configured features, an authenticated active Azure subscription selected in `.env`, and the current Windows operator values. It installs JAWS before task 102 configures the interactive desktop needed by Store packages, then installs every enabled Windows package and leaves the VM running after a successful hibernation/resume check. It is opt-in and never runs in CI. The committed B-series default does not support nested virtualization. When the Compute SKU response omits that capability, Clagnos checks the documented VM family; a B-series selection with nested virtualization enabled now fails during configuration review, before creating a resource group, network, or VM. See Microsoft's [Bsv2 feature support table](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/general-purpose/bsv2-series). Choose a size whose documented and subscription-reported features satisfy the requested toggles, or set `VM_ENABLE_NESTED_VIRTUALIZATION=false` for a B-series VM. To continue a partially completed run without recreating the managed VM or rerunning init tasks, pass `-ResumeExisting -ResumeFromPackage <catalog>/<package-id>` after fixing the reported cause.
+The test requires an unused VM name, a compatible VM size and image, an authenticated active Azure subscription selected in `clagnos.env`, a Windows operator identity, and passwords in the target `<vm-name>.env` profile. It installs JAWS before task 102 configures the interactive desktop needed by Store packages, then installs every enabled Windows package and leaves the VM running after a successful hibernation/resume check. It is opt-in and never runs in CI. The committed B-series default does not support nested virtualization. When the Compute SKU response omits that capability, Clagnos checks the documented VM family; a B-series selection with nested virtualization enabled now fails during configuration review, before creating a resource group, network, or VM. See Microsoft's [Bsv2 feature support table](https://learn.microsoft.com/en-us/azure/virtual-machines/sizes/general-purpose/bsv2-series). Choose a size whose documented and subscription-reported features satisfy the requested toggles, or set `VM_ENABLE_NESTED_VIRTUALIZATION=false` in that VC profile for a B-series VM. To continue a partially completed run without recreating the managed VM or rerunning init tasks, pass `-ResumeExisting -ResumeFromPackage <catalog>/<package-id>` after fixing the reported cause.
 
 For the repeatable VC2 setup, use the repository launcher:
 
@@ -200,7 +194,7 @@ For the repeatable VC2 setup, use the repository launcher:
 .\setup-vc2.cmd -ResumeAtPackageStage
 ```
 
-The runner uses the Windows image selected by `WIN_VM_IMAGE` in local `.env`, the `az2vs` subscription selected by `SELECTED_AZURE_SUBSCRIPTION_ID`, `germanywestcentral`, `Standard_B2s_v2`, a 160 GB OS disk, and hibernation. It temporarily stages create values and restores the original `.env` byte-for-byte. Nested virtualization is disabled for this VM because B2s_v2 does not expose the required guest CPU extensions. When no managed `vc2` exists, the runner creates a fresh resource group and VM; on reruns it reuses the managed VM, expands a smaller disk or corrects its size/hibernation through Clagnos, and stops if the OS, region, ownership, or disk state is incompatible. It runs vm-init, bootstraps Chocolatey and Sysinternals over WinRM for the autologon maintenance task, runs vm-update, applies setup-all for enabled builtin/custom packages over WinRM, and reruns vm-update to verify package-dependent startup and shortcut tasks. It then tests RDP/SSH/WinRM and final Azure status, leaving the VM running. Each invocation writes a local transcript under `%TEMP%\clagnos-setup-vc2-*.log`. AnyDesk’s signed vendor installer is verified locally, copied over WinRM, and hash-checked on the VM before package installation. `-PreflightOnly` performs read-only target checks without applying corrections. `-ResumeAtPackageStage` requires an existing compatible managed VC2 and skips create, init, and the first update pass so operators can continue after those phases completed; it still verifies prerequisites, runs package setup, performs the final update, and checks all three transports. This resume mode never changes disk or network resources. If AnyDesk staging or another package fails, the runner records the issue and still lets setup-all finish independent packages before returning a nonzero result when any package remains unverified.
+The runner uses the Windows image selected by `WIN_VM_IMAGE` in local `vc2.env`, the `az2vs` subscription selected by `SELECTED_AZURE_SUBSCRIPTION_ID`, `germanywestcentral`, `Standard_B2s_v2`, a 160 GB OS disk, and hibernation. It temporarily stages create values and persists setup values in `vc2.env` and restores only temporary package-transport overrides. Nested virtualization is disabled for this VM because B2s_v2 does not expose the required guest CPU extensions. When no managed `vc2` exists, the runner creates a fresh resource group and VM; on reruns it reuses the managed VM, expands a smaller disk or corrects its size/hibernation through Clagnos, and stops if the OS, region, ownership, or disk state is incompatible. It runs vm-init, bootstraps Chocolatey and Sysinternals over WinRM for the autologon maintenance task, runs vm-update, applies setup-all for enabled builtin/custom packages over WinRM, and reruns vm-update to verify package-dependent startup and shortcut tasks. It then tests RDP/SSH/WinRM and final Azure status, leaving the VM running. Each invocation writes a local transcript under `%TEMP%\clagnos-setup-vc2-*.log`. AnyDesk’s signed vendor installer is verified locally, copied over WinRM, and hash-checked on the VM before package installation. `-PreflightOnly` performs read-only target checks without applying corrections. `-ResumeAtPackageStage` requires an existing compatible managed VC2 and skips create, init, and the first update pass so operators can continue after those phases completed; it still verifies prerequisites, runs package setup, performs the final update, and checks all three transports. This resume mode never changes disk or network resources. If AnyDesk staging or another package fails, the runner records the issue and still lets setup-all finish independent packages before returning a nonzero result when any package remains unverified.
 ### Daily Operator Shortcuts
 ```powershell
 .\cg.cmd --version
@@ -317,14 +311,14 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `--perf` | Most public commands | Prints timing metrics for the current command | Useful during profiling, acceptance, and long-running change windows. |
 | `--windows` | `create`, `initialize`, `update`, `exec`, `resize`, `package` | Forces the Windows platform path or validates Windows expectation | Use this when the target platform must be explicit. |
 | `--linux` | `create`, `initialize`, `update`, `exec`, `resize`, `package` | Forces the Linux platform path or validates Linux expectation | Use this when the target platform must be explicit. |
-| `-s`, `--subscription-id=<subscription-guid>` | All Azure-touching commands plus `task --run-*` and `task --save/restore-app-state` | Targets Azure operations to one subscription and persists CLI-provided subscription intent locally | `-s`, `--subscription-id=<subscription-guid>`: target Azure subscription for every Azure-touching command; successful CLI usage also writes `SELECTED_AZURE_SUBSCRIPTION_ID` into `.env`. |
+| `-s`, `--subscription-id=<subscription-guid>` | All Azure-touching commands plus `task --run-*` and `task --save/restore-app-state` | Targets Azure operations to one subscription and persists CLI-provided subscription intent locally | `-s`, `--subscription-id=<subscription-guid>`: target Azure subscription for every Azure-touching command; successful CLI usage also writes `SELECTED_AZURE_SUBSCRIPTION_ID` into `clagnos.env`. |
 | `-h`, `--help` | All public commands | Prints quick help or command-specific help | `-h`, `--help` are equivalent operator aliases. |
 
 ### Command Matrix
 
 | Command | Purpose | Mutation level | When to use it | Primary outcome |
 | --- | --- | --- | --- | --- |
-| `configure` | Review, edit, validate, preview, and save the supported `.env` contract | Local `.env` only | Before create/update work, or whenever the next VM configuration needs a safe frontend | Validated `.env` values with a next-create preview |
+| `configure` | Review, edit, validate, preview, and save global `clagnos.env` settings and create defaults | Local global config only | Before create/update work, or when app-wide settings need editing | Validated global values with a next-create preview |
 | `create` | Create a fresh managed group, initial network, and VM | Azure-mutating | First deployment or explicit rebuild flow | New virtual computer infrastructure; guest stages remain separate. |
 | `initialize` | Run enabled `vm-init` tasks on an existing managed VM | Guest-mutating | Initial guest bootstrap | Initialized guest access and base configuration. |
 | `update` | Run enabled `vm-update` maintenance tasks | Guest-mutating | Ongoing maintenance | Package installers live in their isolated package catalogs. |
@@ -342,9 +336,9 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `delete` | Delete a selected managed scope after showing its resource chain | Azure-mutating | Controlled cleanup | Deleted selected target scope, verified absent in Azure. |
 | `help` | Print the command catalog or one command's details | Local/read-only | Operator discovery and reference | Command documentation |
 
-Windows package actions use `PACKAGE_TRANSPORT=ssh|winrm` from `.env` (default `ssh`). The selected transport is strict: authentication or transfer failures stop the action and do not silently retry through the other transport. WinRM uses the manager credentials and adds only the exact target endpoint to the local TrustedHosts list when it is not already present.
+Windows package actions use `PACKAGE_TRANSPORT=ssh|winrm` from the target VC profile, with `DEFAULT_PACKAGE_TRANSPORT` in `clagnos.env` as the create default. The selected transport is strict: authentication or transfer failures stop the action and do not silently retry through the other transport. WinRM uses the manager credentials and adds only the exact target endpoint to the local TrustedHosts list when it is not already present.
 
-To compare the read-only package status path over both transports, run `tools/benchmark-package-transports.ps1` with one existing target and package. It takes five samples per transport by default, prints medians and ranges, and restores the original `PACKAGE_TRANSPORT` setting afterward.
+To compare the read-only package status path over both transports, run `tools/benchmark-package-transports.ps1` with one existing target and package. It takes five samples per transport by default, prints medians and ranges, and restores the original target profile's `PACKAGE_TRANSPORT` setting afterward.
 
 ### Command Variations By Command
 
@@ -352,7 +346,7 @@ To compare the read-only package status path over both transports, run `tools/be
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd configure` | none | Opens the interactive `.env` editor | First configuration pass or safe local config maintenance | Purpose: review, edit, validate, preview, and save the supported `.env` contract through sections and pickers. |
+| `.\cg.cmd configure` | none | Opens the interactive global `clagnos.env` editor | First configuration pass or safe local config maintenance | Edits global identity, Azure selection, naming templates, runtime settings, and create defaults. VC-specific values stay in each `<vm-name>.env`. |
 | `.\cg.cmd configure --help` | `--help` | Prints the configure editor contract | Operator discovery | `configure` is interactive-only and rejects target-selection flags such as `--group`, `--vm-name`, and `--subscription-id`. |
 
 #### `create`
@@ -360,7 +354,7 @@ To compare the read-only package status path over both transports, run `tools/be
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
 | `.\cg.cmd create` | interactive | Creates a new managed group, initial network, and VM | First deployment | It stops after VM deployment; use initialize for vm-init and package for software. |
-| `.\cg.cmd create --auto` | `--auto` | Unattended fresh infrastructure/VM deployment | Controlled deployment | CLI overrides win over `.env`; platform, name, region, and size must resolve. |
+| `.\cg.cmd create --auto` | `--auto` | Unattended fresh infrastructure/VM deployment | Controlled deployment | CLI overrides win over global `DEFAULT_*` create values; platform, name, region, size, and credentials must resolve. |
 | `.\cg.cmd create --step-from=group --step-to=vm-deploy` | step window | Runs a validated infrastructure window | Recovery or diagnosis | Guest task stages are not part of create. |
 
 #### `initialize`
@@ -369,7 +363,7 @@ To compare the read-only package status path over both transports, run `tools/be
 | --- | --- | --- | --- | --- |
 | `.\cg.cmd initialize --group=<resource-group> --vm-name=<vm-name>` | target selectors | Runs enabled vm-init tasks | Guest bootstrap | Requires an existing managed VM. |
 | `.\cg.cmd initialize --auto --group=<resource-group> --vm-name=<vm-name>` | `--auto`, target selectors | Runs init tasks without review prompts | Automated bootstrap | Does not create Azure resources. |
-| `.\cg.cmd initialize --group=<resource-group> --vm-name=<vm-name> --reset-managed-user-passwords` | target selectors, explicit reset flag | Resets manager and assistant passwords to `.env` values after typed confirmation | Credential rotation | Interactive-only; ordinary init preserves existing passwords. |
+| `.\cg.cmd initialize --group=<resource-group> --vm-name=<vm-name> --reset-managed-user-passwords` | target selectors, explicit reset flag | Resets manager and assistant passwords to that VC's `<vm-name>.env` values after typed confirmation | Credential rotation | Interactive-only; ordinary init preserves existing passwords. |
 
 #### `update`
 
@@ -412,8 +406,8 @@ To compare the read-only package status path over both transports, run `tools/be
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
 | `.\cg.cmd show` | none | Prints the broader managed report | Environment audit | Good for multi-group review. |
-| `.\cg.cmd show --group=<resource-group>` | `--group` | Prints one managed group report | Support handoff and verification | `show` prints the expected inventory while password-bearing `.env` values are redacted. |
-| `.\cg.cmd show --group=<resource-group> --vm-name=<vm-name>` | `--group`, `--vm-name` | Prints the managed report and one VM's target-derived configuration | Focused inspection of a single managed target | `show` stays read-only and uses actual Azure state without writing `.env`. |
+| `.\cg.cmd show --group=<resource-group>` | `--group` | Prints one managed group report | Support handoff and verification | `show` prints the expected inventory while password-bearing VC profile values are redacted. |
+| `.\cg.cmd show --group=<resource-group> --vm-name=<vm-name>` | `--group`, `--vm-name` | Prints the managed report and one VM's target-derived configuration | Focused inspection of a single managed target | `show` stays read-only and uses actual Azure state without writing `clagnos.env`. |
 | `.\cg.cmd show --export-json=<path>` | `--export-json`, optional `--overwrite` | Writes a machine-readable report with sensitive configuration redacted | Support handoff or downstream reporting | Existing files are preserved unless `--overwrite` is explicit. |
 
 #### `do`
@@ -496,7 +490,7 @@ To compare the read-only package status path over both transports, run `tools/be
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --hibernation=off -s <subscription-guid>` | `--hibernation` | Changes hibernation state | Feature-state management | Syncs the successful change into `.env`. |
+| `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --hibernation=off -s <subscription-guid>` | `--hibernation` | Changes hibernation state | Feature-state management | Syncs the successful change into the selected VC profile. |
 | `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --nested-virtualization=off` | `--nested-virtualization` | Saves the Clagnos nested-virtualization request | Repo setting sync | Does not change Azure hardware exposure; `on` requires a running VM and validates guest CPU virtualization extensions |
 | `.\cg.cmd set --group=<resource-group> --vm-name=<vm-name> --hibernation=on --nested-virtualization=off` | both flags | Applies both feature controls | Coordinated feature changes | Partial success still updates local state for the successful part. |
 
@@ -529,7 +523,7 @@ To compare the read-only package status path over both transports, run `tools/be
 Practical outcomes:
 - the default path creates one fresh managed resource group and one fresh VM target
 - interactive mode proposes the next globally unique managed `gX` group id and globally unique managed `nX` resource ids
-- auto mode succeeds when CLI overrides or `.env` `SELECTED_*` values plus the platform VM defaults resolve platform, VM name, Azure region, and VM size
+- auto mode succeeds when CLI overrides plus `DEFAULT_*` values in `clagnos.env` resolve platform, VM name, Azure region, and VM size
 - when a destructive rebuild is intentional, run `delete` first and then run `create`
 - the same step model works in interactive and auto mode
 
@@ -556,8 +550,8 @@ Practical outcomes:
 
 Practical outcomes:
 - `list` gives a read-only managed inventory view across groups and resource types
-- `configure` gives a safe interactive frontend for every supported `.env` key, with picker-backed multi-option fields and a next-create preview before save
-- `show` gives an inventory snapshot while password-bearing `.env` values are redacted, and adds target-derived configuration when one managed VM is in scope
+- `configure` gives a safe interactive frontend for every supported global `clagnos.env` key, with picker-backed multi-option fields and a next-create preview before save
+- `show` gives an inventory snapshot while password-bearing VC profile values are redacted, and adds target-derived configuration when one managed VM is in scope
 - `do --vm-action=status` is the quickest preflight check before a mutating change
 
 ### Run One Task Or Open A Remote Shell
@@ -627,23 +621,24 @@ Practical outcomes:
 - `--auto`: unattended mode for `create`, `initialize`, `update`, and `delete`
 - `--perf`: print timing metrics
 - `--windows`, `--linux`: explicit platform selection or platform expectation
-- `-s`, `--subscription-id=<subscription-guid>`: target Azure subscription for every Azure-touching command; successful CLI usage also writes `SELECTED_AZURE_SUBSCRIPTION_ID` into `.env`.
+- `-s`, `--subscription-id=<subscription-guid>`: target Azure subscription for every Azure-touching command; successful CLI usage also writes `SELECTED_AZURE_SUBSCRIPTION_ID` into `clagnos.env`.
 - `-h`, `--help`: print quick or command-specific help
 - Canonical target selectors are `--group` / `-g`, `--vm-name` / `-v`, and `--subscription-id` / `-s`; value-taking options accept both `--option=value` and `--option value`, plus short-form `-x=value` and `-x value` when a short alias exists.
 
-Azure subscription selection precedence is: CLI `--subscription-id` / `-s` -> `.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
+Azure subscription selection precedence is: CLI `--subscription-id` / `-s` -> `clagnos.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
 
 ### `configure`
-Purpose: review, edit, validate, preview, and save the supported `.env` contract through one interactive frontend.
+Purpose: review, edit, validate, preview, and save the global `clagnos.env` contract through one interactive frontend.
 
 Behavior notes:
-- interactive-only `.env` editor
-- shows every supported `.env` key in section order derived from `.env.example`
+- interactive-only global `clagnos.env` editor
+- shows every supported global key in section order derived from `clagnos.env.example`
 - uses a picker for every finite or discoverable multi-option field
-- stages edits in memory until final confirmation, then writes only supported `.env` keys once
+- stages edits in memory until final confirmation, then writes only supported global keys once
 - renders a next-create preview with effective platform inputs plus next managed resource names when Azure validation is available
 - can open without `az login`, but Azure-backed fields stay read-only until Azure validation is available
-- recovers softly for blank-permitted fields, including clearing `SELECTED_RESOURCE_GROUP` when no managed resource groups exist, and blocks save only when create-critical values remain unresolved
+- never edits or syncs an individual VM profile; VM lifecycle commands read and persist those values in `<vm-name>.env`
+- accepts blank create defaults; the wizard collects missing target-specific values and credentials when a VC is created
 
 ### `create`
 Purpose: build one fresh managed resource group, its initial network, and one VM.
@@ -651,7 +646,7 @@ Purpose: build one fresh managed resource group, its initial network, and one VM
 Behavior notes:
 - `create` stops after VM deployment and the read-only summary. Run `initialize` for vm-init tasks and use `package` for catalogued software.
 - `create` never reuses an existing managed resource group or existing managed resource names, and `update` never falls through to an implicit fresh-create path.
-- Auto `create` succeeds when CLI overrides or `.env` `SELECTED_*` values plus the platform defaults resolve platform, VM name, Azure region, and VM size.
+- Auto `create` succeeds when CLI overrides plus `DEFAULT_*` global values resolve platform, VM name, Azure region, and VM size. The per-VC profile then stores the resolved values and credentials.
 - The infra flow keeps deterministic resource naming, validation, and review checkpoints before group and VM deployment.
 - if `--windows` or `--linux` is omitted, interactive mode asks for the VM OS type first and then scopes size, disk, and image defaults to that selection
 - Interactive `create` reviews only the resource group and VM deployment steps.
@@ -664,14 +659,14 @@ Purpose: run enabled vm-init tasks on one existing managed VM.
 Behavior notes:
 - This command never creates or updates Azure resources.
 - It uses the shared platform task catalog, dependency ordering, timeout, reboot, and post-task app-state behavior.
-- It requires a managed resource group and VM, supplied directly or resolved from `.env`.
+- It requires a managed resource group and VM, supplied directly or resolved from `ACTIVE_VM_NAME` and that VC's required profile.
 
 ### `update`
 Purpose: run enabled vm-update maintenance tasks on one existing managed VM.
 
 Behavior notes:
 - `update` requires an existing managed resource group and VM. It does not create or redeploy the VM.
-- Auto `update` resolves its target from CLI overrides first, then `.env` `SELECTED_RESOURCE_GROUP` and `SELECTED_VM_NAME`, with single-VM auto-resolution allowed when the selected group contains exactly one VM.
+- Auto `update` resolves its target from CLI overrides first, then `ACTIVE_VM_NAME` and that VM's `SELECTED_RESOURCE_GROUP` in `<vm-name>.env`; single-VM auto-resolution remains available for an explicitly selected group.
 - Packages are managed separately from task stages through their package catalogs.
 - Use `do` for explicit redeploy/repair and lifecycle actions.
 - Best fit for day-two guest setting and service maintenance.
@@ -711,7 +706,7 @@ Purpose: print a full system and configuration dump for app resource groups and 
 
 Behavior notes:
 - good for support handoff, release verification, and environment auditing
-- password-bearing `.env` values are redacted
+- password-bearing VC profile values are redacted
 - `--export-json <path>` writes a machine-readable report with sensitive config values redacted; existing files require `--overwrite`
 - nested virtualization request (`VM_ENABLE_NESTED_VIRTUALIZATION`), any Azure-reported nested virtualization setting, and guest CPU-extension availability are shown separately; a request is not proof that Azure exposed virtualization extensions or that Hyper-V is installed inside the guest
 - when the VM is running, guest availability is determined by guest validation evidence. Windows validation requires VMX, firmware virtualization, and SLAT extensions to be exposed to the guest. `HyperVisorPresent` or an enabled `VirtualMachinePlatform` feature alone does not prove nested virtualization; missing probe fields remain unknown instead of being reported as disabled
@@ -783,7 +778,7 @@ Behavior notes:
 - `--disk-size` accepts positive `MB`, `GB`, or `TB` text values that normalize to an OS disk size from 1 through 4095 GiB
 - `--disk-size=... --expand` performs the supported managed OS disk growth path
 - `--disk-size=... --shrink` is a non-mutating guidance path because Azure does not support shrinking an existing managed OS disk in place; the command prints supported rebuild and migration alternatives instead of risking disk integrity
-- both mutating resize paths print before/after lifecycle snapshots and verify the resulting VM SKU or OS disk size with Azure readbacks before saving the requested value into `.env`
+- both mutating resize paths print before/after lifecycle snapshots and verify the resulting VM SKU or OS disk size with Azure readbacks before saving the requested value into the selected VC profile
 - if Azure's readback differs from the requested target, the command reports the actual state, does not save the target config value, and does not claim an automatic rollback; it starts the VM before performing the final readback
 
 ### `set`
@@ -791,9 +786,9 @@ Purpose: apply hibernation and validate or store nested-virtualization settings.
 
 Behavior notes:
 - Hibernation is changed through Azure.
-- The nested-virtualization option stores Clagnos intent in `.env`; Azure single-VM APIs do not expose a separate nested-virtualization toggle in this workflow.
+- The nested-virtualization option stores Clagnos intent in the selected VC profile; Azure single-VM APIs do not expose a separate nested-virtualization toggle in this workflow.
 - Turning nested virtualization on requires a running VM and checks whether all required CPU virtualization extensions are visible to the guest. This check does not install or configure Hyper-V inside the guest.
-- Successful hibernation changes and validated nested-virtualization requests are synchronized back into local `.env`.
+- Successful hibernation changes and validated nested-virtualization requests are synchronized back into the selected VC profile.
 
 ### `delete`
 Purpose: delete a selected scope from a managed resource group.
@@ -848,37 +843,26 @@ Task-scoped app-state capture and replay use the portable task folder contract. 
 ### Runtime Precedence
 Runtime precedence is:
 1. CLI override
-2. `.env`
-3. hard-coded default
+2. selected VC's `<vm-name>.env` value
+3. global `clagnos.env` default
+4. hard-coded default
 
 This matters because:
 - command-line overrides are the safest way to test one change without rewriting local defaults
-- `.env.example` is the committed configuration contract
-- `.env` remains local and untracked
+- `clagnos.env.example` and `vc.env.example` are the committed global and per-VC contracts
+- `clagnos.env` and every `<vm-name>.env` remain local and untracked
 
-### High-Value `.env` Keys
-- `SELECTED_VM_OS`: persisted active platform selection
-- `SELECTED_VM_NAME`: persisted active VM naming seed for unattended and existing-target flows
-- `SELECTED_AZURE_REGION`: persisted active region selection
-- `SELECTED_RESOURCE_GROUP`: persisted active existing-target group selection
-- `SELECTED_AZURE_SUBSCRIPTION_ID`: optional repo-local default Azure subscription id for Azure-touching commands
-- `VM_ADMIN_USER`, `VM_ADMIN_PASS`: manager/admin identity
-- `VM_ASSISTANT_USER`, `VM_ASSISTANT_PASS`: assistant identity
-- `SELECTED_COMPANY_NAME`, `SELECTED_COMPANY_WEB_ADDRESS`, `SELECTED_COMPANY_EMAIL_ADDRESS`, `SELECTED_EMPLOYEE_EMAIL_ADDRESS`, `SELECTED_EMPLOYEE_FULL_NAME`: Windows shortcut and UX identity inputs
-- `VM_PRICE_COUNT_HOURS`: pricing window used by SKU-selection helpers
-- `AZURE_COMMAND_TIMEOUT_SECONDS`: shared Azure command timeout
-- `PYSSH_CLIENT_PATH`: default path should remain `tools/pyssh/ssh_client.py`
+### Global And VC Environment Files
+`clagnos.env` contains app-wide values: `ACTIVE_VM_NAME`, the Azure subscription selector, operator identity and shortcut overrides, naming templates, timeouts, task paths, and non-secret `DEFAULT_*` values used to seed newly created VCs. `configure` edits this global file only.
 
-### Shared VM Feature Toggles
-- `VM_ENABLE_HIBERNATION`
-- `VM_ENABLE_NESTED_VIRTUALIZATION`
+Each VC has a `<vm-name>.env` file containing its `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, operating system, Azure region, VM image/size/disk, storage and security settings, hibernation/nested-virtualization intent, login users/passwords, connection ports, allowed ports, and package transport. The create wizard creates that file; target commands verify its name matches the profile identity. Passwords never go into `clagnos.env`.
 
-Use these as shared cross-platform intent flags instead of creating platform-specific duplicates.
+`SELECTED_AZURE_SUBSCRIPTION_ID`, company/employee identity keys, `VM_PRICE_COUNT_HOURS`, `AZURE_COMMAND_TIMEOUT_SECONDS`, and `PYSSH_CLIENT_PATH` are global. `PYSSH_CLIENT_PATH` defaults to `tools/pyssh/ssh_client.py`. `DEFAULT_*` keys seed create only; once a VC exists, its profile wins over global defaults.
 
-### Platform-Specific Settings
-- `WIN_` keys are for Windows-only settings such as Windows image and disk-size defaults.
-- `LIN_` keys are for Linux-only settings such as Linux image and disk-size defaults.
-- The committed managed-resource templates in `.env.example` use `{SELECTED_VM_NAME}` as the naming placeholder, for example `rg-{SELECTED_VM_NAME}-{REGION_CODE}-g{N}`.
+### Naming And Platform Defaults
+- `DEFAULT_WIN_*` and `DEFAULT_LIN_*` keys in `clagnos.env` seed image, size, and disk settings for a new Windows or Linux VC.
+- Existing target values use `WIN_*` or `LIN_*` keys in that VC's profile.
+- The committed managed-resource templates in `clagnos.env.example` use `{SELECTED_VM_NAME}` as the naming placeholder, for example `rg-{SELECTED_VM_NAME}-{REGION_CODE}-g{N}`.
 - Managed resource group ids use a global `gX` suffix that increments across all managed groups, regardless of region.
 - Managed resource ids use a global `nX` suffix that increments across all generated managed resources and is never reused by another managed resource of any type.
 
@@ -888,7 +872,8 @@ Use these as shared cross-platform intent flags instead of creating platform-spe
 - Use `--perf` when you want timing evidence for long-running flows.
 
 ### Global Versus Task-Local Configuration
-- Keep app-wide customization, secrets, operator identity, and reusable overrides in `.env`.
+- Keep global app customization, Azure subscription selection, operator identity, and non-secret create defaults in `clagnos.env`.
+- Keep VM credentials and every target-specific setting in that VC's `<vm-name>.env` profile.
 - Task-only constants should stay in the owning task script, in a clearly labeled config block at the top of the owning `vm-init` or `vm-update` script.
 
 ## Developer Benefits
@@ -915,7 +900,7 @@ After committing the release docs with the version's cumulative commit count, cr
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\package-release.ps1
 ```
 
-The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a clean git worktree, and no tracked `.env`. It archives the committed tree under `dist/clagnos-<version>/`, adds `BUILD-MANIFEST.json`, and writes `dist/clagnos-<version>.zip.sha256`. The default output directory is git-ignored. Use `-OutputDirectory <path>` to choose another destination or `-Overwrite` to replace an existing artifact deliberately.
+The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a clean git worktree, and no tracked runtime `*.env` files. It archives the committed tree under `dist/clagnos-<version>/`, adds `BUILD-MANIFEST.json`, and writes `dist/clagnos-<version>.zip.sha256`. The default output directory is git-ignored. Use `-OutputDirectory <path>` to choose another destination or `-Overwrite` to replace an existing artifact deliberately.
 
 ## Core Mental Model
 
@@ -950,8 +935,8 @@ The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a 
 - Interactive mode prompts for Azure subscription first when `--subscription-id` is omitted for `create`, `initialize`, and `update`.
 - Interactive `create` reviews the resource group and VM deployment steps; `initialize` and `update` have their own task-stage reviews.
 - `--auto` supports unattended `create`, `initialize`, `update`, and `delete` operations.
-- Auto `create` provisions infrastructure only and resolves platform, VM name, region, and size from CLI or `.env` selections.
-- Auto `update` resolves its managed target from CLI overrides first, then `.env` `SELECTED_RESOURCE_GROUP` and `SELECTED_VM_NAME`.
+- Auto `create` provisions infrastructure only and resolves platform, VM name, region, and size from CLI or global `DEFAULT_*` values; target-specific values are saved in the VC profile.
+- Auto `update` resolves its managed target from CLI overrides first, then `ACTIVE_VM_NAME` and the selected VC profile.
 - Auto mode prints the same review context, but it continues without waiting for checkpoint confirmation.
 - The TUI keeps every public command and registered component/package action reachable from a numbered or lettered submenu.
 - Legacy `managed-by=az-vm` groups remain readable and migrate to `managed-by=clagnos` after confirmation on the first inventory.
@@ -980,13 +965,14 @@ The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a 
 ### Configuration Resolution
 Runtime precedence is:
 1. CLI override
-2. `.env`
-3. hard-coded default
+2. selected VC's `<vm-name>.env` value
+3. global `clagnos.env` default
+4. hard-coded default
 
 This matters because:
 - command-line overrides are the safest way to test one change without rewriting local defaults
-- `.env.example` is the committed contract
-- `.env` remains local and untracked
+- `clagnos.env.example` and `vc.env.example` are the committed global and per-VC contracts
+- `clagnos.env` and every `<vm-name>.env` remain local and untracked
 
 ### Task Folder Model
 Each task directory is self-contained. The folder holds one same-named script, one `task.json`, optional helper assets, and an optional git-ignored `app-state/` directory. `tasks.toml` owns catalog membership and availability; discovery does not rewrite it or `task.json`. A missing portable task folder is treated as absent rather than as a failure. Package installer folders are separate from task stages and use `package.json` plus `install.ps1` or `install.sh`.
@@ -1000,7 +986,7 @@ Each task directory is self-contained. The folder holds one same-named script, o
 - `create` creates one fresh managed group, network, and VM; `initialize` runs vm-init; `update` runs vm-update maintenance tasks on an existing managed VM.
 - `package` manages catalogued package status/install/update/uninstall. `component` provides CRUD for the Azure resources Clagnos owns.
 - `update` requires one existing managed group and VM and never falls through to implicit fresh-create behavior.
-- `configure` is the interactive `.env` frontend: it must stay focused on reviewing, editing, validating, previewing, and saving supported `.env` values, and it must not sync `.env` from a live Azure target.
+- `configure` edits only supported global `clagnos.env` values; VC-specific settings remain in their `<vm-name>.env` profile, and neither path syncs from live Azure state.
 - `list` is the managed inventory command: it must stay Azure-read-only, must not mutate Azure resources, and must expose managed resource listings through `--type` plus optional exact `--group` filtering.
 - Azure component deletion displays dependent resources, removes them in dependency order, verifies absence, and uses provider purge only when supported; immediate name reuse remains subject to Azure service rules.
 
@@ -1029,7 +1015,7 @@ Each task directory is self-contained. The folder holds one same-named script, o
 - Vm-init and vm-update app-state replay are post-task and plug-in based. If `<task-folder>/app-state/app-state.zip` is absent, the task logs a skip and continues; if it exists, the shared SSH post-process deploys it without requiring a dedicated restore task, and vm-init defers replay until SSH is ready.
 - Managed app-state save and restore target only the `manager` and `assistant` OS profiles. Large generated payloads such as installers, models, telemetry trees, and low-value caches are intentionally pruned so the zips stay operator-owned and reusable instead of drifting into machine-image snapshots.
 - Local-machine app-state restore validates the current `task.json` allow-list and writes task-adjacent `backup-app-states/<task-name>/` snapshots plus `restore-journal.json` and `verify-report.json` before replaying onto the operator machine.
-- Windows public desktop shortcut validation names the exact missing `.env` keys, for example `SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow.` and `SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow.`
+- Windows public desktop shortcut validation names the exact missing `clagnos.env` keys, for example `SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow.` and `SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow.`
 - Use `VM_TASK_OUTCOME_MODE=strict` when you want the stage to stop at the first failure.
 
 ### Connection Failures
@@ -1080,11 +1066,11 @@ GitHub Actions runs the non-destructive `.github/workflows/quality-gate.yml` wor
 For a release push, the job is not finished until the pushed `main` SHA completes this workflow green.
 
 ### Live Release Acceptance
-Before calling the repo or the active profile release-ready for a live publish, run one end-to-end live acceptance cycle against the current `.env` target:
+Before calling the repo or the active profile release-ready for a live publish, run one end-to-end live acceptance cycle against the current active VC profile and global subscription:
 - if the target group is safe to purge, prefer a full recreate by running `clagnos delete --target=group --group=<resource-group> --yes` before the live create
-- run a clean `clagnos create --auto --perf` once the target `.env` `SELECTED_*` values and platform defaults are complete
+- run a clean `clagnos create --auto --perf` once the active VC profile and global create defaults are complete
 - rerun `clagnos update --auto --perf` without changing the natural task order
-- confirm `clagnos show` prints the expected inventory while password-bearing `.env` values stay redacted
+- confirm `clagnos show` prints the expected inventory while password-bearing VC profile values stay redacted
 - confirm `clagnos do --vm-action=status --vm-name=<vm-name>` reports the VM as started
 - confirm `clagnos connect --ssh --vm-name=<vm-name> --user=manager --test`; for Windows also confirm `clagnos connect --rdp --vm-name=<vm-name> --user=manager --test`
 - when `VM_ENABLE_HIBERNATION=true`, validate the intended hibernation path explicitly and restore the VM to `started` before finishing the release gate
@@ -1099,7 +1085,7 @@ Before calling the repo or the active profile release-ready for a live publish, 
 
 ### Documentation Contract
 When a prompt changes repo files:
-- update `README.md`, `AGENTS.md`, `.env.example`, tests, or help text when the contract changes
+- update `README.md`, `AGENTS.md`, `clagnos.env.example`, tests, or help text when the contract changes
 - update `CHANGELOG.md` and `release-notes.md` in the same final change set before commit
 - update `docs/prompt-history.md` with the English-normalized prompt and final summary
 - when a maintained document records a time-of-day, record it in UTC

@@ -17,9 +17,10 @@ function Assert-ReleasePackageTest {
 try {
     New-Item -ItemType Directory -Path $repoRootPath -Force | Out-Null
     $fixtureFiles = @{
-        '.gitignore' = ".env`n/dist/`n"
+        '.gitignore' = "*.env`n/dist/`n"
         'README.md' = '# Fixture release source'
-        '.env.example' = 'VM_ADMIN_USER=manager'
+        'clagnos.env.example' = 'DEFAULT_VM_ADMIN_USER=manager'
+        'vc.env.example' = 'VM_ADMIN_USER=manager'
         'cg.cmd' = '@echo off'
         'CHANGELOG.md' = "# Changelog`n`n## [2026.10.13.1] - 2026-10-13`n"
         'release-notes.md' = "# Release Notes`n`n## Release 2026.10.13.1 - 2026-10-13`n"
@@ -35,7 +36,8 @@ try {
     & git -C $repoRootPath -c user.name=ClagnosTest -c user.email=clagnos-test commit -q -m 'test fixture'
     if ($LASTEXITCODE -ne 0) { throw 'Could not commit the temporary packaging fixture.' }
 
-    Set-Content -LiteralPath (Join-Path $repoRootPath '.env') -Value 'VM_ADMIN_PASS=release-fixture-secret' -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $repoRootPath 'clagnos.env') -Value 'SELECTED_AZURE_SUBSCRIPTION_ID=fixture-id' -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $repoRootPath 'vc1.env') -Value 'VM_ADMIN_PASS=fixture-password-placeholder' -Encoding ASCII
     $artifactOutput = & $packagerPath -RepoRoot $repoRootPath -OutputDirectory $outputRoot
     $zipPath = Join-Path $outputRoot 'clagnos-2026.10.13.1.zip'
     $hashPath = $zipPath + '.sha256'
@@ -49,7 +51,7 @@ try {
         $entryNames = @($archive.Entries | ForEach-Object { [string]$_.FullName })
         Assert-ReleasePackageTest -Condition ($entryNames -contains 'clagnos-2026.10.13.1/cg.cmd') -Message 'Release package must contain the launcher under its versioned root.'
         Assert-ReleasePackageTest -Condition ($entryNames -contains 'clagnos-2026.10.13.1/BUILD-MANIFEST.json') -Message 'Release package must contain its build manifest.'
-        Assert-ReleasePackageTest -Condition (-not ($entryNames -match '(^|/)\.env$')) -Message 'Release package must not include local .env files.'
+        Assert-ReleasePackageTest -Condition (-not ($entryNames -match '(^|/)(clagnos|vc1)\.env$')) -Message 'Release package must not include local runtime environment files.'
         $manifestEntry = $archive.GetEntry('clagnos-2026.10.13.1/BUILD-MANIFEST.json')
         $reader = [System.IO.StreamReader]::new($manifestEntry.Open())
         try { $manifest = ConvertFrom-Json -InputObject $reader.ReadToEnd() -ErrorAction Stop }
