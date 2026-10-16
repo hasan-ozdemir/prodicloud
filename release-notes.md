@@ -2,6 +2,19 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.16.423 - 2026-10-16
+
+### Summary
+The interactive CLI now opens without waiting for Azure inventory warmup and keeps its current context and operation visible in a fixed two-row status area.
+
+### Highlights
+- The home screen reads the configured Azure subscription and active VC profile locally. The inventory worker refreshes subscription-scoped resources in the background while menus remain responsive.
+- The top two console rows show the active screen, selected VC, subscription, current `Doing:` operation, and cache activity. Progress actions update the status rows as they run.
+- Repeated refresh requests are coalesced. Mutations can trigger a newer reconciliation, maximum cache age is enforced, and worker replacement/shutdown is bounded.
+
+### Validation
+- PowerShell parsing and `git diff --check` passed. The commit hooks passed repository quality, sensitive-content, documentation, package-state/lifecycle, Python, packaging, and CLI-help checks; TUI tests and live Azure tests were not run.
+
 ## Release 2026.10.16.422 - 2026-10-16
 
 ### Summary

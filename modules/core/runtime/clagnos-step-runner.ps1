@@ -10,6 +10,9 @@ function Write-ClagnosActionProgress {
     if ([string]::IsNullOrWhiteSpace($actionText)) { $actionText = 'continue operation' }
     $actionText = $actionText.Trim()
     if ($actionText -notmatch '^doing\s*:') { $actionText = 'Doing: ' + $actionText }
+    if ($null -ne $script:ClagnosUiStatusCallback) {
+        try { & $script:ClagnosUiStatusCallback -Action $actionText } catch { }
+    }
     Write-Host $actionText -ForegroundColor DarkCyan
 }
 

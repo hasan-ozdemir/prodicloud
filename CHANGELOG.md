@@ -3,6 +3,16 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.16.423] - 2026-10-16
+
+### Changed
+- Made the TUI home screen independent of Azure inventory warmup: it reads the selected subscription and active VC profile locally, then lets the hidden worker refresh inventory while the menu remains usable. When no subscription is saved, only the Azure CLI active-account lookup is needed before the worker starts.
+- Reserved the first two console rows for the current screen, VC, subscription, operation, and cache status. Runtime `Doing:` progress updates this status strip, which remains fixed while menu output scrolls.
+- Coalesced repeated inventory refresh requests so navigation does not restart an active scan. Mutation requests can still supersede a scan, stale snapshots beyond five minutes are withheld, and worker shutdown/replacement waits are bounded.
+
+### Validation
+- PowerShell parsing and `git diff --check` passed. The commit hooks passed repository quality, sensitive-content, documentation, package-state/lifecycle, Python, packaging, and CLI-help checks; TUI tests and live Azure tests were not run.
+
 ## [2026.10.16.422] - 2026-10-16
 
 ### Added

@@ -36,6 +36,10 @@ $script:ClagnosUiTestMode = $false
 $script:ClagnosUiInventoryCacheFilePath = ''
 $script:ClagnosUiInventoryCacheFileLastWriteUtc = [DateTime]::MinValue
 $script:ClagnosUiCacheRootPath = ''
+$script:ClagnosUiCurrentScreen = 'Starting'
+$script:ClagnosUiCurrentAction = ''
+$script:ClagnosUiScrollRegionActive = $false
+$script:ClagnosUiStatusCallback = $null
 
 if (-not (Test-Path -LiteralPath $script:ClagnosUiBackendPath)) {
     throw "Clagnos runtime was not found: $script:ClagnosUiBackendPath"
@@ -84,28 +88,70 @@ function Update-ClagnosUiSubscription {
     }
 
     $previousSubscriptionId = if ($null -ne $script:ClagnosUiSubscription) { [string]$script:ClagnosUiSubscription.SubscriptionId } else { '' }
-    try {
-        $script:ClagnosUiSubscription = Initialize-ClagnosCommandSubscriptionState -CommandName 'list' -Options @{}
+    $envPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.env'
+    $config = Read-DotEnvFile -Path $envPath -GlobalOnly
+    $configuredId = if ($null -ne $config -and $config.ContainsKey('SELECTED_AZURE_SUBSCRIPTION_ID')) { [string]$config['SELECTED_AZURE_SUBSCRIPTION_ID'] } else { '' }
+    if (-not [string]::IsNullOrWhiteSpace($configuredId) -and (Test-ClagnosSubscriptionIdFormat -SubscriptionId $configuredId)) {
+        $subscriptionName = $configuredId
+        $tenantId = ''
+        if ($null -ne $script:ClagnosUiCloudSubscriptionRows) {
+            $knownRow = @($script:ClagnosUiCloudSubscriptionRows | Where-Object { [string]::Equals([string]$_.id,$configuredId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+            if (@($knownRow).Count -gt 0) { $subscriptionName = [string]$knownRow[0].name; $tenantId = [string]$knownRow[0].tenantId }
+        }
+        if ($null -ne $script:ClagnosUiSubscription -and [string]::Equals([string]$script:ClagnosUiSubscription.SubscriptionId,$configuredId,[System.StringComparison]::OrdinalIgnoreCase) -and -not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiSubscription.SubscriptionName)) {
+            $subscriptionName = [string]$script:ClagnosUiSubscription.SubscriptionName
+            $tenantId = [string]$script:ClagnosUiSubscription.TenantId
+        }
+        $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = $configuredId; SubscriptionName = $subscriptionName; TenantId = $tenantId; ResolutionSource = 'clagnos.env' }
+        if ($null -eq $script:ConfigOverrides) { $script:ConfigOverrides = @{} }
+        $script:ConfigOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = $configuredId
+        Set-ClagnosResolvedSubscriptionContext -SubscriptionId $configuredId -SubscriptionName $subscriptionName -TenantId $tenantId -ResolutionSource 'clagnos.env'
         $script:ClagnosUiSubscriptionError = ''
     }
-    catch {
+    else {
         $script:ClagnosUiSubscription = $null
-        $script:ClagnosUiSubscriptionError = [string]$_.Exception.Message
-    }
-
-    $envPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.env'
-    $config = Read-DotEnvFile -Path $envPath
-    $script:ClagnosUiSelectedResourceGroup = [string](Get-ConfigValue -Config $config -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
-    $script:ClagnosUiSelectedVmName = [string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_NAME' -DefaultValue '')
-    if ($null -eq $script:ClagnosUiSubscription) {
-        $configuredId = [string](Get-ConfigValue -Config $config -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -DefaultValue '')
-        if (-not [string]::IsNullOrWhiteSpace($configuredId)) {
-            $script:ClagnosUiSubscription = [pscustomobject]@{
-                SubscriptionId = $configuredId
-                SubscriptionName = 'Sign-in required to resolve subscription name'
-                ResolutionSource = 'env'
+        $script:ClagnosUiSubscriptionError = 'No valid SELECTED_AZURE_SUBSCRIPTION_ID is configured.'
+        Clear-ClagnosResolvedSubscriptionContext
+        try {
+            Write-ClagnosActionProgress -Action 'resolve the Azure CLI active subscription'
+            $accountJson = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
+                az account show -o json --only-show-errors 2>$null
+            }
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$accountJson)) {
+                $activeAccount = ConvertFrom-JsonCompat -InputObject ([string]$accountJson)
+                $activeId = [string]$activeAccount.id
+                if (Test-ClagnosSubscriptionIdFormat -SubscriptionId $activeId) {
+                    $script:ClagnosUiSubscription = [pscustomobject]@{
+                        SubscriptionId = $activeId
+                        SubscriptionName = [string]$activeAccount.name
+                        TenantId = [string]$activeAccount.tenantId
+                        ResolutionSource = 'active'
+                    }
+                    if ($null -eq $script:ConfigOverrides) { $script:ConfigOverrides = @{} }
+                    $script:ConfigOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = $activeId
+                    Set-ClagnosResolvedSubscriptionContext -SubscriptionId $activeId -SubscriptionName ([string]$activeAccount.name) -TenantId ([string]$activeAccount.tenantId) -ResolutionSource 'active'
+                    $script:ClagnosUiSubscriptionError = ''
+                }
             }
         }
+        catch { $script:ClagnosUiSubscriptionError = [string]$_.Exception.Message }
+        finally { Set-ClagnosUiStatusAction -Action '' }
+    }
+
+    $activeVmName = [string](Get-ConfigValue -Config $config -Key 'ACTIVE_VM_NAME' -DefaultValue '')
+    $script:ClagnosUiSelectedVmName = $activeVmName
+    $script:ClagnosUiSelectedResourceGroup = ''
+    if (-not [string]::IsNullOrWhiteSpace($activeVmName)) {
+        try {
+            $vmEnvPath = Get-ClagnosVmEnvPath -VmName $activeVmName -RepoRoot $script:ClagnosUiRepoRoot
+            if (Test-Path -LiteralPath $vmEnvPath -PathType Leaf) {
+                $vmConfig = Read-DotEnvFile -Path $vmEnvPath -GlobalOnly
+                if ([string]::Equals([string](Get-ConfigValue -Config $vmConfig -Key 'SELECTED_VM_NAME' -DefaultValue ''),$activeVmName,[System.StringComparison]::OrdinalIgnoreCase)) {
+                    $script:ClagnosUiSelectedResourceGroup = [string](Get-ConfigValue -Config $vmConfig -Key 'SELECTED_RESOURCE_GROUP' -DefaultValue '')
+                }
+            }
+        }
+        catch { $script:ClagnosUiSelectedResourceGroup = '' }
     }
 
     $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
@@ -188,7 +234,17 @@ function Import-ClagnosUiInventoryCacheFromDisk {
             catch { }
         }
         $snapshotAge = ([DateTime]::UtcNow - $validatedAt).TotalSeconds
-        if ($snapshotAge -gt [int]$script:ClagnosUiInventoryMaximumStaleSeconds) { return $script:ClagnosUiInventoryCache }
+        if ($snapshotAge -gt [int]$script:ClagnosUiInventoryMaximumStaleSeconds) {
+            if ($null -ne $script:ClagnosUiInventoryCache -and [string]::Equals([string]$script:ClagnosUiInventoryCache.SubscriptionId,$subscriptionId,[System.StringComparison]::OrdinalIgnoreCase)) {
+                $script:ClagnosUiInventoryCache.IsDirty = $true
+                $script:ClagnosUiInventoryCache.DirtyReason = 'cached inventory exceeded its maximum age'
+                if ($null -eq $script:ClagnosUiInventoryCache.PSObject.Properties['DirtySinceUtc']) {
+                    $script:ClagnosUiInventoryCache | Add-Member -NotePropertyName 'DirtySinceUtc' -NotePropertyValue ([DateTime]::UtcNow)
+                }
+                else { $script:ClagnosUiInventoryCache.DirtySinceUtc = [DateTime]::UtcNow }
+            }
+            return $script:ClagnosUiInventoryCache
+        }
         if ($null -ne $script:ClagnosUiInventoryCache -and [bool]$script:ClagnosUiInventoryCache.IsDirty) {
             $dirtySince = if ($null -ne $script:ClagnosUiInventoryCache.DirtySinceUtc) { [DateTime]$script:ClagnosUiInventoryCache.DirtySinceUtc } else { [DateTime]::MinValue }
             if ($validatedAt -le $dirtySince) { return $script:ClagnosUiInventoryCache }
@@ -230,7 +286,19 @@ function Request-ClagnosUiInventoryRefresh {
     }
     $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId ([string]$script:ClagnosUiSubscription.SubscriptionId)
     if (-not (Test-Path -LiteralPath $paths.Root -PathType Container)) { New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null }
-    Set-Content -LiteralPath $paths.Request -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ASCII
+    $writeRequest = $Force -or -not (Test-Path -LiteralPath $paths.Request -PathType Leaf)
+    if (-not $writeRequest) {
+        try {
+            $pendingAt = [DateTime]::Parse([string](Get-Content -LiteralPath $paths.Request -Raw -ErrorAction Stop),[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+            $writeRequest = (([DateTime]::UtcNow - $pendingAt).TotalSeconds -gt [int]$script:ClagnosUiInventoryMaximumStaleSeconds)
+        }
+        catch { $writeRequest = $true }
+    }
+    if ($writeRequest) {
+        $temporaryPath = '{0}.{1}.tmp' -f $paths.Request,$PID
+        Set-Content -LiteralPath $temporaryPath -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ASCII
+        Move-Item -LiteralPath $temporaryPath -Destination $paths.Request -Force
+    }
     Start-ClagnosUiBackgroundCacheWorker | Out-Null
     return $true
 }
@@ -247,7 +315,13 @@ function Start-ClagnosUiBackgroundCacheWorker {
     if (-not (Test-Path -LiteralPath $paths.Root -PathType Container)) { New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null }
     if ($null -ne $script:ClagnosUiCacheWorkerProcess -and -not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCacheWorkerStopPath)) {
         try { Set-Content -LiteralPath $script:ClagnosUiCacheWorkerStopPath -Value 'stop' -Encoding ASCII } catch { }
-        try { if (-not $script:ClagnosUiCacheWorkerProcess.HasExited) { [void]$script:ClagnosUiCacheWorkerProcess.WaitForExit(500) } } catch { }
+        try {
+            if (-not $script:ClagnosUiCacheWorkerProcess.HasExited -and -not $script:ClagnosUiCacheWorkerProcess.WaitForExit(500)) {
+                Stop-Process -Id $script:ClagnosUiCacheWorkerProcess.Id -Force -ErrorAction SilentlyContinue
+                [void]$script:ClagnosUiCacheWorkerProcess.WaitForExit(500)
+            }
+        }
+        catch { }
         try { $script:ClagnosUiCacheWorkerProcess.Dispose() } catch { }
     }
     if (Test-Path -LiteralPath $paths.Stop) { Remove-Item -LiteralPath $paths.Stop -Force -ErrorAction SilentlyContinue }
@@ -281,9 +355,9 @@ function Stop-ClagnosUiBackgroundCacheWorker {
     if ($null -eq $script:ClagnosUiCacheWorkerProcess -or [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCacheWorkerStopPath)) { return }
     try { Set-Content -LiteralPath $script:ClagnosUiCacheWorkerStopPath -Value 'stop' -Encoding ASCII } catch { }
     try {
-        if (-not $script:ClagnosUiCacheWorkerProcess.HasExited -and -not $script:ClagnosUiCacheWorkerProcess.WaitForExit(5000)) {
+        if (-not $script:ClagnosUiCacheWorkerProcess.HasExited -and -not $script:ClagnosUiCacheWorkerProcess.WaitForExit(1000)) {
             Stop-Process -Id $script:ClagnosUiCacheWorkerProcess.Id -Force -ErrorAction SilentlyContinue
-            [void]$script:ClagnosUiCacheWorkerProcess.WaitForExit(1000)
+            [void]$script:ClagnosUiCacheWorkerProcess.WaitForExit(500)
         }
     }
     catch { }
@@ -493,7 +567,7 @@ function Ensure-ClagnosUiResourceCache {
     }
     if ([bool]$snapshot.IsDirty) {
         Start-ClagnosUiBackgroundCacheWorker | Out-Null
-        Request-ClagnosUiInventoryRefresh -Force | Out-Null
+        Request-ClagnosUiInventoryRefresh | Out-Null
         $status = Get-ClagnosUiBackgroundCacheStatus
         if ($null -ne $status -and [string]$status.State -eq 'error') { throw ('Managed inventory refresh failed: {0}' -f [string]$status.Message) }
         throw ('Managed inventory is revalidating after {0}. Return to this screen in a moment.' -f [string]$snapshot.DirtyReason)
@@ -654,9 +728,11 @@ function Get-ClagnosUiAzureCliActiveSubscriptionId {
         $activeAge = ([DateTime]::UtcNow - [DateTime]$script:ClagnosUiAzureCliActiveSubscriptionValidatedAtUtc).TotalSeconds
         if ($activeAge -lt 15) { return [string]$script:ClagnosUiAzureCliActiveSubscriptionId }
     }
+    Write-ClagnosActionProgress -Action 'read the active Azure subscription id'
     $activeId = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
         az account show --query id -o tsv --only-show-errors 2>$null
     }
+    Set-ClagnosUiStatusAction -Action ''
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$activeId)) {
         throw "Azure CLI could not resolve its active subscription. Run 'az login' and retry."
     }
@@ -670,9 +746,11 @@ function Get-ClagnosUiCloudSubscriptionRows {
         $cacheAge = ([DateTime]::UtcNow - [DateTime]$script:ClagnosUiCloudSubscriptionRowsValidatedAtUtc).TotalSeconds
         if ($cacheAge -lt 30) { return @($script:ClagnosUiCloudSubscriptionRows) }
     }
+    Write-ClagnosActionProgress -Action 'refresh the Azure subscription list'
     $raw = Invoke-ClagnosWithBypassedAzCliSubscription -Action {
         az account list --all --refresh -o json --only-show-errors 2>$null
     }
+    Set-ClagnosUiStatusAction -Action ''
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$raw)) {
         throw "Azure CLI could not refresh the subscription list. Run 'az login' and retry."
     }
@@ -698,11 +776,14 @@ function Set-ClagnosUiActiveSubscription {
     $previousContext = Get-ClagnosResolvedSubscriptionContext
     $subscriptionId = [string]$Subscription.id
     try {
+        Write-ClagnosActionProgress -Action ('set Azure CLI active subscription to {0}' -f $subscriptionId)
         az account set --subscription $subscriptionId --only-show-errors
         Assert-LastExitCode 'az account set'
+        Set-ClagnosUiStatusAction -Action ''
     }
     catch {
         if (-not [string]::IsNullOrWhiteSpace($previousCliId)) {
+            Write-ClagnosActionProgress -Action 'restore the previous Azure CLI subscription'
             az account set --subscription $previousCliId --only-show-errors
             $null = $LASTEXITCODE
         }
@@ -717,6 +798,7 @@ function Set-ClagnosUiActiveSubscription {
     $verifiedId = Get-ClagnosUiAzureCliActiveSubscriptionId
     if (-not [string]::Equals($verifiedId, $subscriptionId, [System.StringComparison]::OrdinalIgnoreCase)) {
         if (-not [string]::IsNullOrWhiteSpace($previousCliId)) {
+            Write-ClagnosActionProgress -Action 'restore the previous Azure CLI subscription'
             az account set --subscription $previousCliId --only-show-errors
             $null = $LASTEXITCODE
         }
@@ -730,6 +812,7 @@ function Set-ClagnosUiActiveSubscription {
     }
     catch {
         if (-not [string]::IsNullOrWhiteSpace($previousCliId)) {
+            Write-ClagnosActionProgress -Action 'restore the previous Azure CLI subscription'
             az account set --subscription $previousCliId --only-show-errors
             $null = $LASTEXITCODE
         }
@@ -748,6 +831,8 @@ function Set-ClagnosUiActiveSubscription {
         -SubscriptionName ([string]$Subscription.name) `
         -TenantId ([string]$Subscription.tenantId) `
         -ResolutionSource 'interactive'
+    if ($null -eq $script:ConfigOverrides) { $script:ConfigOverrides = @{} }
+    $script:ConfigOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = $subscriptionId
     $script:ClagnosUiSubscription = [pscustomobject]@{
         SubscriptionId = $subscriptionId
         SubscriptionName = [string]$Subscription.name
@@ -757,6 +842,7 @@ function Set-ClagnosUiActiveSubscription {
     $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
     Reset-ClagnosUiResourceCache -Reason 'subscription selected'
     Write-Host ('Active Azure subscription: {0} ({1})' -f [string]$Subscription.name, $subscriptionId) -ForegroundColor Green
+    Set-ClagnosUiStatusAction -Action ''
 }
 
 function Show-ClagnosUiCloudSubscriptions {
@@ -766,6 +852,15 @@ function Show-ClagnosUiCloudSubscriptions {
         try {
             $rows = @(Get-ClagnosUiCloudSubscriptionRows)
             $selectedContext = Get-ClagnosResolvedSubscriptionContext
+            if ($null -ne $script:ClagnosUiSubscription) {
+                $selectedSubscriptionRow = @($rows | Where-Object { [string]::Equals([string]$_.id,[string]$script:ClagnosUiSubscription.SubscriptionId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+                if (@($selectedSubscriptionRow).Count -gt 0) {
+                    $script:ClagnosUiSubscription.SubscriptionName = [string]$selectedSubscriptionRow[0].name
+                    $script:ClagnosUiSubscription.TenantId = [string]$selectedSubscriptionRow[0].tenantId
+                    Set-ClagnosResolvedSubscriptionContext -SubscriptionId ([string]$selectedSubscriptionRow[0].id) -SubscriptionName ([string]$selectedSubscriptionRow[0].name) -TenantId ([string]$selectedSubscriptionRow[0].tenantId) -ResolutionSource 'clagnos.env'
+                    $selectedContext = Get-ClagnosResolvedSubscriptionContext
+                }
+            }
             $activeId = Get-ClagnosUiAzureCliActiveSubscriptionId
             $selectedName = if ($null -ne $selectedContext) { [string]$selectedContext.SubscriptionName } else { '(none)' }
             $activeRow = @($rows | Where-Object { [string]::Equals([string]$_.id, $activeId, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
@@ -800,29 +895,102 @@ function Show-ClagnosUiCloudSubscriptions {
     }
 }
 
+function Get-ClagnosUiStatusText {
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCurrentAction)) { return [string]$script:ClagnosUiCurrentAction }
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiResourceCacheError)) { return ('Cache unavailable: {0}' -f [string]$script:ClagnosUiResourceCacheError) }
+    if ($null -eq $script:ClagnosUiSubscription) { return 'Select a cloud subscription to load managed inventory' }
+    $cacheStatus = Get-ClagnosUiBackgroundCacheStatus
+    if ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'refreshing') { return [string]$cacheStatus.Message }
+    if ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'error') { return ('Cache issue: {0}' -f [string]$cacheStatus.Message) }
+    if ($null -eq $script:ClagnosUiInventoryCache) { return 'Inventory cache is warming in the background' }
+    if ([bool]$script:ClagnosUiInventoryCache.IsDirty) { return 'Inventory cache is being revalidated' }
+    try {
+        $age = [int]([DateTime]::UtcNow - [DateTime]$script:ClagnosUiInventoryCache.LastValidatedAtUtc).TotalSeconds
+        if ($age -ge [int]$script:ClagnosUiInventoryValidationSeconds) { return ('Inventory refresh due; cached snapshot is {0}s old' -f $age) }
+        return ('Ready; inventory checked {0}s ago' -f [Math]::Max($age,0))
+    }
+    catch { return 'Ready' }
+}
+
+function Get-ClagnosUiStatusLines {
+    $screen = if ([string]::IsNullOrWhiteSpace([string]$script:ClagnosUiCurrentScreen)) { 'Clagnos' } else { [string]$script:ClagnosUiCurrentScreen }
+    $vmName = if ([string]::IsNullOrWhiteSpace([string]$script:ClagnosUiSelectedVmName)) { '(none)' } else { [string]$script:ClagnosUiSelectedVmName }
+    $line1 = 'CLAGNOS | {0} | VC: {1}' -f $screen,$vmName
+    $subscription = if ($null -ne $script:ClagnosUiSubscription) {
+        $name = [string]$script:ClagnosUiSubscription.SubscriptionName
+        $id = [string]$script:ClagnosUiSubscription.SubscriptionId
+        if ([string]::Equals($name,$id,[System.StringComparison]::OrdinalIgnoreCase)) { 'Azure subscription: {0}' -f $id }
+        else { 'Azure subscription: {0} ({1})' -f $name,$id }
+    }
+    else { 'Azure subscription: not signed in' }
+    $line2 = 'Status: {0} | {1}' -f (Get-ClagnosUiStatusText),$subscription
+    return @($line1,$line2)
+}
+
+function Write-ClagnosUiStatusArea {
+    param([switch]$InitializeScreen)
+
+    $lines = @(Get-ClagnosUiStatusLines)
+    if ([Console]::IsOutputRedirected -or [bool]$script:ClagnosUiTestMode) {
+        if ($InitializeScreen) {
+            Write-Host $lines[0] -ForegroundColor Cyan
+            Write-Host $lines[1] -ForegroundColor Gray
+        }
+        return
+    }
+
+    $escape = [string][char]27
+    if ($InitializeScreen) {
+        $initialWidth = 120
+        try { $initialWidth = [Math]::Max(1,([Console]::WindowWidth - 1)) } catch { }
+        $initialLines = @($lines | ForEach-Object { $text = [string]$_; if ($text.Length -gt $initialWidth) { $text = $text.Substring(0,$initialWidth) }; $text })
+        Write-Host $initialLines[0] -ForegroundColor Cyan
+        Write-Host $initialLines[1] -ForegroundColor Gray
+        $height = 25
+        try { $height = [Math]::Max(4,[Console]::WindowHeight) } catch { }
+        try {
+            [Console]::Write(('{0}[3;{1}r{0}[3;1H' -f $escape,$height))
+            $script:ClagnosUiScrollRegionActive = $true
+        }
+        catch { $script:ClagnosUiScrollRegionActive = $false }
+        return
+    }
+
+    $width = 120
+    $cursorTop = 2
+    $cursorLeft = 0
+    try { $width = [Math]::Max(1,[Console]::WindowWidth); $cursorTop = [Math]::Max(2,[Console]::CursorTop); $cursorLeft = [Math]::Max(0,[Console]::CursorLeft) } catch { }
+    $padded = @($lines | ForEach-Object { $text = [string]$_; if ($text.Length -gt $width) { $text = $text.Substring(0,$width) }; $text.PadRight($width) })
+    try {
+        [Console]::Write(('{0}[1;1H{0}[2K{1}{0}[2;1H{0}[2K{2}{0}[{3};{4}H' -f $escape,$padded[0],$padded[1],($cursorTop + 1),($cursorLeft + 1)))
+    }
+    catch { }
+}
+
+function Set-ClagnosUiStatusAction {
+    param([AllowEmptyString()][string]$Action = '')
+    $script:ClagnosUiCurrentAction = ([string]$Action).Trim()
+    Write-ClagnosUiStatusArea
+}
+
+$script:ClagnosUiStatusCallback = { param([string]$Action) Set-ClagnosUiStatusAction -Action $Action }
+
+function Reset-ClagnosUiViewport {
+    if (-not [Console]::IsOutputRedirected -and -not [bool]$script:ClagnosUiTestMode -and $script:ClagnosUiScrollRegionActive) {
+        try { [Console]::Write(([string][char]27 + '[r')) } catch { }
+    }
+    $script:ClagnosUiScrollRegionActive = $false
+}
+
 function Write-ClagnosUiHeader {
     param([string]$Title = 'Clagnos')
 
+    Reset-ClagnosUiViewport
     Clear-Host
-    Write-Host 'CLAGNOS' -ForegroundColor Cyan
+    $script:ClagnosUiCurrentScreen = if ([string]::IsNullOrWhiteSpace([string]$Title)) { 'Clagnos' } else { [string]$Title }
+    $script:ClagnosUiCurrentAction = ''
+    Write-ClagnosUiStatusArea -InitializeScreen
     Write-Host 'one tool for all common cloud operations' -ForegroundColor DarkCyan
-    if ($null -ne $script:ClagnosUiSubscription) {
-        Write-Host ('Azure subscription: {0} ({1})' -f [string]$script:ClagnosUiSubscription.SubscriptionName, [string]$script:ClagnosUiSubscription.SubscriptionId) -ForegroundColor Gray
-    }
-    else {
-        Write-Host 'Azure subscription: not signed in' -ForegroundColor Yellow
-    }
-    $cacheStatus = Get-ClagnosUiBackgroundCacheStatus
-    if ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'refreshing') {
-        Write-Host ([string]$cacheStatus.Message) -ForegroundColor DarkGray
-    }
-    elseif ($null -ne $cacheStatus -and [string]$cacheStatus.State -eq 'error') {
-        Write-Host ('Background inventory cache: {0}' -f [string]$cacheStatus.Message) -ForegroundColor Yellow
-    }
-    if (-not [string]::IsNullOrWhiteSpace([string]$Title)) {
-        Write-Host ''
-        Write-Host $Title -ForegroundColor White
-    }
     Write-Host ''
 }
 
@@ -841,6 +1009,7 @@ function Resolve-ClagnosUiMenuChoice {
 function Read-ClagnosUiMenuChoice {
     param([string]$Prompt = 'Select an option')
     if (-not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) { Import-ClagnosUiInventoryCacheFromDisk | Out-Null }
+    Write-ClagnosUiStatusArea
     $choice = ''
     if ([Console]::IsInputRedirected) {
         $choice = Resolve-ClagnosUiMenuChoice -Value ([string](Read-ClagnosUiChoice -Prompt $Prompt))
@@ -848,7 +1017,17 @@ function Read-ClagnosUiMenuChoice {
     else {
         Write-Host ("{0}: " -f $Prompt) -NoNewline
         $inputBuffer = New-Object System.Text.StringBuilder
+        $nextStatusRefreshAt = [DateTime]::UtcNow.AddSeconds(2)
         while ($true) {
+            if (-not [Console]::KeyAvailable) {
+                if ([DateTime]::UtcNow -ge $nextStatusRefreshAt) {
+                    if (-not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) { Import-ClagnosUiInventoryCacheFromDisk | Out-Null }
+                    Write-ClagnosUiStatusArea
+                    $nextStatusRefreshAt = [DateTime]::UtcNow.AddSeconds(2)
+                }
+                Start-Sleep -Milliseconds 200
+                continue
+            }
             $key = [Console]::ReadKey($true)
             if ($key.Key -eq [ConsoleKey]::Escape) {
                 Write-Host ''
@@ -921,6 +1100,7 @@ function Invoke-ClagnosUiCommand {
     )
 
     $commandFailed = $false
+    Set-ClagnosUiStatusAction -Action ('Doing: {0} operation' -f $CommandName)
     try {
         Invoke-ClagnosCommandDispatcher -CommandName $CommandName -Options $Options -FrontendContext $FrontendContext | Out-Null
     }
@@ -960,7 +1140,9 @@ function Invoke-ClagnosUiCommand {
         # command attempt and let the next screen reconcile against Azure.
         Invalidate-ClagnosUiResourceCache -Reason ("TUI {0} operation" -f $CommandName) -ResourceGroup ([string](Get-ClagnosCliOptionText -Options $Options -Name 'group'))
     }
+    Set-ClagnosUiStatusAction -Action 'Operation complete; press Enter to return'
     Wait-ClagnosUiContinue
+    Set-ClagnosUiStatusAction -Action ''
     Update-ClagnosUiSubscription
 }
 
@@ -1044,7 +1226,9 @@ function Invoke-ClagnosUiLegacyTagMigration {
                 $tags += 'managed-by=clagnos'
             }
             $subscriptionId = [string]$script:ClagnosUiSubscription.SubscriptionId
+            Write-ClagnosActionProgress -Action ('migrate resource group management tag on {0}' -f $groupName)
             & az group update --name $groupName --subscription $subscriptionId --tags @tags -o none --only-show-errors 2>$null
+            Set-ClagnosUiStatusAction -Action ''
             if ($LASTEXITCODE -ne 0) {
                 throw 'Azure rejected the resource group tag update.'
             }
@@ -2903,23 +3087,25 @@ function Show-ClagnosUiInventoryMenu {
 
 function Show-ClagnosUiHome {
     while ($true) {
+        Write-ClagnosUiHeader -Title 'Main menu'
         Update-ClagnosUiSubscription
+        $script:ClagnosUiResourceCacheError = ''
         try {
             if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {
                 Ensure-ClagnosUiResourceCache | Out-Null
             }
             else {
                 Import-ClagnosUiInventoryCacheFromDisk | Out-Null
-                Start-ClagnosUiBackgroundCacheWorker | Out-Null
-                if ($null -ne $script:ClagnosUiInventoryCache) { Ensure-ClagnosUiResourceCache | Out-Null }
-                else { throw 'Managed inventory is warming in the background.' }
+                $workerStarted = Start-ClagnosUiBackgroundCacheWorker
+                if (-not $workerStarted -and $null -ne $script:ClagnosUiSubscription -and -not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiResourceCacheError)) {
+                    throw [string]$script:ClagnosUiResourceCacheError
+                }
             }
-            $script:ClagnosUiResourceCacheError = ''
+            Write-ClagnosUiStatusArea
         }
         catch {
             $script:ClagnosUiResourceCacheError = [string]$_.Exception.Message
         }
-        Write-ClagnosUiHeader -Title 'Main menu'
         if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosUiResourceCacheError)) {
             Write-Host ('Managed resource cache unavailable: {0}' -f [string]$script:ClagnosUiResourceCacheError) -ForegroundColor Yellow
         }
@@ -2942,4 +3128,4 @@ function Show-ClagnosUiHome {
 }
 
 try { Show-ClagnosUiHome }
-finally { Stop-ClagnosUiBackgroundCacheWorker }
+finally { Reset-ClagnosUiViewport; Stop-ClagnosUiBackgroundCacheWorker }

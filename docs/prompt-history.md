@@ -5948,3 +5948,12 @@ Feature update: Store all VC-specific settings for every virtual computer create
 **Assistant Summary**
 
 Separated global settings from per-VC configuration. `clagnos.env` now owns the active VC pointer, Azure subscription, operator identity, naming templates, timeouts, task paths, and non-secret create defaults; each `<vm-name>.env` owns its target identity, group, OS, region, image/SKU/disk, VM features, credentials, ports, and package transport. Added `vc.env.example`, made the configure editor global-only, routed VM settings through the selected profile, and updated the TUI, setup runner, benchmarks, release packaging, live acceptance script, and contract checks. Migrated the local configuration and existing managed VC profiles using read-only Azure inventory, verified identity and key VM properties, and removed the prior local settings file. No Azure resources were changed. PowerShell parsing passed for 49 changed scripts and `git diff --check` passed; automated tests were updated but not run.
+
+### 2026-10-16 00:32 UTC
+**User Prompt**
+
+Performance fix: shorten the startup cache warmup. Reserve the first two console rows exclusively for status: show the current menu/screen, selected VC, and current operation/action. Strengthen background Azure CLI caching so it does not block the foreground; manage the worker and cache refreshes more efficiently, validate and refresh changed resource groups/resources at the right times, and keep the UI responsive with current Azure inventory.
+
+**Assistant Summary**
+
+Removed synchronous subscription-list and inventory warmup from the normal TUI startup path. The menu now reads the selected subscription and active VC profile locally, with a single active-account lookup only when no subscription is configured, and starts the subscription-scoped inventory worker without waiting for it. Added a two-row status strip for screen, VC, subscription, current Doing action, and cache state; action progress updates it, and the terminal scroll region keeps it visible. Coalesced duplicate refresh requests, preserved superseding refreshes after mutations, withheld inventory snapshots older than five minutes, and bounded worker replacement/shutdown. PowerShell parsing and git diff --check passed. The commit hooks passed repository quality, sensitive-content, documentation, package-state/lifecycle, Python, packaging, and CLI-help checks; TUI tests and live Azure tests were not run.
