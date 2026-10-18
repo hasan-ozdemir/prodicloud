@@ -45,17 +45,44 @@ function Get-ClagnosTaskListRows {
     return @($rows)
 }
 
+function Select-ClagnosConfiguredTaskBlocks {
+    param(
+        [object[]]$ActiveTasks,
+        [object[]]$InventoryTasks,
+        [string]$SelectionText,
+        [ValidateSet('init','update')][string]$Stage
+    )
+
+    if ([string]::IsNullOrWhiteSpace([string]$SelectionText)) { return @($ActiveTasks) }
+    $tokens = @($SelectionText -split ',' | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if ($tokens.Count -eq 1 -and [string]::Equals([string]$tokens[0],'all',[System.StringComparison]::OrdinalIgnoreCase)) { return @($ActiveTasks) }
+    if ($tokens.Count -eq 1 -and [string]::Equals([string]$tokens[0],'none',[System.StringComparison]::OrdinalIgnoreCase)) { return @() }
+    if ($tokens.Count -eq 0) { throw ("VM_{0}_TASKS must be blank, 'all', 'none', or a comma-separated list of task ids/numbers." -f $Stage.ToUpperInvariant()) }
+
+    $selectedNames = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($token in @($tokens)) {
+        $match = @($InventoryTasks | Where-Object {
+            [string]::Equals([string]$_.Name,[string]$token,[System.StringComparison]::OrdinalIgnoreCase) -or
+            ($token -match '^\d+$' -and [int]$_.TaskNumber -eq [int]$token)
+        } | Select-Object -First 1)
+        if ($match.Count -ne 1) { throw ("VM_{0}_TASKS contains unknown task '{1}'." -f $Stage.ToUpperInvariant(),$token) }
+        if (-not [bool]$match[0].Enabled) {
+            Write-Host ("Configured task '{0}' remains disabled in tasks.toml and will be skipped." -f [string]$match[0].Name) -ForegroundColor DarkYellow
+            continue
+        }
+        [void]$selectedNames.Add([string]$match[0].Name)
+    }
+    return @($ActiveTasks | Where-Object { $selectedNames.Contains([string]$_.Name) })
+}
+
 # Handles Get-ClagnosTaskRunHistoryPath.
 function Get-ClagnosTaskRunHistoryPath {
     if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosTaskHistoryPathOverride)) {
         return [string]$script:ClagnosTaskHistoryPathOverride
     }
 
-    $stateRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
-    if ([string]::IsNullOrWhiteSpace([string]$stateRoot)) {
-        $stateRoot = [System.IO.Path]::GetTempPath()
-    }
-    return (Join-Path (Join-Path $stateRoot 'clagnos') 'task-runs.jsonl')
+    $repoRoot = Get-ClagnosRepoRoot
+    return (Join-Path (Join-Path $repoRoot '.logs') 'task-runs.jsonl')
 }
 
 # Handles Write-ClagnosTaskRunHistoryRecord.
@@ -66,11 +93,6 @@ function Write-ClagnosTaskRunHistoryRecord {
     $historyDirectory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($historyPath))
     if (-not (Test-Path -LiteralPath $historyDirectory -PathType Container)) {
         New-Item -ItemType Directory -Path $historyDirectory -Force | Out-Null
-    }
-
-    if ((Test-Path -LiteralPath $historyPath -PathType Leaf) -and (Get-Item -LiteralPath $historyPath).Length -gt 5MB) {
-        $recentLines = @(Get-Content -LiteralPath $historyPath -Tail 1999 -ErrorAction SilentlyContinue)
-        [System.IO.File]::WriteAllLines($historyPath, [string[]]$recentLines, ([System.Text.UTF8Encoding]::new($false)))
     }
 
     $jsonLine = ConvertTo-Json -InputObject $Record -Depth 8 -Compress
@@ -750,6 +772,53 @@ function Resolve-ClagnosTaskExecutionPlanForStage {
     }
 }
 
+function Invoke-ClagnosWinRmTaskBlocksWithGuestRestart {
+    param(
+        [psobject]$Runtime,
+        [string]$HostName,
+        [psobject]$Target,
+        [object[]]$TaskBlocks,
+        [ValidateSet('continue','strict')][string]$TaskOutcomeMode = 'strict',
+        [hashtable]$Options = @{},
+        [switch]$AutoMode,
+        [switch]$WindowsFlag
+    )
+
+    if (@($TaskBlocks).Count -ne 1) { throw 'A WinRM task reboot retry must contain exactly one task.' }
+    $result = Invoke-ClagnosWinRmTaskBlocks -Platform 'windows' -HostName $HostName -Runtime $Runtime -Target $Target -TaskBlocks $TaskBlocks -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory 'task-run'
+    if (-not [bool]$result.RebootRequired -or [string]$TaskBlocks[0].TaskType -eq 'package') {
+        return [pscustomobject]@{ Result=$result; Runtime=$Runtime; Target=$Target; HostName=$HostName }
+    }
+
+    if ($Options.Count -eq 0) {
+        $Options = @{
+            group = [string]$Runtime.Context.ResourceGroup
+            'vm-name' = [string]$Runtime.Context.VmName
+        }
+        $subscription = Get-ClagnosResolvedSubscriptionContext
+        if ($null -ne $subscription -and -not [string]::IsNullOrWhiteSpace([string]$subscription.SubscriptionId)) { $Options['subscription-id'] = [string]$subscription.SubscriptionId }
+    }
+    $taskName = [string]$TaskBlocks[0].Name
+    Write-ClagnosActionProgress -Action ("apply the requested one-time VM restart for Windows task '{0}'" -f $taskName)
+    $restart = Restart-ClagnosPackageVmForPendingReboot -Runtime $Runtime -Target $Target -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -ActionLabel ("Windows task '{0}'" -f $taskName) -WaitTransport 'winrm'
+    $Runtime = $restart.Runtime
+    $Target = $restart.Target
+    $vmDetails = Get-ClagnosVmDetails -Context $Runtime.Context -AllowCachedInventory
+    $HostName = [string]$vmDetails.VmFqdn
+    if ([string]::IsNullOrWhiteSpace($HostName)) { $HostName = [string]$vmDetails.PublicIP }
+    if ([string]::IsNullOrWhiteSpace($HostName)) { throw ("Windows task '{0}' requested a restart, but its WinRM endpoint could not be resolved afterward." -f $taskName) }
+
+    Write-ClagnosActionProgress -Action ("rerun Windows task '{0}' once after restart to verify servicing completion" -f $taskName)
+    $retryResult = Invoke-ClagnosWinRmTaskBlocks -Platform 'windows' -HostName $HostName -Runtime $Runtime -Target $Target -TaskBlocks $TaskBlocks -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory 'task-run'
+    if ([bool]$retryResult.RebootRequired) {
+        throw ("Windows task '{0}' still requests a reboot after its one allowed servicing restart. Rerun the task after reviewing target Windows servicing state." -f $taskName)
+    }
+    $retryResult.RebootCount = 1
+    $retryResult.FinalRestartCount = 1
+    $retryResult.RebootRequestedTasks = @($taskName)
+    return [pscustomobject]@{ Result=$retryResult; Runtime=$Runtime; Target=$Target; HostName=$HostName }
+}
+
 function Invoke-ClagnosTaskExecutionWithTargetCore {
     param(
         [pscustomobject]$Runtime,
@@ -832,18 +901,25 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
         throw "Task execution could not resolve VM SSH host (FQDN/Public IP)."
     }
 
-    if ([string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase) -and
-        [string]::Equals([string]$Runtime.Platform,'windows',[System.StringComparison]::OrdinalIgnoreCase) -and
-        (Get-ClagnosPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)) -eq 'winrm') {
+    $declaredWinRmTransport = @($executionTaskBlocks | Where-Object { $_.PSObject.Properties.Match('Transport').Count -gt 0 -and [string]$_.Transport -eq 'winrm' }).Count -gt 0
+    $packageWinRmTransport = ([string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase) -and
+        (Get-ClagnosPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)) -eq 'winrm')
+    if ([string]::Equals([string]$Runtime.Platform,'windows',[System.StringComparison]::OrdinalIgnoreCase) -and ($declaredWinRmTransport -or $packageWinRmTransport)) {
         if ($Runtime.Context.PSObject.Properties.Match('PowerShellPort').Count -eq 0) { $Runtime.Context | Add-Member -NotePropertyName PowerShellPort -NotePropertyValue (Get-ClagnosDefaultPowerShellPortText) }
-        $winrmTaskResult = Invoke-ClagnosWinRmTaskBlocks `
-            -Platform 'windows' `
-            -HostName $sshHost `
-            -Runtime $Runtime `
-            -Target $target `
-            -TaskBlocks @($executionTaskBlocks) `
-            -TaskOutcomeMode $effectiveTaskOutcomeMode `
-            -PerfTaskCategory 'task-run'
+        if ($declaredWinRmTransport -and -not [string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase)) {
+            $winrmExecution = Invoke-ClagnosWinRmTaskBlocksWithGuestRestart -Runtime $Runtime -HostName $sshHost -Target $target -TaskBlocks @($executionTaskBlocks) -TaskOutcomeMode $effectiveTaskOutcomeMode -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag
+            $winrmTaskResult = $winrmExecution.Result
+        }
+        else {
+            $winrmTaskResult = Invoke-ClagnosWinRmTaskBlocks `
+                -Platform 'windows' `
+                -HostName $sshHost `
+                -Runtime $Runtime `
+                -Target $target `
+                -TaskBlocks @($executionTaskBlocks) `
+                -TaskOutcomeMode $effectiveTaskOutcomeMode `
+                -PerfTaskCategory 'task-run'
+        }
         return [pscustomobject]@{
             Stage = 'update'
             Task = $taskBlock

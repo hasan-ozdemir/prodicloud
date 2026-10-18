@@ -55,6 +55,12 @@ function Get-ClagnosPackageCatalog {
         $category = [string]$manifest.category
         if ([string]::IsNullOrWhiteSpace($category)) { throw ("Package '{0}' requires category." -f $id) }
         $category = $category.Trim().ToLowerInvariant()
+
+        $packageSettings = $null
+        if ($null -ne $manifest.settings) {
+            $packageSettings = ConvertFrom-JsonCompat -InputObject (ConvertTo-JsonCompat -InputObject $manifest.settings -Depth 12)
+            [void](Get-ClagnosManifestSettingValueMap -Settings $packageSettings -ConfigMap @{})
+        }
         if ($category -notin @('application','tool','package','feature')) { throw ("Package '{0}' has unsupported category '{1}'." -f $id, $category) }
 
         $statusCheck = $manifest.statusCheck
@@ -251,6 +257,7 @@ function Get-ClagnosPackageCatalog {
             AppStateKey = $appStateKey
             PostInstallTasks = @($postInstallTasks)
             DependsOn = @($manifest.dependsOn | ForEach-Object { [string]$_ })
+            Settings = $packageSettings
         }
         $taskBlock = [pscustomobject]@{
             Name = $id
@@ -283,6 +290,7 @@ function Get-ClagnosPackageCatalog {
             RepairStrategy = [string]$repairStrategy
             RepairPackageId = [string]$manifest.repairPackageId
             StartupPolicy = $manifest.startupPolicy
+            Settings = $packageSettings
             ObservedDurationSeconds = [double]::PositiveInfinity
         }
         $packages += [pscustomobject]@{
@@ -562,6 +570,12 @@ Invoke-ClagnosPackageLifecycle -Action __CLAGNOS_ACTION__ -PackageSpecBase64 '__
         $template = $template.Replace('__CLAGNOS_INSTALL_SCRIPT_B64__',$installBase64)
     }
     if ($Action -eq 'repair') { $template = New-ClagnosPackageRepairWithAppStateBackupScript -InnerScript $template -Package $Package -Context $Context }
+    if ($null -ne $Context -and $null -ne $Package.PackageTask -and $Package.PackageTask.PSObject.Properties.Match('Settings').Count -gt 0) {
+        $settingsConfig = @{}
+        if ($Context -is [System.Collections.IDictionary] -and $Context.Contains('ConfigMap')) { $settingsConfig = [hashtable]$Context['ConfigMap'] }
+        $settingValues = Get-ClagnosManifestSettingValueMap -Settings $Package.PackageTask.Settings -ConfigMap $settingsConfig
+        foreach ($settingKey in @($settingValues.Keys)) { $template = $template.Replace(('__{0}__' -f [string]$settingKey),[string]$settingValues[$settingKey]) }
+    }
     return [string]$template
 }
 
@@ -1064,6 +1078,45 @@ function Get-ClagnosPackageDependencyOrder {
     return @($ordered.ToArray())
 }
 
+function Select-ClagnosConfiguredPackages {
+    param([object[]]$Packages,[string]$SelectionText)
+    if ([string]::IsNullOrWhiteSpace([string]$SelectionText)) { return @($Packages) }
+    $tokens = @($SelectionText -split ',' | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    if ($tokens.Count -eq 1 -and [string]::Equals([string]$tokens[0],'all',[System.StringComparison]::OrdinalIgnoreCase)) { return @($Packages) }
+    if ($tokens.Count -eq 1 -and [string]::Equals([string]$tokens[0],'none',[System.StringComparison]::OrdinalIgnoreCase)) { return @() }
+    if ($tokens.Count -eq 0) { throw "VM_PACKAGE_SETUP_PACKAGES must be blank, 'all', 'none', or a comma-separated list of builtin:<id>/custom:<id>." }
+
+    $selected = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($token in @($tokens)) {
+        if ($token -notmatch '^(?<catalog>builtin|custom):(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)$') { throw ("Invalid VM_PACKAGE_SETUP_PACKAGES entry '{0}'. Use builtin:<id> or custom:<id>." -f $token) }
+        $catalog = [string]$Matches.catalog
+        $id = [string]$Matches.id
+        $matches = @($Packages | Where-Object { [string]::Equals([string]$_.Catalog,$catalog,[System.StringComparison]::OrdinalIgnoreCase) -and [string]::Equals([string]$_.Id,$id,[System.StringComparison]::OrdinalIgnoreCase) })
+        if ($matches.Count -ne 1) { throw ("VM_PACKAGE_SETUP_PACKAGES references unknown package '{0}'." -f $token) }
+        if (-not [bool]$matches[0].Enabled) { throw ("VM_PACKAGE_SETUP_PACKAGES selects '{0}', but it is disabled in that catalog's tasks.toml." -f $token) }
+        [void]$selected.Add(([string]$catalog + ':' + [string]$id))
+    }
+
+    $changed = $true
+    while ($changed) {
+        $changed = $false
+        foreach ($package in @($Packages | Where-Object { $selected.Contains(([string]$_.Catalog + ':' + [string]$_.Id)) })) {
+            foreach ($dependency in @($package.PackageTask.DependsOn | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })) {
+                $dependencyMatches = @($Packages | Where-Object { [string]::Equals([string]$_.Id,$dependency,[System.StringComparison]::OrdinalIgnoreCase) })
+                if ($dependencyMatches.Count -eq 0) { continue }
+                $enabledDependency = @($dependencyMatches | Where-Object { [bool]$_.Enabled } | Select-Object -First 1)
+                if ($enabledDependency.Count -ne 1) { throw ("Selected package '{0}' requires disabled dependency '{1}'." -f [string]$package.Id,$dependency) }
+                $dependencyKey = [string]$enabledDependency[0].Catalog + ':' + [string]$enabledDependency[0].Id
+                if ($selected.Add($dependencyKey)) {
+                    Write-Host ("Package selection added required dependency [{0}] {1}." -f [string]$enabledDependency[0].Catalog,[string]$enabledDependency[0].Id) -ForegroundColor DarkCyan
+                    $changed = $true
+                }
+            }
+        }
+    }
+    return @($Packages | Where-Object { $selected.Contains(([string]$_.Catalog + ':' + [string]$_.Id)) })
+}
+
 function New-ClagnosPackageSetupPlan {
     param(
         [object[]]$Packages,
@@ -1268,6 +1321,13 @@ function Invoke-ClagnosPackageSetupAll {
     )
     if ($packages.Count -eq 0) { throw ("No builtin or custom packages are available for platform '{0}'." -f $platform) }
 
+    $selectionText = [string](Get-ConfigValue -Config $runtime.EffectiveConfigMap -Key 'VM_PACKAGE_SETUP_PACKAGES' -DefaultValue '')
+    $packages = @(Select-ClagnosConfiguredPackages -Packages $packages -SelectionText $selectionText)
+    if ($packages.Count -eq 0) {
+        Write-Host 'Package setup selection is empty; no package status checks or guest mutations are required.' -ForegroundColor DarkCyan
+        return [pscustomobject]@{ Installed = 0; Repaired = 0; Failed = 0; Skipped = 0; Results = @() }
+    }
+
     $plan = New-ClagnosPackageSetupPlan -Packages $packages -Options $Options -Platform $platform -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
     Write-Host ''
     Write-Host ("Package setup plan for {0} VM '{1}' in resource group '{2}':" -f $platform,[string]$plan.Target.VmName,[string]$plan.Target.ResourceGroup) -ForegroundColor Cyan
@@ -1298,11 +1358,11 @@ function Invoke-ClagnosPackageSetupAll {
 }
 
 function Restart-ClagnosPackageVmForPendingReboot {
-    param([psobject]$Runtime,[psobject]$Target,[hashtable]$Options,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag)
+    param([psobject]$Runtime,[psobject]$Target,[hashtable]$Options,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag,[string]$ActionLabel='package operation',[ValidateSet('profile','ssh','winrm')][string]$WaitTransport='profile')
 
     $subscription = Get-ClagnosResolvedSubscriptionContext
     $subscriptionId = if ($null -ne $subscription) { [string]$subscription.SubscriptionId } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id') }
-    Write-ClagnosActionProgress -Action ("restart VM '{0}' because its completed package uninstall requested a reboot" -f [string]$Target.VmName)
+    Write-ClagnosActionProgress -Action ("restart VM '{0}' because {1} requested a reboot" -f [string]$Target.VmName,$ActionLabel)
     $restartArgs = @(
         '--vm-action=restart',
         ('--group={0}' -f [string]$Target.ResourceGroup),
@@ -1310,7 +1370,9 @@ function Restart-ClagnosPackageVmForPendingReboot {
         ('--subscription-id={0}' -f $subscriptionId)
     )
     $parsedRestart = Parse-ClagnosCliArguments -CommandToken 'do' -RawArgs $restartArgs
-    Invoke-ClagnosCommandDispatcher -CommandName 'do' -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
+    Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds 900 -Action {
+        Invoke-ClagnosCommandDispatcher -CommandName 'do' -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
+    }
 
     $nextRuntime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $nextTarget = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $nextRuntime.EffectiveConfigMap -OperationName 'package'
@@ -1320,7 +1382,7 @@ function Restart-ClagnosPackageVmForPendingReboot {
     $hostName = [string]$vmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = [string]$vmDetails.PublicIP }
     if ([string]::IsNullOrWhiteSpace($hostName)) { throw 'The VM restarted for package servicing, but its guest endpoint could not be resolved.' }
-    $transport = Get-ClagnosPackageTransport -ConfigMap ([hashtable]$nextRuntime.EffectiveConfigMap)
+    $transport = if ($WaitTransport -eq 'profile') { Get-ClagnosPackageTransport -ConfigMap ([hashtable]$nextRuntime.EffectiveConfigMap) } else { [string]$WaitTransport }
     if ($transport -eq 'winrm') {
         $port = if ($nextRuntime.Context.PSObject.Properties.Match('PowerShellPort').Count -gt 0) { [int]$nextRuntime.Context.PowerShellPort } else { 5985 }
         if (-not (Wait-ClagnosTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'WinRM after package-requested reboot')) {

@@ -109,6 +109,9 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'AZURE_COMMAND_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'Azure command timeout (seconds)' -EditorKind 'positive-int')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'SSH connect timeout (seconds)' -EditorKind 'positive-int')
         (New-ClagnosConfigureFieldSpec -Key 'SSH_TASK_TIMEOUT_SECONDS' -Section 'Advanced' -Label 'SSH task timeout (seconds)' -EditorKind 'positive-int')
+        (New-ClagnosConfigureFieldSpec -Key 'VM_INIT_TASKS' -Section 'Advanced' -Label 'Selected vm-init tasks' -EditorKind 'task-selection')
+        (New-ClagnosConfigureFieldSpec -Key 'VM_UPDATE_TASKS' -Section 'Advanced' -Label 'Selected vm-update tasks' -EditorKind 'task-selection')
+        (New-ClagnosConfigureFieldSpec -Key 'VM_PACKAGE_SETUP_PACKAGES' -Section 'Advanced' -Label 'Selected setup-all packages' -EditorKind 'package-selection')
         (New-ClagnosConfigureFieldSpec -Key 'TOP_STATUS_LINES' -Section 'Advanced' -Label 'Two-row TUI status area' -EditorKind 'toggle-picker')
         (New-ClagnosConfigureFieldSpec -Key 'WIN_VM_INIT_TASK_DIR' -Section 'Advanced' -Label 'Windows vm-init task directory' -EditorKind 'task-dir-picker')
         (New-ClagnosConfigureFieldSpec -Key 'WIN_VM_UPDATE_TASK_DIR' -Section 'Advanced' -Label 'Windows vm-update task directory' -EditorKind 'task-dir-picker')
@@ -121,6 +124,11 @@ function Get-ClagnosConfigureFieldSchema {
         (New-ClagnosConfigureFieldSpec -Key 'DEFAULT_TCP_PORTS' -Section 'Advanced' -Label 'Default TCP ports' -EditorKind 'tcp-ports-picker')
     )
 
+    $knownFieldKeys = @($fields | ForEach-Object { [string]$_.Key })
+    foreach ($settingKey in @(Get-ClagnosManifestDeclaredSettingKeys)) {
+        if ($knownFieldKeys -contains [string]$settingKey) { continue }
+        $fields += New-ClagnosConfigureFieldSpec -Key ([string]$settingKey) -Section 'Advanced' -Label ("Task/package setting: {0}" -f [string]$settingKey) -EditorKind 'manifest-setting'
+    }
     return @($fields)
 }
 
@@ -835,6 +843,33 @@ function Assert-ClagnosConfigureDirectoryValue {
     return $Value.Trim()
 }
 
+function Assert-ClagnosConfigureTaskSelectionValue {
+    param([string]$Key,[string]$Value,[switch]$AllowCatalogPrefix)
+    $text = if ($null -eq $Value) { '' } else { [string]$Value.Trim() }
+    if ([string]::IsNullOrWhiteSpace($text)) { return '' }
+    if ([string]::Equals($text,'all',[System.StringComparison]::OrdinalIgnoreCase)) { return 'all' }
+    if ([string]::Equals($text,'none',[System.StringComparison]::OrdinalIgnoreCase)) { return 'none' }
+    $tokens = @($text -split ',' | ForEach-Object { ([string]$_).Trim() })
+    if ($tokens.Count -eq 0 -or @($tokens | Where-Object { [string]::IsNullOrWhiteSpace([string]$_) }).Count -gt 0) {
+        Throw-FriendlyError -Detail ("{0} contains an empty selection." -f $Key) -Code 2 -Summary 'Task/package selection is invalid.' -Hint 'Use comma-separated ids, or `all`/`none`.'
+    }
+    if ($AllowCatalogPrefix) {
+        foreach ($token in @($tokens)) {
+            if ($token -notmatch '^(?i:builtIn|custom):[a-z0-9]+(?:-[a-z0-9]+)*$') {
+                Throw-FriendlyError -Detail ("Package selection entry '{0}' is invalid." -f $token) -Code 2 -Summary 'Package selection is invalid.' -Hint 'Use comma-separated builtin:<id> or custom:<id> package ids.'
+            }
+        }
+    }
+    else {
+        foreach ($token in @($tokens)) {
+            if ($token -notmatch '^(?:\d{1,5}|[A-Za-z0-9][A-Za-z0-9._-]*)$') {
+                Throw-FriendlyError -Detail ("Task selection entry '{0}' is invalid." -f $token) -Code 2 -Summary 'Task selection is invalid.' -Hint 'Use comma-separated task ids or numbers.'
+            }
+        }
+    }
+    return (@($tokens | Select-Object -Unique) -join ',')
+}
+
 function Assert-ClagnosConfigureFieldValue {
     param(
         [string]$Key,
@@ -910,6 +945,9 @@ function Assert-ClagnosConfigureFieldValue {
         'WIN_VM_DISK_SIZE_GB' { return (Assert-ClagnosConfigurePositiveIntegerValue -Key $Key -Value $text) }
         'LIN_VM_DISK_SIZE_GB' { return (Assert-ClagnosConfigurePositiveIntegerValue -Key $Key -Value $text) }
         'SSH_MAX_RETRIES' { return (Assert-ClagnosConfigurePositiveIntegerValue -Key $Key -Value $text) }
+        'VM_INIT_TASKS' { return (Assert-ClagnosConfigureTaskSelectionValue -Key $Key -Value $text -AllowCatalogPrefix:$false) }
+        'VM_UPDATE_TASKS' { return (Assert-ClagnosConfigureTaskSelectionValue -Key $Key -Value $text -AllowCatalogPrefix:$false) }
+        'VM_PACKAGE_SETUP_PACKAGES' { return (Assert-ClagnosConfigureTaskSelectionValue -Key $Key -Value $text -AllowCatalogPrefix) }
         'PACKAGE_TRANSPORT' {
             $transport = ([string]$text).Trim().ToLowerInvariant()
             if ($transport -notin @('ssh','winrm')) {
@@ -940,6 +978,15 @@ function Assert-ClagnosConfigureFieldValue {
         'LIN_VM_INIT_TASK_DIR' { return (Assert-ClagnosConfigureDirectoryValue -Key $Key -Value $text -State $State) }
         'LIN_VM_UPDATE_TASK_DIR' { return (Assert-ClagnosConfigureDirectoryValue -Key $Key -Value $text -State $State) }
         default {
+            if (@(Get-ClagnosManifestDeclaredSettingKeys) -contains $Key) {
+                if ([string]::IsNullOrWhiteSpace([string]$text)) { return '' }
+                $descriptor = Get-ClagnosManifestSettingDescriptor -Key $Key
+                if ($null -eq $descriptor) { throw ("No validator is registered for manifest setting '{0}'." -f $Key) }
+                $settingDescriptorMap = @{}
+                $settingDescriptorMap[$Key] = $descriptor
+                $settingMap = Get-ClagnosManifestSettingValueMap -Settings ([pscustomobject]$settingDescriptorMap) -ConfigMap @{ $Key = $text.Trim() }
+                return [string]$settingMap[$Key]
+            }
             return $text.Trim()
         }
     }

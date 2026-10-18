@@ -234,8 +234,9 @@ function Get-ClagnosTaskCatalogObservedDurationMap {
     $observedDurations = @{}
     $repoRoot = Resolve-ClagnosTaskCatalogRepoRoot -StartPath $PSScriptRoot
     if (-not [string]::IsNullOrWhiteSpace([string]$repoRoot) -and (Test-Path -LiteralPath $repoRoot)) {
+        $logRoot = Join-Path $repoRoot '.logs'
         $logFiles = @(
-            Get-ChildItem -LiteralPath $repoRoot -Filter 'clagnos-log-*.txt' -File -ErrorAction SilentlyContinue |
+            Get-ChildItem -LiteralPath $logRoot -Filter 'clagnos-log-*.txt' -File -ErrorAction SilentlyContinue |
                 Sort-Object LastWriteTimeUtc -Descending
         )
         foreach ($logFile in @($logFiles)) {
@@ -680,6 +681,17 @@ function Get-ClagnosTaskFolderMetadata {
         $dependsOn = @(ConvertTo-ClagnosTaskFolderDependsOn -InputObject $metadata.dependsOn -TaskLabel $taskLabel)
     }
 
+    $transport = 'ssh'
+    if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('transport').Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$metadata.transport)) {
+        $transport = ([string]$metadata.transport).Trim().ToLowerInvariant()
+    }
+    if ($transport -notin @('ssh','winrm')) { throw ("Task '{0}' declares unsupported transport '{1}'. Use ssh or winrm." -f $taskLabel,$transport) }
+    $settings = $null
+    if ($null -ne $metadata -and $null -ne $metadata.settings) {
+        $settings = ConvertFrom-JsonCompat -InputObject (ConvertTo-JsonCompat -InputObject $metadata.settings -Depth 12)
+        [void](Get-ClagnosManifestSettingValueMap -Settings $settings -ConfigMap @{})
+    }
+
     $extensions = $null
     if ($null -ne $metadata -and $metadata.PSObject.Properties.Match('extensions').Count -gt 0 -and $null -ne $metadata.extensions) {
         $extensions = ConvertFrom-JsonCompat -InputObject (ConvertTo-JsonCompat -InputObject $metadata.extensions -Depth 20)
@@ -692,6 +704,8 @@ function Get-ClagnosTaskFolderMetadata {
         AppStateSpec = $appStateSpec
         DependsOn = @($dependsOn)
         Extensions = $extensions
+        Transport = [string]$transport
+        Settings = $settings
     }
 }
 
@@ -785,6 +799,11 @@ function Read-ClagnosTaskFolderRow {
         return $null
     }
 
+    if ([string]$metadata.Transport -eq 'winrm' -and $ExpectedExtension -cne '.ps1') {
+        Write-ClagnosTaskFolderSkipWarning -RelativeFolderPath $relativeFolderPath -Message 'WinRM task transport is supported only for Windows PowerShell tasks.'
+        return $null
+    }
+
     $priority = [int]$metadata.Priority
     if (-not (Test-ClagnosTaskPriorityFitsType -TaskType $taskType -Priority $priority)) {
         Write-ClagnosTaskFolderSkipWarning -RelativeFolderPath $relativeFolderPath -Message ("priority '{0}' is outside the allowed {1} band." -f $priority, [string]$taskType)
@@ -818,6 +837,8 @@ function Read-ClagnosTaskFolderRow {
         Enabled = [bool]$isEnabled
         DisabledReason = [string]$disabledReason
         DependsOn = @($metadata.DependsOn)
+        Transport = [string]$metadata.Transport
+        Settings = $metadata.Settings
         ObservedDurationSeconds = [double]::PositiveInfinity
     }
 }
@@ -907,6 +928,8 @@ function Get-ClagnosTaskBlocksFromDirectory {
                 TaskRootPath = [string]$task.TaskRootPath
                 TaskMetadataPath = [string]$task.TaskMetadataPath
                 DependsOn = @($task.DependsOn)
+                Transport = [string]$task.Transport
+                Settings = $task.Settings
                 ObservedDurationSeconds = [double]$task.ObservedDurationSeconds
             }
             continue
@@ -929,6 +952,8 @@ function Get-ClagnosTaskBlocksFromDirectory {
             Source = [string]$task.Source
             TaskNumber = [int]$task.TaskNumber
             DependsOn = @($task.DependsOn)
+            Transport = [string]$task.Transport
+            Settings = $task.Settings
             ObservedDurationSeconds = [double]$task.ObservedDurationSeconds
         }
     }

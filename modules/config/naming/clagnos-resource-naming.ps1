@@ -330,128 +330,51 @@ function ConvertTo-ClagnosAzureDnsSafeLabel {
     return [string]$label
 }
 
-function Get-ClagnosManagedPublicIpRows {
-    $rows = New-Object 'System.Collections.Generic.List[object]'
-    try {
-        $resourceGroups = @(Get-ClagnosManagedResourceGroupRows)
-        foreach ($groupRow in @($resourceGroups)) {
-            $resourceGroup = [string]$groupRow.name
-            if ([string]::IsNullOrWhiteSpace([string]$resourceGroup)) {
-                continue
-            }
-
-            $publicIpJson = az network public-ip list -g $resourceGroup -o json --only-show-errors 2>$null
-            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$publicIpJson)) {
-                continue
-            }
-
-            foreach ($publicIpRow in @(ConvertFrom-JsonArrayCompat -InputObject $publicIpJson)) {
-                if ($null -eq $publicIpRow) {
-                    continue
-                }
-
-                $rows.Add($publicIpRow) | Out-Null
-            }
-        }
-    }
-    catch {
-        Throw-FriendlyError `
-            -Detail "Managed public IP inventory could not be listed while resolving the next public DNS label." `
-            -Code 22 `
-            -Summary "Managed public DNS label could not be resolved." `
-            -Hint "Run az login and verify access to list clagnos managed resource groups and public IPs."
-    }
-
-    return @($rows.ToArray())
-}
-
-function Test-ClagnosManagedPublicIpAttached {
-    param([AllowNull()]$PublicIpRow)
-
-    if ($null -eq $PublicIpRow) {
-        return $false
-    }
-
-    $ipConfigurationId = ''
-    if ($PublicIpRow.PSObject.Properties.Match('ipConfiguration').Count -gt 0 -and $null -ne $PublicIpRow.ipConfiguration) {
-        if ($PublicIpRow.ipConfiguration.PSObject.Properties.Match('id').Count -gt 0) {
-            $ipConfigurationId = [string]$PublicIpRow.ipConfiguration.id
-        }
-    }
-
-    return (-not [string]::IsNullOrWhiteSpace([string]$ipConfigurationId))
-}
-
-function New-ClagnosManagedPublicDnsLabelCandidate {
+function Assert-ClagnosPublicDnsLabelAvailable {
     param(
-        [string]$VmName,
-        [int]$VmId
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Location,
+        [Parameter(Mandatory = $true)][string]$SubscriptionId
     )
 
-    $effectiveVmId = if ($VmId -lt 1) { 1 } else { [int]$VmId }
-    $safeVmName = ConvertTo-ClagnosAzureDnsSafeLabel -Value $VmName -Fallback 'vm'
-    $suffix = ('-vm{0}' -f $effectiveVmId)
-    $maxVmNameLength = [Math]::Max(1, 63 - $suffix.Length)
-    if ($safeVmName.Length -gt $maxVmNameLength) {
-        $safeVmName = ([string]$safeVmName.Substring(0, $maxVmNameLength)).TrimEnd('-')
-        if ([string]::IsNullOrWhiteSpace([string]$safeVmName)) {
-            $safeVmName = 'vm'
-        }
+    $normalizedLabel = ConvertTo-ClagnosAzureDnsSafeLabel -Value $Label -Fallback 'vm'
+    if ($normalizedLabel -notmatch '^[a-z][a-z0-9-]{1,61}[a-z0-9]$') {
+        Throw-FriendlyError -Detail ("DNS label '{0}' is not a valid Azure public IP label." -f $normalizedLabel) -Code 25 -Summary 'Azure DNS label is invalid.' -Hint 'Use the VM name as the public DNS label.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$Location) -or [string]::IsNullOrWhiteSpace([string]$SubscriptionId)) {
+        Throw-FriendlyError -Detail 'DNS availability check requires the selected Azure region and subscription.' -Code 22 -Summary 'Azure DNS label could not be checked.' -Hint 'Select an Azure subscription and region, then retry.'
     }
 
-    return (ConvertTo-ClagnosAzureDnsSafeLabel -Value ($safeVmName + $suffix) -Fallback ('vm' + $effectiveVmId))
+    $url = "https://management.azure.com/subscriptions/$SubscriptionId/providers/Microsoft.Network/locations/$Location/checkDnsNameAvailability?api-version=2025-05-01"
+    Write-Host ("Doing: check whether Azure DNS label '{0}' is available in '{1}'" -f $normalizedLabel,$Location) -ForegroundColor Cyan
+    $json = az rest --method get --url $url --url-parameters ("domainNameLabel={0}" -f $normalizedLabel) --subscription $SubscriptionId -o json --only-show-errors 2>$null
+    Assert-LastExitCode 'Azure public DNS label availability check'
+    if ([string]::IsNullOrWhiteSpace([string]$json)) {
+        Throw-FriendlyError -Detail ("Azure returned no DNS availability result for label '{0}'." -f $normalizedLabel) -Code 22 -Summary 'Azure DNS label availability is unknown.' -Hint 'Retry after verifying Azure Network read access.'
+    }
+
+    try { $availability = ConvertFrom-JsonCompat -InputObject ([string]$json) }
+    catch { Throw-FriendlyError -Detail ("Azure returned an unreadable DNS availability result for label '{0}'." -f $normalizedLabel) -Code 22 -Summary 'Azure DNS label availability is unknown.' -Hint 'Retry after verifying Azure Network read access.' }
+    if ($null -eq $availability -or $availability.PSObject.Properties.Match('available').Count -eq 0) {
+        Throw-FriendlyError -Detail ("Azure omitted the availability flag for DNS label '{0}'." -f $normalizedLabel) -Code 22 -Summary 'Azure DNS label availability is unknown.' -Hint 'Retry after verifying Azure Network read access.'
+    }
+    if (-not [bool]$availability.available) {
+        $reason = [string]$availability.reason
+        if ([string]::IsNullOrWhiteSpace([string]$reason)) { $reason = 'label already in use' }
+        Throw-FriendlyError -Detail ("Azure DNS label '{0}.{1}.cloudapp.azure.com' is unavailable ({2})." -f $normalizedLabel,$Location,$reason) -Code 25 -Summary 'The VM name is unavailable as an Azure DNS label.' -Hint 'Choose a different VM name before provisioning; Clagnos will not add a numeric DNS suffix.'
+    }
+    return $true
 }
 
 # Handles Resolve-ClagnosPublicDnsLabel.
 function Resolve-ClagnosPublicDnsLabel {
     param(
         [string]$PublicIpName,
-        [string]$VmName = '',
-        [int]$PreferredVmId = 0,
-        [object[]]$ManagedPublicIpRows = @()
+        [string]$VmName = ''
     )
 
     $effectiveVmName = if ([string]::IsNullOrWhiteSpace([string]$VmName)) { [string]$PublicIpName } else { [string]$VmName }
-    $managedRowsWereProvided = $PSBoundParameters.ContainsKey('ManagedPublicIpRows')
-    $publicIpRows = if ($managedRowsWereProvided) { @($ManagedPublicIpRows) } else { @(Get-ClagnosManagedPublicIpRows) }
-    $existingLabels = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
-    $attachedCount = 0
-
-    foreach ($publicIpRow in @($publicIpRows)) {
-        $rowName = ''
-        if ($publicIpRow.PSObject.Properties.Match('name').Count -gt 0) {
-            $rowName = [string]$publicIpRow.name
-        }
-
-        if (Test-ClagnosManagedPublicIpAttached -PublicIpRow $publicIpRow) {
-            $attachedCount++
-        }
-
-        $domainNameLabel = ''
-        if ($publicIpRow.PSObject.Properties.Match('dnsSettings').Count -gt 0 -and $null -ne $publicIpRow.dnsSettings) {
-            if ($publicIpRow.dnsSettings.PSObject.Properties.Match('domainNameLabel').Count -gt 0) {
-                $domainNameLabel = [string]$publicIpRow.dnsSettings.domainNameLabel
-            }
-        }
-        if (-not [string]::IsNullOrWhiteSpace([string]$domainNameLabel)) {
-            if (-not [string]::IsNullOrWhiteSpace([string]$PublicIpName) -and
-                [string]::Equals([string]$rowName, [string]$PublicIpName, [System.StringComparison]::OrdinalIgnoreCase)) {
-                return [string]($domainNameLabel.Trim().ToLowerInvariant())
-            }
-
-            [void]$existingLabels.Add($domainNameLabel.Trim().ToLowerInvariant())
-        }
-    }
-
-    $vmId = if ($PreferredVmId -gt 0) { [int]$PreferredVmId } else { ($attachedCount + 1) }
-    while ($true) {
-        $candidateLabel = New-ClagnosManagedPublicDnsLabelCandidate -VmName $effectiveVmName -VmId $vmId
-        if (-not $existingLabels.Contains($candidateLabel)) {
-            return [string]$candidateLabel
-        }
-
-        $vmId++
-    }
+    return [string](ConvertTo-ClagnosAzureDnsSafeLabel -Value $effectiveVmName -Fallback 'vm')
 }
 
 # Handles Resolve-ConfigPath.

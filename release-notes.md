@@ -2,6 +2,23 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.18.430 - 2026-10-18
+
+### Summary
+Clagnos now keeps local operational logs together, synchronizes richer VC profiles with observed Azure state, uses concise VM-name DNS labels, and bounds Turkish Windows language servicing.
+
+### Highlights
+- All Clagnos logs and transcripts go under ignored `.logs/`; copied guest logs are hash-verified before remote cleanup.
+- Existing VC environment profiles are populated without blank values, while secret values are never guessed. Azure component updates synchronize verified settings to the matching profile.
+- Existing and future Public IP DNS labels use `vc1`, `vc2`, and the matching VM name. Azure availability is checked before changes.
+- Turkish language provisioning now uses the matching Microsoft Windows 11 language ISO and targeted DISM operations instead of a slow Windows Update language catalog scan. It installs only the display-language CAB and Basic typing capability and leaves optional language features out.
+- Source transfer stops at 600 seconds; the guest task has a 12.5-minute internal deadline and a 900-second hard task timeout.
+
+### Validation
+- VC1's existing Turkish language and required Basic capability passed an idempotent live Clagnos task run in about 36 seconds; English remained the default and no VM restart was required.
+- VC1 and VC2 DNS labels and FQDNs were updated and resolved to their unchanged IP addresses. VM size, disks, NICs, IP allocation, and Public IP SKU matched the before snapshot.
+- Windows PowerShell 5.1 and PowerShell 7 passed smoke 195/195 and TUI 180/180 per host. Code quality, documentation, app-state, lifecycle, and sensitive-content checks passed.
+
 ## Release 2026.10.18.429 - 2026-10-18
 
 ### Summary

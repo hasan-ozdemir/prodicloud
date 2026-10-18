@@ -49,6 +49,55 @@ function Invoke-ClagnosComponentAzMutation {
     } | Out-Null
 }
 
+function Sync-ClagnosVmPublicDnsLabel {
+    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$Context)
+
+    $vmName = [string]$Context.VmName
+    $resourceGroup = [string]$Context.ResourceGroup
+    $publicIpName = [string]$Context.IP
+    $location = [string]$Context.AzLocation
+    $desiredLabel = Resolve-ClagnosPublicDnsLabel -PublicIpName $publicIpName -VmName $vmName
+    if ([string]::IsNullOrWhiteSpace($resourceGroup) -or [string]::IsNullOrWhiteSpace($publicIpName) -or [string]::IsNullOrWhiteSpace($location)) {
+        throw 'The selected managed VM is missing its resource group, public IP name, or Azure region; its DNS label cannot be synchronized.'
+    }
+
+    Write-Host ("Doing: inspect Azure public IP '{0}' DNS settings for VM '{1}'" -f $publicIpName,$vmName) -ForegroundColor Cyan
+    $publicIp = Get-ClagnosComponentAzureJson -Arguments @('network','public-ip','show','--resource-group',$resourceGroup,'--name',$publicIpName)
+    $currentLabel = [string]$publicIp.dnsSettings.domainNameLabel
+    $changed = -not [string]::Equals($currentLabel,$desiredLabel,[System.StringComparison]::OrdinalIgnoreCase)
+    if ($changed) {
+        $subscription = Get-ClagnosResolvedSubscriptionContext
+        if ($null -eq $subscription -or [string]::IsNullOrWhiteSpace([string]$subscription.SubscriptionId)) {
+            throw "Azure CLI sign-in is required. Run 'az login' and select the target subscription before updating the VM DNS label."
+        }
+        Assert-ClagnosPublicDnsLabelAvailable -Label $desiredLabel -Location $location -SubscriptionId ([string]$subscription.SubscriptionId) | Out-Null
+        Invoke-ClagnosComponentAzMutation `
+            -Arguments @('network','public-ip','update','--resource-group',$resourceGroup,'--name',$publicIpName,'--dns-name',$desiredLabel,'-o','none') `
+            -Label ("az network public-ip update --dns-name {0} for VM {1}" -f $desiredLabel,$vmName)
+        Write-Host ("Doing: verify Azure public IP '{0}' DNS settings for VM '{1}'" -f $publicIpName,$vmName) -ForegroundColor Cyan
+        $publicIp = Get-ClagnosComponentAzureJson -Arguments @('network','public-ip','show','--resource-group',$resourceGroup,'--name',$publicIpName)
+        $currentLabel = [string]$publicIp.dnsSettings.domainNameLabel
+        if (-not [string]::Equals($currentLabel,$desiredLabel,[System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ("Azure did not confirm public DNS label '{0}' for VM '{1}'." -f $desiredLabel,$vmName)
+        }
+        Write-Host ("Public DNS label for VM '{0}' is now '{1}' ({2})." -f $vmName,$currentLabel,[string]$publicIp.dnsSettings.fqdn) -ForegroundColor Green
+    }
+    else {
+        Write-Host ("Public DNS label for VM '{0}' is already '{1}'." -f $vmName,$currentLabel) -ForegroundColor Green
+    }
+
+    $profilePath = Get-ClagnosVmEnvPath -VmName $vmName
+    $profileDnsLabel = ''
+    if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
+        $profileConfig = Read-DotEnvFile -Path $profilePath -GlobalOnly
+        $profileDnsLabel = [string](Get-ConfigValue -Config $profileConfig -Key 'PUBLIC_IP_DNS_LABEL' -DefaultValue '')
+    }
+    if (-not [string]::Equals($profileDnsLabel,$currentLabel,[System.StringComparison]::OrdinalIgnoreCase)) {
+        Set-DotEnvValue -Path $profilePath -Key 'PUBLIC_IP_DNS_LABEL' -Value $currentLabel -VmName $vmName
+    }
+    return [pscustomobject]@{ Label = $currentLabel; Fqdn = [string]$publicIp.dnsSettings.fqdn; Changed = [bool]$changed }
+}
+
 function Get-ClagnosComponentScopedGroups {
     param([hashtable]$Options)
 
@@ -268,6 +317,92 @@ function Invoke-ClagnosComponentCreate {
     Write-Host ("Created {0} '{1}'." -f $Type, $name) -ForegroundColor Green
 }
 
+function Sync-ClagnosComponentProfileAfterVerifiedUpdate {
+    param([string]$Type,[object]$Row,[string]$ResourceGroup)
+
+    $repoRoot = Get-ClagnosRepoRoot
+    $globalPath = Get-ClagnosGlobalEnvPath
+    if (-not (Test-Path -LiteralPath $globalPath -PathType Leaf)) { return }
+    $globalConfig = Read-DotEnvFile -Path $globalPath -GlobalOnly
+    $activeVmName = [string]$globalConfig['ACTIVE_VM_NAME']
+    $profiles = New-Object 'System.Collections.Generic.List[string]'
+    if (-not [string]::IsNullOrWhiteSpace($activeVmName)) {
+        $activePath = Get-ClagnosVmEnvPath -VmName $activeVmName -RepoRoot $repoRoot
+        if (Test-Path -LiteralPath $activePath -PathType Leaf) { $profiles.Add($activePath) | Out-Null }
+    }
+    foreach ($profileFile in @(Get-ChildItem -LiteralPath $repoRoot -File -Filter '*.env' -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}\.env$' })) {
+        $profilePathCandidate = [string]$profileFile.FullName
+        if (-not $profiles.Contains($profilePathCandidate)) { $profiles.Add($profilePathCandidate) | Out-Null }
+    }
+    $matchingProfiles = @()
+    foreach ($profilePath in @($profiles.ToArray())) {
+        try {
+            $profile = Read-DotEnvFile -Path $profilePath -GlobalOnly
+            if ([string]::Equals([string]$profile['SELECTED_RESOURCE_GROUP'],$ResourceGroup,[System.StringComparison]::OrdinalIgnoreCase)) { $matchingProfiles += $profilePath }
+        }
+        catch { continue }
+    }
+    if ($matchingProfiles.Count -ne 1) { return }
+    $profilePath = [string]$matchingProfiles[0]
+    $profile = Read-DotEnvFile -Path $profilePath -GlobalOnly
+    $vmName = [string]$profile['SELECTED_VM_NAME']
+    $ownedDiskName = [string]$profile['VM_DISK_NAME']
+    $freshRows = @(Get-ClagnosComponentRowsForGroup -Type $Type -ResourceGroup $ResourceGroup)
+    $verified = @($freshRows | Where-Object { [string]::Equals([string]$_.Name,[string]$Row.Name,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    if ($verified.Count -ne 1) { throw ("Updated component '{0}' was not found during Azure readback; its VC profile was not changed." -f [string]$Row.Name) }
+
+    $values = [ordered]@{}
+    switch ($Type) {
+        'disk' {
+            if (-not [string]::Equals([string]$verified[0].Name,$ownedDiskName,[System.StringComparison]::OrdinalIgnoreCase)) { return }
+            $platform = [string]$profile['SELECTED_VM_OS']
+            $sizeKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_DISK_SIZE_GB'
+            $values[$sizeKey] = [string]$verified[0].Resource.diskSizeGb
+            $values['VM_STORAGE_SKU'] = [string]$verified[0].Resource.sku.name
+        }
+        'vnet' {
+            $values['VNET_ADDRESS_PREFIXES'] = @($verified[0].Resource.addressSpace.addressPrefixes | ForEach-Object { [string]$_ }) -join ','
+        }
+        'subnet' {
+            $values['SUBNET_ADDRESS_PREFIXES'] = [string]$verified[0].Resource.addressPrefix
+            if ($verified[0].Resource.PSObject.Properties.Match('addressPrefixes').Count -gt 0 -and $verified[0].Resource.addressPrefixes) { $values['SUBNET_ADDRESS_PREFIXES'] = @($verified[0].Resource.addressPrefixes | ForEach-Object { [string]$_ }) -join ',' }
+            $nsgId = [string]$verified[0].Resource.networkSecurityGroup.id
+            $values['SUBNET_NSG_NAME'] = if ([string]::IsNullOrWhiteSpace($nsgId)) { '' } else { [string]($nsgId -split '/')[-1] }
+        }
+        'nic' {
+            $resource = $verified[0].Resource
+            $values['NIC_ENABLE_IP_FORWARDING'] = ([bool]$resource.enableIpForwarding).ToString().ToLowerInvariant()
+            $values['NIC_DNS_SERVERS'] = @($resource.dnsSettings.dnsServers | ForEach-Object { [string]$_ }) -join ','
+            $ipConfiguration = @(ConvertTo-ObjectArrayCompat -InputObject $resource.ipConfigurations | Select-Object -First 1)
+            if ($ipConfiguration.Count -gt 0) {
+                $values['NIC_PRIVATE_IP_ALLOCATION'] = [string]$ipConfiguration[0].privateIPAllocationMethod
+                $values['NIC_PRIVATE_IP_ADDRESS'] = [string]$ipConfiguration[0].privateIPAddress
+                $publicIpId = [string]$ipConfiguration[0].publicIPAddress.id
+                $values['NIC_PUBLIC_IP_NAME'] = if ([string]::IsNullOrWhiteSpace($publicIpId)) { '' } else { [string]($publicIpId -split '/')[-1] }
+            }
+        }
+        'ip' {
+            $values['PUBLIC_IP_DNS_LABEL'] = [string]$verified[0].Resource.dnsSettings.domainNameLabel
+            $values['PUBLIC_IP_ALLOCATION_METHOD'] = [string]$verified[0].Resource.publicIPAllocationMethod
+            $values['PUBLIC_IP_SKU'] = [string]$verified[0].Resource.sku.name
+        }
+        'nsg-rule' {
+            $resource = $verified[0].Resource
+            $values['NSG_RULE_PRIORITY'] = [string]$resource.priority
+            $values['NSG_RULE_DIRECTION'] = [string]$resource.direction
+            $values['NSG_RULE_ACCESS'] = [string]$resource.access
+            $values['NSG_RULE_PROTOCOL'] = [string]$resource.protocol
+            $values['NSG_RULE_SOURCE_ADDRESS_PREFIXES'] = @(@($resource.sourceAddressPrefixes) + @($resource.sourceAddressPrefix) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ } | Select-Object -Unique) -join ','
+            $values['NSG_RULE_SOURCE_PORT_RANGES'] = @(@($resource.sourcePortRanges) + @($resource.sourcePortRange) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ } | Select-Object -Unique) -join ','
+            $values['NSG_RULE_DESTINATION_ADDRESS_PREFIXES'] = @(@($resource.destinationAddressPrefixes) + @($resource.destinationAddressPrefix) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ } | Select-Object -Unique) -join ','
+            $values['NSG_RULE_DESTINATION_PORT_RANGES'] = @(@($resource.destinationPortRanges) + @($resource.destinationPortRange) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | ForEach-Object { [string]$_ } | Select-Object -Unique) -join ','
+        }
+        default { return }
+    }
+    foreach ($key in @($values.Keys)) { Set-DotEnvValue -Path $profilePath -Key ([string]$key) -Value ([string]$values[$key]) }
+    Write-Host ("Verified component properties were saved to {0}.env for VC '{1}'." -f [System.IO.Path]::GetFileNameWithoutExtension($profilePath),$vmName) -ForegroundColor Green
+}
+
 function Invoke-ClagnosComponentUpdate {
     param([string]$Type, [object]$Row, [string]$ResourceGroup)
 
@@ -387,7 +522,18 @@ function Invoke-ClagnosComponentUpdate {
             $arguments = @('network','public-ip','update','--resource-group',$ResourceGroup,'--name',[string]$Row.Name)
             if ($choice -eq 'd') {
                 $dns = Read-Host 'New DNS label'
-                if ([string]::IsNullOrWhiteSpace($dns)) { $arguments += @('--remove','dnsSettings.domainNameLabel') } else { $arguments += @('--dns-name',$dns) }
+                if ([string]::IsNullOrWhiteSpace($dns)) { $arguments += @('--remove','dnsSettings.domainNameLabel') }
+                else {
+                    $currentDns = [string]$Row.Resource.dnsSettings.domainNameLabel
+                    if (-not [string]::Equals($currentDns,$dns,[System.StringComparison]::OrdinalIgnoreCase)) {
+                        $location = [string]$Row.Resource.location
+                        if ([string]::IsNullOrWhiteSpace($location)) { $location = Get-ClagnosComponentLocation -ResourceGroup $ResourceGroup }
+                        $subscription = Get-ClagnosResolvedSubscriptionContext
+                        if ($null -eq $subscription -or [string]::IsNullOrWhiteSpace([string]$subscription.SubscriptionId)) { throw "Azure CLI sign-in is required. Run 'az login' and select a subscription before changing the public DNS label." }
+                        Assert-ClagnosPublicDnsLabelAvailable -Label $dns -Location $location -SubscriptionId ([string]$subscription.SubscriptionId) | Out-Null
+                    }
+                    $arguments += @('--dns-name',$dns)
+                }
             }
             elseif ($choice -eq 'a') {
                 $method = (Read-Host 'Allocation: Static or Dynamic').Trim()
@@ -448,6 +594,9 @@ function Invoke-ClagnosComponentUpdate {
         }
     }
     Write-Host ("Updated {0} '{1}'." -f $Type, [string]$Row.Name) -ForegroundColor Green
+    if ($Type -in @('disk','vnet','subnet','nic','ip','nsg-rule')) {
+        Sync-ClagnosComponentProfileAfterVerifiedUpdate -Type $Type -Row $Row -ResourceGroup $ResourceGroup
+    }
 }
 
 function Get-ClagnosComponentReferenceIds {

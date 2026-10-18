@@ -570,10 +570,10 @@ Invoke-Test -Name "global and VC environment profile contracts" -Action {
 
     $globalKeys = @(Get-Content $globalExamplePath | Where-Object { $_ -match '^[A-Za-z0-9_]+=' } | ForEach-Object { ($_ -split '=', 2)[0] })
     $vmKeys = @(Get-Content $vmExamplePath | Where-Object { $_ -match '^[A-Za-z0-9_]+=' } | ForEach-Object { ($_ -split '=', 2)[0] })
-    foreach ($key in @('ACTIVE_VM_NAME','SELECTED_AZURE_SUBSCRIPTION_ID','DEFAULT_VM_OS','DEFAULT_AZURE_REGION','DEFAULT_VM_ADMIN_USER','DEFAULT_VM_ASSISTANT_USER','DEFAULT_WIN_VM_IMAGE','DEFAULT_WIN_VM_SIZE','DEFAULT_TCP_PORTS','RESOURCE_GROUP_TEMPLATE','AZURE_COMMAND_TIMEOUT_SECONDS','PYSSH_CLIENT_PATH')) {
+    foreach ($key in @('ACTIVE_VM_NAME','SELECTED_AZURE_SUBSCRIPTION_ID','DEFAULT_VM_OS','DEFAULT_AZURE_REGION','DEFAULT_VM_ADMIN_USER','DEFAULT_VM_ASSISTANT_USER','DEFAULT_WIN_VM_IMAGE','DEFAULT_WIN_VM_SIZE','DEFAULT_TCP_PORTS','VM_INIT_TASKS','VM_UPDATE_TASKS','VM_PACKAGE_SETUP_PACKAGES','RESOURCE_GROUP_TEMPLATE','AZURE_COMMAND_TIMEOUT_SECONDS','PYSSH_CLIENT_PATH')) {
         Assert-True -Condition ($globalKeys -contains $key) -Message ("clagnos.env.example is missing global key '{0}'." -f $key)
     }
-    foreach ($key in @('SELECTED_VM_NAME','SELECTED_RESOURCE_GROUP','SELECTED_VM_OS','SELECTED_AZURE_REGION','VNET_NAME','SUBNET_NAME','NSG_NAME','NSG_RULE_NAME','PUBLIC_IP_NAME','NIC_NAME','VM_DISK_NAME','VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','VM_ENABLE_HIBERNATION','VM_ENABLE_NESTED_VIRTUALIZATION','VM_SSH_PORT','VM_RDP_PORT','PACKAGE_TRANSPORT','WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB')) {
+    foreach ($key in @('VC_PROFILE_SCHEMA_VERSION','SELECTED_VM_NAME','SELECTED_RESOURCE_GROUP','SELECTED_VM_OS','SELECTED_AZURE_REGION','VNET_NAME','SUBNET_NAME','NSG_NAME','NSG_RULE_NAME','PUBLIC_IP_NAME','NIC_NAME','VM_DISK_NAME','VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','VM_ENABLE_HIBERNATION','VM_ENABLE_NESTED_VIRTUALIZATION','VM_SSH_PORT','VM_RDP_PORT','PACKAGE_TRANSPORT','VM_INIT_TASKS','VM_UPDATE_TASKS','VM_PACKAGE_SETUP_PACKAGES','VNET_ADDRESS_PREFIXES','NIC_DNS_SERVERS','PUBLIC_IP_DNS_LABEL','WIN_DEFAULT_UI_LANGUAGE','WIN_ADDITIONAL_LANGUAGES','WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB')) {
         Assert-True -Condition ($vmKeys -contains $key) -Message ("vc.env.example is missing VC key '{0}'." -f $key)
     }
     Assert-True -Condition ((Get-ClagnosSupportedDotEnvKeys) -contains 'SELECTED_AZURE_SUBSCRIPTION_ID') -Message 'Global settings must include the Azure subscription selector.'
@@ -589,13 +589,15 @@ Invoke-Test -Name "global and VC environment profile contracts" -Action {
     try {
         $globalPath = Join-Path $sandbox 'clagnos.env'
         $profilePath = Join-Path $sandbox 'vc1.env'
-        Set-Content -LiteralPath $globalPath -Value @('SELECTED_AZURE_SUBSCRIPTION_ID=subscription-test','DEFAULT_PACKAGE_TRANSPORT=ssh','RESOURCE_GROUP_TEMPLATE=rg-{SELECTED_VM_NAME}-{REGION_CODE}-g{N}') -Encoding ASCII
-        Set-Content -LiteralPath $profilePath -Value @('SELECTED_VM_NAME=vc1','SELECTED_RESOURCE_GROUP=rg-vc1','SELECTED_VM_OS=windows','SELECTED_AZURE_REGION=eastus','VM_ADMIN_USER=manager','VM_ADMIN_PASS=placeholder','PACKAGE_TRANSPORT=winrm') -Encoding ASCII
+        Set-Content -LiteralPath $globalPath -Value @('SELECTED_AZURE_SUBSCRIPTION_ID=subscription-test','DEFAULT_PACKAGE_TRANSPORT=ssh','VM_UPDATE_TASKS=all','WIN_DEFAULT_UI_LANGUAGE=en-US','RESOURCE_GROUP_TEMPLATE=rg-{SELECTED_VM_NAME}-{REGION_CODE}-g{N}') -Encoding ASCII
+        Set-Content -LiteralPath $profilePath -Value @('SELECTED_VM_NAME=vc1','SELECTED_RESOURCE_GROUP=rg-vc1','SELECTED_VM_OS=windows','SELECTED_AZURE_REGION=eastus','VM_ADMIN_USER=manager','VM_ADMIN_PASS=placeholder','PACKAGE_TRANSPORT=winrm','VM_UPDATE_TASKS=136','WIN_DEFAULT_UI_LANGUAGE=tr-TR') -Encoding ASCII
         $globalMap = Read-DotEnvFile -Path $globalPath -GlobalOnly
         $effective = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalMap -VmName 'vc1' -VmEnvRoot $sandbox -RequireProfile
         Assert-True -Condition ([string]$effective.SELECTED_AZURE_SUBSCRIPTION_ID -eq 'subscription-test') -Message 'Effective VC config must inherit the global subscription.'
         Assert-True -Condition ([string]$effective.SELECTED_RESOURCE_GROUP -eq 'rg-vc1') -Message 'Effective VC config must load the selected VM resource group.'
         Assert-True -Condition ([string]$effective.PACKAGE_TRANSPORT -eq 'winrm') -Message 'The VC transport must override the global create default.'
+        Assert-True -Condition ([string]$effective.VM_UPDATE_TASKS -eq '136') -Message 'A VC task selection must override the global stage selection.'
+        Assert-True -Condition ([string]$effective.WIN_DEFAULT_UI_LANGUAGE -eq 'tr-TR') -Message 'Manifest-declared task settings must be accepted and use the VC profile override.'
         Set-DotEnvValue -Path $globalPath -Key 'VM_ADMIN_USER' -Value 'updated-manager' -VmName 'vc1'
         $savedProfile = Read-DotEnvFile -Path $profilePath -GlobalOnly
         Assert-True -Condition ([string]$savedProfile.VM_ADMIN_USER -eq 'updated-manager') -Message 'VM-scoped writes must update the selected VC profile.'
@@ -1198,7 +1200,7 @@ Invoke-Test -Name "Workflow pipeline delegates restarts to task runners and star
     }
 
     Assert-True -Condition ($pipelineText -match [regex]::Escape('$vmUpdateStageResult = Invoke-Step ''Step 6/7 - VM update''')) -Message 'Pipeline must capture the vm-update stage result from the shared step wrapper.'
-    Assert-True -Condition ($pipelineText -match [regex]::Escape('return (Invoke-ClagnosSshTaskBlocks')) -Message 'VM update step must return the SSH stage result explicitly.'
+    Assert-True -Condition ($pipelineText -match [regex]::Escape('Invoke-ClagnosTaskBlocksByDeclaredTransport')) -Message 'VM update step must dispatch update tasks through their declared transports.'
     Assert-True -Condition (-not ($pipelineText -match [regex]::Escape('-EnableFinalVmRestart'))) -Message 'Workflow vm-update must not force a final VM restart when no task requested one.'
     Assert-True -Condition (-not ($pipelineText -match [regex]::Escape('Invoke-ClagnosWorkflowRestartBarrier'))) -Message 'Pipeline must not keep the retired deferred restart barrier call.'
     Assert-True -Condition (-not ($pipelineText -match [regex]::Escape('-SuppressDeferredRestartHint'))) -Message 'Pipeline must not keep the retired deferred restart hint suppression flag.'
@@ -1229,6 +1231,8 @@ Invoke-Test -Name "Create waits for provisioning recovery before vm-init and ext
 
 Invoke-Test -Name "Task restart helper extends Azure restart timeout" -Action {
     $taskRestartText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\core\tasks\clagnos-task-restart.ps1') -Raw)
+    $packageRuntimeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\package\runtime.ps1') -Raw)
+    $doRuntimeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\do\runtime.ps1') -Raw)
 
     foreach ($fragment in @(
         'Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds 900',
@@ -1238,6 +1242,8 @@ Invoke-Test -Name "Task restart helper extends Azure restart timeout" -Action {
     )) {
         Assert-True -Condition ($taskRestartText -like ('*' + [string]$fragment + '*')) -Message ("Task restart helper must include fragment '{0}'." -f [string]$fragment)
     }
+    Assert-True -Condition ($packageRuntimeText -like '*function Restart-ClagnosPackageVmForPendingReboot*' -and $packageRuntimeText -like '*Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds 900 -Action {*') -Message 'WinRM task and package requested restarts must receive a 900-second Azure CLI timeout.'
+    Assert-True -Condition ($doRuntimeText.Contains('$timeoutSeconds = if ([string]::Equals([string]$ActionName,''restart'',') -and $doRuntimeText -like '*Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds $timeoutSeconds -Action {*') -Message 'Azure VM restart commands must receive a bounded 900-second Azure CLI timeout.'
 }
 
 Invoke-Test -Name "Isolated vm-update task runs do not request the final vm-update restart" -Action {
@@ -1407,6 +1413,25 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'vm-update\windows') -Platform windows -Stage update -SuppressSkipMessages
     Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
     Assert-True -Condition (@($updateInventory.InventoryTasks | Where-Object { $_.Name -eq '01-install-choco-tool' -or $_.Name -eq '03-install-chrome-application' }).Count -eq 0) -Message 'Builtin package installers must no longer appear as vm-update tasks.'
+    $languageTask = @($updateInventory.ActiveTasks | Where-Object { $_.Name -eq '136-configure-language-settings' } | Select-Object -First 1)
+    Assert-True -Condition ($languageTask.Count -eq 1 -and [string]$languageTask[0].Transport -eq 'winrm') -Message 'The Windows language-settings task must explicitly use WinRM.'
+    $languageValues = Get-ClagnosManifestSettingValueMap -Settings $languageTask[0].Settings -ConfigMap @{ WIN_DEFAULT_UI_LANGUAGE='tr-TR'; WIN_ADDITIONAL_LANGUAGES='tr-TR' }
+    Assert-True -Condition ($languageValues.WIN_DEFAULT_UI_LANGUAGE -eq 'tr-TR' -and $languageValues.WIN_ADDITIONAL_LANGUAGES -eq 'tr-TR') -Message 'Task manifest settings must resolve validated profile values.'
+    $languageContext = @{
+        VmUser='manager'; VmPass='fixture-secret'; VmAssistantUser='assistant'; VmAssistantPass='fixture-secret'; SshPort='444'; RdpPort='3389'; TcpPorts=@()
+        ResourceGroup='rg-fixture'; VmName='vc-fixture'; CompanyName=''; CompanyWebAddress=''; CompanyEmailAddress=''; EmployeeEmailAddress=''; EmployeeFullName=''
+        AzLocation='eastus'; VmSize='Standard_B2s_v2'; VmImage='image'; VmDiskName='disk'; VmDiskSize='160'; VmStorageSku='StandardSSD_LRS'
+        HostStartupProfileJsonBase64='e30='; HostAutostartDiscoveryJsonBase64='e30='; ConfigMap=@{ WIN_DEFAULT_UI_LANGUAGE='en-US'; WIN_ADDITIONAL_LANGUAGES='tr-TR' }
+    }
+    $resolvedLanguageTask = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($languageTask[0]) -Context $languageContext)[0]
+    Assert-True -Condition ($resolvedLanguageTask.Script -like '*$primaryLanguage = ''en-US''*' -and $resolvedLanguageTask.Script -like '*$additionalLanguages = @(''tr-TR''*' -and $resolvedLanguageTask.Script -notlike '*__WIN_DEFAULT_UI_LANGUAGE__*' -and $resolvedLanguageTask.Script -notlike '*__WIN_ADDITIONAL_LANGUAGES__*') -Message 'Manifest-declared settings must be safely substituted into the guest task script.'
+    $selectedLanguageTask = @(Select-ClagnosConfiguredTaskBlocks -ActiveTasks @($updateInventory.ActiveTasks) -InventoryTasks @($updateInventory.InventoryTasks) -SelectionText '136' -Stage update)
+    Assert-True -Condition ($selectedLanguageTask.Count -eq 1 -and $selectedLanguageTask[0].Name -eq '136-configure-language-settings') -Message 'Per-VC task selection must select task numbers while preserving catalog order.'
+    $historyOverride = [string]$script:ClagnosTaskHistoryPathOverride
+    $script:ClagnosTaskHistoryPathOverride = ''
+    $historyPath = ([string](Get-ClagnosTaskRunHistoryPath)).Replace('\','/')
+    $script:ClagnosTaskHistoryPathOverride = $historyOverride
+    Assert-True -Condition ($historyPath.EndsWith('/.logs/task-runs.jsonl',[System.StringComparison]::OrdinalIgnoreCase)) -Message 'Local task history must be stored under the repository .logs directory.'
     Assert-True -Condition ((@(Get-ClagnosComponentTypeIds) -join ',') -eq 'group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule') -Message 'The component catalog must expose all managed VC resource types.'
 
     $uiPath = Join-Path $RepoRoot 'scripts\clagnos-cli.ps1'
@@ -1504,6 +1529,13 @@ Invoke-Test -Name "Configure schema covers global settings and create defaults" 
     $schemaKeys = @($schema | ForEach-Object { [string]$_.Key } | Sort-Object -Unique)
     $supportedKeys = @(Get-ClagnosSupportedDotEnvKeys | Sort-Object -Unique)
     Assert-True -Condition (($supportedKeys -join '|') -eq ($schemaKeys -join '|')) -Message 'Configure field schema must cover every supported dotenv key exactly once.'
+    Assert-True -Condition (@($schema | Where-Object { $_.Key -eq 'VM_UPDATE_TASKS' -or $_.Key -eq 'VM_PACKAGE_SETUP_PACKAGES' }).Count -eq 2) -Message 'Configure must expose global task and package selection defaults.'
+    Assert-True -Condition (@($schema | Where-Object { $_.Key -eq 'WIN_DEFAULT_UI_LANGUAGE' -and $_.EditorKind -eq 'manifest-setting' }).Count -eq 1) -Message 'Configure must discover manifest-declared global task settings.'
+    Assert-True -Condition ((Assert-ClagnosConfigureFieldValue -Key 'WIN_DEFAULT_UI_LANGUAGE' -Value 'tr-TR' -State @{ RepoRoot=$RepoRoot }) -eq 'tr-TR') -Message 'Configure must accept a declared enum setting value.'
+    $invalidLanguageSettingRejected = $false
+    try { [void](Assert-ClagnosConfigureFieldValue -Key 'WIN_DEFAULT_UI_LANGUAGE' -Value 'fr-FR' -State @{ RepoRoot=$RepoRoot }) }
+    catch { $invalidLanguageSettingRejected = $true }
+    Assert-True -Condition $invalidLanguageSettingRejected -Message 'Configure must reject a manifest setting outside its allowed values.'
 
     foreach ($pickerKind in @(
         'vm-os-picker',
@@ -3363,37 +3395,82 @@ Invoke-Test -Name "Managed naming uses global gX and sequential global nX alloca
     }
 }
 
-Invoke-Test -Name "Managed public DNS label uses vm_name-vm{id} and skips stale label collisions" -Action {
-    $firstLabel = Resolve-ClagnosPublicDnsLabel -VmName 'test' -ManagedPublicIpRows @(
-        [pscustomobject]@{
-            dnsSettings = [pscustomobject]@{}
-            ipConfiguration = [pscustomobject]@{ id = '' }
-        }
-    )
-    Assert-True -Condition ([string]$firstLabel -eq 'test-vm1') -Message 'Managed public DNS label must start at vm1 when no managed public IPs are attached yet.'
-
-    $managedPublicIpRows = @(
-        [pscustomobject]@{
-            dnsSettings = [pscustomobject]@{ domainNameLabel = 'test-vm1' }
-            ipConfiguration = [pscustomobject]@{ id = '/subscriptions/test/resourceGroups/rg-a/providers/Microsoft.Network/networkInterfaces/nic-a/ipConfigurations/ipconfig1' }
-        },
-        [pscustomobject]@{
-            dnsSettings = [pscustomobject]@{ domainNameLabel = 'test-vm2' }
-            ipConfiguration = [pscustomobject]@{ id = '/subscriptions/test/resourceGroups/rg-b/providers/Microsoft.Network/networkInterfaces/nic-b/ipConfigurations/ipconfig1' }
-        },
-        [pscustomobject]@{
-            dnsSettings = [pscustomobject]@{ domainNameLabel = 'test-vm3' }
-            ipConfiguration = [pscustomobject]@{ id = '' }
-        }
-    )
-    $collisionSkippedLabel = Resolve-ClagnosPublicDnsLabel -VmName 'test' -ManagedPublicIpRows $managedPublicIpRows
-    Assert-True -Condition ([string]$collisionSkippedLabel -eq 'test-vm4') -Message 'Managed public DNS label must skip stale managed label collisions and advance to the next free vm id.'
+Invoke-Test -Name "Managed public DNS labels match the VM name and check Azure availability before create" -Action {
+    $vc1Label = Resolve-ClagnosPublicDnsLabel -PublicIpName 'ip-vc1-use1-n19' -VmName 'vc1'
+    $vc2Label = Resolve-ClagnosPublicDnsLabel -PublicIpName 'ip-vc2-gew1-n19' -VmName 'VC2'
+    Assert-True -Condition ([string]$vc1Label -eq 'vc1') -Message 'VC1 public DNS label must be exactly vc1.'
+    Assert-True -Condition ([string]$vc2Label -eq 'vc2') -Message 'VC2 public DNS label must be normalized to vc2.'
+    Assert-True -Condition ((Resolve-ClagnosPublicDnsLabel -PublicIpName 'old-label' -VmName 'vc1') -eq 'vc1') -Message 'The existing Public IP DNS label must not override the VM-name label.'
 
     $longVmName = ('examplevmsegment' * 5)
-    $truncatedLabel = Resolve-ClagnosPublicDnsLabel -VmName $longVmName -PreferredVmId 12345 -ManagedPublicIpRows @()
-    Assert-True -Condition ($truncatedLabel.Length -le 63) -Message 'Managed public DNS label must stay within Azure length limits.'
-    Assert-True -Condition ($truncatedLabel -match '^[a-z0-9][a-z0-9-]*[a-z0-9]$') -Message 'Managed public DNS label must stay Azure-safe after normalization.'
-    Assert-True -Condition ($truncatedLabel -like '*-vm12345') -Message 'Managed public DNS label truncation must preserve the vm{id} suffix.'
+    $truncatedLabel = Resolve-ClagnosPublicDnsLabel -VmName $longVmName
+    Assert-True -Condition ($truncatedLabel.Length -le 63) -Message 'Managed public DNS labels must stay within Azure length limits.'
+    Assert-True -Condition ($truncatedLabel -match '^[a-z][a-z0-9-]{1,61}[a-z0-9]$') -Message 'Managed public DNS labels must stay Azure-safe after normalization.'
+
+    $originalAzFunction = Get-Item -Path Function:\script:az -ErrorAction SilentlyContinue
+    try {
+        function script:az {
+            $global:LASTEXITCODE = 0
+            if ($args -contains '--url-parameters') { return '{"available":true}' }
+            throw ('Unexpected az mock arguments: ' + (@($args) -join ' '))
+        }
+        Assert-True -Condition (Assert-ClagnosPublicDnsLabelAvailable -Label 'vc1' -Location 'eastus' -SubscriptionId '00000000-0000-4000-8000-000000000001') -Message 'Available VM-name DNS labels must pass the Azure availability check.'
+    }
+    finally {
+        Remove-Item Function:\script:az -ErrorAction SilentlyContinue
+        if ($null -ne $originalAzFunction) { Set-Item -Path Function:\script:az -Value ([scriptblock]::Create([string]$originalAzFunction.Definition)) }
+    }
+}
+
+Invoke-Test -Name "VM update normalizes only the public IP DNS label and verifies the saved profile value" -Action {
+    $functionNames = @('Get-ClagnosComponentAzureJson','Invoke-ClagnosComponentAzMutation','Assert-ClagnosPublicDnsLabelAvailable','Get-ClagnosResolvedSubscriptionContext','Get-ClagnosVmEnvPath','Set-DotEnvValue')
+    $originalFunctions = @{}
+    foreach ($name in $functionNames) {
+        $original = Get-Item -Path ("Function:\script:{0}" -f $name) -ErrorAction SilentlyContinue
+        if ($null -ne $original) { $originalFunctions[$name] = [string]$original.Definition }
+    }
+    try {
+        $global:TestDnsLabel = 'vc1-vm2'
+        $global:TestDnsMutationArguments = @()
+        $global:TestDnsSavedValue = ''
+        $global:TestDnsAvailable = $true
+        $global:TestDnsProfilePath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-dns-test-' + [guid]::NewGuid().ToString('N') + '\vc1.env')
+        function script:Get-ClagnosComponentAzureJson {
+            param([string[]]$Arguments)
+            return [pscustomobject]@{ name = 'ip-vc1'; dnsSettings = [pscustomobject]@{ domainNameLabel = [string]$global:TestDnsLabel; fqdn = (([string]$global:TestDnsLabel) + '.eastus.cloudapp.azure.com') } }
+        }
+        function script:Get-ClagnosResolvedSubscriptionContext { return [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001' } }
+        function script:Get-ClagnosVmEnvPath { param([string]$VmName) return [string]$global:TestDnsProfilePath }
+        function script:Assert-ClagnosPublicDnsLabelAvailable { param([string]$Label,[string]$Location,[string]$SubscriptionId) if (-not $global:TestDnsAvailable) { throw 'DNS label unavailable fixture.' }; return $true }
+        function script:Invoke-ClagnosComponentAzMutation {
+            param([string[]]$Arguments,[string]$Label)
+            $global:TestDnsMutationArguments = @($Arguments)
+            $index = [Array]::IndexOf([string[]]$Arguments,'--dns-name')
+            if ($index -ge 0 -and ($index + 1) -lt $Arguments.Count) { $global:TestDnsLabel = [string]$Arguments[$index + 1] }
+        }
+        function script:Set-DotEnvValue { param([string]$Path,[string]$Key,[string]$Value,[string]$VmName) $global:TestDnsSavedValue = ($Key + '=' + $Value) }
+
+        $result = Sync-ClagnosVmPublicDnsLabel -Context ([ordered]@{ VmName = 'vc1'; ResourceGroup = 'rg-vc1'; IP = 'ip-vc1'; AzLocation = 'eastus' })
+        Assert-True -Condition ([bool]$result.Changed -and [string]$result.Label -eq 'vc1' -and [string]$result.Fqdn -eq 'vc1.eastus.cloudapp.azure.com') -Message 'The update path must replace the suffixed label and verify the new FQDN.'
+        Assert-True -Condition ((@($global:TestDnsMutationArguments) -join ' ') -match '^network public-ip update .*--dns-name vc1') -Message 'DNS normalization must issue only a Public IP DNS-name update.'
+        Assert-True -Condition ($global:TestDnsSavedValue -eq 'PUBLIC_IP_DNS_LABEL=vc1') -Message 'The verified DNS label must be saved into the matching VC profile.'
+        $global:TestDnsLabel = 'vc1-vm2'
+        $global:TestDnsAvailable = $false
+        $unavailableLabelThrew = $false
+        try { Sync-ClagnosVmPublicDnsLabel -Context ([ordered]@{ VmName = 'vc1'; ResourceGroup = 'rg-vc1'; IP = 'ip-vc1'; AzLocation = 'eastus' }) | Out-Null }
+        catch { $unavailableLabelThrew = $true }
+        Assert-True -Condition $unavailableLabelThrew -Message 'DNS updates must stop before Azure mutation when the VM-name label is unavailable.'
+        $pipelineText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\pipeline\clagnos-main-command.ps1') -Raw)
+        $setupText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'setup-vc.ps1') -Raw)
+        Assert-True -Condition ($pipelineText.Contains("Sync-ClagnosVmPublicDnsLabel -Context `$step1Context") -and $setupText.Contains("'--dns-name',`$desiredDnsLabel")) -Message 'Normal update and profile-driven setup must route through safe VM-name DNS reconciliation.'
+    }
+    finally {
+        foreach ($name in $functionNames) {
+            Remove-Item -Path ("Function:\script:{0}" -f $name) -ErrorAction SilentlyContinue
+            if ($originalFunctions.ContainsKey($name)) { Set-Item -Path ("Function:\script:{0}" -f $name) -Value ([scriptblock]::Create([string]$originalFunctions[$name])) }
+        }
+        Remove-Variable -Name TestDnsLabel,TestDnsMutationArguments,TestDnsSavedValue,TestDnsAvailable,TestDnsProfilePath -Scope Global -ErrorAction SilentlyContinue
+    }
 }
 
 Invoke-Test -Name "Create allows same VM name in other resource groups but rejects target-group duplicates" -Action {
@@ -6539,7 +6616,7 @@ Invoke-Test -Name "Windows task and package catalogs are physically isolated" -A
     $expectedTaskTimeouts = [ordered]@{
         '102-configure-autologon-settings' = 60
         '110-configure-unlocker-settings' = 120
-        '136-configure-language-settings' = 1635
+        '136-configure-language-settings' = 900
         '10001-configure-advanced-settings' = 30
         '10002-configure-startup-settings' = 120
         '10003-create-public-desktop-shortcuts' = 120
@@ -8802,7 +8879,7 @@ Invoke-Test -Name "Auto lifecycle persists generated VC settings before Azure mu
     $networkMutation = $mainText.IndexOf('Invoke-ClagnosNetworkStep -Context $step1Context',[System.StringComparison]::Ordinal)
     $vmMutation = $mainText.IndexOf('Invoke-ClagnosVmCreateStep -Context $step1Context',[System.StringComparison]::Ordinal)
     Assert-True -Condition ($persistCondition -ge 0 -and $deferredMap -gt $persistCondition -and $persistBeforeGroup -ge 0 -and $groupMutation -gt $persistBeforeGroup -and $networkMutation -gt $persistBeforeGroup -and $vmMutation -gt $persistBeforeGroup) -Message 'Create and update must persist resolved group/resource names and all selected VC settings in the named profile before the first Azure group, network, or VM mutation, including auto mode.'
-    foreach ($nameKey in @('VNET_NAME','SUBNET_NAME','NSG_NAME','NSG_RULE_NAME','PUBLIC_IP_NAME','NIC_NAME','VM_DISK_NAME')) {
+    foreach ($nameKey in @('VNET_NAME','SUBNET_NAME','NSG_NAME','NSG_RULE_NAME','PUBLIC_IP_NAME','PUBLIC_IP_DNS_LABEL','NIC_NAME','VM_DISK_NAME')) {
         Assert-True -Condition ($mapText -match ('(?m)^\s*' + [regex]::Escape($nameKey) + '\s*=')) -Message ("VC settings persistence map is missing generated resource name '{0}'." -f $nameKey)
     }
 }
@@ -9171,34 +9248,50 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
     $healthTaskText = [string](Get-Content -LiteralPath $healthTaskPath -Raw)
 
     foreach ($fragment in @(
-        'Install-Language',
         'Get-WindowsCapability',
+        'Get-WindowsCapability -Online -Name $capabilityFilter',
+        'Get-WindowsCapability -Online -Name ("Language.Basic~~~{0}~0.0.1.0" -f $LanguageTag)',
+        'Install-LanguageFromMicrosoftIso -LanguageTag $LanguageTag',
+        'Add-Package /PackagePath:',
+        'Add-Capability /CapabilityName:Language.Basic',
+        'Microsoft-Windows-Client-Language-Pack_x64_{0}.cab',
+        'Microsoft-Windows-LanguageFeatures-Basic-{0}-Package~*.cab',
+        'software-static.download.prss.microsoft.com',
+        'Maximum 600s',
+        'no download bytes arrived for 60 seconds',
+        'resume the Microsoft language ISO once',
+        'LanguageSourceIsoBytes',
+        'LanguageOperationDeadlineUtc',
+        'UtcNow.AddMinutes(12.5)',
+        'function Clear-LanguageSourceCache',
+        '-WaitTimeoutSeconds 60',
+        'Get-InstalledLanguageSafe -LanguageTag $LanguageTag',
         'Language.Basic',
         'InstallPending',
-        'Test-LanguageCapabilityDeferredVerificationAllowed',
-        'QueuedInstallAccepted',
         'Set-SystemPreferredUILanguage',
         'Set-WinUILanguageOverride',
         'Set-WinUserLanguageList',
-        'tr-TR',
-        'en-US',
+        '__WIN_DEFAULT_UI_LANGUAGE__',
+        '__WIN_ADDITIONAL_LANGUAGES__',
+        'LanguagePolicyMarkerPath',
+        'LanguagePolicyChanged',
+        'The configured default UI language',
         'TASK_REBOOT_REQUIRED:configure-language-settings',
         'language-step-ok: restart-required-to-finalize',
         'language-step-ok: already-current; no restart required',
-        'already installed; no install worker or restart is needed',
+        'Language pack {0} is already installed.',
         'if ($rebootRequired) {',
-        'Applying system preferred UI language',
+        'Applying requested system preferred UI language',
         'Collecting final language verification output',
         'language-capabilities-final => {0} => {1}',
-        'language-capabilities-deferred => {0} => {1}',
-        'install remains queued inside its retry window',
-        'DeferredPending',
         'Assert-LanguageStateReadyForRestart',
-        'Assert-LanguageStateReadyForRestart -ComponentResults $systemLanguageState.ComponentResults',
         'direct apply for ''{0}'' is queued and will finish after the next restart or sign-in.'
     )) {
         Assert-True -Condition ($taskText -like ('*' + [string]$fragment + '*')) -Message ("Language settings task must include fragment '{0}'." -f [string]$fragment)
     }
+    Assert-True -Condition ($taskText.Contains("`$capabilityState -notin @('Installed', 'NotPresent', 'Unavailable')")) -Message 'Optional language Features on Demand may remain NotPresent while the required Basic capability is installed.'
+    Assert-True -Condition ($taskText -notlike '*Install-Language -Language*' -and $taskText -notlike '*Start-Service -Name $serviceName*' -and $taskText -notlike '*wuauserv*') -Message 'Language provisioning must bypass the slow Windows Update language scan and leave Windows Update service configuration untouched.'
+    Assert-True -Condition ($taskText.Contains('if ($null -eq $previousPolicy) {') -and $taskText.Contains('if (-not $script:LanguagePolicyChanged -and -not [string]::IsNullOrWhiteSpace([string]$currentUserUiLanguage)) { return $true }')) -Message 'An unchanged English system policy must preserve each managed user''s existing language selection without launching unnecessary interactive automation.'
 
     foreach ($removedFragment in @(
         'Set-WinDefaultInputMethodOverride',
@@ -9212,12 +9305,10 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
         Assert-True -Condition (-not ($taskText -like ('*' + [string]$removedFragment + '*'))) -Message ("Language settings task must no longer own '{0}'." -f [string]$removedFragment)
     }
 
-    Assert-True -Condition ($taskJsonText -like '*"timeout": 1635*') -Message 'Language settings task must keep the normalized timeout 1635.'
-    Assert-True -Condition ($taskText -like '*-WaitTimeoutSeconds 600*') -Message 'Language settings task must allow its SYSTEM language worker a bounded 600-second window within the 1635-second task budget.'
-    Assert-True -Condition ($taskText -like '*function Get-LanguageInstallQueueMarker*' -and $taskText -like '*function Set-LanguageInstallQueueMarker*' -and $taskText -like '*function Remove-LanguageInstallQueueMarker*' -and $taskText -like '*24-hour retry window*' -and $taskText -like '*skip duplicate install/restart*') -Message 'A language capability queued for restart must have a durable, expiring pending marker so repeated vm-update runs do not restart-loop.'
-    Assert-True -Condition ($taskText -like '*interactive-worker-timeout-recovered=true*') -Message 'Language settings task must recover timeout cases when capability state is already satisfied.'
-    Assert-True -Condition ($taskText -like '*interactive-worker-queued=true*') -Message 'Language settings task must accept the queued background install state when the SYSTEM worker is still running at timeout.'
-    Assert-True -Condition ($taskText -like '*$queuedInstallAccepted = (*') -Message 'Language settings task must explicitly preserve the queued-install verification path after the interactive worker returns.'
+    Assert-True -Condition ($taskJsonText -like '*"timeout": 900*') -Message 'Language settings task must stop within the 900-second (15-minute) bound.'
+    Assert-True -Condition ($taskJsonText -like '*"transport": "winrm"*') -Message 'Language provisioning must run over its declared WinRM transport.'
+    Assert-True -Condition ($taskJsonText -like '*"WIN_DEFAULT_UI_LANGUAGE"*' -and $taskJsonText -like '*"WIN_ADDITIONAL_LANGUAGES"*') -Message 'Language defaults must be controlled by validated task settings.'
+    Assert-True -Condition (-not ($taskText -like '*LanguageInstallQueueMarker*' -or $taskText -like '*24-hour retry window*' -or $taskText -like '*install remains queued inside its retry window*')) -Message 'Language install must not report a cooldown-based queued state as success.'
     Assert-True -Condition (-not ($taskJsonText -like '*"appState"*')) -Message 'Language settings task must stay out of task-local app-state snapshot and restore.'
 
     foreach ($fragment in @(

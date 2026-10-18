@@ -70,6 +70,7 @@ function Initialize-ClagnosCommandRuntimeContext {
         -SkipInteractiveConfigEditor:$WizardMode `
         -DeferEnvWrites:$DeferDotEnvWrites
 
+    $step1Context['ConfigMap'] = $effectiveConfigMap
     $step1Context['VmOsType'] = $platform
     $subscriptionContext = Get-ClagnosResolvedSubscriptionContext
     if ($null -ne $subscriptionContext) {
@@ -308,6 +309,7 @@ function Initialize-ClagnosTaskExecutionRuntimeContext {
         SshTaskTimeoutSeconds = [int]$sshTaskTimeoutSeconds
         SshConnectTimeoutSeconds = [int]$sshConnectTimeoutSeconds
     }
+    $context['ConfigMap'] = $effectiveConfigMap
 
     return [pscustomobject]@{
         EnvFilePath = $envFilePath

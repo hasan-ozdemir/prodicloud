@@ -2,6 +2,7 @@
 *.env
 
 # Ignore logs and transcripts
+.logs/
 *.log
 *.tmp
 clagnos-log-*.txt

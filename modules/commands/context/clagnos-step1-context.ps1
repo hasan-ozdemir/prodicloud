@@ -142,6 +142,7 @@ function Get-ClagnosStep1ContextPersistenceMap {
         NSG_NAME = [string]$Context.NSG
         NSG_RULE_NAME = [string]$Context.NsgRule
         PUBLIC_IP_NAME = [string]$Context.IP
+        PUBLIC_IP_DNS_LABEL = [string]$Context.PublicDnsLabel
         NIC_NAME = [string]$Context.NIC
         VM_DISK_NAME = [string]$Context.VmDiskName
         VM_STORAGE_SKU = [string]$Context.VmStorageSku
@@ -1009,7 +1010,19 @@ function Invoke-ClagnosStep1Common {
             -DeferEnvWrites:$DeferEnvWrites
     }
 
+    if ([string]::Equals([string]$OperationName,'create',[System.StringComparison]::OrdinalIgnoreCase)) {
+        $context.PublicDnsLabel = Resolve-ClagnosPublicDnsLabel -PublicIpName ([string]$context.IP) -VmName ([string]$context.VmName)
+        $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+        if ($null -eq $resolvedSubscription -or [string]::IsNullOrWhiteSpace([string]$resolvedSubscription.SubscriptionId)) {
+            Throw-FriendlyError -Detail 'The selected Azure subscription is unavailable while checking the public DNS label.' -Code 22 -Summary 'Azure DNS label could not be checked.' -Hint 'Select an Azure subscription and retry create.'
+        }
+        Assert-ClagnosPublicDnsLabelAvailable -Label ([string]$context.PublicDnsLabel) -Location ([string]$context.AzLocation) -SubscriptionId ([string]$resolvedSubscription.SubscriptionId) | Out-Null
+    }
+
     $persistMap = Get-ClagnosStep1ContextPersistenceMap -Platform $Platform -Context $context
+    if ([string]::Equals([string]$OperationName,'update',[System.StringComparison]::OrdinalIgnoreCase) -and $persistMap.Contains('PUBLIC_IP_DNS_LABEL')) {
+        $null = $persistMap.Remove('PUBLIC_IP_DNS_LABEL')
+    }
     if ($PersistGeneratedResourceGroup) {
         if ($DeferEnvWrites) {
             $pendingEnvUpdates = $persistMap

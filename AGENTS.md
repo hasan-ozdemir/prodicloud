@@ -67,7 +67,7 @@ Use these sources in this order when maintaining the repo:
 - `connect` owns interactive/test connection flows and requires exactly one transport flag: `--ssh` or `--rdp`.
 - `create` is fresh-only: it creates one new managed resource group plus one new managed VM target and must not be documented or wired as an existing-resource reuse path. It creates the initial network and does not run `vm-init`, `vm-update`, or package installation operations.
 - `initialize` runs enabled `vm-init` tasks for one existing managed VM and does not create infrastructure.
-- `update` is existing-managed-target only: it requires one existing managed resource group plus one existing VM and must not fall through to implicit fresh-create behavior. It runs enabled `vm-update` maintenance tasks; packages are isolated under `package` catalogs and never discovered as stage tasks.
+- `update` is existing-managed-target only: it requires one existing managed resource group plus one existing VM and must not fall through to implicit fresh-create behavior. Before enabled `vm-update` maintenance tasks, it reconciles the managed Public IP DNS label to the VM name and persists the verified label in that VC profile; packages are isolated under `package` catalogs and never discovered as stage tasks.
 - `package` owns status, install/repair/update/reinstall, uninstall, and availability for validated packages in the isolated `builtin` and `custom` catalogs. Every operation names exactly one catalog.
 - `component` owns CRUD for Clagnos-managed resource groups, VMs, managed disks, VNets, subnets, NICs, public IPs, NSGs, and NSG rules. It must not expose generic CRUD for unrelated subscription resources.
 - `configure` is the interactive global `clagnos.env` frontend: it edits only supported global settings/defaults and must not sync configuration from a live Azure target. VM-targeted settings belong in the selected `<vm-name>.env` profile.
@@ -88,6 +88,7 @@ Use these sources in this order when maintaining the repo:
 - `clagnos.env` is local-only and must remain untracked.
 - `clagnos.env.example` is the committed configuration contract and must stay current.
 - `<vm-name>.env` files are the local-only source of truth for VM name/group/OS/region, generated resource names, VM features, credentials, ports, transport, image, SKU, and disk size. Create persists the resolved group and component names before the first Azure mutation. Every managed VC must have an identity-matching profile before target operations run.
+- Populate existing root-level VC profiles with `tools/populate-vc-env-profiles.ps1`; it preserves non-empty values, uses read-only Azure readbacks and global/manifest defaults, and fills unresolvable optional inheritance with `@global`. An unknown password is marked `@secret-required`; it must block use until an operator replaces it, and must never be guessed or copied between VCs.
 - `vc.env.example` is the committed per-VC profile template. Git-ignore all `*.env` runtime files.
 - Keep app-wide customization, Azure subscription selection, operator identity, naming templates, Azure/SSH timeouts, task paths, and non-secret `DEFAULT_*` create defaults in `clagnos.env`. Never store VM passwords in the global file.
 - `ACTIVE_VM_NAME` in `clagnos.env` selects the default VC profile when a command has no explicit target. Selecting a VC in the TUI updates this pointer.
@@ -109,6 +110,7 @@ Use these sources in this order when maintaining the repo:
 - Template-driven resource names must derive from the effective `SELECTED_VM_NAME` runtime value, region code, and the committed templates.
 - Resource-group uniqueness is suffix-based and deterministic.
 - Managed resource name generation must remain explicit, predictable, and validation-backed.
+- Managed Azure public IP DNS labels are the normalized VM name exactly, with no generated numeric suffix; create preflights Azure DNS availability and existing-target `update` reconciles the Public IP label plus the matching VC profile.
 - Managed resource group ids use a globally increasing `gX` suffix across all managed groups, regardless of region.
 - Managed resource ids use a globally increasing `nX` suffix across all generated managed resources; one generated `nX` must not be reused by another managed resource, even across resource types.
 - If naming rules change, update README, tests, and any naming-related summaries in the same change.
@@ -121,7 +123,7 @@ Use these sources in this order when maintaining the repo:
   - `101-999` for `normal`
   - `10001-10099` for `final`
 - Each `builtin` and `custom` task catalog owns a `tasks.toml` file with a `[tasks]` table that lists every task id and its enabled state. Folder location never controls availability.
-- `task.json` owns task priority, timeout, assets, app-state, and dependencies; it must not contain `enabled`.
+- `task.json` owns task priority, timeout, assets, app-state, dependencies, optional Windows `transport` (`ssh` default, `winrm` opt-in), and validated task `settings`; it must not contain `enabled`.
 - A missing task folder must be treated as absent; init/update execution must continue cleanly as if that task never existed.
 - Malformed task folders must warn and skip instead of aborting the stage, unless duplicate names or duplicate effective priorities make execution order ambiguous.
 - The only allowed task app-state source is the owning task or package plugin zip `<task-folder>/app-state/app-state.zip` or `<package-folder>/app-state/app-state.zip`.
@@ -135,7 +137,7 @@ Use these sources in this order when maintaining the repo:
 - `tasks.toml` is the only source of task and package availability. Missing task folders are treated as absent, unlisted task folders warn and skip, and package catalog ids must match their package folders. Runtime discovery must not rewrite catalogs implicitly.
 - `task.json` supplies task-only ordering, timeout, assets, app-state, and dependencies. It must not define availability or package metadata.
 - Each package lives under exactly one of `vm-packages/builtin/<platform>/<package-id>/` or `vm-packages/custom/<platform>/<package-id>/` and contains one `package.json` plus its platform installer (`install.ps1` or `install.sh`). Windows builtin packages also carry distinct `status.ps1`, `update.ps1`, `uninstall.ps1`, and `repair.ps1` scripts. The folder id must match the manifest id. Builtin and custom catalogs are discovered and operated independently.
-- `package.json` owns package identity, display name, category, bounded per-operation timeouts, validated status/uninstall/repair actions, Windows builtin lifecycle-script paths and update/repair strategy, package assets, optional app-state policy, and optional post-install tasks. It must not contain `enabled`. Explicit package enable/disable updates only the selected `tasks.toml` boolean after typed confirmation and verifies the result.
+- `package.json` owns package identity, display name, category, bounded per-operation timeouts, validated status/uninstall/repair actions, Windows builtin lifecycle-script paths and update/repair strategy, package assets, optional allow-listed `settings`, optional app-state policy, and optional post-install tasks. Setting values must be typed and validated before safe token substitution. It must not contain `enabled`. Explicit package enable/disable updates only the selected `tasks.toml` boolean after typed confirmation and verifies the result.
 - Package app-state identity may use `appStateKey` to preserve previously captured package snapshots when a package folder or public id is migrated.
 - Package app-state archives must contain only portable preferences selected by `package.json`; do not capture credentials, authenticated browser profiles, tokens, caches, histories, workspace databases, or licensing/activation registry state.
 - Generalize source-user and machine paths in captured package app-state with the supported `%CLAGNOS_*%` tokens. Capture normalizes known profile paths, SIDs, drive roots, Visual Studio instance ids, host names, and source addresses; restore resolves tokens against the target VM and selected `manager`/`assistant` profile immediately before replay. Unknown or unavailable tokens must fail before replay.
@@ -179,6 +181,7 @@ Use these sources in this order when maintaining the repo:
 - The only allowed language exception is for literal user-defined display labels or product/site names that are intentionally preserved as-is, such as specific desktop shortcut titles.
 - Keep Linux and Windows wording aligned for equivalent behavior.
 - Keep logs contextual, singular, and readable.
+- Store all local Clagnos transcripts, task history, and verified completed guest-worker logs under the git-ignored repo-root `.logs/` directory. Collect Clagnos-owned guest `.log` files over WinRM, verify copied hashes before deleting the matching remote file, and retain local logs until manual cleanup.
 - Interactive menus use numbered or lettered choices with Enter and no arrow-key selection. Escape and `b` move one level up, `c` closes the current menu flow where no product action already owns that key, and `q` exits.
 - Before every Azure CLI request, VM lifecycle operation, remote guest command, task, package install/status/uninstall, and long wait, print an English `Doing: <action>` progress message; never leave the operator waiting without a current action label.
 - For blocking Azure CLI or Azure REST waits, emit a bounded progress heartbeat at least every 30 seconds. Do not include passwords, tokens, or other secret argument values in progress labels.

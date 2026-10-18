@@ -87,6 +87,14 @@ function Apply-ClagnosTaskBlockReplacements {
             }
         }
 
+        $settingConfig = @{}
+        if ($Context -and $Context.ContainsKey('ConfigMap') -and $null -ne $Context['ConfigMap']) {
+            $settingConfig = [hashtable]$Context['ConfigMap']
+        }
+        $settingDescriptors = if ($taskBlock.PSObject.Properties.Match('Settings').Count -gt 0) { $taskBlock.Settings } else { $null }
+        $settingValues = Get-ClagnosManifestSettingValueMap -Settings $settingDescriptors -ConfigMap $settingConfig
+        foreach ($settingKey in @($settingValues.Keys)) { $effectiveReplacements[[string]$settingKey] = [string]$settingValues[$settingKey] }
+
         if ($effectiveReplacements.Count -gt 0) {
             foreach ($key in $effectiveReplacements.Keys) {
                 $token = "__{0}__" -f [string]$key
@@ -178,6 +186,8 @@ function Apply-ClagnosTaskBlockReplacements {
             PackageSpec = if ($taskBlock.PSObject.Properties.Match('PackageSpec').Count -gt 0) { $taskBlock.PackageSpec } else { $null }
             AppStateKey = if ($taskBlock.PSObject.Properties.Match('AppStateKey').Count -gt 0) { [string]$taskBlock.AppStateKey } else { '' }
             Extensions = if ($taskBlock.PSObject.Properties.Match('Extensions').Count -gt 0) { $taskBlock.Extensions } else { $null }
+            Settings = if ($taskBlock.PSObject.Properties.Match('Settings').Count -gt 0) { $taskBlock.Settings } else { $null }
+            Transport = if ($taskBlock.PSObject.Properties.Match('Transport').Count -gt 0) { [string]$taskBlock.Transport } else { 'ssh' }
             DependsOn = if ($taskBlock.PSObject.Properties.Match('DependsOn').Count -gt 0) { @($taskBlock.DependsOn) } else { @() }
             ObservedDurationSeconds = if ($taskBlock.PSObject.Properties.Match('ObservedDurationSeconds').Count -gt 0) { [double]$taskBlock.ObservedDurationSeconds } else { [double]::PositiveInfinity }
         }

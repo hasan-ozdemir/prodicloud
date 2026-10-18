@@ -8,8 +8,11 @@ $assistantUser = '__ASSISTANT_USER__'
 $assistantPassword = '__ASSISTANT_PASS__'
 $helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
 
-$primaryLanguage = 'en-US'
-$secondaryLanguage = 'tr-TR'
+$primaryLanguage = '__WIN_DEFAULT_UI_LANGUAGE__'
+$additionalLanguages = @('__WIN_ADDITIONAL_LANGUAGES__' -split ',' | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+$secondaryLanguage = if (@($additionalLanguages).Count -gt 0) { [string]$additionalLanguages[0] } else { 'tr-TR' }
+$script:LanguagePolicyChanged = $true
+$script:LanguagePolicyMarkerPath = Join-Path $env:ProgramData 'clagnos\state\language-policy.json'
 
 if (-not (Test-Path -LiteralPath $helperPath)) {
     throw ("Interactive session helper was not found: {0}" -f $helperPath)
@@ -145,10 +148,14 @@ function Get-LanguageCapabilityStateMap {
     $stateMap = [ordered]@{}
     $availableCapabilities = @()
     if (Get-Command Get-WindowsCapability -ErrorAction SilentlyContinue) {
-        $availableCapabilities = @(
-            Get-WindowsCapability -Online -ErrorAction SilentlyContinue |
-                Where-Object { $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_.Name) }
-        )
+        $capabilityFilter = ("Language.*~~~{0}~*" -f [string]$LanguageTag)
+        try {
+            $availableCapabilities = @(
+                Get-WindowsCapability -Online -Name $capabilityFilter -ErrorAction Stop |
+                    Where-Object { $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_.Name) }
+            )
+        }
+        catch { $availableCapabilities = @() }
     }
 
     foreach ($capabilityName in @($catalog.Keys)) {
@@ -195,7 +202,7 @@ function Test-LanguageCapabilityStateSatisfied {
         $basicState = [string]$StateMap.'Language.Basic'
     }
 
-    if ($basicState -notin @('Installed', 'InstallPending')) {
+    if ($basicState -ne 'Installed') {
         return $false
     }
 
@@ -208,7 +215,7 @@ function Test-LanguageCapabilityStateSatisfied {
             }
         }
 
-        if ($capabilityState -notin @('Installed', 'InstallPending', 'Unavailable')) {
+        if ($capabilityState -notin @('Installed', 'NotPresent', 'Unavailable')) {
             return $false
         }
     }
@@ -216,28 +223,247 @@ function Test-LanguageCapabilityStateSatisfied {
     return $true
 }
 
-function Test-LanguageCapabilityDeferredVerificationAllowed {
-    param([AllowNull()]$StateMap)
+$script:LanguageSourceIsoUrl = 'https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1.240331-1435.ge_release_amd64fre_CLIENT_LOF_PACKAGES_OEM.iso'
+$script:LanguageSourceIsoBytes = [int64]6251841536
+$script:LanguageSourceRoot = 'C:\ProgramData\clagnos\cache\language-source'
+$script:LanguageSourceIsoPath = Join-Path $script:LanguageSourceRoot 'windows-11-24h2-25h2-language-features-x64.iso'
+$script:LanguageOperationDeadlineUtc = [DateTime]::UtcNow.AddMinutes(12.5)
 
-    if ($null -eq $StateMap) {
-        return $false
+function Get-LanguageRemainingSeconds {
+    return [int][Math]::Floor(($script:LanguageOperationDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+}
+
+function Assert-LanguageOperationTimeRemaining {
+    param([string]$Phase)
+
+    if ((Get-LanguageRemainingSeconds) -le 0) {
+        throw ("The Turkish language task reached its 13-minute operation budget during '{0}'." -f $Phase)
+    }
+}
+
+function Clear-LanguageSourceCache {
+    if (Test-Path -LiteralPath $script:LanguageSourceIsoPath -PathType Leaf) {
+        Remove-Item -LiteralPath $script:LanguageSourceIsoPath -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $script:LanguageSourceRoot -PathType Container) {
+        foreach ($pattern in @('curl-language-source-*.out','curl-language-source-*.err','dism-*.out','dism-*.err')) {
+            Get-ChildItem -LiteralPath $script:LanguageSourceRoot -Filter $pattern -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+        }
+        $remaining = @(Get-ChildItem -LiteralPath $script:LanguageSourceRoot -Force -ErrorAction SilentlyContinue)
+        if ($remaining.Count -eq 0) { Remove-Item -LiteralPath $script:LanguageSourceRoot -Force -ErrorAction SilentlyContinue }
+    }
+    Write-Host 'language-source-cache-cleaned => temporary Microsoft language ISO and task output files were removed.'
+}
+
+function Get-LanguageSourceIso {
+    Assert-LanguageOperationTimeRemaining -Phase 'source validation'
+    if (Test-Path -LiteralPath $script:LanguageSourceIsoPath -PathType Leaf) {
+        $existingSize = [int64](Get-Item -LiteralPath $script:LanguageSourceIsoPath -ErrorAction Stop).Length
+        if ($existingSize -eq $script:LanguageSourceIsoBytes) {
+            Write-StateSkip ("Reuse the verified-size Microsoft language source ISO cache ({0:N2} GiB)." -f ($existingSize / 1GB))
+            return $script:LanguageSourceIsoPath
+        }
+        if ($existingSize -gt $script:LanguageSourceIsoBytes) {
+            Remove-Item -LiteralPath $script:LanguageSourceIsoPath -Force -ErrorAction Stop
+        }
     }
 
-    foreach ($capabilityName in @('Language.Basic', 'Language.Handwriting', 'Language.OCR', 'Language.Speech', 'Language.TextToSpeech')) {
-        $capabilityState = 'Unavailable'
-        if ($StateMap.PSObject.Properties.Match($capabilityName).Count -gt 0) {
-            $candidate = [string]$StateMap.$capabilityName
-            if (-not [string]::IsNullOrWhiteSpace([string]$candidate)) {
-                $capabilityState = $candidate
+    $systemDrive = [string]$env:SystemDrive
+    $systemDisk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter ("DeviceID='{0}'" -f $systemDrive) -ErrorAction Stop
+    $freeBytes = [int64]$systemDisk.FreeSpace
+    if ($freeBytes -lt [int64]($script:LanguageSourceIsoBytes + 2GB)) {
+        throw ("The target needs at least {0:N2} GiB free on {1} to cache the official language source ISO and service the image; {2:N2} GiB is available." -f (($script:LanguageSourceIsoBytes + 2GB) / 1GB),$systemDrive,($freeBytes / 1GB))
+    }
+
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($null -eq $curl -or [string]::IsNullOrWhiteSpace([string]$curl.Source)) {
+        throw 'Windows curl.exe is unavailable; cannot perform the bounded Microsoft language-source download.'
+    }
+    if (-not (Test-Path -LiteralPath $script:LanguageSourceRoot -PathType Container)) {
+        New-Item -ItemType Directory -Path $script:LanguageSourceRoot -Force -ErrorAction Stop | Out-Null
+    }
+
+    $downloadDeadlineUtc = [DateTime]::UtcNow.AddSeconds([Math]::Min(600,(Get-LanguageRemainingSeconds) - 120))
+    $lastFailure = ''
+    for ($attempt = 1; $attempt -le 2; $attempt++) {
+        Assert-LanguageOperationTimeRemaining -Phase 'Microsoft ISO download'
+        $stdoutPath = Join-Path $script:LanguageSourceRoot ("curl-language-source-{0}.out" -f $attempt)
+        $stderrPath = Join-Path $script:LanguageSourceRoot ("curl-language-source-{0}.err" -f $attempt)
+        Remove-Item -LiteralPath $stdoutPath,$stderrPath -Force -ErrorAction SilentlyContinue
+        $arguments = @(
+            '--fail','--location','--silent','--show-error',
+            '--speed-limit','4096','--speed-time','60',
+            '--continue-at','-','--output',$script:LanguageSourceIsoPath,
+            $script:LanguageSourceIsoUrl
+        )
+        Write-Host ("Doing: download the official 24H2/25H2 language ISO from Microsoft (attempt {0}/2; maximum 600s)." -f $attempt) -ForegroundColor Cyan
+        $process = Start-Process -FilePath ([string]$curl.Source) -ArgumentList $arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -ErrorAction Stop
+        $lastLength = if (Test-Path -LiteralPath $script:LanguageSourceIsoPath -PathType Leaf) { [int64](Get-Item -LiteralPath $script:LanguageSourceIsoPath).Length } else { 0 }
+        $lastGrowthUtc = [DateTime]::UtcNow
+        $nextHeartbeatUtc = [DateTime]::UtcNow.AddSeconds(15)
+        $stalled = $false
+        try {
+            while (-not $process.HasExited) {
+                $now = [DateTime]::UtcNow
+                if ($now -ge $downloadDeadlineUtc) {
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                    throw 'The official language source ISO exceeded its bounded download time.'
+                }
+                $currentLength = if (Test-Path -LiteralPath $script:LanguageSourceIsoPath -PathType Leaf) { [int64](Get-Item -LiteralPath $script:LanguageSourceIsoPath).Length } else { 0 }
+                if ($currentLength -gt $lastLength) {
+                    $lastLength = $currentLength
+                    $lastGrowthUtc = $now
+                }
+                if (($now - $lastGrowthUtc).TotalSeconds -ge 60) {
+                    $stalled = $true
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                    break
+                }
+                if ($now -ge $nextHeartbeatUtc) {
+                    $elapsed = [int]($now - $process.StartTime.ToUniversalTime()).TotalSeconds
+                    $rate = if ($elapsed -gt 0) { ($currentLength / 1MB) / $elapsed } else { 0 }
+                    Write-Host ("Doing: Microsoft language ISO download is active ({0:N0}/{1:N0} MiB; {2:N1} MiB/s; attempt {3}/2)." -f ($currentLength / 1MB),($script:LanguageSourceIsoBytes / 1MB),$rate,$attempt) -ForegroundColor DarkCyan
+                    $nextHeartbeatUtc = $now.AddSeconds(15)
+                }
+                Start-Sleep -Seconds 2
+                $process.Refresh()
+            }
+            if (-not $stalled) {
+                $process.WaitForExit()
+                $process.Refresh()
+                if ([int]$process.ExitCode -eq 0) {
+                    $downloadedSize = if (Test-Path -LiteralPath $script:LanguageSourceIsoPath -PathType Leaf) { [int64](Get-Item -LiteralPath $script:LanguageSourceIsoPath).Length } else { 0 }
+                    if ($downloadedSize -eq $script:LanguageSourceIsoBytes) {
+                        Write-StateSuccess ("Microsoft language source ISO download completed ({0:N0} MiB)." -f ($downloadedSize / 1MB))
+                        return $script:LanguageSourceIsoPath
+                    }
+                    $lastFailure = ("curl completed but downloaded {0:N0} of {1:N0} bytes." -f $downloadedSize,$script:LanguageSourceIsoBytes)
+                }
+                else {
+                    $lastFailure = if (Test-Path -LiteralPath $stderrPath -PathType Leaf) { [string](Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue) } else { ("curl exited with code {0}." -f [int]$process.ExitCode) }
+                }
+            }
+            else {
+                $lastFailure = 'No download bytes arrived for 60 seconds.'
             }
         }
-
-        if ($capabilityState -notin @('NotPresent', 'Unavailable', 'InstallPending', 'Installed')) {
-            return $false
+        finally {
+            if ($null -ne $process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
         }
+        if ($attempt -lt 2 -and [DateTime]::UtcNow.AddSeconds(30) -lt $downloadDeadlineUtc) {
+            Write-Host ("Doing: resume the Microsoft language ISO once after download inactivity or a transport error ({0})." -f $lastFailure.Trim()) -ForegroundColor Yellow
+            continue
+        }
+        throw ("The Microsoft language source ISO download failed after {0} bounded attempt(s): {1}" -f $attempt,$lastFailure.Trim())
+    }
+    throw 'The Microsoft language source ISO download did not complete.'
+}
+
+function Invoke-LanguageDismProcess {
+    param(
+        [string]$Phase,
+        [string]$Arguments,
+        [int]$MaximumSeconds = 180
+    )
+
+    Assert-LanguageOperationTimeRemaining -Phase $Phase
+    $remaining = Get-LanguageRemainingSeconds
+    $timeoutSeconds = [Math]::Min([int]$MaximumSeconds,$remaining)
+    if ($timeoutSeconds -lt 5) { throw ("Less than five seconds remain before the language-task deadline at '{0}'." -f $Phase) }
+    $dismPath = Join-Path $env:windir 'System32\dism.exe'
+    $safePhase = [regex]::Replace($Phase,'[^A-Za-z0-9-]','-')
+    $stdoutPath = Join-Path $script:LanguageSourceRoot ("dism-{0}.out" -f $safePhase)
+    $stderrPath = Join-Path $script:LanguageSourceRoot ("dism-{0}.err" -f $safePhase)
+    Remove-Item -LiteralPath $stdoutPath,$stderrPath -Force -ErrorAction SilentlyContinue
+    Write-Host ("Doing: {0} with bounded DISM servicing (timeout {1}s)." -f $Phase,$timeoutSeconds) -ForegroundColor Cyan
+    $process = Start-Process -FilePath $dismPath -ArgumentList $Arguments -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -ErrorAction Stop
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $nextHeartbeatSeconds = 15
+    try {
+        while (-not $process.HasExited) {
+            if ($watch.Elapsed.TotalSeconds -ge $timeoutSeconds) {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                throw ("DISM phase '{0}' exceeded its {1}s limit." -f $Phase,$timeoutSeconds)
+            }
+            if ([int]$watch.Elapsed.TotalSeconds -ge $nextHeartbeatSeconds) {
+                Write-Host ("Doing: {0} is still running ({1}s elapsed)." -f $Phase,[int]$watch.Elapsed.TotalSeconds) -ForegroundColor DarkCyan
+                $nextHeartbeatSeconds += 15
+            }
+            Start-Sleep -Seconds 2
+            $process.Refresh()
+        }
+        $process.WaitForExit()
+        $process.Refresh()
+        $exitCode = [int]$process.ExitCode
+        $outputText = @(
+            foreach ($path in @($stdoutPath,$stderrPath)) {
+                if (Test-Path -LiteralPath $path -PathType Leaf) { Get-Content -LiteralPath $path -Tail 40 -ErrorAction SilentlyContinue }
+            }
+        ) -join "`n"
+        if ($exitCode -notin @(0,3010,1641)) {
+            throw ("DISM phase '{0}' failed with exit code {1}. {2}" -f $Phase,$exitCode,$outputText.Trim())
+        }
+        if ($exitCode -in @(3010,1641)) { return $true }
+        return $false
+    }
+    finally {
+        $watch.Stop()
+        if ($null -ne $process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+function Install-LanguageFromMicrosoftIso {
+    param([string]$LanguageTag)
+
+    $windowsVersion = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+    $build = [string]$windowsVersion.CurrentBuildNumber
+    if ($build -notin @('26100','26200')) {
+        throw ("The pinned Microsoft language ISO supports Windows 11 24H2/25H2 builds 26100 and 26200; this target reports build '{0}'." -f $build)
+    }
+    if ([string]$env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+        throw ("The pinned Microsoft language ISO is x64; this target reports architecture '{0}'." -f [string]$env:PROCESSOR_ARCHITECTURE)
     }
 
-    return $true
+    $isoPath = Get-LanguageSourceIso
+    $mountedHere = $false
+    try {
+        $diskImage = Get-DiskImage -ImagePath $isoPath -ErrorAction SilentlyContinue
+        if ($null -eq $diskImage -or -not [bool]$diskImage.Attached) {
+            Write-Host 'Doing: mount the verified Microsoft language source ISO read-only.' -ForegroundColor Cyan
+            Mount-DiskImage -ImagePath $isoPath -StorageType ISO -Access ReadOnly -ErrorAction Stop | Out-Null
+            $mountedHere = $true
+        }
+        $volume = Get-DiskImage -ImagePath $isoPath -ErrorAction Stop | Get-Volume -ErrorAction Stop | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.DriveLetter) } | Select-Object -First 1
+        if ($null -eq $volume) { throw 'Windows mounted the language ISO but did not expose a drive letter.' }
+        $contentRoot = Join-Path ([string]$volume.DriveLetter + ':\') 'LanguagesAndOptionalFeatures'
+        if (-not (Test-Path -LiteralPath $contentRoot -PathType Container)) {
+            throw ("The Microsoft language ISO is missing its expected content folder: {0}" -f $contentRoot)
+        }
+        $languageCab = Get-ChildItem -LiteralPath $contentRoot -Filter ("Microsoft-Windows-Client-Language-Pack_x64_{0}.cab" -f $LanguageTag.ToLowerInvariant()) -File -Recurse -ErrorAction Stop | Select-Object -First 1
+        $basicCab = Get-ChildItem -LiteralPath $contentRoot -Filter ("Microsoft-Windows-LanguageFeatures-Basic-{0}-Package~*.cab" -f $LanguageTag) -File -Recurse -ErrorAction Stop | Select-Object -First 1
+        if ($null -eq $languageCab) { throw ("The Microsoft language ISO does not contain the {0} x64 display-language CAB." -f $LanguageTag) }
+        if ($null -eq $basicCab) { throw ("The Microsoft language ISO does not contain the {0} Basic typing capability CAB." -f $LanguageTag) }
+
+        $installedRows = @(Get-InstalledLanguageSafe -LanguageTag $LanguageTag)
+        if (@($installedRows).Count -eq 0) {
+            $quotedCab = '"{0}"' -f [string]$languageCab.FullName
+            $arguments = '/English /Online /Add-Package /PackagePath:{0} /NoRestart' -f $quotedCab
+            if (Invoke-LanguageDismProcess -Phase ("install {0} display language CAB" -f $LanguageTag) -Arguments $arguments -MaximumSeconds 180) { $script:LanguageDismRestartRequired = $true }
+        }
+
+        $basicState = @(Get-WindowsCapability -Online -Name ("Language.Basic~~~{0}~0.0.1.0" -f $LanguageTag) -ErrorAction Stop | Select-Object -First 1)
+        if ($basicState.Count -eq 0 -or [string]$basicState[0].State -notin @('Installed','InstallPending')) {
+            $quotedSource = '"{0}"' -f $contentRoot
+            $arguments = '/English /Online /Add-Capability /CapabilityName:Language.Basic~~~{0}~0.0.1.0 /Source:{1} /LimitAccess /NoRestart' -f $LanguageTag,$quotedSource
+            if (Invoke-LanguageDismProcess -Phase ("install {0} Basic typing capability" -f $LanguageTag) -Arguments $arguments -MaximumSeconds 180) { $script:LanguageDismRestartRequired = $true }
+        }
+    }
+    finally {
+        if ($mountedHere) {
+            Write-Host 'Doing: dismount the Microsoft language source ISO.' -ForegroundColor Cyan
+            Dismount-DiskImage -ImagePath $isoPath -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
 }
 
 function Invoke-LanguageInteractiveAutomation {
@@ -374,318 +600,60 @@ function Invoke-LanguageInteractiveAutomation {
     }
 }
 
-function Get-LanguageInstallQueueMarkerPath {
-    param([string]$LanguageTag)
-    $safeLanguageTag = [regex]::Replace([string]$LanguageTag,'[^A-Za-z0-9-]','_')
-    return (Join-Path (Join-Path $env:ProgramData 'clagnos\state') ('language-install-' + $safeLanguageTag + '.json'))
-}
-
-function Get-LanguageInstallQueueMarker {
-    param([string]$LanguageTag)
-    $path = Get-LanguageInstallQueueMarkerPath -LanguageTag $LanguageTag
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
-    try {
-        $marker = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
-        if ([int]$marker.schemaVersion -ne 1 -or -not [string]::Equals([string]$marker.languageTag,[string]$LanguageTag,[System.StringComparison]::OrdinalIgnoreCase)) { return $null }
-        $queuedAt = [DateTime]::Parse([string]$marker.queuedAtUtc,[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::AdjustToUniversal)
-        if (([DateTime]::UtcNow - $queuedAt).TotalHours -ge 24) { return $null }
-        return $marker
-    }
-    catch { return $null }
-}
-
-function Set-LanguageInstallQueueMarker {
-    param([string]$LanguageTag,[string]$Reason)
-    $path = Get-LanguageInstallQueueMarkerPath -LanguageTag $LanguageTag
-    $directory = Split-Path -Path $path -Parent
-    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
-    $marker = [ordered]@{
-        schemaVersion = 1
-        languageTag = [string]$LanguageTag
-        queuedAtUtc = [DateTime]::UtcNow.ToString('o',[System.Globalization.CultureInfo]::InvariantCulture)
-        reason = [string]$Reason
-    }
-    $temporaryPath = $path + '.tmp'
-    [System.IO.File]::WriteAllText($temporaryPath,(ConvertTo-Json -InputObject $marker -Depth 4),[System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $temporaryPath -Destination $path -Force -ErrorAction Stop
-}
-
-function Remove-LanguageInstallQueueMarker {
-    param([string]$LanguageTag)
-    $path = Get-LanguageInstallQueueMarkerPath -LanguageTag $LanguageTag
-    if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
-}
-
 function Install-LanguageComponents {
-    param(
-        [string]$LanguageTag,
-        [string]$DisplayName
-    )
-
-    Write-StateIntent ("Language components for {0} will be installed." -f [string]$DisplayName)
-    Write-StateStart ("Installing language components for {0}..." -f [string]$DisplayName)
-
-    $existingCapabilityState = Get-LanguageCapabilityStateMap -LanguageTag $LanguageTag
-    $existingCapabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $existingCapabilityState
-    $existingBasicState = if ($existingCapabilityState.PSObject.Properties.Match('Language.Basic').Count -gt 0) { [string]$existingCapabilityState.'Language.Basic' } else { '' }
-    $existingInstalledRows = @(Get-InstalledLanguageSafe -LanguageTag $LanguageTag)
-    if (@($existingInstalledRows).Count -gt 0 -and $existingBasicState -eq 'Installed') {
-        Remove-LanguageInstallQueueMarker -LanguageTag $LanguageTag
-        Write-StateSuccess ("Language components for {0} are already installed; no install worker or restart is needed." -f [string]$DisplayName)
-        Write-Host ("language-components => {0} => {1}" -f [string]$LanguageTag, (Get-LanguageFeatureSummary -InstalledLanguage $existingInstalledRows[0]))
-        Write-Host ("language-capabilities-current => {0} => {1}" -f [string]$LanguageTag, [string]$existingCapabilitySummary)
-        return [pscustomobject]@{
-            LanguageTag = [string]$LanguageTag
-            RebootRequired = $false
-            QueuedInstallAccepted = $false
-            CapabilitySummary = [string]$existingCapabilitySummary
-            InstalledLanguagePresent = $true
-            DeferredPending = $false
-        }
-    }
-
-    $pendingMarker = Get-LanguageInstallQueueMarker -LanguageTag $LanguageTag
-    if ($null -ne $pendingMarker) {
-        Write-StateSkip ("Language components for {0} remain queued after a prior restart; skip duplicate install/restart during the 24-hour retry window." -f [string]$DisplayName)
-        Write-Host ("language-install-deferred => {0} => queuedAtUtc={1}" -f [string]$LanguageTag,[string]$pendingMarker.queuedAtUtc) -ForegroundColor DarkCyan
-        return [pscustomobject]@{
-            LanguageTag = [string]$LanguageTag
-            RebootRequired = $false
-            QueuedInstallAccepted = $false
-            CapabilitySummary = [string]$existingCapabilitySummary
-            InstalledLanguagePresent = $false
-            DeferredPending = $true
-        }
-    }
-    Remove-LanguageInstallQueueMarker -LanguageTag $LanguageTag
-
-    $interactiveTaskName = ('{0}-install-{1}' -f $taskName, (($LanguageTag -replace '[^a-zA-Z0-9]+', '-').Trim('-')))
-    $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
-    $workerScript = @'
-$ErrorActionPreference = "Stop"
-$helperPath = "__HELPER_PATH__"
-$resultPath = "__RESULT_PATH__"
-$taskName = "__TASK_NAME__"
-$languageTag = "__LANGUAGE_TAG__"
-
-. $helperPath
-
-function Get-LanguageCapabilityCatalog {
-    param([string]$LanguageTag)
-
-    $languageTagText = [string]$LanguageTag
-    return [ordered]@{
-        'Language.Basic'        = ("Language.Basic~~~{0}~0.0.1.0" -f $languageTagText)
-        'Language.Handwriting'  = ("Language.Handwriting~~~{0}~0.0.1.0" -f $languageTagText)
-        'Language.OCR'          = ("Language.OCR~~~{0}~0.0.1.0" -f $languageTagText)
-        'Language.Speech'       = ("Language.Speech~~~{0}~0.0.1.0" -f $languageTagText)
-        'Language.TextToSpeech' = ("Language.TextToSpeech~~~{0}~0.0.1.0" -f $languageTagText)
-    }
-}
-
-function Get-LanguageCapabilityStateMap {
-    param([string]$LanguageTag)
-
-    $catalog = Get-LanguageCapabilityCatalog -LanguageTag $LanguageTag
-    $stateMap = [ordered]@{}
-    $availableCapabilities = @(
-        Get-WindowsCapability -Online -ErrorAction SilentlyContinue |
-            Where-Object { $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_.Name) }
-    )
-
-    foreach ($capabilityName in @($catalog.Keys)) {
-        $capabilityIdentity = [string]$catalog[$capabilityName]
-        $capability = $availableCapabilities | Where-Object { [string]$_.Name -eq $capabilityIdentity } | Select-Object -First 1
-        $stateMap[$capabilityName] = if ($null -eq $capability) { 'Unavailable' } else { [string]$capability.State }
-    }
-
-    return [pscustomobject]$stateMap
-}
-
-function Convert-LanguageCapabilityStateMapToSummary {
-    param([AllowNull()]$StateMap)
-
-    if ($null -eq $StateMap) {
-        return 'unavailable'
-    }
-
-    $parts = New-Object 'System.Collections.Generic.List[string]'
-    foreach ($capabilityName in @('Language.Basic', 'Language.Handwriting', 'Language.OCR', 'Language.Speech', 'Language.TextToSpeech')) {
-        $stateValue = 'Unavailable'
-        if ($StateMap.PSObject.Properties.Match($capabilityName).Count -gt 0) {
-            $candidate = [string]$StateMap.$capabilityName
-            if (-not [string]::IsNullOrWhiteSpace([string]$candidate)) {
-                $stateValue = $candidate
-            }
-        }
-
-        $parts.Add(("{0}={1}" -f [string]$capabilityName, [string]$stateValue)) | Out-Null
-    }
-
-    return (@($parts.ToArray()) -join ', ')
-}
-
-function Test-LanguageCapabilityStateSatisfied {
-    param([AllowNull()]$StateMap)
-
-    if ($null -eq $StateMap) {
-        return $false
-    }
-
-    $basicState = ''
-    if ($StateMap.PSObject.Properties.Match('Language.Basic').Count -gt 0) {
-        $basicState = [string]$StateMap.'Language.Basic'
-    }
-
-    if ($basicState -notin @('Installed', 'InstallPending')) {
-        return $false
-    }
-
-    foreach ($capabilityName in @('Language.Handwriting', 'Language.OCR', 'Language.Speech', 'Language.TextToSpeech')) {
-        $capabilityState = 'Unavailable'
-        if ($StateMap.PSObject.Properties.Match($capabilityName).Count -gt 0) {
-            $candidate = [string]$StateMap.$capabilityName
-            if (-not [string]::IsNullOrWhiteSpace([string]$candidate)) {
-                $capabilityState = $candidate
-            }
-        }
-
-        if ($capabilityState -notin @('Installed', 'InstallPending', 'Unavailable')) {
-            return $false
-        }
-    }
-
-    return $true
-}
-
-try {
-    $installResult = Install-Language -Language $languageTag -ErrorAction Stop
-    $rebootRequired = $false
-    foreach ($propertyName in @('RestartNeeded', 'RebootRequired', 'RequiresRestart')) {
-        if ($null -ne $installResult -and $installResult.PSObject.Properties.Match($propertyName).Count -gt 0 -and [bool]$installResult.$propertyName) {
-            $rebootRequired = $true
-            break
-        }
-    }
-
-    $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $languageTag
-    $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
-    if (-not (Test-LanguageCapabilityStateSatisfied -StateMap $capabilityState)) {
-        throw ("Unable to verify installed language components for '{0}' inside the system worker. {1}" -f [string]$languageTag, [string]$capabilitySummary)
-    }
-
-    if ($capabilitySummary -match '(?i)InstallPending') {
-        $rebootRequired = $true
-    }
-
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language components installed.' -Details @(
-        ("reboot-required={0}" -f [bool]$rebootRequired),
-        ("language-capabilities={0}" -f [string]$capabilitySummary)
-    )
-}
-catch {
-    $exceptionMessage = [string]$_.Exception.Message
-    $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $languageTag
-    $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
-    $acceptPartialInstall = ($exceptionMessage -match '(?i)partially installed|0x80073CF1|2147009295') -and (Test-LanguageCapabilityStateSatisfied -StateMap $capabilityState)
-    if ($acceptPartialInstall) {
-        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language components were queued successfully and require restart.' -Details @(
-            'reboot-required=true',
-            ("language-capabilities={0}" -f [string]$capabilitySummary),
-            'language-install-partial=true'
-        )
-        return
-    }
-
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language components failed.' -Details @(
-        [string]$exceptionMessage,
-        ("language-capabilities={0}" -f [string]$capabilitySummary)
-    )
-    throw
-}
-'@
-
-    $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
-    $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
-    $workerScript = $workerScript.Replace('__TASK_NAME__', $interactiveTaskName)
-    $workerScript = $workerScript.Replace('__LANGUAGE_TAG__', $LanguageTag)
-
-    $interactiveResult = Invoke-LanguageInteractiveAutomation `
-        -InteractiveTaskName $interactiveTaskName `
-        -RunAsUser 'SYSTEM' `
-        -RunAsPassword '' `
-        -WorkerScriptText $workerScript `
-        -LanguageTag $LanguageTag `
-        -WaitTimeoutSeconds 600
-
-    $rebootRequired = $false
-    $capabilitySummary = ''
-    $interactiveWorkerQueued = $false
-    if ($null -ne $interactiveResult -and $interactiveResult.PSObject.Properties.Match('Details').Count -gt 0 -and $null -ne $interactiveResult.Details) {
-        foreach ($detail in @($interactiveResult.Details)) {
-            $detailText = [string]$detail
-            if ($detailText -match '^reboot-required=(?<value>true|false)$') {
-                $rebootRequired = [bool]::Parse([string]$Matches['value'])
-                continue
-            }
-            if ($detailText -match '^language-capabilities=(?<value>.+)$') {
-                $capabilitySummary = [string]$Matches['value']
-                continue
-            }
-            if ($detailText -match '^interactive-worker-queued=(?<value>true|false)$') {
-                $interactiveWorkerQueued = [bool]::Parse([string]$Matches['value'])
-            }
-        }
-    }
+    param([string]$LanguageTag,[string]$DisplayName)
 
     $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $LanguageTag
-    if ([string]::IsNullOrWhiteSpace([string]$capabilitySummary)) {
-        $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
-    }
-
+    $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
+    $basicState = if ($capabilityState.PSObject.Properties.Match('Language.Basic').Count -gt 0) { [string]$capabilityState.'Language.Basic' } else { 'Unavailable' }
     $installedRows = @(Get-InstalledLanguageSafe -LanguageTag $LanguageTag)
-    $capabilityStateSatisfied = Test-LanguageCapabilityStateSatisfied -StateMap $capabilityState
-    $queuedInstallAccepted = (
-        [bool]$interactiveWorkerQueued -or
-        (
-            [bool]$rebootRequired -and
-            ([string]$capabilitySummary -match '(?i)InstallPending')
-        )
-    )
-
-    if ($queuedInstallAccepted) {
-        Set-LanguageInstallQueueMarker -LanguageTag $LanguageTag -Reason 'Windows optional-language capability install is pending after restart.'
-    }
-    elseif (@($installedRows).Count -gt 0 -or $capabilityStateSatisfied) {
-        Remove-LanguageInstallQueueMarker -LanguageTag $LanguageTag
+    if (@($installedRows).Count -gt 0 -and $basicState -eq 'Installed' -and (Test-LanguageCapabilityStateSatisfied -StateMap $capabilityState)) {
+        Write-StateSuccess ("Language pack {0} is already installed." -f $LanguageTag)
+        Write-Host ("language-capabilities-current => {0} => {1}" -f $LanguageTag,$capabilitySummary)
+        Clear-LanguageSourceCache
+        return [pscustomobject]@{ LanguageTag=$LanguageTag; RebootRequired=$false; CapabilitySummary=$capabilitySummary; InstalledLanguagePresent=$true }
     }
 
-    if (@($installedRows).Count -lt 1 -and -not $capabilityStateSatisfied -and -not $queuedInstallAccepted) {
-        throw ("Unable to verify installed language components for '{0}'." -f [string]$LanguageTag)
-    }
-
-    if (@($installedRows).Count -gt 0) {
-        Write-Host ("language-components => {0} => {1}" -f [string]$LanguageTag, (Get-LanguageFeatureSummary -InstalledLanguage $installedRows[0]))
+    $displayLanguageAlreadyInstalled = @($installedRows).Count -gt 0
+    if ($displayLanguageAlreadyInstalled) {
+        Write-StateIntent ("The {0} display language pack is already registered; install only the missing required Basic typing capability." -f $DisplayName)
     }
     else {
-        Write-Host ("language-capabilities => {0} => {1}" -f [string]$LanguageTag, [string]$capabilitySummary)
+        Write-StateIntent ("Install the {0} display language pack and required Basic typing capability from Microsoft's matching Windows 11 language ISO; optional OCR, speech, and handwriting features are skipped." -f $DisplayName)
     }
+    $script:LanguageDismRestartRequired = $false
+    Install-LanguageFromMicrosoftIso -LanguageTag $LanguageTag
+    $rebootRequired = [bool]$script:LanguageDismRestartRequired
+    $verifyDeadline = [DateTime]::UtcNow.AddSeconds([Math]::Min(45,[Math]::Max(1,(Get-LanguageRemainingSeconds))))
+    do {
+        $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $LanguageTag
+        $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
+        $basicState = if ($capabilityState.PSObject.Properties.Match('Language.Basic').Count -gt 0) { [string]$capabilityState.'Language.Basic' } else { 'Unavailable' }
+        $installedRows = @(Get-InstalledLanguageSafe -LanguageTag $LanguageTag)
+        if ((@($installedRows).Count -gt 0 -or $rebootRequired) -and $basicState -in @('Installed','InstallPending')) { break }
+        Write-Host ("Doing: wait for Windows to register the {0} language components; current state: {1}" -f $LanguageTag,$capabilitySummary) -ForegroundColor DarkCyan
+        Start-Sleep -Seconds 5
+    } while ([DateTime]::UtcNow -lt $verifyDeadline)
 
-    if ([bool]$queuedInstallAccepted) {
+    if ($basicState -eq 'InstallPending' -or $capabilitySummary -match '(?i)InstallPending' -or $rebootRequired) {
         $rebootRequired = $true
-        Write-StateSuccess ("Language components for {0} were queued successfully and will finish after restart." -f [string]$DisplayName)
+        Write-Host ("language-components-pending-restart => {0} => {1}" -f $LanguageTag,$capabilitySummary) -ForegroundColor Yellow
+    }
+    elseif ($basicState -ne 'Installed' -or @($installedRows).Count -lt 1) {
+        throw ("DISM completed, but Windows did not verify the {0} display language and Basic capability. Capability state: {1}" -f $LanguageTag,$capabilitySummary)
+    }
+    Write-Host ("language-capabilities => {0} => {1}" -f $LanguageTag,$capabilitySummary)
+    if ($rebootRequired) {
+        Write-Host ("language-info: {0} package servicing is staged and will be verified after the one allowed restart." -f $DisplayName) -ForegroundColor Yellow
     }
     else {
-        Write-StateSuccess ("Language components for {0} were installed successfully." -f [string]$DisplayName)
+        Write-StateSuccess ("Language pack {0} was installed on the target VM." -f $DisplayName)
     }
-
     return [pscustomobject]@{
-        LanguageTag = [string]$LanguageTag
-        RebootRequired = [bool]$rebootRequired
-        QueuedInstallAccepted = [bool]$queuedInstallAccepted
-        CapabilitySummary = [string]$capabilitySummary
-        InstalledLanguagePresent = (@($installedRows).Count -ge 1)
-        DeferredPending = $false
+        LanguageTag=[string]$LanguageTag
+        RebootRequired=[bool]$rebootRequired
+        CapabilitySummary=[string]$capabilitySummary
+        InstalledLanguagePresent=(@($installedRows).Count -ge 1 -or $basicState -eq 'Installed')
     }
 }
 
@@ -729,6 +697,8 @@ function Invoke-UserLanguageConfiguration {
             return $false
         }
 
+        $currentUserUiLanguage = if (-not [string]::IsNullOrWhiteSpace([string]$state.UiOverride)) { [string]$state.UiOverride } else { [string]$languageTags[0] }
+        if (-not $script:LanguagePolicyChanged -and -not [string]::IsNullOrWhiteSpace([string]$currentUserUiLanguage)) { return $true }
         $primaryMatches = [string]::Equals([string]$languageTags[0], $primaryLanguage, [System.StringComparison]::OrdinalIgnoreCase)
         $secondaryMatches = (@($languageTags) | Where-Object { [string]::Equals([string]$_, $secondaryLanguage, [System.StringComparison]::OrdinalIgnoreCase) } | Measure-Object).Count -ge 1
         $overrideMatches = (
@@ -746,6 +716,8 @@ function Invoke-UserLanguageConfiguration {
             return $false
         }
 
+        $currentUserUiLanguage = if (-not [string]::IsNullOrWhiteSpace([string]$state.UiOverride)) { [string]$state.UiOverride } else { [string]$languageTags[0] }
+        if (-not $script:LanguagePolicyChanged -and -not [string]::IsNullOrWhiteSpace([string]$currentUserUiLanguage)) { return $true }
         $primaryMatches = [string]::Equals([string]$languageTags[0], $primaryLanguage, [System.StringComparison]::OrdinalIgnoreCase)
         $secondaryMatches = (@($languageTags) | Where-Object { [string]::Equals([string]$_, $secondaryLanguage, [System.StringComparison]::OrdinalIgnoreCase) } | Measure-Object).Count -ge 1
         return ($primaryMatches -and $secondaryMatches)
@@ -771,9 +743,9 @@ function Invoke-UserLanguageConfiguration {
 
     function Set-CurrentUserLanguageConfigurationDirect {
         $languageList = New-WinUserLanguageList $primaryLanguage
-        $secondaryEntries = New-WinUserLanguageList $secondaryLanguage
-        if ($null -ne $secondaryEntries -and $secondaryEntries.Count -gt 0) {
-            [void]$languageList.Add($secondaryEntries[0])
+        if (-not [string]::Equals([string]$primaryLanguage,[string]$secondaryLanguage,[System.StringComparison]::OrdinalIgnoreCase)) {
+            $secondaryEntries = New-WinUserLanguageList $secondaryLanguage
+            if ($null -ne $secondaryEntries -and $secondaryEntries.Count -gt 0) { [void]$languageList.Add($secondaryEntries[0]) }
         }
 
         Set-WinUserLanguageList -LanguageList $languageList -Force -WarningAction SilentlyContinue
@@ -822,14 +794,31 @@ $resultPath = "__RESULT_PATH__"
 $taskName = "__TASK_NAME__"
 $primaryLanguage = "__PRIMARY_LANGUAGE__"
 $secondaryLanguage = "__SECONDARY_LANGUAGE__"
+$languagePolicyChanged = "__LANGUAGE_POLICY_CHANGED__" -eq 'true'
 
 . $helperPath
 
 try {
+    if (-not $languagePolicyChanged) {
+        $currentTags = @(Get-WinUserLanguageList | ForEach-Object { [string]$_.LanguageTag } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        $currentOverride = ''
+        try { $currentOverride = [string](Get-WinUILanguageOverride) } catch { }
+        $currentUi = if (-not [string]::IsNullOrWhiteSpace($currentOverride)) { $currentOverride } elseif ($currentTags.Count -gt 0) { [string]$currentTags[0] } else { '' }
+        if (-not [string]::IsNullOrWhiteSpace([string]$currentUi)) {
+            $currentSummary = @(
+                Get-WinUserLanguageList | ForEach-Object {
+                    $tips = if ($_.PSObject.Properties.Match('InputMethodTips').Count -gt 0 -and $null -ne $_.InputMethodTips) { (@($_.InputMethodTips) -join ',') } else { '' }
+                    ("{0}:{1}" -f [string]$_.LanguageTag,$tips)
+                }
+            ) -join '; '
+            Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Existing Windows language selection preserved.' -Details @(("ui-language={0}" -f $currentUi),("language-list={0}" -f $currentSummary))
+            return
+        }
+    }
     $languageList = New-WinUserLanguageList $primaryLanguage
-    $secondaryEntries = New-WinUserLanguageList $secondaryLanguage
-    if ($null -ne $secondaryEntries -and $secondaryEntries.Count -gt 0) {
-        [void]$languageList.Add($secondaryEntries[0])
+    if (-not [string]::Equals([string]$primaryLanguage,[string]$secondaryLanguage,[System.StringComparison]::OrdinalIgnoreCase)) {
+        $secondaryEntries = New-WinUserLanguageList $secondaryLanguage
+        if ($null -ne $secondaryEntries -and $secondaryEntries.Count -gt 0) { [void]$languageList.Add($secondaryEntries[0]) }
     }
 
     Set-WinUserLanguageList -LanguageList $languageList -Force -WarningAction SilentlyContinue
@@ -867,101 +856,100 @@ catch {
     $workerScript = $workerScript.Replace('__TASK_NAME__', $interactiveTaskName)
     $workerScript = $workerScript.Replace('__PRIMARY_LANGUAGE__', $primaryLanguage)
     $workerScript = $workerScript.Replace('__SECONDARY_LANGUAGE__', $secondaryLanguage)
+    $workerScript = $workerScript.Replace('__LANGUAGE_POLICY_CHANGED__',([bool]$script:LanguagePolicyChanged).ToString().ToLowerInvariant())
 
     $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $interactiveTaskName `
         -RunAsUser $UserName `
         -RunAsPassword $UserPassword `
         -WorkerScriptText $workerScript `
-        -WaitTimeoutSeconds 300 `
+        -WaitTimeoutSeconds 60 `
         -HeartbeatSeconds 10
 
     Write-StateSuccess ("Language settings for user '{0}' were configured successfully." -f [string]$UserName)
 }
 
+function Get-LanguagePolicyMarker {
+    if (-not (Test-Path -LiteralPath $script:LanguagePolicyMarkerPath -PathType Leaf)) { return $null }
+    try { return (ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $script:LanguagePolicyMarkerPath -Raw -ErrorAction Stop))) }
+    catch { return $null }
+}
+
+function Save-LanguagePolicyMarker {
+    $directory = Split-Path -Path $script:LanguagePolicyMarkerPath -Parent
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $marker = [ordered]@{ schemaVersion = 1; defaultUiLanguage = [string]$primaryLanguage; additionalLanguages = @($additionalLanguages); appliedAtUtc = [DateTime]::UtcNow.ToString('o',[System.Globalization.CultureInfo]::InvariantCulture) }
+    $temporaryPath = $script:LanguagePolicyMarkerPath + '.tmp'
+    [System.IO.File]::WriteAllText($temporaryPath,(ConvertTo-Json -InputObject $marker -Depth 4),[System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporaryPath -Destination $script:LanguagePolicyMarkerPath -Force -ErrorAction Stop
+}
+
 function Set-SystemLanguageState {
     $systemPreferredUiBefore = Get-SystemPreferredUiLanguageSafe
-    Write-StateIntent ('System language packages and UI settings will be configured.')
-    Write-StateStart ('Configuring system language packages and UI settings...')
+    $previousPolicy = Get-LanguagePolicyMarker
+    if ($null -eq $previousPolicy) {
+        $script:LanguagePolicyChanged = -not [string]::Equals([string]$systemPreferredUiBefore,$primaryLanguage,[System.StringComparison]::OrdinalIgnoreCase)
+    }
+    else {
+        $script:LanguagePolicyChanged = -not [string]::Equals([string]$previousPolicy.defaultUiLanguage,$primaryLanguage,[System.StringComparison]::OrdinalIgnoreCase)
+    }
+    Write-StateIntent ('Provision additional language components on the target and apply the configured UI language only when the VC language policy changed.')
+    Write-StateStart ('Configuring target Windows language components...')
 
-    $englishInstallResult = Install-LanguageComponents -LanguageTag $primaryLanguage -DisplayName 'English (United States)'
-    $turkishInstallResult = Install-LanguageComponents -LanguageTag $secondaryLanguage -DisplayName 'Turkish (Turkey)'
-
-    Write-StateStart ("Applying system preferred UI language '{0}'..." -f $primaryLanguage)
-    Set-SystemPreferredUILanguage -Language $primaryLanguage
-    $systemPreferredUiAfter = Get-SystemPreferredUiLanguageSafe
-
-    if (-not [string]::Equals([string]$systemPreferredUiAfter, $primaryLanguage, [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw ("Unable to set the system preferred UI language to '{0}'." -f $primaryLanguage)
+    $componentResults = [ordered]@{}
+    foreach ($languageTag in @($additionalLanguages | Select-Object -Unique)) {
+        $displayName = if ([string]::Equals([string]$languageTag,'tr-TR',[System.StringComparison]::OrdinalIgnoreCase)) { 'Turkish (Turkey)' } else { [string]$languageTag }
+        $componentResults[[string]$languageTag] = Install-LanguageComponents -LanguageTag ([string]$languageTag) -DisplayName $displayName
     }
 
-    Write-StateSuccess('System language packages and UI settings were configured successfully.')
-
-    return [pscustomobject]@{
-        RebootRequired = (
-            [bool]$englishInstallResult.RebootRequired -or
-            [bool]$turkishInstallResult.RebootRequired -or
-            (-not [string]::Equals([string]$systemPreferredUiBefore, [string]$systemPreferredUiAfter, [System.StringComparison]::OrdinalIgnoreCase))
-        )
-        ComponentResults = [ordered]@{
-            ([string]$primaryLanguage) = $englishInstallResult
-            ([string]$secondaryLanguage) = $turkishInstallResult
+    if ($script:LanguagePolicyChanged) {
+        Write-StateStart ("Applying requested system preferred UI language '{0}'..." -f $primaryLanguage)
+        Set-SystemPreferredUILanguage -Language $primaryLanguage
+        $systemPreferredUiAfter = Get-SystemPreferredUiLanguageSafe
+        if (-not [string]::Equals([string]$systemPreferredUiAfter,$primaryLanguage,[System.StringComparison]::OrdinalIgnoreCase)) {
+            throw ("Unable to apply configured system preferred UI language '{0}'." -f $primaryLanguage)
         }
+    }
+    else {
+        $systemPreferredUiAfter = $systemPreferredUiBefore
+        Write-StateSkip ("The configured default UI language '{0}' is unchanged; preserve the current Windows language selection." -f $primaryLanguage)
+    }
+
+    Write-StateSuccess('Target Windows language components and system language policy were verified.')
+    return [pscustomobject]@{
+        RebootRequired = (@($componentResults.Values | Where-Object { [bool]$_.RebootRequired }).Count -gt 0 -or
+            -not [string]::Equals([string]$systemPreferredUiBefore,[string]$systemPreferredUiAfter,[System.StringComparison]::OrdinalIgnoreCase))
+        ComponentResults = $componentResults
     }
 }
 
 function Assert-LanguageStateReadyForRestart {
-    param([hashtable]$ComponentResults = @{})
-
-    foreach ($languageTag in @($primaryLanguage, $secondaryLanguage)) {
+    foreach ($languageTag in @($additionalLanguages | Select-Object -Unique)) {
         $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $languageTag
         $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
-        $installedLanguageRows = @(Get-InstalledLanguageSafe -LanguageTag $languageTag)
-        $installedLanguagePresent = (@($installedLanguageRows).Count -ge 1)
-        Write-Host ("language-capabilities-final => {0} => {1}" -f [string]$languageTag, [string]$capabilitySummary)
+        Write-Host ("language-capabilities-final => {0} => {1}" -f [string]$languageTag,[string]$capabilitySummary)
         if (-not (Test-LanguageCapabilityStateSatisfied -StateMap $capabilityState)) {
-            if ($installedLanguagePresent) {
-                Write-Host ("language-capabilities-info => {0} => installed-language verification is already satisfied; optional capability packages remain image-managed. {1}" -f [string]$languageTag, [string]$capabilitySummary) -ForegroundColor DarkCyan
-                continue
-            }
-
-            $componentResult = $null
-            if ($null -ne $ComponentResults -and $ComponentResults.ContainsKey([string]$languageTag)) {
-                $componentResult = $ComponentResults[[string]$languageTag]
-            }
-
-            $allowDeferredVerification = $false
-            if ($null -ne $componentResult) {
-                if ($componentResult.PSObject.Properties.Match('DeferredPending').Count -gt 0 -and [bool]$componentResult.DeferredPending) {
-                    Write-Host ("language-capabilities-deferred => {0} => install remains queued inside its retry window; {1}" -f [string]$languageTag, [string]$capabilitySummary) -ForegroundColor DarkCyan
-                    continue
-                }
-                if ($componentResult.PSObject.Properties.Match('QueuedInstallAccepted').Count -gt 0 -and [bool]$componentResult.QueuedInstallAccepted) {
-                    $allowDeferredVerification = $true
-                }
-                elseif ($componentResult.PSObject.Properties.Match('RebootRequired').Count -gt 0 -and [bool]$componentResult.RebootRequired) {
-                    $allowDeferredVerification = $true
-                }
-            }
-
-            if ($allowDeferredVerification -and (Test-LanguageCapabilityDeferredVerificationAllowed -StateMap $capabilityState)) {
-                Write-Host ("language-capabilities-deferred => {0} => {1}" -f [string]$languageTag, [string]$capabilitySummary) -ForegroundColor DarkCyan
-                continue
-            }
-
-            throw ("Language capability verification failed for '{0}'. {1}" -f [string]$languageTag, [string]$capabilitySummary)
+            throw ("Language capability verification failed for '{0}'; the expected installed state was not present after the servicing restart. {1}" -f [string]$languageTag,[string]$capabilitySummary)
         }
     }
 }
-
 $rebootRequired = $false
 
 try {
-    if (-not (Get-Command Install-Language -ErrorAction SilentlyContinue)) {
-        throw 'Install-Language is not available on this image.'
-    }
     if (-not (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue)) {
         throw 'Set-SystemPreferredUILanguage is not available on this image.'
+    }
+
+    $pendingServicingPaths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired',
+        'C:\Windows\WinSxS\pending.xml'
+    )
+    $pendingServicing = @($pendingServicingPaths | Where-Object { Test-Path -LiteralPath $_ })
+    if ($pendingServicing.Count -gt 0) {
+        Write-Host ("language-servicing-restart-required => {0}" -f ($pendingServicing -join ',')) -ForegroundColor Yellow
+        Write-Host 'TASK_REBOOT_REQUIRED:configure-language-settings'
+        return
     }
 
     $systemLanguageState = Set-SystemLanguageState
@@ -973,12 +961,15 @@ try {
     Invoke-UserLanguageConfiguration -UserName $managerUser -UserPassword $managerPassword
     Write-StateStart("Applying language list and UI override for '{0}'..." -f $assistantUser)
     Invoke-UserLanguageConfiguration -UserName $assistantUser -UserPassword $assistantPassword
+    Save-LanguagePolicyMarker
 
     Write-StateStart('Collecting final language verification output...')
-    Write-Host ("language-targets => system-ui={0}; primary-language={1}; secondary-language={2}" -f $primaryLanguage, $primaryLanguage, $secondaryLanguage)
+    Write-Host ("language-targets => system-ui={0}; configured-default={1}; additional-languages={2}; policy-changed={3}" -f (Get-SystemPreferredUiLanguageSafe),$primaryLanguage,(@($additionalLanguages) -join ','),[bool]$script:LanguagePolicyChanged)
     Write-Host ("installed-language => {0} => {1}" -f $primaryLanguage, (Get-LanguageFeatureSummary -InstalledLanguage (@(Get-InstalledLanguageSafe -LanguageTag $primaryLanguage) | Select-Object -First 1)))
     Write-Host ("installed-language => {0} => {1}" -f $secondaryLanguage, (Get-LanguageFeatureSummary -InstalledLanguage (@(Get-InstalledLanguageSafe -LanguageTag $secondaryLanguage) | Select-Object -First 1)))
-    Assert-LanguageStateReadyForRestart -ComponentResults $systemLanguageState.ComponentResults
+    Assert-LanguageStateReadyForRestart
+
+    if (-not $rebootRequired) { Clear-LanguageSourceCache }
 
     if ($rebootRequired) {
         Write-Host 'language-step-ok: restart-required-to-finalize'

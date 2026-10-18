@@ -34,7 +34,7 @@ $script:SetupResourceGroup = ''
 $script:SetupDidPushLocation = $false
 $script:SetupFailed = $false
 $script:SetupPackageWarnings = @()
-$script:SetupTranscriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-setup-' + $script:SetupVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+$script:SetupTranscriptPath = Join-Path (Join-Path $script:SetupRepoRoot '.logs') ('clagnos-setup-' + $script:SetupVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 $script:SetupTranscriptStarted = $false
 
 function Write-SetupDoing {
@@ -52,6 +52,11 @@ function Assert-SetupElevatedSession {
 
 function Get-SetupEnvPathForKey {
     param([Parameter(Mandatory = $true)][string]$Key)
+    $profileTemplatePath = Join-Path $script:SetupRepoRoot 'vc.env.example'
+    if (Test-Path -LiteralPath $profileTemplatePath -PathType Leaf) {
+        $profileTemplate = [System.IO.File]::ReadAllText($profileTemplatePath)
+        if ($profileTemplate -match ('(?m)^\s*' + [regex]::Escape($Key) + '\s*=')) { return $script:SetupVmEnvPath }
+    }
     if ($Key -eq 'SELECTED_AZURE_SUBSCRIPTION_ID' -or $Key -like 'DEFAULT_*' -or $Key -in @('RESOURCE_GROUP_TEMPLATE','VNET_NAME_TEMPLATE','SUBNET_NAME_TEMPLATE','NSG_NAME_TEMPLATE','NSG_RULE_NAME_TEMPLATE','PUBLIC_IP_NAME_TEMPLATE','NIC_NAME_TEMPLATE','VM_DISK_NAME_TEMPLATE','AZURE_COMMAND_TIMEOUT_SECONDS','SSH_CONNECT_TIMEOUT_SECONDS','SSH_TASK_TIMEOUT_SECONDS','VM_TASK_OUTCOME_MODE','SSH_MAX_RETRIES','PYSSH_CLIENT_PATH','VM_PRICE_COUNT_HOURS') -or $Key -like 'SELECTED_COMPANY_*' -or $Key -like 'SELECTED_EMPLOYEE_*' -or $Key -like 'WIN_PUBLIC_SHORTCUT_*') {
         return $script:SetupGlobalEnvPath
     }
@@ -132,7 +137,9 @@ function Initialize-SetupDesiredConfiguration {
     if ([string]::IsNullOrWhiteSpace($script:SetupVmAdminUser) -or [string]::IsNullOrWhiteSpace($script:SetupVmAssistantUser)) {
         throw ("Profile '{0}' must define VM_ADMIN_USER and VM_ASSISTANT_USER." -f [System.IO.Path]::GetFileName($script:SetupVmEnvPath))
     }
-    if ([string]::IsNullOrWhiteSpace((Get-SetupEnvValue -Key 'VM_ADMIN_PASS')) -or [string]::IsNullOrWhiteSpace((Get-SetupEnvValue -Key 'VM_ASSISTANT_PASS'))) {
+    $adminPassword = [string](Get-SetupEnvValue -Key 'VM_ADMIN_PASS')
+    $assistantPassword = [string](Get-SetupEnvValue -Key 'VM_ASSISTANT_PASS')
+    if ([string]::IsNullOrWhiteSpace($adminPassword) -or [string]::IsNullOrWhiteSpace($assistantPassword) -or $adminPassword -eq '@secret-required' -or $assistantPassword -eq '@secret-required') {
         throw ("Profile '{0}' must contain both managed-user passwords for unattended setup. Values are never printed." -f [System.IO.Path]::GetFileName($script:SetupVmEnvPath))
     }
     $script:SetupVmHibernation = Get-SetupBooleanValue -Key 'VM_ENABLE_HIBERNATION'
@@ -170,6 +177,29 @@ function Set-SetupEnvValue {
     [System.IO.File]::WriteAllText($path,($lines -join $newline),[System.Text.UTF8Encoding]::new($false))
 }
 
+function Sync-SetupVmProfileSchema {
+    if (-not (Test-Path -LiteralPath $script:SetupVmEnvPath -PathType Leaf)) { throw ("VC environment profile is missing: {0}" -f $script:SetupVmEnvPath) }
+    $templatePath = Join-Path $script:SetupRepoRoot 'vc.env.example'
+    if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) { throw 'vc.env.example was not found.' }
+    $profileText = [System.IO.File]::ReadAllText($script:SetupVmEnvPath)
+    $newline = if ($profileText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $profileLines = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($line in @([regex]::Split($profileText,"\r\n|\n|\r"))) { $profileLines.Add([string]$line) }
+    foreach ($templateLine in @(Get-Content -LiteralPath $templatePath -ErrorAction Stop)) {
+        $match = [regex]::Match([string]$templateLine,'^\s*(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<value>.*)$')
+        if (-not $match.Success) { continue }
+        $key = [string]$match.Groups['key'].Value
+        if ($profileText -match ('(?m)^\s*' + [regex]::Escape($key) + '\s*=')) { continue }
+        $value = [string]$match.Groups['value'].Value
+        if ($key -eq 'SELECTED_VM_NAME') { $value = $script:SetupVmName }
+        $profileLines.Add(('{0}={1}' -f $key,$value))
+    }
+    [System.IO.File]::WriteAllText($script:SetupVmEnvPath,($profileLines -join $newline),[System.Text.UTF8Encoding]::new($false))
+    $profileVmName = (Get-SetupEnvValue -Key 'SELECTED_VM_NAME').Trim()
+    if ([string]::IsNullOrWhiteSpace($profileVmName) -or $profileVmName -eq '<vm-name>') { Set-SetupEnvValue -Key 'SELECTED_VM_NAME' -Value $script:SetupVmName }
+    Set-SetupEnvValue -Key 'VC_PROFILE_SCHEMA_VERSION' -Value '2'
+}
+
 function Set-SetupTemporaryEnvValues {
     param([Parameter(Mandatory = $true)][hashtable]$Values)
     foreach ($key in @($Values.Keys)) {
@@ -196,6 +226,19 @@ function Invoke-SetupAzJson {
     if ([string]::IsNullOrWhiteSpace([string]$output)) { return $null }
     try { return (ConvertFrom-Json -InputObject ([string]($output -join [Environment]::NewLine)) -ErrorAction Stop) }
     catch { throw ("Azure CLI returned unreadable data while attempting to {0}." -f $Action) }
+}
+
+function Assert-SetupDnsLabelAvailable {
+    param([Parameter(Mandatory = $true)][string]$Label,[Parameter(Mandatory = $true)][string]$Location)
+    if ($Label -notmatch '^[a-z][a-z0-9-]{1,61}[a-z0-9]$') { throw ("VM name '{0}' is not valid as an Azure public DNS label." -f $Label) }
+    $url = "https://management.azure.com/subscriptions/$($script:SetupSubscriptionId)/providers/Microsoft.Network/locations/$Location/checkDnsNameAvailability?api-version=2025-05-01"
+    $availability = Invoke-SetupAzJson -Arguments @('rest','--method','get','--url',$url,'--url-parameters',("domainNameLabel={0}" -f $Label),'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("check whether Azure DNS label '{0}' is available in '{1}'" -f $Label,$Location)
+    if ($null -eq $availability -or $null -eq $availability.available) { throw ("Azure did not confirm availability of public DNS label '{0}'." -f $Label) }
+    if (-not [bool]$availability.available) {
+        $reason = [string]$availability.reason
+        if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'label already in use' }
+        throw ("Azure DNS label '{0}.{1}.cloudapp.azure.com' is unavailable ({2}). Choose a different VM name; Clagnos will not add a numeric DNS suffix." -f $Label,$Location,$reason)
+    }
 }
 
 function Invoke-SetupAzText {
@@ -526,6 +569,9 @@ function Get-SetupNetworkState {
         if (-not [string]::Equals([string]$publicIp.sku.name,'Standard',[System.StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals([string]$publicIp.publicIPAllocationMethod,'Static',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::IsNullOrWhiteSpace([string]$publicIp.dnsSettings.domainNameLabel)) {
             [void]$reasons.Add('public IP must remain Standard, static, and have its Clagnos DNS label')
         }
+        else {
+            $networkState | Add-Member -NotePropertyName PublicIp -NotePropertyValue $publicIp -Force
+        }
     }
     return [pscustomobject]@{ DriftReasons = @($reasons.ToArray()); ProfileUpdates = $profileUpdates }
 }
@@ -539,7 +585,7 @@ function Assert-SetupTargetContract {
     if (-not (Test-SetupImageMatches -Vm $vm)) { [void]$incompatibleReasons.Add('OS image does not match WIN_VM_IMAGE') }
     $missingResourceTypes = @(Get-SetupInfrastructureDrift)
     foreach ($missingType in @($missingResourceTypes)) { [void]$incompatibleReasons.Add(("managed resource inventory is missing {0}" -f $missingType)) }
-    $networkState = [pscustomobject]@{ DriftReasons = @(); ProfileUpdates = [ordered]@{} }
+    $networkState = [pscustomobject]@{ DriftReasons = @(); ProfileUpdates = [ordered]@{}; PublicIp = $null }
     if ($missingResourceTypes.Count -eq 0) {
         $networkState = Get-SetupNetworkState -Vm $vm
         foreach ($networkReason in @($networkState.DriftReasons)) { [void]$incompatibleReasons.Add([string]$networkReason) }
@@ -570,6 +616,22 @@ function Assert-SetupTargetContract {
         $reason = $incompatibleReasons -join '; '
         if ($ApplyFixes) { return [pscustomobject]@{ RequiresRebuild = $true; Reason = $reason } }
         throw ("VM '{0}' requires a clean recreate to match its profile: {1}." -f $script:SetupVmName,$reason)
+    }
+
+    if ($null -ne $networkState.PublicIp) {
+        $desiredDnsLabel = $script:SetupVmName
+        $currentDnsLabel = [string]$networkState.PublicIp.dnsSettings.domainNameLabel
+        if (-not [string]::Equals($currentDnsLabel,$desiredDnsLabel,[System.StringComparison]::OrdinalIgnoreCase)) {
+            Assert-SetupDnsLabelAvailable -Label $desiredDnsLabel -Location $script:SetupVmRegion
+            if ($ApplyFixes) {
+                Invoke-SetupAzText -Arguments @('network','public-ip','update','--resource-group',$script:SetupResourceGroup,'--name',[string]$networkState.PublicIp.name,'--dns-name',$desiredDnsLabel,'--output','none','--subscription',$script:SetupSubscriptionId,'--only-show-errors') -Action ("update only VM '{0}' public IP DNS label to '{1}'" -f $script:SetupVmName,$desiredDnsLabel) | Out-Null
+                $networkState.PublicIp = Invoke-SetupAzJson -Arguments @('network','public-ip','show','--resource-group',$script:SetupResourceGroup,'--name',[string]$networkState.PublicIp.name,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("verify public DNS label for VM '{0}'" -f $script:SetupVmName)
+                $currentDnsLabel = [string]$networkState.PublicIp.dnsSettings.domainNameLabel
+                if (-not [string]::Equals($currentDnsLabel,$desiredDnsLabel,[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Azure did not confirm DNS label '{0}' for VM '{1}'." -f $desiredDnsLabel,$script:SetupVmName) }
+                Write-Host ("Public DNS name is now {0}." -f [string]$networkState.PublicIp.dnsSettings.fqdn) -ForegroundColor Green
+            }
+        }
+        $networkState.ProfileUpdates['PUBLIC_IP_DNS_LABEL'] = $desiredDnsLabel
     }
 
     $currentSize = [string]$vm.hardwareProfile.vmSize
@@ -624,6 +686,7 @@ function Invoke-SetupCreate {
         SELECTED_VM_NAME = $script:SetupVmName
         SELECTED_RESOURCE_GROUP = ''
         SELECTED_AZURE_REGION = $script:SetupVmRegion
+        PUBLIC_IP_DNS_LABEL = $script:SetupVmName
         WIN_VM_IMAGE = $script:SetupVmImage
         WIN_VM_SIZE = $script:SetupVmSize
         WIN_VM_DISK_SIZE_GB = [string]$script:SetupVmDiskSizeGb
@@ -665,10 +728,12 @@ try {
         Copy-Item -LiteralPath $vmTemplate -Destination $script:SetupVmEnvPath -ErrorAction Stop
         Set-SetupEnvValue -Key 'SELECTED_VM_NAME' -Value $script:SetupVmName
     }
+    Sync-SetupVmProfileSchema
     if (-not (Test-Path -LiteralPath $script:SetupLauncherPath -PathType Leaf)) { throw "cg.cmd was not found at the repository root." }
     Initialize-SetupDesiredConfiguration
     Push-Location $script:SetupRepoRoot
     $script:SetupDidPushLocation = $true
+    if (-not (Test-Path -LiteralPath (Split-Path -Path $script:SetupTranscriptPath -Parent) -PathType Container)) { New-Item -ItemType Directory -Path (Split-Path -Path $script:SetupTranscriptPath -Parent) -Force | Out-Null }
     Start-Transcript -LiteralPath $script:SetupTranscriptPath -Force | Out-Null
     $script:SetupTranscriptStarted = $true
     Write-Host ("Setup transcript: {0}" -f $script:SetupTranscriptPath) -ForegroundColor DarkGray

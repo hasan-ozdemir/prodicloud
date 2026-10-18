@@ -187,6 +187,63 @@ function Stop-ClagnosPackageGuestProcessTree {
     finally { if ($null -ne $job) { Remove-Job -Job $job -Force -ErrorAction SilentlyContinue } }
 }
 
+function Sync-ClagnosRemoteGuestLogs {
+    param([object]$Session,[string]$VmName)
+    if ($null -eq $Session -or [string]::IsNullOrWhiteSpace([string]$VmName)) { return }
+
+    try {
+        $remoteLogs = @(Invoke-Command -Session $Session -ErrorAction Stop -ScriptBlock {
+            $rootPath = Join-Path $env:ProgramData 'clagnos'
+            $logDirectories = @(
+                (Join-Path $rootPath 'interactive'),
+                (Join-Path $rootPath 'logs')
+            )
+            $found = New-Object 'System.Collections.Generic.List[object]'
+            foreach ($directory in @($logDirectories)) {
+                if (-not (Test-Path -LiteralPath $directory -PathType Container)) { continue }
+                foreach ($file in @(Get-ChildItem -LiteralPath $directory -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue)) {
+                    $found.Add([pscustomobject]@{ FullName=[string]$file.FullName; Length=[int64]$file.Length; LastWriteUtc=[DateTime]$file.LastWriteTimeUtc; Root=[string]$directory }) | Out-Null
+                }
+            }
+            $windowsTemp = [System.IO.Path]::GetTempPath()
+            foreach ($file in @(Get-ChildItem -LiteralPath $windowsTemp -File -Filter 'clagnos-*.log' -ErrorAction SilentlyContinue)) {
+                $found.Add([pscustomobject]@{ FullName=[string]$file.FullName; Length=[int64]$file.Length; LastWriteUtc=[DateTime]$file.LastWriteTimeUtc; Root=[string]$windowsTemp }) | Out-Null
+            }
+            return @($found.ToArray())
+        })
+        if (@($remoteLogs).Count -eq 0) { return }
+
+        $repoRoot = Get-ClagnosRepoRoot
+        $runDirectory = Join-Path (Join-Path (Join-Path $repoRoot '.logs') 'guest') (Join-Path $VmName ((Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss-fff',[System.Globalization.CultureInfo]::InvariantCulture)))
+        New-Item -ItemType Directory -Path $runDirectory -Force | Out-Null
+        foreach ($entry in @($remoteLogs)) {
+            $fullName = [string]$entry.FullName
+            $root = ([string]$entry.Root).TrimEnd('\')
+            $relative = $fullName.Substring([Math]::Min($root.Length + 1,$fullName.Length)).TrimStart('\','/')
+            $destination = Join-Path $runDirectory ($relative -replace '[<>:"|?*]','_')
+            $destinationDirectory = Split-Path -Path $destination -Parent
+            if (-not (Test-Path -LiteralPath $destinationDirectory -PathType Container)) { New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null }
+            Copy-Item -LiteralPath $fullName -Destination $destination -FromSession $Session -Force -ErrorAction Stop
+            $remoteHash = [string](Invoke-Command -Session $Session -ErrorAction Stop -ScriptBlock { param([string]$Path) (Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash } -ArgumentList $fullName)
+            $localHash = [string](Get-FileHash -LiteralPath $destination -Algorithm SHA256 -ErrorAction Stop).Hash
+            if (-not [string]::Equals($remoteHash,$localHash,[System.StringComparison]::OrdinalIgnoreCase)) {
+                throw ("Clagnos guest log copy did not verify: {0}" -f [System.IO.Path]::GetFileName($fullName))
+            }
+            $removed = Invoke-Command -Session $Session -ErrorAction Stop -ScriptBlock {
+                param([string]$Path,[string]$ExpectedHash)
+                if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $true }
+                $currentHash = [string](Get-FileHash -LiteralPath $Path -Algorithm SHA256 -ErrorAction Stop).Hash
+                if (-not [string]::Equals($currentHash,$ExpectedHash,[System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+                Remove-Item -LiteralPath $Path -Force -ErrorAction Stop
+                return (-not (Test-Path -LiteralPath $Path -PathType Leaf))
+            } -ArgumentList $fullName,$remoteHash
+            if (-not [bool]$removed) { Write-Warning ("Collected guest log but left the remote file because it changed during collection: {0}" -f [System.IO.Path]::GetFileName($fullName)) }
+            else { Write-Host ("Guest log collected and verified: .logs/guest/{0}/{1}" -f $VmName,$relative.Replace('\','/')) -ForegroundColor DarkGray }
+        }
+    }
+    catch { Write-Warning ("Clagnos guest log collection could not complete; remote source files were retained. {0}" -f [string]$_.Exception.Message) }
+}
+
 function Invoke-ClagnosPackageWinRmTaskScript {
     param(
         [object]$Session,
@@ -196,7 +253,8 @@ function Invoke-ClagnosPackageWinRmTaskScript {
         [object]$ObserverSession = $null,
         [string[]]$RedactionValues = @(),
         [int]$Attempt = 1,
-        [DateTime]$DeadlineUtc = [DateTime]::MinValue
+        [DateTime]$DeadlineUtc = [DateTime]::MinValue,
+        [switch]$MonitorInactivity
     )
 
     $safeTimeout = [Math]::Max(30,[Math]::Min(7200,[int]$TimeoutSeconds))
@@ -307,7 +365,7 @@ function Invoke-ClagnosPackageWinRmTaskScript {
                     $lastHeartbeatAt = $elapsed
                 }
                 $idleSeconds = ([DateTime]::UtcNow - $lastMovementAt).TotalSeconds
-                if ($idleSeconds -ge 60) {
+                if ($MonitorInactivity -and $idleSeconds -ge 60) {
                     Stop-ClagnosPackageGuestProcessTree -Session $ObserverSession -RunId $runId
                     Stop-Job -Job $job -ErrorAction SilentlyContinue | Out-Null
                     if ($Attempt -lt 2 -and ([DateTime]::UtcNow -lt $DeadlineUtc.AddSeconds(-30))) {
@@ -315,7 +373,7 @@ function Invoke-ClagnosPackageWinRmTaskScript {
                         $null = Wait-Job -Job $job -Timeout 5
                         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
                         $remainingForRetry = [Math]::Max(30,[int][Math]::Floor(($DeadlineUtc - [DateTime]::UtcNow).TotalSeconds))
-                        return (Invoke-ClagnosPackageWinRmTaskScript -Session $Session -TaskName $TaskName -ScriptText $ScriptText -TimeoutSeconds $remainingForRetry -ObserverSession $ObserverSession -RedactionValues $RedactionValues -Attempt ($Attempt + 1) -DeadlineUtc $DeadlineUtc)
+                        return (Invoke-ClagnosPackageWinRmTaskScript -Session $Session -TaskName $TaskName -ScriptText $ScriptText -TimeoutSeconds $remainingForRetry -ObserverSession $ObserverSession -RedactionValues $RedactionValues -Attempt ($Attempt + 1) -DeadlineUtc $DeadlineUtc -MonitorInactivity:$MonitorInactivity)
                     }
                     throw ("WinRM package operation '{0}' failed at phase '{1}': no guest CPU, network, disk, memory, or output progress for 60s after {2} attempt(s)." -f $TaskName,$lastMovementLabel,$Attempt)
                 }
@@ -363,6 +421,7 @@ function Invoke-ClagnosWinRmTaskBlocks {
     $successes = @()
     $warnings = @()
     $failures = @()
+    $rebootRequestedTasks = @()
     try {
         foreach ($task in @($TaskBlocks)) {
             $taskName = [string]$task.Name
@@ -391,12 +450,15 @@ function Invoke-ClagnosWinRmTaskBlocks {
             $taskDeadlineUtc = if ($hasPackageOperation) { $packageDeadlineUtc } else { [DateTime]::UtcNow.AddSeconds($taskTimeout) }
             $remainingTaskSeconds = [int][Math]::Floor(($taskDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
             if ($remainingTaskSeconds -le 0) { throw ("Package operation '{0}' exceeded its bounded deadline before guest execution." -f $taskName) }
-            $taskResult = Invoke-ClagnosPackageWinRmTaskScript -Session $session -TaskName $taskName -ScriptText ([string]$task.Script) -TimeoutSeconds $remainingTaskSeconds -ObserverSession $observerSession -RedactionValues @([string]$Runtime.Context.VmPass,[string]$Runtime.Context.VmAssistantPass) -DeadlineUtc $taskDeadlineUtc
+            $taskResult = Invoke-ClagnosPackageWinRmTaskScript -Session $session -TaskName $taskName -ScriptText ([string]$task.Script) -TimeoutSeconds $remainingTaskSeconds -ObserverSession $observerSession -RedactionValues @([string]$Runtime.Context.VmPass,[string]$Runtime.Context.VmAssistantPass) -DeadlineUtc $taskDeadlineUtc -MonitorInactivity:([string]$task.TaskType -eq 'package')
             $taskOutput = [string]$taskResult.Output
             foreach ($secret in @([string]$Runtime.Context.VmPass,[string]$Runtime.Context.VmAssistantPass)) {
                 if (-not [string]::IsNullOrWhiteSpace($secret)) { $taskOutput = $taskOutput.Replace($secret,'[redacted]') }
             }
             $taskOutputs += [pscustomobject]@{ Name = $taskName; ExitCode = [int]$taskResult.ExitCode; Output = $taskOutput }
+            foreach ($outputLine in @($taskOutput -split "`r?`n")) {
+                if ([string]$outputLine -match '^TASK_REBOOT_REQUIRED:(?<reason>.+)$') { $rebootRequestedTasks += $taskName; break }
+            }
             if ([int]$taskResult.ExitCode -ne 0) {
                 $failures += $taskName
                 if ($TaskOutcomeMode -eq 'strict') { throw ("WinRM package task '{0}' failed (exit {1}). {2}" -f $taskName,[int]$taskResult.ExitCode,$taskOutput.Trim()) }
@@ -421,6 +483,7 @@ function Invoke-ClagnosWinRmTaskBlocks {
         }
     }
     finally {
+        if ($null -ne $session) { Sync-ClagnosRemoteGuestLogs -Session $session -VmName ([string]$Runtime.Context.VmName) }
         if ($null -ne $observerSession) { Remove-PSSession -Session $observerSession -ErrorAction SilentlyContinue }
         if ($null -ne $session) { Remove-PSSession -Session $session -ErrorAction SilentlyContinue }
     }
@@ -439,7 +502,7 @@ function Invoke-ClagnosWinRmTaskBlocks {
         ErrorCount = @($failures).Count
         RebootCount = 0
         FinalRestartCount = 0
-        RebootRequired = $false
-        RebootRequestedTasks = @()
+        RebootRequired = (@($rebootRequestedTasks | Select-Object -Unique).Count -gt 0)
+        RebootRequestedTasks = @($rebootRequestedTasks | Select-Object -Unique)
     }
 }

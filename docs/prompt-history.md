@@ -6030,3 +6030,61 @@ Added shared profile-driven setup and purge PowerShell engines with VC1/VC2 comm
 Resolved live package setup findings: portable WinGet installation and dependent package ordering, signed AnyDesk fallback, and lifecycle budgets that allow Chrome and Visual Studio Code installation plus app-state verification. The final live `setup-all` pass reported 36/36 builtin packages installed and `installed=0, repaired=0, failed=0, skipped=0`. The tracked Visual Studio Code app-state was restored and verified for both managed profiles.
 
 Made queued Windows language capabilities safe across repeated runs, and made Docker/Ollama summary probes defer when their guest processes are not running. Setup now streams redacted summary output, the deep VM summary uses bounded waits, and NVDA/7-Zip path resolution covers the installed executable locations. The final setup left the VM running and passed RDP, SSH, WinRM, Azure property, package, vm-init, and vm-update checks. Code quality and the Windows PowerShell 5.1/7 compatibility matrix passed. The selected SKU still reports nested virtualization unavailable; the optional Turkish language capability remains deferred by Windows servicing, with a cooldown that prevents repeated download/restart attempts.
+
+### 2026-10-18 19:27 UTC
+**User Prompt**
+
+````text
+Plan update: preserve the current work and add these tasks:
+1. Move every Clagnos log file beneath the repository-root `.logs` directory and write all application activity there.
+2. Deeply review and enrich the schema for `vc1.env`, `vc2.env`, and future VC profiles. Keep the schemas consistent, reuse common variable names, and include as many per-VC settings as can safely be displayed or managed. Re-running the matching `setup-vc*.cmd` should apply supported profile changes to that VC. Ask me about any part of the requested schema that is unclear.
+3. Isolate and fix installation of the Turkish Windows language components on the existing VC. Repair the relevant vm-update task and run it on the target instead of rebuilding the VM. Install Turkish OS-level language support while keeping all current UI/default language settings in English so I can switch later.
+````
+
+**Assistant Summary**
+
+Moved Clagnos transcripts, task history, setup/remove output, and verified guest logs under ignored `.logs/`; remote Clagnos logs are removed only after their copied hashes verify. Expanded the shared VC profile schema, preserved global fallbacks through `@global`, kept unknown secrets marked rather than guessed, added profile population and Azure-observed component synchronization, and verified both existing VC profiles have no blank values. Reworked the Turkish language task and ran it against VC1 without rebuilding. The VM's language and English-default state were verified during the live run. Code and contract tests passed as recorded in release 2026.10.18.430.
+
+### 2026-10-18 20:34 UTC
+**User Prompt**
+
+````text
+Plan update: preserve the current plan and best-effort populate every variable in all existing `vc*.env` files with a valid value. Do not leave any VC profile variable blank.
+````
+
+**Assistant Summary**
+
+Populated the existing VC profiles from preserved values, global defaults, manifest defaults, and read-only Azure readbacks. The profiles now share the same schema and contain no blank values; no unknown password or other secret was guessed. Both profiles passed the value-presence check.
+
+### 2026-10-18 21:21 UTC
+**User Prompt**
+
+````text
+Important plan update: preserve all current plan work and simplify Azure DNS labels. For example, use `vc1` rather than `vc1-vm2`, and update the corresponding FQDNs and related values. Apply this to all active VCs and ensure future creates and updates use the same naming rule.
+````
+
+**Assistant Summary**
+
+Changed DNS naming to use the normalized VM name, added Azure availability validation before create and component changes, and wired normal update and profile-driven setup to reconcile and verify the label. Added profile synchronization and test coverage. The active VC DNS migration was completed in the following plan turn after both names were preflighted.
+
+### 2026-10-18 21:22 UTC
+**User Prompt**
+
+````text
+Important plan update: preserve all existing plan work and apply the requested DNS-label simplification to all active VCs and future setup/update flows. Use only the VM name, such as `vc1` or `vc2`, and keep the resulting FQDNs consistent.
+````
+
+**Assistant Summary**
+
+Continued the same DNS-label migration plan. The code and safety checks remained the same; only the two verified active Public IP labels were changed, once each, through Clagnos component menus.
+
+### 2026-10-18 22:28 UTC
+**User Prompt**
+
+````text
+Important plan update: preserve all plan work and fix the Turkish Windows language install/update task so it does not take so long. Five to ten minutes is acceptable; anything beyond fifteen minutes is not. Research a faster, straightforward Windows 11 PowerShell/DISM/CMD method using Microsoft documentation, GitHub, community feedback, and articles, then test and apply the best efficient approach.
+````
+
+**Assistant Summary**
+
+Replaced the slow Windows Update language scan with a bounded DISM path using Microsoft's matching Windows 11 24H2/25H2 Languages and Optional Features ISO. The task downloads the source with resume and a 600-second limit, installs only the Turkish display-language CAB and required Basic capability, skips optional OCR/speech/handwriting features, preserves the configured English default, and has a 900-second hard task timeout. Live inspection found Turkish and Basic already installed on VC1 after the earlier servicing attempt completed asynchronously; the updated Clagnos task then completed idempotently in about 36 seconds without a restart or another ISO download. VC1 and VC2 DNS labels were updated through Clagnos and verified to resolve to the same public IPs; VM size, disks, NICs, allocation, and Public IP SKU were unchanged. Windows PowerShell 5.1 and PowerShell 7 passed smoke 195/195 and TUI 180/180 on each host; code quality and documentation checks passed.

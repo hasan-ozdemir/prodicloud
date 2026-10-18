@@ -3,6 +3,19 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.18.430] - 2026-10-18
+
+### Changed
+- Consolidated Clagnos transcripts, task history, and verified guest log collection under the ignored repository-root `.logs/`; logs are retained until manually removed, and remote files are removed only after copied hashes verify.
+- Expanded and aligned per-VC environment profiles, populated existing VC profiles with non-empty effective values, and synchronized Azure-observed public-IP DNS settings back to the owning profile.
+- Normalized managed Azure public DNS labels to the VM names themselves and added availability preflight plus update/setup reconciliation.
+- Replaced the Turkish language task's slow Windows Update language scan with bounded DISM installation from Microsoft's matching Windows 11 language ISO. The task installs only the display language and required Basic capability, preserves English defaults, and enforces a 900-second task limit.
+
+### Validation
+- VC1's existing Turkish display language and `Language.Basic` capability were verified through the Clagnos WinRM task; its English system UI default remained selected. The already-installed state completed idempotently in about 36 seconds, without an ISO download or VM restart.
+- Updated the live DNS labels through Clagnos component menus. VC1 and VC2 resolve to `vc1.eastus.cloudapp.azure.com` and `vc2.germanywestcentral.cloudapp.azure.com`; VM size, disks, NICs, public IP addresses, allocation, and SKU remained unchanged.
+- PowerShell 5.1 and PowerShell 7 compatibility passed with 195/195 smoke checks and 180/180 TUI checks on each. Code quality, documentation, lifecycle, app-state, and sensitive-content checks passed.
+
 ## [2026.10.18.429] - 2026-10-18
 
 ### Added

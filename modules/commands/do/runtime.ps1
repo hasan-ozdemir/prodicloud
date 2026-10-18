@@ -556,9 +556,12 @@ function Invoke-ClagnosDoAzureAction {
     )
 
     try {
-        Invoke-TrackedAction -Label ("az " + (@($AzArguments) -join ' ')) -Action {
-            az @AzArguments
-            Assert-LastExitCode $AzContext
+        $timeoutSeconds = if ([string]::Equals([string]$ActionName,'restart',[System.StringComparison]::OrdinalIgnoreCase)) { 900 } else { [int]$script:AzCommandTimeoutSeconds }
+        Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds $timeoutSeconds -Action {
+            Invoke-TrackedAction -Label ("az " + (@($AzArguments) -join ' ')) -Action {
+                az @AzArguments
+                Assert-LastExitCode $AzContext
+            } | Out-Null
         } | Out-Null
     }
     catch {

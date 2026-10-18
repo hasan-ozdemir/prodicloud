@@ -131,6 +131,8 @@ Creating a virtual computer opens a numbered wizard. The configured/default OS, 
 
 The wizard accepts inbound TCP ports as comma-separated numbers and ascending ranges such as `22,80,443,3000-3300`; it validates ports from 1 through 65535, merges overlapping ranges, and adds the required SSH/RDP ports. OS disk-size text accepts `MB`, `GB`, or `TB` (for example `1MB`, `128GB`, or `1TB`) and normalizes to whole GiB within the Azure OS disk limit of 1–4095 GiB. Invalid entries are explained and requested again before the create command is dispatched.
 
+Azure public DNS labels follow the normalized VM name exactly (`vc1`, `vc2`), so a VM in `eastus` uses an FQDN such as `vc1.eastus.cloudapp.azure.com`. Create checks Azure's DNS availability API before provisioning and fails clearly if the name is already taken; it never appends a numeric suffix. A normal `update` reconciles an existing managed Public IP's DNS label to the VM name and verifies the resulting FQDN without changing the IP, NIC, disk, or network configuration. The selected `<vm-name>.env` profile records the verified `PUBLIC_IP_DNS_LABEL`.
+
 ### Prerequisites
 - Windows host with PowerShell and the Azure CLI available.
 - Azure subscription access with permission to create, update, and delete compute and networking resources.
@@ -156,10 +158,13 @@ The wizard accepts inbound TCP ports as comma-separated numbers and ascending ra
 
 ### First Configuration Pass
 1. Copy `clagnos.env.example` to `clagnos.env`.
-2. Use `clagnos.env` for `SELECTED_AZURE_SUBSCRIPTION_ID`, operator identity, naming templates, Azure/SSH timeouts, task paths, and `DEFAULT_*` values used only when creating a VC.
-3. Copy `vc.env.example` to `<vm-name>.env` only when preparing a profile manually. It contains that VC's resource group, OS, region, compute/image/disk, feature flags, connection ports, package transport, usernames, and passwords. The create wizard creates and saves this file for new VCs; existing VCs load their own profile by name.
-4. Set `SELECTED_COMPANY_NAME`, `SELECTED_COMPANY_WEB_ADDRESS`, `SELECTED_COMPANY_EMAIL_ADDRESS`, `SELECTED_EMPLOYEE_EMAIL_ADDRESS`, and `SELECTED_EMPLOYEE_FULL_NAME` in `clagnos.env` for Windows flows. Repo-managed public desktop web shortcuts require the company and employee identity inputs; business shortcuts use `SELECTED_COMPANY_NAME` plus `SELECTED_COMPANY_WEB_ADDRESS`, personal shortcuts use the email local-part from `SELECTED_EMPLOYEE_EMAIL_ADDRESS` as the Chrome `--profile-directory`, and future mail-facing shortcuts can reuse `SELECTED_COMPANY_EMAIL_ADDRESS`. The task normalizes profile-directory sources to lowercase before writing the Chrome profile name.
-5. Keep task-only constants in the owning task script's top config block. Runtime `*.env` files are local and git-ignored.
+2. Use `clagnos.env` for `SELECTED_AZURE_SUBSCRIPTION_ID`, host-only settings, naming templates, global target defaults, task paths, and `DEFAULT_*` values used when seeding new VCs. Target-facing values can be overridden per VC with the same variable name in that VC's profile.
+3. Copy `vc.env.example` to `<vm-name>.env` only when preparing a profile manually. It contains the VC's resource group, OS, region, compute/image/disk, feature flags, connection ports, component settings, task/package selections, package transport, usernames, and passwords. The create wizard creates and saves this file for new VCs; existing VCs load their own profile by name. `setup-vc*.cmd` adds missing schema keys while preserving existing profile values.
+4. Set `SELECTED_COMPANY_NAME`, `SELECTED_COMPANY_WEB_ADDRESS`, `SELECTED_COMPANY_EMAIL_ADDRESS`, `SELECTED_EMPLOYEE_EMAIL_ADDRESS`, and `SELECTED_EMPLOYEE_FULL_NAME` in `clagnos.env` for global Windows defaults. A VC profile can override those target-facing values. Business shortcuts use the company name/address; personal shortcuts use the email local-part for the Chrome `--profile-directory`, normalized to lowercase.
+5. Optional `VM_INIT_TASKS` and `VM_UPDATE_TASKS` select comma-separated task ids/numbers; `VM_PACKAGE_SETUP_PACKAGES` selects `builtin:<id>` and `custom:<id>` packages. Blank or `all` uses enabled catalog entries, `none` selects nothing, and profile values override global selections. `tasks.toml` remains the availability authority, so a disabled task/package cannot be re-enabled through selection.
+6. Task and package setting keys are allow-listed by their `task.json` or `package.json` `settings` metadata. Values use validated enums, booleans, integers, or bounded CSV lists; arbitrary environment variables are never injected into guest scripts. The language task defaults to English UI with Turkish available as an additional language. It installs the matching Turkish display-language CAB and only the required `Language.Basic` capability from Microsoft's Windows 11 24H2/25H2 Languages and Optional Features ISO using DISM, skipping optional OCR, speech, and handwriting downloads. The source download has a 600-second ceiling, the guest operation has a 12.5-minute internal deadline, and the task runner enforces a 900-second maximum. See [Microsoft's Windows 11 language-pack guidance](https://learn.microsoft.com/en-us/azure/virtual-desktop/windows-11-language-packs) and [DISM language servicing guidance](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/add-language-packs-to-windows?view=windows-11).
+7. Keep task-only constants in the owning task script's top config block. Runtime `*.env` files and all Clagnos transcripts/history are local and git-ignored; logs are stored under `.logs/`.
+8. `tools/populate-vc-env-profiles.ps1` best-effort fills missing values in existing root-level `vc*.env` files from the global defaults, manifest defaults, and Azure readbacks. It preserves all existing non-empty values. When there is no safe per-VC value, it writes `@global` to inherit the global/runtime default; an unknown credential is marked `@secret-required` and is deliberately never guessed.
 
 ### Fastest Safe Path To Value
 If you want the fastest safe path to value, use this order. The target outcome is not only "the VM exists"; it is "someone can connect and start real work quickly" with a machine that already looks curated. On the current Windows path that includes Store-aware public desktop shortcuts, managed short-launcher wrapping for overlong Chrome/Edge-style shortcut invocations, git-ignored task app-state plugins, sanitized package app-state archives versioned beside their package manifests, and WSL2 plus Docker Desktop prerequisite hardening before developer-runtime health is considered ready:
@@ -218,7 +223,7 @@ The profile-driven launchers use the current repository checkout and the selecte
 .\remove-vc2.cmd
 ```
 
-Both setup launchers call the shared `setup-vc.ps1` engine and read `{vm-name}.env`. WinGet-dependent packages declare the builtin Windows Package Manager as a setup dependency, and its status check requires a usable WinGet executable. The engine validates the saved OS, region, image, VM SKU, disk size/storage SKU, security and feature settings, managed NIC/VNet/subnet/NSG/public IP attachments, inbound TCP ports, and credentials before Azure changes. It persists normalized profile values before provisioning; Clagnos persists generated group/resource names before creating them. Existing VCs record Azure-verified network resource names in their VC profile, and setup verifies profile port ranges against the attached NSG rule. Each Azure command is pinned to the selected subscription id, regardless of the Azure CLI default subscription. Setup creates a missing VC, purges and recreates an interrupted managed partial create, safely resizes the VM or expands its OS disk when needed, re-runs idempotent vm-init/vm-update and package setup, and verifies the final Azure state plus RDP/SSH/WinRM. Package failures are reported after independent package work and final health checks. Transcripts are written under `%TEMP%\clagnos-setup-{vm-name}-*.log`; AnyDesk’s signed installer is verified locally and on the VM before installation.
+Both setup launchers call the shared `setup-vc.ps1` engine and read `{vm-name}.env`. WinGet-dependent packages declare the builtin Windows Package Manager as a setup dependency, and its status check requires a usable WinGet executable. The engine validates the saved OS, region, image, VM SKU, disk size/storage SKU, security and feature settings, managed NIC/VNet/subnet/NSG/public IP attachments, inbound TCP ports, and credentials before Azure changes. It persists normalized profile values before provisioning; Clagnos persists generated group/resource names before creating them. Existing VCs record Azure-verified network resource names in their VC profile, and setup verifies profile port ranges against the attached NSG rule. Each Azure command is pinned to the selected subscription id, regardless of the Azure CLI default subscription. Setup creates a missing VC, purges and recreates an interrupted managed partial create, safely resizes the VM or expands its OS disk when needed, re-runs the selected idempotent vm-init/vm-update tasks and package setup, and verifies the final Azure state plus RDP/SSH/WinRM. Package failures are reported after independent package work and final health checks. Transcripts are written under `.logs/`; AnyDesk’s signed installer is verified locally and on the VM before installation.
 
 Setup automatically removes and recreates the selected managed resource group when the VM’s region, OS image/type, security settings, disk storage SKU/size, or required resource inventory cannot be reconciled safely in place. Recreate deletes guest data on that VM. Unmanaged targets and ambiguous ownership stop before deletion. `-PreflightOnly` is read-only. `-ResumeAtPackageStage` requires an existing compatible managed VM and resumes at package prerequisites.
 
@@ -350,7 +355,7 @@ Windows is the richest end-user path today. Linux is already reliable, intention
 | `configure` | Review, edit, validate, preview, and save global `clagnos.env` settings and create defaults | Local global config only | Before create/update work, or when app-wide settings need editing | Validated global values with a next-create preview |
 | `create` | Create a fresh managed group, initial network, and VM | Azure-mutating | First deployment or explicit rebuild flow | New virtual computer infrastructure; guest stages remain separate. |
 | `initialize` | Run enabled `vm-init` tasks on an existing managed VM | Guest-mutating | Initial guest bootstrap | Initialized guest access and base configuration. |
-| `update` | Run enabled `vm-update` maintenance tasks | Guest-mutating | Ongoing maintenance | Package installers live in their isolated package catalogs. |
+| `update` | Normalize the VM public DNS label, then run enabled `vm-update` maintenance tasks | Azure DNS + guest mutation | Ongoing maintenance | DNS changes are limited to the selected managed Public IP label. Package installers live in their isolated package catalogs. |
 | `list` | Print managed inventory by type | Azure-read-only | Inventory, targeting, quick visibility | Managed group/resource listings |
 | `show` | Print a full managed report and optionally export redacted JSON | Azure-read-only | Health review, support handoff, release verification, diagnostic export | Screen report or redacted JSON file |
 | `do` | Apply lifecycle or repair actions | Azure-mutating or read-only for `status` | Power-state control, reapply, redeploy, hibernation flow | Target VM lifecycle action |
@@ -398,9 +403,9 @@ To compare the read-only package status path over both transports, run `tools/be
 
 | Usage pattern | Key parameters | What it does | When to use it | Important notes |
 | --- | --- | --- | --- | --- |
-| `.\cg.cmd update` | interactive | Runs vm-update maintenance tasks on an existing VM | Manual upkeep | Prompts for a subscription if needed. |
-| `.\cg.cmd update --auto --group=<resource-group> --vm-name=<vm-name>` | `--auto`, target selectors | Runs vm-update tasks | Controlled maintenance | Package operations are outside task-stage catalogs. |
-| `.\cg.cmd update --step=vm-update --auto --group=<resource-group> --vm-name=<vm-name>` | `--step` | Runs the maintenance task stage | Isolated maintenance | Use package for software tasks. |
+| `.\cg.cmd update` | interactive | Reconciles the existing VM's Public IP DNS label to its VM name and runs vm-update maintenance tasks | Manual upkeep | Prompts for a subscription if needed. |
+| `.\cg.cmd update --auto --group=<resource-group> --vm-name=<vm-name>` | `--auto`, target selectors | Reconciles the DNS label and runs vm-update tasks | Controlled maintenance | The Azure-side reconciliation touches only the Public IP DNS label; package operations remain outside task-stage catalogs. |
+| `.\cg.cmd update --step=vm-update --auto --group=<resource-group> --vm-name=<vm-name>` | `--step` | Reconciles the DNS label and runs the maintenance task stage | Isolated maintenance | Use package for software tasks. |
 
 #### `package`
 
@@ -467,7 +472,7 @@ To compare the read-only package status path over both transports, run `tools/be
 | `.\cg.cmd task --disable --vm-update-task=136 --windows` | `--disable`, task selector, platform | Disables one maintenance task in its catalog tasks.toml after typed confirmation; the task folder stays in place | Stop future task runs | Package availability is managed by the package command. |
 | `.\cg.cmd task --enable --vm-update-task=136 --windows` | `--enable`, task selector, platform | Enables one maintenance task in its catalog tasks.toml after typed confirmation | Allow future task runs | Leaves `task.json` unchanged and verifies the `tasks.toml` state. |
 | `.\cg.cmd task --run-vm-init 01 --group <resource-group> --vm-name <vm-name>` | `--run-vm-init`, target selectors | Runs one init task directly | Isolated bootstrap rerun | Uses Azure run-command against one managed VM. |
-| `.\cg.cmd task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name> --windows` | `--run-vm-update`, platform | Runs one update task directly | Isolated guest fix | Uses the SSH task runner against one managed VM; task-signaled immediate restarts still run, Isolated task reruns do not run package installers or their declared post-install tasks. |
+| `.\cg.cmd task --run-vm-update 10002 --group <resource-group> --vm-name <vm-name> --windows` | `--run-vm-update`, platform | Runs one update task directly | Isolated guest fix | Uses the transport declared by `task.json` (SSH by default, WinRM for selected Windows tasks); task-signaled immediate restarts still run. Isolated task reruns do not run package installers or their declared post-install tasks. |
 | `.\cg.cmd task --save-app-state --vm-update-task=115 --group=<resource-group> --vm-name=<vm-name> -s <subscription-guid>` | `--save-app-state`, `--vm-update-task`, target selectors | Captures one live task-owned app-state payload into the task-local `<task-folder>/app-state/app-state.zip` | Refreshing an operator-owned payload from the active VM | Cleanly skips when no capture coverage exists. |
 | `.\cg.cmd task --restore-app-state --vm-update-task=115 --group=<resource-group> --vm-name=<vm-name> -s <subscription-guid>` | `--restore-app-state`, `--vm-update-task`, target selectors | Replays one saved task-owned app-state payload to the active VM | Targeted state restore after reinstall or cleanup | Fails cleanly when the requested zip is missing or invalid, and otherwise verifies the guest replayed content and rolls back from guest-side backup staging on mismatch. |
 | `.\cg.cmd task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows` | `--save-app-state`, `--source=lm`, `--user=.current.` | Captures one local-machine task payload into the same task-local zip path | Refreshing a portable app-state payload from the operator machine | Windows-host-only. |
@@ -567,7 +572,7 @@ Practical outcomes:
 Practical outcomes:
 - the command fails fast if the managed resource group or VM does not exist, and it points the operator to `create`
 - auto mode requires an explicit platform plus `--group` and `--vm-name`
-- `update` runs enabled vm-update `vm-update` maintenance tasks against the existing VM
+- `update` normalizes the managed Public IP DNS label to the VM name, then runs enabled vm-update maintenance tasks against the existing VM
 - use `initialize` for `vm-init`; use `do --vm-action=reapply|redeploy` for explicit Azure-side repair
 
 ### Inspect Managed Resource Groups And VM State
@@ -692,7 +697,7 @@ Behavior notes:
 - It requires a managed resource group and VM, supplied directly or resolved from `ACTIVE_VM_NAME` and that VC's required profile.
 
 ### `update`
-Purpose: run enabled vm-update maintenance tasks on one existing managed VM.
+Purpose: normalize the existing managed VM's Public IP DNS label and run enabled vm-update maintenance tasks.
 
 Behavior notes:
 - `update` requires an existing managed resource group and VM. It does not create or redeploy the VM.
@@ -755,10 +760,10 @@ Purpose: list discovered init/update tasks in runtime order, run one task in iso
 Behavior notes:
 - shows builtin and custom task folders together
 - `--run-vm-init` routes one init task through Azure run-command and relays the full guest transcript immediately after that task finishes
-- `--run-vm-update` routes one update task through the SSH task runner and streams guest stdout/stderr live over SSH
+- `--run-vm-update` uses the task's declared transport and streams guest stdout/stderr live; SSH is the default, while Windows tasks can explicitly select WinRM
 - `--history` shows recent isolated/package outcomes and vm-init/vm-update stage summaries recorded on the operator machine without Azure access
 - history stores task names, target, outcome counts, duration, and deferred app-state task names; it does not save guest output or credentials
-- history is stored under the operator's local application state directory in `clagnos/task-runs.jsonl` and is trimmed to roughly 2,000 rows after the file grows beyond 5 MiB
+- history is stored in the git-ignored repo-local `.logs/task-runs.jsonl` and remains until an operator removes it
 - `--save-app-state` defaults to `--source=vm`; `--restore-app-state` defaults to `--target=vm`; both default to `--user=.all.`
 - `--user` accepts `.all.`, `.current.`, one explicit user, or a comma-separated user list such as `--user=operator,assistant`
 - managed VM app-state reads or writes the task-local payload at `<task-folder>/app-state/app-state.zip`
@@ -860,6 +865,9 @@ Every task is a portable folder under `vm-init/<platform>/{builtin,custom}/` or 
 - missing `priority`: default to the filename task number when available, otherwise `1000`
 - missing `timeout`: default to `180`
 - `initial`, `normal`, and `final` task folders from both `builtin` and `custom` catalogs are ordered by their effective priority and dependencies
+- `task.json` may declare `transport: "winrm"` for a Windows PowerShell task; other tasks default to SSH. The Windows language-settings task runs through WinRM.
+- task/package `settings` metadata declares the allowed env key, type, default, and validation bounds. Global values are fallback defaults; the selected VC profile overrides them. Only validated setting tokens declared by that manifest are substituted into guest scripts.
+- `VM_INIT_TASKS`, `VM_UPDATE_TASKS`, and `VM_PACKAGE_SETUP_PACKAGES` narrow a stage/setup-all run for one VC. Blank or `all` inherits enabled `tasks.toml` entries, `none` selects none, and explicit selections cannot bypass catalog-disabled state.
 
 ### Direct Task Execution With `task`
 Direct `task --run-vm-init` and `task --run-vm-update` are the main diagnosis path when one task needs to be rerun without replaying the entire orchestration chain.
@@ -885,7 +893,9 @@ This matters because:
 ### Global And VC Environment Files
 `clagnos.env` contains app-wide values: `ACTIVE_VM_NAME`, the Azure subscription selector, operator identity and shortcut overrides, naming templates, timeouts, task paths, and non-secret `DEFAULT_*` values used to seed newly created VCs. `configure` edits this global file only.
 
-Each VC has a `<vm-name>.env` file containing its `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, generated VNet/subnet/NSG/rule/public-IP/NIC/disk names, operating system, Azure region, VM image/size/disk, storage and security settings, hibernation/nested-virtualization intent, login users/passwords, connection ports, allowed ports, and package transport. The create wizard creates that file; target commands verify its name matches the profile identity. Passwords never go into `clagnos.env`.
+Each VC has a `<vm-name>.env` file containing its `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, generated VNet/subnet/NSG/rule/public-IP/NIC/disk names, operating system, Azure region, VM image/size/disk, storage and security settings, hibernation/nested-virtualization intent, login users/passwords, connection ports, allowed ports, package transport, task/package selections, task/package allow-listed settings, and supported component properties. The create wizard creates that file; setup runners add newly supported schema keys without overwriting existing values; target commands verify that the file name matches the profile identity. `@global` explicitly inherits a global/runtime default and is ignored as an override. `@secret-required` blocks automated use of a missing credential until an operator supplies it. Passwords never go into `clagnos.env`.
+
+All locally produced Clagnos transcripts, task history, and collected Clagnos-owned guest worker logs live under the git-ignored repository `.logs/` directory. Guest log collection uses WinRM, verifies each copied log hash, then removes only the matching completed guest log. Logs are retained locally until an operator deletes them.
 
 `SELECTED_AZURE_SUBSCRIPTION_ID`, company/employee identity keys, `VM_PRICE_COUNT_HOURS`, `AZURE_COMMAND_TIMEOUT_SECONDS`, and `PYSSH_CLIENT_PATH` are global. `PYSSH_CLIENT_PATH` defaults to `tools/pyssh/ssh_client.py`. `DEFAULT_*` keys seed create only; once a VC exists, its profile wins over global defaults.
 
@@ -912,14 +922,14 @@ Each VC has a `<vm-name>.env` file containing its `SELECTED_VM_NAME`, `SELECTED_
 - One orchestrator means less context switching between separate scripts for provisioning, update, connection, and repair.
 - The same command surface covers Windows and Linux, so platform differences stay narrow and explicit.
 - `create` now stays dedicated to one fresh managed resource group plus one fresh managed VM; use `delete` and then `create` when a destructive rebuild is intentional.
-- `initialize` runs initial guest bootstrap on an existing managed VM; `update` runs vm-update maintenance tasks without recreating or redeploying Azure resources.
+- `initialize` runs initial guest bootstrap on an existing managed VM; `update` normalizes only the Public IP DNS label and runs vm-update maintenance tasks without recreating or redeploying the VM.
 - `resize --disk-size=... --expand` gives a safe in-place managed OS disk growth path, while `resize --disk-size=... --shrink` stops early and explains the supported alternatives instead of risking data loss.
 - Direct `task` and `exec` flows let maintainers inspect and rerun exactly the step or task that matters.
 
 ### Daily Maintainer Flow
 1. Confirm the target with `list`, `show`, `configure`, and `do --vm-action=status`.
 2. Use `create` for first deploys and fresh environments; when a full destructive rebuild is intentional, run `delete` first and then run `create`.
-3. Use `initialize` for initial guest setup, `update` for ongoing vm-update maintenance, and `do` for explicit Azure lifecycle or repair actions.
+3. Use `initialize` for initial guest setup, `update` to normalize the VM's public DNS label and run ongoing vm-update maintenance, and `do` for explicit Azure lifecycle or repair actions.
 4. Use `task` and `exec` to isolate one failing init or update task instead of replaying the whole chain.
 5. Use `move`, `resize`, `set`, and `delete` only after the inventory and current state are explicit.
 
@@ -947,12 +957,12 @@ The packager requires aligned `CHANGELOG.md` and `release-notes.md` versions, a 
 6. `vm-update`
 7. `vm-summary`
 
-`create` runs the infrastructure steps through `vm-deploy`; `initialize` runs `vm-init`; `update` runs vm-update `vm-update` tasks. Package operations are invoked through `package`.
+`create` runs the infrastructure steps through `vm-deploy`; `initialize` runs `vm-init`; `update` normalizes the managed Public IP DNS label to the VM name before running `vm-update` tasks. Package operations are invoked through `package`.
 
 ### Init Tasks Versus Update Tasks
 - `vm-init` is Azure Run Command driven and is used for early guest bootstrap, one task at a time.
-- `vm-update` is pyssh driven and is used for richer task-by-task update flows after the VM is reachable.
-- `vm-init` relays the full guest transcript back to the local clagnos console as soon as each task completes, while `vm-update` streams guest stdout/stderr live over SSH while the task is still running.
+- `vm-update` uses pyssh by default for task-by-task updates; an individual Windows task can declare WinRM in `task.json`.
+- `vm-init` relays the full guest transcript back to the local clagnos console as soon as each task completes, while `vm-update` streams guest stdout/stderr over each task's declared transport.
 - Both stages use portable task folders, `tasks.toml` for availability, and `task.json` for ordering, timeout, and execution metadata. Both invoke the same per-task app-state restore helper when a matching task-local plugin zip exists.
 - `builtin` and `custom` tasks share the `initial`, `normal`, and `final` priority bands and are ordered by effective priority and dependencies.
 - Every task timeout is normalized to a minimum of `30` seconds and then rounded up in `15`-second slots.
@@ -1013,7 +1023,7 @@ Each task directory is self-contained. The folder holds one same-named script, o
 - Help output, docs, and runtime wording try to stay parallel across both platforms.
 
 ### End-To-End Create And Update Flow
-- `create` creates one fresh managed group, network, and VM; `initialize` runs vm-init; `update` runs vm-update maintenance tasks on an existing managed VM.
+- `create` creates one fresh managed group, network, and VM; `initialize` runs vm-init; `update` normalizes the Public IP DNS label to the VM name and runs vm-update maintenance tasks on an existing managed VM.
 - `package` manages catalogued package status/install/update/uninstall. `component` provides CRUD for the Azure resources Clagnos owns.
 - `update` requires one existing managed group and VM and never falls through to implicit fresh-create behavior.
 - `configure` edits only supported global `clagnos.env` values; VC-specific settings remain in their `<vm-name>.env` profile, and neither path syncs from live Azure state.
@@ -1042,7 +1052,7 @@ Each task directory is self-contained. The folder holds one same-named script, o
 ### Task Failures
 - Rerun the failing task with `task --run-vm-init` or `task --run-vm-update`.
 - Check task timeouts in `task.json` and task/package availability in the corresponding `tasks.toml`.
-- Vm-init and vm-update app-state replay are post-task and plug-in based. If `<task-folder>/app-state/app-state.zip` is absent, the task logs a skip and continues; if it exists, the shared SSH post-process deploys it without requiring a dedicated restore task, and vm-init defers replay until SSH is ready.
+- Vm-init and vm-update app-state replay are post-task and plug-in based. If `<task-folder>/app-state/app-state.zip` is absent, the task logs a skip and continues; if it exists, the shared post-process deploys it over the selected task transport without requiring a dedicated restore task, and vm-init defers replay until SSH is ready.
 - Managed app-state save and restore target only the `manager` and `assistant` OS profiles. Large generated payloads such as installers, models, telemetry trees, and low-value caches are intentionally pruned so the zips stay operator-owned and reusable instead of drifting into machine-image snapshots.
 - Local-machine app-state restore validates the current `task.json` allow-list and writes task-adjacent `backup-app-states/<task-name>/` snapshots plus `restore-journal.json` and `verify-report.json` before replaying onto the operator machine.
 - Windows public desktop shortcut validation names the exact missing `clagnos.env` keys, for example `SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow.` and `SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow.`

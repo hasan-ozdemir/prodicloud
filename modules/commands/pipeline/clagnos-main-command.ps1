@@ -111,7 +111,9 @@ function Invoke-ClagnosMain {
         }
 
         $logTimestamp = (Get-Date).ToString('ddMMMyy-HHmmss', [System.Globalization.CultureInfo]::InvariantCulture).ToLowerInvariant()
-        $logPath = Join-Path $repoRoot ("clagnos-log-{0}.txt" -f $logTimestamp)
+        $logRoot = Join-Path $repoRoot '.logs'
+        if (-not (Test-Path -LiteralPath $logRoot -PathType Container)) { New-Item -ItemType Directory -Path $logRoot -Force | Out-Null }
+        $logPath = Join-Path $logRoot ("clagnos-log-{0}.txt" -f $logTimestamp)
         Start-Transcript -Path $logPath -Force
         $script:TranscriptStarted = $true
 
@@ -389,6 +391,9 @@ function Invoke-ClagnosMain {
                 default {
                     Invoke-ClagnosPersistPendingSelections -Context $step1Context -EnvFilePath $envFilePath
                     $vmUpdateStageResult = Invoke-Step 'Step 6/7 - VM update' {
+                        if ([string]::Equals([string]$CommandName,'update',[System.StringComparison]::OrdinalIgnoreCase)) {
+                            Sync-ClagnosVmPublicDnsLabel -Context $step1Context | Out-Null
+                        }
                         if (@($updateDisabledTasks).Count -gt 0) {
                             $disabledNames = @($updateDisabledTasks | ForEach-Object { [string]$_.Name })
                             Write-Host ("Disabled update tasks (ignored): {0}" -f ($disabledNames -join ', ')) -ForegroundColor Yellow
@@ -413,7 +418,16 @@ function Invoke-ClagnosMain {
                             $sshMaxRetries = Resolve-ClagnosSshRetryCount -RetryText $sshMaxRetriesText -DefaultValue 3
                         }
 
-                        return (Invoke-ClagnosSshTaskBlocks -Platform $platform -RepoRoot $repoRoot -SshHost $sshHost -SshUser ([string]$step1Context.VmUser) -SshPassword ([string]$step1Context.VmPass) -SshPort ([string]$step1Context.SshPort) -AssistantUser ([string]$step1Context.VmAssistantUser) -ResourceGroup ([string]$step1Context.ResourceGroup) -VmName ([string]$step1Context.VmName) -TaskBlocks $updateTaskBlocks -TaskOutcomeMode $taskOutcomeMode -SshMaxRetries $sshMaxRetries -SshTaskTimeoutSeconds $sshTaskTimeoutSeconds -SshConnectTimeoutSeconds $sshConnectTimeoutSeconds -ConfiguredPySshClientPath $configuredPySshClientPath)
+                        $stageRuntime = [pscustomobject]@{
+                            Context = $step1Context
+                            Platform = [string]$platform
+                            RepoRoot = [string]$repoRoot
+                            EffectiveConfigMap = $effectiveConfigMap
+                            SshTaskTimeoutSeconds = [int]$sshTaskTimeoutSeconds
+                            SshConnectTimeoutSeconds = [int]$sshConnectTimeoutSeconds
+                            ConfiguredPySshClientPath = [string]$configuredPySshClientPath
+                        }
+                        return (Invoke-ClagnosTaskBlocksByDeclaredTransport -Runtime $stageRuntime -HostName $sshHost -TaskBlocks $updateTaskBlocks -TaskOutcomeMode $taskOutcomeMode -SshMaxRetries $sshMaxRetries)
                     }
                     [void]$completedStages.Add('vm-update')
                 }

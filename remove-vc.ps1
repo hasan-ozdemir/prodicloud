@@ -20,7 +20,7 @@ $script:RemoveGroups = @()
 $script:RemoveResourceNames = @($script:RemoveVmName)
 $script:RemoveCapturedResources = New-Object 'System.Collections.Generic.List[object]'
 $script:RemoveTranscriptStarted = $false
-$script:RemoveTranscriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-remove-' + $script:RemoveVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+$script:RemoveTranscriptPath = Join-Path (Join-Path $script:RemoveRepoRoot '.logs') ('clagnos-remove-' + $script:RemoveVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
 function Write-RemoveDoing {
     param([Parameter(Mandatory = $true)][string]$Action)
@@ -252,6 +252,7 @@ try {
     if (-not (Test-Path -LiteralPath $script:RemoveCgPath -PathType Leaf)) { throw 'cg.cmd was not found at the repository root.' }
     $script:RemoveSubscriptionId = Get-RemoveSubscriptionId
     if ([string]::IsNullOrWhiteSpace($script:RemoveSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in clagnos.env or pass -SubscriptionId.' }
+    if (-not (Test-Path -LiteralPath (Split-Path -Path $script:RemoveTranscriptPath -Parent) -PathType Container)) { New-Item -ItemType Directory -Path (Split-Path -Path $script:RemoveTranscriptPath -Parent) -Force | Out-Null }
     Start-Transcript -LiteralPath $script:RemoveTranscriptPath -Force | Out-Null
     $script:RemoveTranscriptStarted = $true
     Write-Host ("Removal transcript: {0}" -f $script:RemoveTranscriptPath) -ForegroundColor DarkGray

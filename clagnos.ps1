@@ -148,10 +148,21 @@ if ($MyInvocation.InvocationName -eq '.') {
 Write-ClagnosCliBanner
 
 try {
+    $script:DirectCommandTranscriptStarted = $false
+    $script:DirectCommandTranscriptPath = ''
     $commandToken = [string]$preParsedCommandToken
     $rawArgs = @($preParsedRawArgs)
 
     $parsedCli = Parse-ClagnosCliArguments -CommandToken $commandToken -RawArgs $rawArgs
+    if ([string]$parsedCli.Command -notin @('create','initialize','update')) {
+        $logsRoot = Join-Path $PSScriptRoot '.logs'
+        if (-not (Test-Path -LiteralPath $logsRoot -PathType Container)) { New-Item -ItemType Directory -Path $logsRoot -Force | Out-Null }
+        $timestamp = (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss-fff',[System.Globalization.CultureInfo]::InvariantCulture)
+        $safeCommand = ([string]$parsedCli.Command -replace '[^A-Za-z0-9_-]','-')
+        $script:DirectCommandTranscriptPath = Join-Path $logsRoot ("clagnos-{0}-{1}.txt" -f $safeCommand,$timestamp)
+        Start-Transcript -LiteralPath $script:DirectCommandTranscriptPath -Force | Out-Null
+        $script:DirectCommandTranscriptStarted = $true
+    }
     Invoke-ClagnosCommandDispatcher -CommandName ([string]$parsedCli.Command) -Options $parsedCli.Options -HelpTopic ([string]$parsedCli.HelpTopic)
 }
 catch {
@@ -165,5 +176,12 @@ catch {
     Write-Host ("Detail: {0}" -f $resolvedError.ErrorMessage)
     Write-Host ("Suggested action: {0}" -f $resolvedError.Hint) -ForegroundColor Cyan
     exit ([int]$resolvedError.Code)
+}
+finally {
+    if ($script:DirectCommandTranscriptStarted) {
+        try { Stop-Transcript -ErrorAction Stop | Out-Null }
+        catch { Write-Host ("Command transcript stop skipped: {0}" -f [string]$_.Exception.Message) -ForegroundColor Yellow }
+        finally { $script:DirectCommandTranscriptStarted = $false }
+    }
 }
 

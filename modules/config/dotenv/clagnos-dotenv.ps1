@@ -1,7 +1,7 @@
 # Dotenv read/write helpers.
 
 function Get-ClagnosGlobalEnvKeys {
-    return @(
+    $keys = @(
         'ACTIVE_VM_NAME',
         'SELECTED_AZURE_SUBSCRIPTION_ID',
         'TOP_STATUS_LINES',
@@ -49,6 +49,9 @@ function Get-ClagnosGlobalEnvKeys {
         'DEFAULT_VM_SSH_PORT',
         'DEFAULT_VM_RDP_PORT',
         'DEFAULT_TCP_PORTS',
+        'VM_INIT_TASKS',
+        'VM_UPDATE_TASKS',
+        'VM_PACKAGE_SETUP_PACKAGES',
         'DEFAULT_PACKAGE_TRANSPORT',
         'DEFAULT_WIN_VM_IMAGE',
         'DEFAULT_WIN_VM_SIZE',
@@ -68,10 +71,122 @@ function Get-ClagnosGlobalEnvKeys {
         'SSH_MAX_RETRIES',
         'PYSSH_CLIENT_PATH'
     )
+    return @($keys + @(Get-ClagnosManifestDeclaredSettingKeys) | Select-Object -Unique)
+}
+
+function Get-ClagnosManifestDeclaredSettingKeys {
+    if ($null -ne $script:ClagnosManifestSettingKeyCache) {
+        return @($script:ClagnosManifestSettingKeyCache)
+    }
+
+    $result = New-Object 'System.Collections.Generic.List[string]'
+    $repoRoot = Get-ClagnosRepoRoot
+    foreach ($relativeRoot in @('vm-init','vm-update','vm-packages')) {
+        $root = Join-Path $repoRoot $relativeRoot
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+        $manifestNames = if ($relativeRoot -eq 'vm-packages') { @('package.json') } else { @('task.json') }
+        foreach ($manifestName in $manifestNames) {
+            foreach ($manifestFile in @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter $manifestName -ErrorAction SilentlyContinue)) {
+                try {
+                    $manifest = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $manifestFile.FullName -Raw -ErrorAction Stop))
+                    if ($null -eq $manifest.settings) { continue }
+                    foreach ($setting in @($manifest.settings.PSObject.Properties)) {
+                        $key = [string]$setting.Name
+                        if ($key -notmatch '^[A-Z][A-Z0-9_]{1,63}$') { continue }
+                        if (-not $result.Contains($key)) { $result.Add($key) | Out-Null }
+                    }
+                }
+                catch { continue }
+            }
+        }
+    }
+    $script:ClagnosManifestSettingKeyCache = @($result.ToArray())
+    return @($script:ClagnosManifestSettingKeyCache)
+}
+
+function Get-ClagnosManifestSettingDescriptor {
+    param([Parameter(Mandatory = $true)][string]$Key)
+    $requestedKey = [string]$Key
+    if ($requestedKey -notmatch '^[A-Z][A-Z0-9_]{1,63}$') { return $null }
+    $matches = New-Object 'System.Collections.Generic.List[object]'
+    $repoRoot = Get-ClagnosRepoRoot
+    foreach ($relativeRoot in @('vm-init','vm-update','vm-packages')) {
+        $root = Join-Path $repoRoot $relativeRoot
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { continue }
+        $manifestName = if ($relativeRoot -eq 'vm-packages') { 'package.json' } else { 'task.json' }
+        foreach ($manifestFile in @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter $manifestName -ErrorAction SilentlyContinue)) {
+            try {
+                $manifest = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $manifestFile.FullName -Raw -ErrorAction Stop))
+                $property = if ($null -ne $manifest.settings) { $manifest.settings.PSObject.Properties[$requestedKey] } else { $null }
+                if ($null -ne $property) { $matches.Add($property.Value) | Out-Null }
+            }
+            catch { continue }
+        }
+    }
+    if ($matches.Count -eq 0) { return $null }
+    $first = ConvertTo-JsonCompat -InputObject $matches[0] -Depth 12
+    foreach ($descriptor in @($matches.ToArray() | Select-Object -Skip 1)) {
+        if (-not [string]::Equals($first,(ConvertTo-JsonCompat -InputObject $descriptor -Depth 12),[System.StringComparison]::Ordinal)) {
+            throw ("Task and package manifests declare conflicting setting rules for '{0}'." -f $requestedKey)
+        }
+    }
+    return $matches[0]
+}
+
+function Get-ClagnosManifestSettingValueMap {
+    param(
+        [AllowNull()][object]$Settings,
+        [hashtable]$ConfigMap = @{}
+    )
+
+    $values = @{}
+    if ($null -eq $Settings) { return $values }
+    foreach ($property in @($Settings.PSObject.Properties)) {
+        $key = [string]$property.Name
+        if ($key -notmatch '^[A-Z][A-Z0-9_]{1,63}$') { throw ("Manifest setting key '{0}' is invalid." -f $key) }
+        $descriptor = $property.Value
+        if ($null -eq $descriptor) { throw ("Manifest setting '{0}' requires a descriptor." -f $key) }
+        $kind = ([string]$descriptor.type).Trim().ToLowerInvariant()
+        $defaultValue = [string]$descriptor.default
+        $candidate = ''
+        if ($ConfigMap -and $ConfigMap.ContainsKey($key)) { $candidate = [string]$ConfigMap[$key] }
+        $value = if ([string]::IsNullOrWhiteSpace($candidate)) { $defaultValue } else { $candidate }
+        if ([string]::IsNullOrWhiteSpace($value)) { throw ("Manifest setting '{0}' has no value or default." -f $key) }
+        switch ($kind) {
+            'enum' {
+                $allowed = @($descriptor.allowedValues | ForEach-Object { [string]$_ })
+                if ($allowed.Count -lt 1 -or $allowed -notcontains $value) { throw ("Setting '{0}' must be one of: {1}." -f $key,($allowed -join ', ')) }
+            }
+            'boolean' {
+                if ($value -notmatch '^(?i:true|false)$') { throw ("Setting '{0}' must be true or false." -f $key) }
+                $value = $value.ToLowerInvariant()
+            }
+            'integer' {
+                $parsed = 0
+                if (-not [int]::TryParse($value,[ref]$parsed)) { throw ("Setting '{0}' must be an integer." -f $key) }
+                if ($null -ne $descriptor.minimum -and $parsed -lt [int]$descriptor.minimum) { throw ("Setting '{0}' must be at least {1}." -f $key,[int]$descriptor.minimum) }
+                if ($null -ne $descriptor.maximum -and $parsed -gt [int]$descriptor.maximum) { throw ("Setting '{0}' must be no more than {1}." -f $key,[int]$descriptor.maximum) }
+                $value = [string]$parsed
+            }
+            'csv' {
+                $items = @($value -split ',' | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+                $pattern = [string]$descriptor.itemPattern
+                if ([string]::IsNullOrWhiteSpace($pattern)) { throw ("CSV setting '{0}' requires an itemPattern." -f $key) }
+                if ($null -ne $descriptor.maxItems -and $items.Count -gt [int]$descriptor.maxItems) { throw ("Setting '{0}' accepts no more than {1} values." -f $key,[int]$descriptor.maxItems) }
+                foreach ($item in @($items)) { if ($item -notmatch $pattern) { throw ("Setting '{0}' contains an invalid value '{1}'." -f $key,$item) } }
+                $value = $items -join ','
+            }
+            default { throw ("Manifest setting '{0}' has unsupported type '{1}'." -f $key,$kind) }
+        }
+        if ($value.IndexOfAny([char[]]@("`r","`n",[char]0,[char]39,[char]34)) -ge 0) { throw ("Setting '{0}' contains characters that cannot be safely substituted into guest scripts." -f $key) }
+        $values[$key] = [string]$value
+    }
+    return $values
 }
 
 function Get-ClagnosVmScopedEnvKeys {
-    return @(
+    $keys = @(
+        'VC_PROFILE_SCHEMA_VERSION',
         'SELECTED_VM_NAME',
         'SELECTED_RESOURCE_GROUP',
         'SELECTED_VM_OS',
@@ -97,6 +212,55 @@ function Get-ClagnosVmScopedEnvKeys {
         'VM_RDP_PORT',
         'TCP_PORTS',
         'PACKAGE_TRANSPORT',
+        'VM_INIT_TASKS',
+        'VM_UPDATE_TASKS',
+        'VM_PACKAGE_SETUP_PACKAGES',
+        'VM_TASK_OUTCOME_MODE',
+        'SSH_TASK_TIMEOUT_SECONDS',
+        'SSH_CONNECT_TIMEOUT_SECONDS',
+        'SSH_MAX_RETRIES',
+        'VNET_ADDRESS_PREFIXES',
+        'SUBNET_ADDRESS_PREFIXES',
+        'SUBNET_NSG_NAME',
+        'NIC_ENABLE_IP_FORWARDING',
+        'NIC_PRIVATE_IP_ALLOCATION',
+        'NIC_PRIVATE_IP_ADDRESS',
+        'NIC_DNS_SERVERS',
+        'NIC_PUBLIC_IP_NAME',
+        'PUBLIC_IP_DNS_LABEL',
+        'PUBLIC_IP_ALLOCATION_METHOD',
+        'PUBLIC_IP_SKU',
+        'NSG_RULE_PRIORITY',
+        'NSG_RULE_DIRECTION',
+        'NSG_RULE_ACCESS',
+        'NSG_RULE_PROTOCOL',
+        'NSG_RULE_SOURCE_ADDRESS_PREFIXES',
+        'NSG_RULE_SOURCE_PORT_RANGES',
+        'NSG_RULE_DESTINATION_ADDRESS_PREFIXES',
+        'NSG_RULE_DESTINATION_PORT_RANGES',
+        'SELECTED_COMPANY_NAME',
+        'SELECTED_COMPANY_WEB_ADDRESS',
+        'SELECTED_COMPANY_EMAIL_ADDRESS',
+        'SELECTED_EMPLOYEE_EMAIL_ADDRESS',
+        'SELECTED_EMPLOYEE_FULL_NAME',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_LINKEDIN_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_YOUTUBE_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_GITHUB_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_TIKTOK_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_INSTAGRAM_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_FACEBOOK_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_X_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_SNAPCHAT_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_BUSINESS_NEXTSOSYAL_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_LINKEDIN_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_YOUTUBE_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_GITHUB_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_TIKTOK_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_INSTAGRAM_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_FACEBOOK_URL',
+        'WIN_PUBLIC_SHORTCUT_SOCIAL_PERSONAL_X_URL',
+        'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_HOME_URL',
+        'WIN_PUBLIC_SHORTCUT_WEB_BUSINESS_BLOG_URL',
         'WIN_VM_IMAGE',
         'WIN_VM_SIZE',
         'WIN_VM_DISK_SIZE_GB',
@@ -104,6 +268,7 @@ function Get-ClagnosVmScopedEnvKeys {
         'LIN_VM_SIZE',
         'LIN_VM_DISK_SIZE_GB'
     )
+    return @($keys + @(Get-ClagnosManifestDeclaredSettingKeys) | Select-Object -Unique)
 }
 
 function Get-ClagnosSupportedDotEnvKeys {
@@ -209,6 +374,7 @@ function Merge-ClagnosVmEnvironmentConfig {
     }
     foreach ($key in @(Get-ClagnosVmScopedEnvKeys)) {
         if ($profile.ContainsKey([string]$key) -and -not [string]::IsNullOrWhiteSpace([string]$profile[[string]$key])) {
+            if ([string]::Equals(([string]$profile[[string]$key]).Trim(),'@global',[System.StringComparison]::OrdinalIgnoreCase)) { continue }
             $effective[[string]$key] = [string]$profile[[string]$key]
         }
     }
@@ -432,7 +598,7 @@ function Set-DotEnvValue {
             Set-ClagnosEnvFileValue -Path $Path -Key $normalizedKey -Value $Value
             return
         }
-        if (@(Get-ClagnosVmScopedEnvKeys) -contains $normalizedKey) {
+        if (@(Get-ClagnosVmScopedEnvKeys) -contains $normalizedKey -and @(Get-ClagnosGlobalEnvKeys) -notcontains $normalizedKey) {
             $targetVm = [string]$VmName
             if ([string]::IsNullOrWhiteSpace([string]$targetVm) -and $script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_VM_NAME')) {
                 $targetVm = [string]$script:ConfigOverrides['SELECTED_VM_NAME']

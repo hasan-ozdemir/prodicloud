@@ -1,6 +1,20 @@
 {
   "priority": 136,
-  "timeout": 1635,
+  "timeout": 900,
+  "transport": "winrm",
+  "settings": {
+    "WIN_DEFAULT_UI_LANGUAGE": {
+      "type": "enum",
+      "default": "en-US",
+      "allowedValues": ["en-US", "tr-TR"]
+    },
+    "WIN_ADDITIONAL_LANGUAGES": {
+      "type": "csv",
+      "default": "tr-TR",
+      "itemPattern": "^(en-US|tr-TR)$",
+      "maxItems": 2
+    }
+  },
   "assets": [
     {
       "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",

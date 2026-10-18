@@ -35,7 +35,7 @@ function Show-ClagnosCommandHelpOverview {
         '  configure  Open the interactive global clagnos.env editor and validate saved settings safely.'
         '  create     Create a fresh managed resource group, network, and VM.'
         '  initialize Run vm-init tasks on one existing managed virtual computer.'
-        '  update     Run non-package maintenance tasks on one existing managed VM.'
+        '  update     Normalize the VM public DNS label and run non-package maintenance tasks on one managed VM.'
         '  list       List managed resource groups and managed Azure resources by type.'
         '  show       Print system and configuration dump for resource groups and VMs.'
         '  do         Apply one VM lifecycle action or print current VM state.'
@@ -196,7 +196,7 @@ function Show-ClagnosCommandHelpDetailed {
         'update' {
             Write-ClagnosHelpLines @(
                 'Command: update'
-                'Description: run enabled non-package vm-update maintenance tasks on one existing managed VM.'
+                'Description: normalize the managed Public IP DNS label to the VM name, then run enabled non-package vm-update maintenance tasks.'
                 'Usage:'
                 '  clagnos update [--windows|--linux] [--group <resource-group>] [--vm-name <vm-name>] [--subscription-id <subscription-id>] [--perf]'
                 '  clagnos update --auto [--subscription-id <subscription-id>] [--perf]'
@@ -209,7 +209,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos update --group <resource-group>'
                 '  clagnos update --auto -s <subscription-guid>'
                 '  clagnos update --auto --group <resource-group> --vm-name <vm-name> -s <subscription-guid>'
-                'Notes: update requires an existing managed resource group and VM. It does not create, redeploy, or initialize Azure resources; it runs enabled non-package vm-update maintenance tasks and then renders the read-only summary. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise ACTIVE_VM_NAME selects the VC profile containing the target group and VM name. Single-VM resolution remains available for an explicitly selected managed group. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-package maintenance tasks. vm-summary always renders, even for partial step windows.'
+                'Notes: update requires an existing managed resource group and VM. Before vm-update tasks, it checks the VM-name Public IP DNS label, updates only the DNS label when needed, verifies the FQDN, and records the value in the matching VC profile. It does not create, redeploy, or initialize Azure resources. Interactive mode prompts for Azure subscription when --subscription-id is omitted and asks yes/no/cancel only before the vm-update stage. Auto mode runs from the resolved managed target: CLI overrides win, otherwise ACTIVE_VM_NAME selects the VC profile containing the target group and VM name. Single-VM resolution remains available for an explicitly selected managed group. Reboot-signaling maintenance tasks restart the VM immediately and wait for recovery. The Windows update workflow retains its final restart after the non-package maintenance tasks. vm-summary always renders, even for partial step windows.'
             )
             return
         }
@@ -288,7 +288,7 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos task --save-app-state --source=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=lm --user=.current. --vm-update-task=115 --windows'
                 '  clagnos task --restore-app-state --target=vm --user=assistant --vm-update-task=115 --group <resource-group> --vm-name <vm-name>'
-                'Notes: --list, --history, --enable, and --disable are local task-catalog operations and do not require az login. --history reads the local task-runs.jsonl file on this machine. Enable/disable updates only the selected tasks.toml boolean after a typed confirmation and leaves the task folder and task.json unchanged. Use `package --action enable|disable` for package availability. Package app-state uses --package plus --package-catalog and shares the same VM/local-machine profile rules. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the SSH task runner and streams guest stdout/stderr live; it still honors task-signaled immediate restarts and does not perform the workflow-only final vm-update restart. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only and writes a restore journal plus backup root before local replay.'
+                'Notes: --list, --history, --enable, and --disable are local task-catalog operations and do not require az login. --history reads the git-ignored repo-local .logs/task-runs.jsonl file. Enable/disable updates only the selected tasks.toml boolean after a typed confirmation and leaves the task folder and task.json unchanged. Use `package --action enable|disable` for package availability. Package app-state uses --package plus --package-catalog and shares the same VM/local-machine profile rules. --run-vm-init uses Azure run-command and replays the full guest transcript after each task completes. --run-vm-update uses the task.json transport (SSH by default; selected Windows tasks may use WinRM) and streams guest output live; it still honors task-signaled immediate restarts and does not perform the workflow-only final vm-update restart. --save-app-state defaults to --source=vm and --restore-app-state defaults to --target=vm. Both default to --user=.all.. VM save/restore is SSH-based and remains limited to the managed manager/assistant profiles; vm-init app-state replay defers until SSH is ready. Local save/restore is Windows-host-only and writes a restore journal plus backup root before local replay.'
             )
             return
         }

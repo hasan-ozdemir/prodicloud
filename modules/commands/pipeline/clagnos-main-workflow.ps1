@@ -46,17 +46,95 @@ function Get-ClagnosReviewTaskRows {
     $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $DirectoryPath -Platform $Platform -Stage $Stage
     $activeTemplates = @($catalog.ActiveTasks)
     $disabledTasks = @($catalog.DisabledTasks)
-    $resolved = if (@($activeTemplates).Count -gt 0) {
-        @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks $activeTemplates -Context $Context)
+
+    $selectionKey = if ($Stage -eq 'init') { 'VM_INIT_TASKS' } else { 'VM_UPDATE_TASKS' }
+    $selectionText = ''
+    if ($Context -and $Context.ContainsKey('ConfigMap') -and $Context['ConfigMap'].ContainsKey($selectionKey)) {
+        $selectionText = [string]$Context['ConfigMap'][$selectionKey]
     }
-    else {
-        @()
+    $selectedTemplates = @(Select-ClagnosConfiguredTaskBlocks -ActiveTasks $activeTemplates -InventoryTasks @($catalog.InventoryTasks) -SelectionText $selectionText -Stage $Stage)
+    $resolved = if ($selectedTemplates.Count -gt 0) {
+        @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks $selectedTemplates -Context $Context)
     }
+    else { @() }
 
     return [pscustomobject]@{
         ActiveTasks = @($resolved)
         DisabledTasks = @($disabledTasks)
     }
+}
+
+function Invoke-ClagnosTaskBlocksByDeclaredTransport {
+    param(
+        [psobject]$Runtime,
+        [string]$HostName,
+        [object[]]$TaskBlocks,
+        [ValidateSet('continue','strict')][string]$TaskOutcomeMode,
+        [int]$SshMaxRetries = 1
+    )
+
+    $allResults = New-Object 'System.Collections.Generic.List[object]'
+    $cursor = 0
+    while ($cursor -lt @($TaskBlocks).Count) {
+        $task = $TaskBlocks[$cursor]
+        $transport = if ($task.PSObject.Properties.Match('Transport').Count -gt 0) { [string]$task.Transport } else { 'ssh' }
+        if ([string]::IsNullOrWhiteSpace($transport)) { $transport = 'ssh' }
+        $transport = $transport.ToLowerInvariant()
+        if ($transport -notin @('ssh','winrm')) { throw ("Task '{0}' declares unsupported transport '{1}'." -f [string]$task.Name,$transport) }
+        if ($transport -eq 'winrm' -and [string]$Runtime.Platform -ne 'windows') { throw ("Task '{0}' requires WinRM, which is available only for Windows guests." -f [string]$task.Name) }
+        $end = $cursor + 1
+        while ($end -lt @($TaskBlocks).Count) {
+            $nextTransport = if ($TaskBlocks[$end].PSObject.Properties.Match('Transport').Count -gt 0) { [string]$TaskBlocks[$end].Transport } else { 'ssh' }
+            if ([string]::IsNullOrWhiteSpace($nextTransport)) { $nextTransport = 'ssh' }
+            if (-not [string]::Equals($transport,$nextTransport,[System.StringComparison]::OrdinalIgnoreCase)) { break }
+            $end++
+        }
+        $segment = @($TaskBlocks[$cursor..($end - 1)])
+        if ($transport -eq 'winrm') {
+            if ($Runtime.Context -is [System.Collections.IDictionary] -and -not $Runtime.Context.Contains('PowerShellPort')) { $Runtime.Context['PowerShellPort'] = Get-ClagnosDefaultPowerShellPortText }
+            foreach ($winRmTask in @($segment)) {
+                $target = [pscustomobject]@{ VmName=[string]$Runtime.Context.VmName; ResourceGroup=[string]$Runtime.Context.ResourceGroup }
+                $options = @{ group=[string]$target.ResourceGroup; 'vm-name'=[string]$target.VmName }
+                if (-not [string]::IsNullOrWhiteSpace([string]$Runtime.Context.AzureSubscriptionId)) { $options['subscription-id'] = [string]$Runtime.Context.AzureSubscriptionId }
+                $winRmExecution = Invoke-ClagnosWinRmTaskBlocksWithGuestRestart -Runtime $Runtime -HostName $HostName -Target $target -TaskBlocks @($winRmTask) -TaskOutcomeMode $TaskOutcomeMode -Options $options -AutoMode:$true -WindowsFlag
+                $Runtime = $winRmExecution.Runtime
+                $HostName = [string]$winRmExecution.HostName
+                $allResults.Add($winRmExecution.Result) | Out-Null
+            }
+        }
+        else {
+            $result = Invoke-ClagnosSshTaskBlocks `
+                -Platform ([string]$Runtime.Platform) `
+                -RepoRoot ([string]$Runtime.RepoRoot) `
+                -SshHost $HostName `
+                -SshUser ([string]$Runtime.Context.VmUser) `
+                -SshPassword ([string]$Runtime.Context.VmPass) `
+                -SshPort ([string]$Runtime.Context.SshPort) `
+                -AssistantUser ([string]$Runtime.Context.VmAssistantUser) `
+                -ResourceGroup ([string]$Runtime.Context.ResourceGroup) `
+                -VmName ([string]$Runtime.Context.VmName) `
+                -TaskBlocks $segment `
+                -TaskOutcomeMode $TaskOutcomeMode `
+                -SshMaxRetries $SshMaxRetries `
+                -SshTaskTimeoutSeconds ([int]$Runtime.SshTaskTimeoutSeconds) `
+                -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) `
+                -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
+            $allResults.Add($result) | Out-Null
+        }
+        $cursor = $end
+    }
+
+    $propertyNames = @('SuccessCount','FailedCount','WarningCount','SignalWarningCount','ErrorCount','RebootCount','FinalRestartCount')
+    $summary = [ordered]@{}
+    foreach ($propertyName in $propertyNames) {
+        $summary[$propertyName] = [int](@($allResults | ForEach-Object { if ($_.PSObject.Properties.Match($propertyName).Count -gt 0) { [int]$_.$propertyName } else { 0 } } | Measure-Object -Sum).Sum)
+    }
+    foreach ($propertyName in @('SuccessTasks','FailedTasks','WarningTasks','SignalWarningTasks','RebootRequestedTasks')) {
+        $summary[$propertyName] = @($allResults | ForEach-Object { if ($_.PSObject.Properties.Match($propertyName).Count -gt 0) { @($_.$propertyName) } })
+    }
+    $summary['TaskOutputs'] = @($allResults | ForEach-Object { if ($_.PSObject.Properties.Match('TaskOutputs').Count -gt 0) { @($_.TaskOutputs) } })
+    $summary['RebootRequired'] = @($allResults | Where-Object { $_.PSObject.Properties.Match('RebootRequired').Count -gt 0 -and [bool]$_.RebootRequired }).Count -gt 0
+    return [pscustomobject]$summary
 }
 
 function Show-ClagnosTaskReviewRows {
@@ -74,7 +152,8 @@ function Show-ClagnosTaskReviewRows {
     foreach ($task in @($TaskBlocks)) {
         $priority = if ($task.PSObject.Properties.Match('Priority').Count -gt 0) { [int]$task.Priority } else { 1000 }
         $timeout = if ($task.PSObject.Properties.Match('TimeoutSeconds').Count -gt 0) { [int]$task.TimeoutSeconds } else { 180 }
-        Write-Host ("- #{0} | {1} | priority={2} | timeout={3}s" -f [string]$task.TaskNumber, [string]$task.Name, $priority, $timeout)
+        $transport = if ($task.PSObject.Properties.Match('Transport').Count -gt 0) { [string]$task.Transport } else { 'ssh' }
+        Write-Host ("- #{0} | {1} | priority={2} | timeout={3}s | transport={4}" -f [string]$task.TaskNumber, [string]$task.Name, $priority, $timeout, $transport)
     }
 }
 

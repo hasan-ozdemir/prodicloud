@@ -12,6 +12,8 @@ function Test-ClagnosConfigPlaceholderValue {
 
     $normalized = $Value.Trim().ToLowerInvariant()
     return (
+        $normalized -eq '@secret-required' -or
+        $normalized -eq '@prompt' -or
         $normalized.Contains('change_me') -or
         $normalized.Contains('changeme') -or
         $normalized.Contains('replace_me') -or
