@@ -1334,8 +1334,22 @@ function Invoke-ClagnosPackageOperation {
     if ([string]::IsNullOrWhiteSpace($PackageId) -and $Action -ne 'list') { throw 'A package id is required for this action.' }
     $packageProgressTarget = if ([string]::IsNullOrWhiteSpace($PackageId)) { 'catalog' } else { "package '$PackageId'" }
     Write-ClagnosActionProgress -Action ("{0} {1} in {2} catalog" -f [string]$Action,[string]$packageProgressTarget,[string]$Catalog)
-    $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
-    $platform = [string]$taskRuntime.Platform
+    $catalogOnlyAction = $Action -in @('enable','disable') -or
+        ($Action -in @('install','repair','update','reinstall') -and ($WindowsFlag -or $LinuxFlag))
+    $taskRuntime = $null
+    if ($catalogOnlyAction) {
+        # Availability and disabled-package checks use the global catalog platform;
+        # they must not require Azure access or a valid active VC profile.
+        $repoRoot = Get-ClagnosRepoRoot
+        $envFilePath = Join-Path $repoRoot 'clagnos.env'
+        $globalConfigMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
+        $catalogConfigMap = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfigMap -IgnoreActiveSelection
+        $platform = Resolve-ClagnosPlatformSelection -ConfigMap $catalogConfigMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $script:ConfigOverrides -DeferEnvWrite
+    }
+    else {
+        $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+        $platform = [string]$taskRuntime.Platform
+    }
     $packagesInCatalog = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
     if (@($packagesInCatalog).Count -eq 0 -and $Action -eq 'list') { Write-Host ("The {0} package catalog is empty for '{1}'." -f $Catalog, $platform) -ForegroundColor Yellow; return }
     if ($Action -in @('enable','disable')) {
@@ -1387,6 +1401,10 @@ function Invoke-ClagnosPackageOperation {
         $reason = [string]$package.UninstallPolicy.reason
         if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'This package cannot be safely removed on the selected Windows image.' }
         Throw-FriendlyError -Detail $reason -Code 66 -Summary ("'{0}' cannot be uninstalled on this Windows image." -f [string]$package.DisplayName) -Hint 'Keep the protected Windows component installed. Install, repair, update, and status remain available.'
+    }
+    if ($null -eq $taskRuntime) {
+        $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+        $platform = [string]$taskRuntime.Platform
     }
     $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'

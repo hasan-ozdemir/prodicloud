@@ -410,8 +410,15 @@ function Set-DotEnvValue {
         if ([string]::Equals($normalizedKey,'SELECTED_VM_NAME',[System.StringComparison]::OrdinalIgnoreCase)) {
             $targetVm = if (-not [string]::IsNullOrWhiteSpace([string]$Value)) { [string]$Value } else { [string]$VmName }
             if ([string]::IsNullOrWhiteSpace([string]$targetVm)) { throw 'ACTIVE_VM_NAME requires a VC name.' }
+            $targetProfilePath = Get-ClagnosVmEnvPath -VmName $targetVm -RepoRoot (Split-Path -Path $Path -Parent)
+            if (Test-Path -LiteralPath $targetProfilePath -PathType Leaf) {
+                $targetProfile = Read-DotEnvFile -Path $targetProfilePath -GlobalOnly
+                if ($targetProfile.ContainsKey('SELECTED_VM_NAME') -and -not [string]::Equals([string]$targetProfile['SELECTED_VM_NAME'],$targetVm,[System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw ("VC environment identity does not match its file name: {0}" -f $targetProfilePath)
+                }
+            }
+            Set-ClagnosEnvFileValue -Path $targetProfilePath -Key 'SELECTED_VM_NAME' -Value $targetVm
             Set-ClagnosEnvFileValue -Path $Path -Key 'ACTIVE_VM_NAME' -Value $targetVm
-            Set-ClagnosEnvFileValue -Path (Get-ClagnosVmEnvPath -VmName $targetVm -RepoRoot (Split-Path -Path $Path -Parent)) -Key 'SELECTED_VM_NAME' -Value $targetVm
             return
         }
         if ([string]::Equals($normalizedKey,'ACTIVE_VM_NAME',[System.StringComparison]::OrdinalIgnoreCase)) {
@@ -428,7 +435,15 @@ function Set-DotEnvValue {
                 $targetVm = [string]$globalMap['ACTIVE_VM_NAME']
             }
             if ([string]::IsNullOrWhiteSpace([string]$targetVm)) { throw ("VM-scoped environment value '{0}' requires a selected VC." -f $normalizedKey) }
-            Set-ClagnosEnvFileValue -Path (Get-ClagnosVmEnvPath -VmName $targetVm -RepoRoot (Split-Path -Path $Path -Parent)) -Key $normalizedKey -Value $Value
+            $targetProfilePath = Get-ClagnosVmEnvPath -VmName $targetVm -RepoRoot (Split-Path -Path $Path -Parent)
+            if (Test-Path -LiteralPath $targetProfilePath -PathType Leaf) {
+                $targetProfile = Read-DotEnvFile -Path $targetProfilePath -GlobalOnly
+                if ($targetProfile.ContainsKey('SELECTED_VM_NAME') -and -not [string]::Equals([string]$targetProfile['SELECTED_VM_NAME'],$targetVm,[System.StringComparison]::OrdinalIgnoreCase)) {
+                    throw ("VC environment identity does not match its file name: {0}" -f $targetProfilePath)
+                }
+            }
+            Set-ClagnosEnvFileValue -Path $targetProfilePath -Key 'SELECTED_VM_NAME' -Value $targetVm
+            Set-ClagnosEnvFileValue -Path $targetProfilePath -Key $normalizedKey -Value $Value
             return
         }
         if (-not (@(Get-ClagnosGlobalEnvKeys) -contains $normalizedKey)) { throw ("Environment key '{0}' is not valid in clagnos.env." -f $normalizedKey) }

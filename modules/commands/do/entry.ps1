@@ -8,7 +8,9 @@ function Invoke-ClagnosDoCommand {
 
     $repoRoot = Get-ClagnosRepoRoot
     $envFilePath = Join-Path $repoRoot 'clagnos.env'
-    $configMap = Read-DotEnvFile -Path $envFilePath
+    $hasExplicitTarget = -not [string]::IsNullOrWhiteSpace([string](Get-ClagnosCliOptionText -Options $Options -Name 'group')) -or
+        -not [string]::IsNullOrWhiteSpace([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name'))
+    $configMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly:$hasExplicitTarget
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'do'
     $action = Resolve-ClagnosDoActionName -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-action')) -AllowEmpty
     $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup ([string]$target.ResourceGroup) -VmName ([string]$target.VmName)

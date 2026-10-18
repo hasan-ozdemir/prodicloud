@@ -3054,7 +3054,7 @@ function Show-ClagnosUiVirtualComputers {
         } | Select-Object -First 1)
         if (@($selectedVm).Count -gt 0) {
             $selectedVmName = [string]$selectedVm[0].name
-            Set-DotEnvValue -Path (Join-Path $script:ClagnosUiRepoRoot 'clagnos.env') -Key 'ACTIVE_VM_NAME' -Value $selectedVmName
+            Set-DotEnvValue -Path (Join-Path $script:ClagnosUiRepoRoot 'clagnos.env') -Key 'SELECTED_VM_NAME' -Value $selectedVmName
             $script:ClagnosUiSelectedVmName = $selectedVmName
             $script:ClagnosUiSelectedResourceGroup = [string]$selectedVm[0].ClagnosResourceGroup
             Show-ClagnosUiVmMenu -Vm $selectedVm[0]

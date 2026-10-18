@@ -3,6 +3,18 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.18.427] - 2026-10-18
+
+### Fixed
+- Fixed the remaining smoke-test contract failures across VM-profile fixtures, moved vm-update task paths, CLI help, WinRM mocks, app-state catalog fixtures, and package install expectations.
+- Made package enable/disable and disabled-package preflight resolve catalog state without requiring Azure target resolution or a valid active VC profile.
+- Made explicit `do --group/--vm-name` targets independent of an unrelated active VC profile, and made VM-scoped environment writes seed and validate `SELECTED_VM_NAME` before storing target settings.
+- Isolated the real-`cg.cmd` TUI selection test from local configuration files and verified that selecting a VM persists its active name in the test profile.
+
+### Validation
+- The PowerShell compatibility matrix passed on Windows PowerShell 5.1 and PowerShell 7: smoke checks 193/193 and TUI checks 180/180 on each target.
+- The code-quality audit, package lifecycle and app-state contracts, documentation contract, release package check, and sensitive-content audit passed. No Azure resources were changed.
+
 ## [2026.10.18.426] - 2026-10-18
 
 ### Added

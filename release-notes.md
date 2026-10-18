@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.18.427 - 2026-10-18
+
+### Summary
+The remaining PowerShell smoke-test failures are fixed, and both supported PowerShell hosts now pass the compatibility matrix.
+
+### Highlights
+- Package enable/disable operations and disabled-package preflight no longer depend on Azure target resolution or a valid active VC profile.
+- Explicit VM lifecycle commands use their selected target even if the unrelated active profile is stale.
+- VM-scoped environment writes now preserve the profile identity contract; TUI test selection is isolated from operator configuration.
+- Updated moved-task, help, WinRM, app-state, and package lifecycle test contracts to match current runtime behavior.
+
+### Validation
+- Windows PowerShell 5.1 and PowerShell 7 compatibility matrices passed: 193/193 smoke checks and 180/180 TUI checks per host.
+- Code-quality, package lifecycle, app-state, documentation, sensitive-content, and release-package checks passed. No Azure resources were mutated.
+
 ## Release 2026.10.18.426 - 2026-10-18
 
 ### Summary

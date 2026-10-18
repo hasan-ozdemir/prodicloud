@@ -5986,3 +5986,14 @@ Complete the package lifecycle work for all 36 Windows VM setup packages. Ensure
 **Assistant Summary**
 
 Hardened the Windows builtin package lifecycle paths, added a live WinRM package E2E runner with per-operation reports, bounded timeouts, guest activity observation, and Azure infrastructure comparison, and updated package-specific repair, update, uninstall, and reinstall behavior. Windscribe now reads the active service identity's persisted firewall state and runs its signed uninstall through a password-logon scheduled task without requiring an interactive desktop. Continued the package-by-package live sequence without rebuilding or restarting the full catalog: Windscribe and Node.js each passed install, repair, update, uninstall, install, reinstall, and final status; the Windscribe run confirmed `manager-desktop=absent`. The final read-only inventory showed all 36 builtin packages installed. The VM remained running at its existing size, disk, and network configuration. Package lifecycle, app-state, documentation, sensitive-content, and TUI checks passed (180/180 TUI scenarios). The compatibility smoke suite passed 179 checks and retains 14 unrelated legacy fixture, path, help, and task-contract failures. Windows Package Manager and Microsoft Edge uninstall/reinstall remain intentionally blocked by the Windows image policy.
+
+### 2026-10-18 08:57 UTC
+**User Prompt**
+
+````text
+Complete the remaining plan work by realistically fixing all 14 legacy fixture, path, help, and task-contract failures in the repository smoke suite. Finish the work so the plan has no open tasks and all relevant checks pass.
+````
+
+**Assistant Summary**
+
+Fixed the runtime and fixture causes behind all 14 smoke failures. Package catalog enable/disable and disabled-action checks now run without resolving an Azure target or loading the active VC profile. Explicit VM lifecycle targets read only global configuration before resolving their requested profile. VM-scoped environment writes seed and validate `SELECTED_VM_NAME`; the TUI selection test now uses an isolated temporary repo profile and cannot alter the operator's local files. Updated tests to discover moved task paths, match the current CLI help and package installers, include WinRM session options, construct realistic task catalog metadata, and validate actual Git ignore behavior. Restored the local active VM pointer after cleaning a test-generated fixture profile. The PowerShell compatibility matrix passed on Windows PowerShell 5.1 and PowerShell 7, with 193/193 smoke checks and 180/180 TUI checks on each. Code-quality, package lifecycle, app-state, documentation, release-package, and sensitive-content checks passed. No Azure resource was changed.

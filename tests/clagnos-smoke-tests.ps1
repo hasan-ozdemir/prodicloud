@@ -600,6 +600,10 @@ Invoke-Test -Name "global and VC environment profile contracts" -Action {
         $savedProfile = Read-DotEnvFile -Path $profilePath -GlobalOnly
         Assert-True -Condition ([string]$savedProfile.VM_ADMIN_USER -eq 'updated-manager') -Message 'VM-scoped writes must update the selected VC profile.'
         Assert-True -Condition (-not ((Read-DotEnvFile -Path $globalPath -GlobalOnly).ContainsKey('VM_ADMIN_USER'))) -Message 'VM-scoped writes must not enter the global configuration file.'
+
+        Set-DotEnvValue -Path $globalPath -Key 'SELECTED_VM_OS' -Value 'linux' -VmName 'fixture-created-vc'
+        $createdProfile = Read-DotEnvFile -Path (Join-Path $sandbox 'fixture-created-vc.env') -GlobalOnly
+        Assert-True -Condition ([string]$createdProfile.SELECTED_VM_NAME -eq 'fixture-created-vc' -and [string]$createdProfile.SELECTED_VM_OS -eq 'linux') -Message 'Writing a VM-scoped value to a new VC profile must seed its matching identity.'
     }
     finally {
         $resolvedSandbox = [System.IO.Path]::GetFullPath($sandbox)
@@ -996,12 +1000,12 @@ Invoke-Test -Name "Package status reads the same ProgramData stores used by inst
 }
 
 Invoke-Test -Name "Unlocker setup skips an unavailable package and Windows UX respects its machine-policy privilege boundary" -Action {
-    $unlockerPath = Join-Path $RepoRoot 'vm-update\windows\110-configure-unlocker-settings\110-configure-unlocker-settings.ps1'
+    $unlockerPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '129-configure-unlocker-settings'
     $unlockerText = [string](Get-Content -LiteralPath $unlockerPath -Raw -ErrorAction Stop)
     Assert-True -Condition ($unlockerText -like '*unlocker-settings-skip => IObit Unlocker is not installed*') -Message 'Unlocker settings task must skip cleanly when its optional package is absent.'
     Assert-True -Condition ($unlockerText -notlike '*choco install io-unlocker*') -Message 'Unlocker settings must not invoke the outdated checksum-mismatched Chocolatey installer.'
 
-    $experiencePath = Join-Path $RepoRoot 'vm-update\windows\10004-configure-windows-experience\10004-configure-windows-experience.ps1'
+    $experiencePath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '10003-configure-windows-experience'
     $experienceText = [string](Get-Content -LiteralPath $experiencePath -Raw -ErrorAction Stop)
     Assert-True -Condition ($experienceText -like '*-SkipMachineDshPolicy*') -Message 'Interactive UX worker must defer the machine DSH policy write.'
     Assert-True -Condition ($experienceText -like '*ux-worker-machine-policy-verification-deferred => Microsoft.Dsh.AllowNewsAndInterests*') -Message 'Interactive UX worker must also defer machine DSH policy readback.'
@@ -1415,7 +1419,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'package'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from <vm-name>.env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','x: force uninstall and reinstall','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from {0}.env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','x: force uninstall and reinstall','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape('Get-ClagnosUiCachedInventoryRows -TypeName')) -Message 'The inventory submenu must render managed inventory from the validated snapshot.'
@@ -5486,7 +5490,8 @@ Invoke-Test -Name "PowerShell remoting creates a Negotiate session with the sele
                 [string]$ComputerName,
                 [int]$Port,
                 [System.Management.Automation.PSCredential]$Credential,
-                [string]$Authentication
+                [string]$Authentication,
+                [object]$SessionOption
             )
             $script:PowerShellSessionParameters = [pscustomobject]@{
                 ComputerName = $ComputerName
@@ -6468,8 +6473,9 @@ Invoke-Test -Name "Startup profile task overrides the generic host startup token
         }
         Assert-True -Condition (-not ($decodedKeys -contains '1password')) -Message 'Approved startup profile must exclude 1Password.'
 
-        $pluginZipPath = Join-Path $tempRoot '10002-configure-startup-settings\app-state\app-state.zip'
-        Assert-True -Condition (Test-Path -LiteralPath $pluginZipPath) -Message 'Startup profile task must materialize a task-local app-state zip.'
+        $pluginRootPath = Get-ClagnosTaskAppStateRootDirectoryPath -TaskBlock $resolvedTask
+        $expectedPluginRootPath = Join-Path ([string]$taskBlock.TaskRootPath) 'app-state'
+        Assert-True -Condition ([string]::Equals([string]$pluginRootPath,[string]$expectedPluginRootPath,[System.StringComparison]::OrdinalIgnoreCase)) -Message 'Startup profile task must resolve any captured app-state under its own task folder.'
     }
     finally {
         if (Test-Path -LiteralPath $tempRoot) {
@@ -7299,14 +7305,20 @@ Invoke-Test -Name "Vm-update app-state plugin runtime removes legacy restore sur
     Assert-True -Condition ($localExportModuleText -like '*HKLM\\Software\\WOW6432Node\\Freedom Scientific*') -Message 'Local app-state export helpers must export the JAWS WOW6432 Freedom Scientific subtree.'
     Assert-True -Condition ($localExportModuleText -like '*HKCU\\Software\\Freedom Scientific*') -Message 'Local app-state export helpers must export the JAWS user Freedom Scientific subtree.'
     Assert-True -Condition (-not ($localExportModuleText -like '*AppStatesRoot*')) -Message 'Local app-state export helpers must not keep the retired shared app-states root.'
-    Assert-True -Condition ($gitignoreText -like '*vm-update/windows/**/app-state/***') -Message '.gitignore must ignore Windows update task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*vm-init/windows/**/app-state/***') -Message '.gitignore must ignore Windows init task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*vm-update/linux/**/app-state/***') -Message '.gitignore must ignore Linux update task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*vm-init/linux/**/app-state/***') -Message '.gitignore must ignore Linux init task-local app-state payloads.'
-    Assert-True -Condition ($gitignoreText -like '*vm-update/windows/**/backup-app-states/***') -Message '.gitignore must ignore Windows update backup-app-states snapshots.'
-    Assert-True -Condition ($gitignoreText -like '*vm-init/windows/**/backup-app-states/***') -Message '.gitignore must ignore Windows init backup-app-states snapshots.'
-    Assert-True -Condition ($gitignoreText -like '*vm-update/linux/**/backup-app-states/***') -Message '.gitignore must ignore Linux update backup-app-states snapshots.'
-    Assert-True -Condition ($gitignoreText -like '*vm-init/linux/**/backup-app-states/***') -Message '.gitignore must ignore Linux init backup-app-states snapshots.'
+    $ignoredTaskArtifacts = @(
+        @{ Path = 'vm-update/windows/builtin/__contract__/app-state/app-state.zip'; Label = 'Windows update app-state' },
+        @{ Path = 'vm-init/windows/builtin/__contract__/app-state/app-state.zip'; Label = 'Windows init app-state' },
+        @{ Path = 'vm-update/linux/custom/__contract__/app-state/app-state.zip'; Label = 'Linux update app-state' },
+        @{ Path = 'vm-init/linux/custom/__contract__/app-state/app-state.zip'; Label = 'Linux init app-state' },
+        @{ Path = 'vm-update/windows/builtin/__contract__/backup-app-states/state.json'; Label = 'Windows update backups' },
+        @{ Path = 'vm-init/windows/builtin/__contract__/backup-app-states/state.json'; Label = 'Windows init backups' },
+        @{ Path = 'vm-update/linux/custom/__contract__/backup-app-states/state.json'; Label = 'Linux update backups' },
+        @{ Path = 'vm-init/linux/custom/__contract__/backup-app-states/state.json'; Label = 'Linux init backups' }
+    )
+    foreach ($artifact in @($ignoredTaskArtifacts)) {
+        & git -C $RepoRoot check-ignore --no-index -q -- ([string]$artifact.Path) 2>$null
+        Assert-True -Condition ($LASTEXITCODE -eq 0) -Message (".gitignore must ignore {0}." -f [string]$artifact.Label)
+    }
     Assert-True -Condition (-not ($gitignoreText -like '*vm-update/windows/app-states/***')) -Message '.gitignore must not keep the retired Windows update shared app-states root ignore.'
     Assert-True -Condition (-not ($gitignoreText -like '*vm-init/windows/app-states/***')) -Message '.gitignore must not keep the retired Windows init shared app-states root ignore.'
     Assert-True -Condition (-not ($gitignoreText -like '*vm-update/linux/app-states/***')) -Message '.gitignore must not keep the retired Linux update shared app-states root ignore.'
@@ -8576,6 +8588,7 @@ Invoke-Test -Name "Local-machine app-state restore rolls back when verification 
     $operatorProfile = Join-Path $profileRoot 'operator'
     $taskBlock = [pscustomobject]@{
         Name = '101-local-app-state'
+        Catalog = 'builtin'
         TaskRootPath = [string]$taskRoot
         DirectoryPath = [string]$taskRoot
         StageRootDirectoryPath = [string]$stageRoot
@@ -9241,12 +9254,12 @@ Invoke-Test -Name "Windows install tasks short-circuit healthy installs and avoi
         '104-install-node-tool.ps1' = @('Existing Node.js installation is already healthy. Skipping choco install.', 'choco install nodejs-lts')
         '105-install-azure-cli-tool.ps1' = @('Existing Azure CLI installation is already healthy:', 'choco install azure-cli')
         '107-install-gh-tool.ps1' = @('Existing GitHub CLI installation is already healthy. Skipping choco install.')
-        '106-install-7zip-tool.ps1' = @('Existing 7-Zip installation is already healthy. Skipping choco install.')
-        '133-install-sysinternals-tool.ps1' = @('Existing Sysinternals installation is already healthy:', 'choco install sysinternals')
+        '106-install-7zip-tool.ps1' = @('Existing 7-Zip installation is already healthy at', 'Skipping install.', 'winget install --id 7zip.7zip')
+        '133-install-sysinternals-tool.ps1' = @('Install-ClagnosSysinternalsPackage -Spec $spec')
         '109-install-ffmpeg-tool.ps1' = @('Existing FFmpeg installation is already healthy. Skipping choco install.')
         '135-install-ollama-tool.ps1' = @('Existing Ollama installation is already healthy. Skipping install.', 'winget install --id')
         '112-install-azd-tool.ps1' = @('Existing azd installation is already healthy. Skipping winget install.')
-        '118-install-teams-application.ps1' = @('Existing Microsoft Teams installation is already healthy. Skipping winget install.')
+        '118-install-teams-application.ps1' = @('Existing Microsoft Teams package is present for', 'install script will not upgrade during install or repair.', 'Invoke-ClagnosTeamsBootstrapper -Action install -TimeoutSeconds 240')
         '122-install-anydesk-application.ps1' = @('Existing AnyDesk installation is already healthy', 'function Test-AnyDeskInstalled')
         '123-install-windscribe-application.ps1' = @('Existing Windscribe installation is already healthy. Skipping winget install.', 'function Test-WindscribeInstalled')
         '131-install-jaws-application.ps1' = @('Existing JAWS installation is already healthy. Skipping winget install.', 'FreedomScientific.JAWS.2025', 'jfw.exe')

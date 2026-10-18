@@ -918,12 +918,38 @@ Invoke-TuiTest -Name 'Virtual computers create, refresh, and return to the previ
 }
 
 Invoke-TuiTest -Name 'Virtual computer numeric selection opens that VC' -Action {
-    $script:TuiVirtualComputers = @($script:TuiWindowsVm, (New-TuiVmFixture -Platform Linux))
-    $script:TuiVirtualComputers[1].name = 'fixture-linux'
-    Set-TuiChoices -Choices @('2','b','b')
-    Show-ClagnosUiVirtualComputers
-    Assert-Tui -Condition ($script:TuiVmDetailsCount -eq 1) -Message 'Selecting a VM number must enter its detail screen.'
-    Assert-TuiOutputContains -Text '2. fixture-linux | Linux' -Message 'VC rows must identify the selected item and its platform.'
+    $previousUiRepoRoot = [string]$script:ClagnosUiRepoRoot
+    $originalSetDotEnvValue = (Get-Command Set-DotEnvValue -CommandType Function -ErrorAction Stop).ScriptBlock
+    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-vc-selection-fixture-' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $profileRoot -Force
+    $script:ClagnosUiRepoRoot = $profileRoot
+    Set-Content -LiteralPath (Join-Path $profileRoot 'clagnos.env') -Value @('ACTIVE_VM_NAME=fixture-vc','SELECTED_AZURE_SUBSCRIPTION_ID=00000000-0000-4000-8000-000000000001') -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-vc.env') -Value @('SELECTED_VM_NAME=fixture-vc') -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-linux.env') -Value @('SELECTED_VM_NAME=fixture-linux','SELECTED_VM_OS=linux') -Encoding ASCII
+    $script:TuiPersistedVmSelection = $null
+    function Set-DotEnvValue {
+        param([string]$Path,[string]$Key,[string]$Value,[string]$VmName='')
+        $script:TuiPersistedVmSelection = [pscustomobject]@{ Path = $Path; Key = $Key; Value = $Value; VmName = $VmName }
+    }
+    try {
+        $script:TuiVirtualComputers = @($script:TuiWindowsVm, (New-TuiVmFixture -Platform Linux))
+        $script:TuiVirtualComputers[1].name = 'fixture-linux'
+        Set-TuiChoices -Choices @('2','b','b')
+        Show-ClagnosUiVirtualComputers
+        Assert-Tui -Condition ($script:TuiVmDetailsCount -eq 1) -Message 'Selecting a VM number must enter its detail screen.'
+        Assert-TuiOutputContains -Text '2. fixture-linux | Linux' -Message 'VC rows must identify the selected item and its platform.'
+        Assert-Tui -Condition ([string]$script:ClagnosUiSelectedVmName -eq 'fixture-linux') -Message 'Numeric selection must retain the selected VC name.'
+        Assert-Tui -Condition ($null -ne $script:TuiPersistedVmSelection -and [string]$script:TuiPersistedVmSelection.Path -eq (Join-Path $profileRoot 'clagnos.env') -and [string]$script:TuiPersistedVmSelection.Key -eq 'SELECTED_VM_NAME' -and [string]$script:TuiPersistedVmSelection.Value -eq 'fixture-linux') -Message 'Selecting a VC must persist its active name through the environment writer.'
+    }
+    finally {
+        Set-Item -Path Function:Set-DotEnvValue -Value $originalSetDotEnvValue
+        $script:ClagnosUiRepoRoot = $previousUiRepoRoot
+        Remove-Variable -Name TuiPersistedVmSelection -Scope Script -ErrorAction SilentlyContinue
+        $resolvedProfileRoot = [System.IO.Path]::GetFullPath($profileRoot)
+        $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'clagnos-vc-selection-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI selection fixture: {0}" -f $resolvedProfileRoot) }
+        if (Test-Path -LiteralPath $resolvedProfileRoot) { Remove-Item -LiteralPath $resolvedProfileRoot -Recurse -Force }
+    }
 }
 
 Invoke-TuiTest -Name 'Virtual computer list exits on q without invoking cloud actions' -Action {

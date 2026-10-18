@@ -20,7 +20,7 @@ function Assert-ClagnosUpdateAutoOptions {
 
     if ([string]::IsNullOrWhiteSpace([string]$effectiveGroup)) {
         Throw-FriendlyError `
-            -Detail "Update auto mode could not resolve a managed resource group from CLI or the active VC profile." `
+            -Detail "Update auto mode could not resolve SELECTED_RESOURCE_GROUP from CLI or the active VC profile." `
             -Code 2 `
             -Summary "Update auto mode cannot resolve target resource group." `
             -Hint "Set ACTIVE_VM_NAME in clagnos.env and SELECTED_RESOURCE_GROUP in that VC's <vm-name>.env profile, or pass --group."
