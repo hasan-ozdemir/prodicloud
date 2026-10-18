@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.18.431 - 2026-10-18
+
+### Summary
+The primary Windows Turkish language task now installs the Turkish display pack and every language feature supported by the target Windows edition.
+
+### Highlights
+- Renamed the vm-update task to `136-install-turkish-language-features` and removed the old task-name alias.
+- Installs Basic, text-to-speech, speech recognition, OCR, handwriting recognition, and Pan-European supplemental fonts when available on the target.
+- Uses Microsoft's matching Windows 11 language/FOD ISO and a single dependency-ordered DISM capability operation. It reports edition-unavailable capabilities and excludes Retail Demo packages.
+- Preserves English as the display-language default and caps the WinRM task at 900 seconds.
+
+### Validation
+- The Clagnos WinRM task completed on VC1 in 225 seconds, installed all five capabilities exposed by that Windows edition, and kept English selected. Turkish Speech recognition reported `Unavailable`; no restart was requested.
+- Windows PowerShell 5.1 and PowerShell 7 compatibility passed smoke 195/195 and TUI 180/180 per host. Code quality, documentation, app-state, lifecycle, and sensitive-content checks passed.
+
 ## Release 2026.10.18.430 - 2026-10-18
 
 ### Summary

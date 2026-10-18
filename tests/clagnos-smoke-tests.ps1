@@ -115,7 +115,6 @@ function Get-CurrentSmokeTaskName {
         '130-install-vs2022community-application' = '132-install-vs2022community-application'
         '131-install-jaws-application' = '133-install-jaws-application'
         '132-install-vs2022community-application' = '132-install-vs2022community-application'
-        '132-configure-language-settings' = '136-configure-language-settings'
         '133-install-sysinternals-tool' = '101-install-sysinternals-tool'
         '134-configure-autologon-settings' = '102-configure-autologon-settings'
         '10001-configure-startup-settings' = '10002-configure-startup-settings'
@@ -1413,8 +1412,8 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'vm-update\windows') -Platform windows -Stage update -SuppressSkipMessages
     Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
     Assert-True -Condition (@($updateInventory.InventoryTasks | Where-Object { $_.Name -eq '01-install-choco-tool' -or $_.Name -eq '03-install-chrome-application' }).Count -eq 0) -Message 'Builtin package installers must no longer appear as vm-update tasks.'
-    $languageTask = @($updateInventory.ActiveTasks | Where-Object { $_.Name -eq '136-configure-language-settings' } | Select-Object -First 1)
-    Assert-True -Condition ($languageTask.Count -eq 1 -and [string]$languageTask[0].Transport -eq 'winrm') -Message 'The Windows language-settings task must explicitly use WinRM.'
+    $languageTask = @($updateInventory.ActiveTasks | Where-Object { $_.Name -eq '136-install-turkish-language-features' } | Select-Object -First 1)
+    Assert-True -Condition ($languageTask.Count -eq 1 -and [string]$languageTask[0].Transport -eq 'winrm') -Message 'The Turkish language-features task must explicitly use WinRM.'
     $languageValues = Get-ClagnosManifestSettingValueMap -Settings $languageTask[0].Settings -ConfigMap @{ WIN_DEFAULT_UI_LANGUAGE='tr-TR'; WIN_ADDITIONAL_LANGUAGES='tr-TR' }
     Assert-True -Condition ($languageValues.WIN_DEFAULT_UI_LANGUAGE -eq 'tr-TR' -and $languageValues.WIN_ADDITIONAL_LANGUAGES -eq 'tr-TR') -Message 'Task manifest settings must resolve validated profile values.'
     $languageContext = @{
@@ -1426,7 +1425,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     $resolvedLanguageTask = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($languageTask[0]) -Context $languageContext)[0]
     Assert-True -Condition ($resolvedLanguageTask.Script -like '*$primaryLanguage = ''en-US''*' -and $resolvedLanguageTask.Script -like '*$additionalLanguages = @(''tr-TR''*' -and $resolvedLanguageTask.Script -notlike '*__WIN_DEFAULT_UI_LANGUAGE__*' -and $resolvedLanguageTask.Script -notlike '*__WIN_ADDITIONAL_LANGUAGES__*') -Message 'Manifest-declared settings must be safely substituted into the guest task script.'
     $selectedLanguageTask = @(Select-ClagnosConfiguredTaskBlocks -ActiveTasks @($updateInventory.ActiveTasks) -InventoryTasks @($updateInventory.InventoryTasks) -SelectionText '136' -Stage update)
-    Assert-True -Condition ($selectedLanguageTask.Count -eq 1 -and $selectedLanguageTask[0].Name -eq '136-configure-language-settings') -Message 'Per-VC task selection must select task numbers while preserving catalog order.'
+    Assert-True -Condition ($selectedLanguageTask.Count -eq 1 -and $selectedLanguageTask[0].Name -eq '136-install-turkish-language-features') -Message 'Per-VC task selection must select task numbers while preserving catalog order.'
     $historyOverride = [string]$script:ClagnosTaskHistoryPathOverride
     $script:ClagnosTaskHistoryPathOverride = ''
     $historyPath = ([string](Get-ClagnosTaskRunHistoryPath)).Replace('\','/')
@@ -6616,7 +6615,7 @@ Invoke-Test -Name "Windows task and package catalogs are physically isolated" -A
     $expectedTaskTimeouts = [ordered]@{
         '102-configure-autologon-settings' = 60
         '110-configure-unlocker-settings' = 120
-        '136-configure-language-settings' = 900
+        '136-install-turkish-language-features' = 900
         '10001-configure-advanced-settings' = 30
         '10002-configure-startup-settings' = 120
         '10003-create-public-desktop-shortcuts' = 120
@@ -6626,7 +6625,7 @@ Invoke-Test -Name "Windows task and package catalogs are physically isolated" -A
     }
 
     Assert-True -Condition (@($activeNames).Count -ge $expectedTaskTimeouts.Count) -Message 'The Windows update stage must contain its maintenance tasks.'
-    Assert-True -Condition (@($activeNames | Where-Object { $_ -like '*-install-*' }).Count -eq 0) -Message 'Package installers must not be discovered as vm-update tasks.'
+    Assert-True -Condition (@($activeNames | Where-Object { $_ -like '*-install-*' -and $_ -ne '136-install-turkish-language-features' }).Count -eq 0) -Message 'Package installers must not be discovered as vm-update tasks; the dedicated Turkish language-feature task remains a maintenance task.'
     foreach ($entry in $expectedTaskTimeouts.GetEnumerator()) {
         $task = @($active | Where-Object { [string]$_.Name -eq [string]$entry.Key } | Select-Object -First 1)
         Assert-True -Condition ($task.Count -eq 1) -Message ("Expected maintenance task '{0}' was not discovered." -f [string]$entry.Key)
@@ -8977,7 +8976,7 @@ Invoke-Test -Name "Reboot signal parser ignores explicit no-restart status" -Act
         Assert-True -Condition (-not (Test-ClagnosOutputIndicatesRebootRequired -MessageText $message)) -Message ("No-restart status must not trigger a VM reboot: {0}" -f $message)
     }
     foreach ($message in @(
-        'TASK_REBOOT_REQUIRED:configure-language-settings',
+        'TASK_REBOOT_REQUIRED:install-turkish-language-features',
         'Windows reports that a restart is required to finish this update.',
         'The operation is pending reboot.'
     )) {
@@ -9235,13 +9234,13 @@ Invoke-Test -Name "Windows auto-start task applies the approved startup profile 
     Assert-True -Condition (($healthTaskText.IndexOf('if (-not [bool]$ollamaCliResult.Success -and -not [string]::IsNullOrWhiteSpace([string]$ollamaApiVersion) -and -not [string]::IsNullOrWhiteSpace([string]$ollamaExe)) {', [System.StringComparison]::Ordinal)) -ge 0) -Message "Health snapshot must rerun ollama ls after the API becomes reachable."
 }
 
-Invoke-Test -Name "Windows language task and health contract" -Action {
-    $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '136-configure-language-settings'
-    $taskJsonPath = Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '136-configure-language-settings'
+Invoke-Test -Name "Windows Turkish language feature task and health contract" -Action {
+    $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '136-install-turkish-language-features'
+    $taskJsonPath = Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '136-install-turkish-language-features'
     $healthTaskPath = Get-RepoSummaryReadbackScriptPath -Platform windows
 
-    Assert-True -Condition (Test-Path -LiteralPath $taskPath) -Message 'Language settings task file was not found.'
-    Assert-True -Condition (Test-Path -LiteralPath $taskJsonPath) -Message 'Language settings task json was not found.'
+    Assert-True -Condition (Test-Path -LiteralPath $taskPath) -Message 'Turkish language feature task file was not found.'
+    Assert-True -Condition (Test-Path -LiteralPath $taskJsonPath) -Message 'Turkish language feature task metadata was not found.'
 
     $taskText = [string](Get-Content -LiteralPath $taskPath -Raw)
     $taskJsonText = [string](Get-Content -LiteralPath $taskJsonPath -Raw)
@@ -9250,19 +9249,34 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
     foreach ($fragment in @(
         'Get-WindowsCapability',
         'Get-WindowsCapability -Online -Name $capabilityFilter',
-        'Get-WindowsCapability -Online -Name ("Language.Basic~~~{0}~0.0.1.0" -f $LanguageTag)',
-        'Install-LanguageFromMicrosoftIso -LanguageTag $LanguageTag',
+        'Get-WindowsCapability -Online -Name $fontCapabilityName',
+        'function Get-LanguageCapabilityCatalog',
+        'function Get-LanguageCapabilityStateMap',
+        'function Test-LanguageCapabilityStateSatisfied',
+        'Install-WindowsLanguageFeaturesFromIso -LanguageTag $LanguageTag',
+        'function Get-LanguageCapabilityCabPattern',
+        'Retail Demo language content is showroom-only',
         'Add-Package /PackagePath:',
-        'Add-Capability /CapabilityName:Language.Basic',
+        '/Add-Capability {0} /Source:{1} /LimitAccess /NoRestart',
+        'Language.Basic',
+        'Language.TextToSpeech',
+        'Language.Speech',
+        'Language.OCR',
+        'Language.Handwriting',
+        'Language.Fonts.PanEuropeanSupplementalFonts',
         'Microsoft-Windows-Client-Language-Pack_x64_{0}.cab',
-        'Microsoft-Windows-LanguageFeatures-Basic-{0}-Package~*.cab',
+        'Microsoft-Windows-LanguageFeatures-TextToSpeech-{0}-Package~*.cab',
+        'Microsoft-Windows-LanguageFeatures-Speech-{0}-Package~*.cab',
+        'Microsoft-Windows-LanguageFeatures-OCR-{0}-Package~*.cab',
+        'Microsoft-Windows-LanguageFeatures-Handwriting-{0}-Package~*.cab',
+        'Microsoft-Windows-LanguageFeatures-Fonts-PanEuropeanSupplementalFonts-Package~*.cab',
         'software-static.download.prss.microsoft.com',
         'Maximum 600s',
         'no download bytes arrived for 60 seconds',
         'resume the Microsoft language ISO once',
         'LanguageSourceIsoBytes',
         'LanguageOperationDeadlineUtc',
-        'UtcNow.AddMinutes(12.5)',
+        'UtcNow.AddMinutes(14)',
         'function Clear-LanguageSourceCache',
         '-WaitTimeoutSeconds 60',
         'Get-InstalledLanguageSafe -LanguageTag $LanguageTag',
@@ -9276,10 +9290,10 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
         'LanguagePolicyMarkerPath',
         'LanguagePolicyChanged',
         'The configured default UI language',
-        'TASK_REBOOT_REQUIRED:configure-language-settings',
+        'TASK_REBOOT_REQUIRED:install-turkish-language-features',
         'language-step-ok: restart-required-to-finalize',
         'language-step-ok: already-current; no restart required',
-        'Language pack {0} is already installed.',
+        'The {0} display language and every available language feature are already installed.',
         'if ($rebootRequired) {',
         'Applying requested system preferred UI language',
         'Collecting final language verification output',
@@ -9287,28 +9301,15 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
         'Assert-LanguageStateReadyForRestart',
         'direct apply for ''{0}'' is queued and will finish after the next restart or sign-in.'
     )) {
-        Assert-True -Condition ($taskText -like ('*' + [string]$fragment + '*')) -Message ("Language settings task must include fragment '{0}'." -f [string]$fragment)
+        Assert-True -Condition ($taskText -like ('*' + [string]$fragment + '*')) -Message ("Turkish language feature task must include fragment '{0}'." -f [string]$fragment)
     }
-    Assert-True -Condition ($taskText.Contains("`$capabilityState -notin @('Installed', 'NotPresent', 'Unavailable')")) -Message 'Optional language Features on Demand may remain NotPresent while the required Basic capability is installed.'
-    Assert-True -Condition ($taskText -notlike '*Install-Language -Language*' -and $taskText -notlike '*Start-Service -Name $serviceName*' -and $taskText -notlike '*wuauserv*') -Message 'Language provisioning must bypass the slow Windows Update language scan and leave Windows Update service configuration untouched.'
+    Assert-True -Condition ($taskText.Contains("`$capabilityOrder = @('Language.Basic','Language.TextToSpeech','Language.Speech','Language.OCR','Language.Handwriting','Language.Fonts.PanEuropeanSupplementalFonts')")) -Message 'DISM must install Basic first, then every available speech, OCR, handwriting, and supplemental-font capability in dependency order.'
+    Assert-True -Condition ($taskText.Contains("`$capabilityState -notin @('Installed', 'Unavailable')")) -Message 'Every language feature available for this Windows edition must be installed; only unavailable features may be skipped.'
     Assert-True -Condition ($taskText.Contains('if ($null -eq $previousPolicy) {') -and $taskText.Contains('if (-not $script:LanguagePolicyChanged -and -not [string]::IsNullOrWhiteSpace([string]$currentUserUiLanguage)) { return $true }')) -Message 'An unchanged English system policy must preserve each managed user''s existing language selection without launching unnecessary interactive automation.'
 
-    foreach ($removedFragment in @(
-        'Set-WinDefaultInputMethodOverride',
-        'Set-WinCultureFromLanguageListOptOut',
-        'Set-Culture',
-        'Set-WinHomeLocation',
-        'Set-WinSystemLocale',
-        'Set-TimeZone',
-        'Copy-UserInternationalSettingsToSystem'
-    )) {
-        Assert-True -Condition (-not ($taskText -like ('*' + [string]$removedFragment + '*'))) -Message ("Language settings task must no longer own '{0}'." -f [string]$removedFragment)
-    }
-
-    Assert-True -Condition ($taskJsonText -like '*"timeout": 900*') -Message 'Language settings task must stop within the 900-second (15-minute) bound.'
+    Assert-True -Condition ($taskJsonText -like '*"timeout": 900*') -Message 'Turkish language feature servicing must stop within the 900-second (15-minute) task bound.'
     Assert-True -Condition ($taskJsonText -like '*"transport": "winrm"*') -Message 'Language provisioning must run over its declared WinRM transport.'
     Assert-True -Condition ($taskJsonText -like '*"WIN_DEFAULT_UI_LANGUAGE"*' -and $taskJsonText -like '*"WIN_ADDITIONAL_LANGUAGES"*') -Message 'Language defaults must be controlled by validated task settings.'
-    Assert-True -Condition (-not ($taskText -like '*LanguageInstallQueueMarker*' -or $taskText -like '*24-hour retry window*' -or $taskText -like '*install remains queued inside its retry window*')) -Message 'Language install must not report a cooldown-based queued state as success.'
     Assert-True -Condition (-not ($taskJsonText -like '*"appState"*')) -Message 'Language settings task must stay out of task-local app-state snapshot and restore.'
 
     foreach ($fragment in @(

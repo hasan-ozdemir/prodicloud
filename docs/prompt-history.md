@@ -6088,3 +6088,16 @@ Important plan update: preserve all plan work and fix the Turkish Windows langua
 **Assistant Summary**
 
 Replaced the slow Windows Update language scan with a bounded DISM path using Microsoft's matching Windows 11 24H2/25H2 Languages and Optional Features ISO. The task downloads the source with resume and a 600-second limit, installs only the Turkish display-language CAB and required Basic capability, skips optional OCR/speech/handwriting features, preserves the configured English default, and has a 900-second hard task timeout. Live inspection found Turkish and Basic already installed on VC1 after the earlier servicing attempt completed asynchronously; the updated Clagnos task then completed idempotently in about 36 seconds without a restart or another ISO download. VC1 and VC2 DNS labels were updated through Clagnos and verified to resolve to the same public IPs; VM size, disks, NICs, allocation, and Public IP SKU were unchanged. Windows PowerShell 5.1 and PowerShell 7 passed smoke 195/195 and TUI 180/180 on each host; code quality and documentation checks passed.
+
+### 2026-10-18 23:31 UTC
+**User Prompt**
+
+````text
+Plan update: Update the vm-update task for Turkish language installation so it installs every existing Turkish language feature, including OCR, handwriting, TTS, STT, and all other available language conveniences. Aggressively cut over old code, documentation, and behavior related to the previous Windows Turkish language installation/configuration task. Remove tests for the old behavior and make the updated vm-update task the primary path for Windows language installation and configuration.
+````
+
+**Assistant Summary**
+
+Renamed the active task folder and script to `136-install-turkish-language-features`, removed the retired task-name alias, and replaced its old optional-feature-skip contract. The task now installs the Turkish display pack plus every capability exposed by the target edition: Basic, text-to-speech, speech recognition, OCR, handwriting, and Pan-European supplemental fonts. It checks ISO CAB presence and submits missing capabilities in a single DISM call with Basic and TTS ahead of dependent features. Edition-unavailable capabilities are reported; Retail Demo content is excluded. English remains the system UI default.
+
+Ran the new task through Clagnos over WinRM on VC1. The first run completed in 225 seconds after downloading the 5.96 GiB Microsoft ISO; Basic and OCR were already installed, and TTS, handwriting, and supplemental fonts were installed. Windows reported Turkish speech recognition as unavailable. The display-language default remained `en-US`, no restart was required, and a second run short-circuited in about 30 seconds without another ISO download. PowerShell 5.1/7 smoke checks passed 195/195 and TUI checks passed 180/180 on both hosts; code-quality, documentation, app-state, package-lifecycle, and sensitive-content checks passed.

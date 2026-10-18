@@ -3,6 +3,17 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.18.431] - 2026-10-18
+
+### Changed
+- Cut over the Windows Turkish language task to `136-install-turkish-language-features`, the primary vm-update owner for the Turkish display language and all language features exposed by the selected Windows edition.
+- Install available Basic, text-to-speech, speech recognition, OCR, handwriting, and Pan-European supplemental-font capabilities from one matching Microsoft Windows 11 language/FOD ISO. DISM receives capabilities in dependency order; unsupported features are reported as unavailable, and Retail Demo content is excluded.
+- Removed the retired `132-configure-language-settings` smoke alias and replaced the old optional-feature skip contract with full-feature install/readback coverage. The task retains the English UI default and a 900-second guest timeout.
+
+### Validation
+- The live Clagnos task completed on VC1 in 225 seconds without rebuilding or restarting the VM. Readback shows Basic, TTS, OCR, handwriting, and Pan-European supplemental fonts installed; Speech recognition is not exposed by this Windows edition. The English display-language default stayed selected.
+- PowerShell 5.1 and PowerShell 7 compatibility, code-quality, documentation, package lifecycle, app-state, TUI, and sensitive-content checks passed after the cutover.
+
 ## [2026.10.18.430] - 2026-10-18
 
 ### Changed
