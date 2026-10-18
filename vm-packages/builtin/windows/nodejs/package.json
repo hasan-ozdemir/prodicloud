@@ -2,7 +2,6 @@
   "id": "nodejs",
   "displayName": "Node.js LTS",
   "category": "tool",
-  "timeout": 150,
   "sortOrder": 111,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -17,5 +16,14 @@
   "uninstall": {
     "kind": "choco",
     "value": "nodejs-lts"
+  },
+  "repairStrategy": "choco",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 150,
+    "repair": 150,
+    "update": 150,
+    "uninstall": 150,
+    "reinstall": 300
   }
 }

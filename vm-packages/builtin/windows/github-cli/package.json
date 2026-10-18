@@ -31,5 +31,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
-  }
+  },
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 180,
+    "reinstall": 360
+  },
+  "repairStrategy": "choco"
 }

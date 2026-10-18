@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$Apply
+    [switch]$Apply,
+    [switch]$JawsOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -126,7 +127,7 @@ function ConvertTo-ClagnosPortableAppStatePayloadBytes {
     param([string]$EntryName, [byte[]]$Bytes)
 
     $extension = [IO.Path]::GetExtension([string]$EntryName).ToLowerInvariant()
-    if ($extension -notin @('.json','.yml','.yaml','.xml','.ini','.config','.toml','.txt','.vssettings','.jcf','.jdf','.vpf','.vlcrc') -and [IO.Path]::GetFileName([string]$EntryName) -ne 'config') {
+    if ($extension -notin @('.json','.yml','.yaml','.xml','.ini','.config','.toml','.txt','.vssettings','.jcf','.jdf','.jss','.jkm','.vpf','.vlcrc') -and [IO.Path]::GetFileName([string]$EntryName) -ne 'config') {
         return ,$Bytes
     }
     $memory = New-Object System.IO.MemoryStream(,([byte[]]$Bytes))
@@ -237,12 +238,21 @@ function Set-ClagnosPortablePackageSnapshot {
                 try { $outStream.Write([byte[]]$payloadBytes, 0, ([byte[]]$payloadBytes).Length) }
                 finally { $outStream.Dispose() }
 
+                $targetProfiles = if ($null -ne $rule.TargetProfiles -and @($rule.TargetProfiles).Count -gt 0) { @($rule.TargetProfiles | ForEach-Object { [string]$_ }) } else { @([string]$profileLabel) }
                 $profileFiles.Add([ordered]@{
                     sourcePath = [string]$payloadPath
                     relativeDestinationPath = [string]$destinationPath
-                    targetProfiles = @([string]$profileLabel)
+                    targetProfiles = @($targetProfiles)
                 }) | Out-Null
             }
+        }
+
+        foreach ($updateEntry in @($sourceArchive.Entries | Where-Object { ([string]$_.FullName).StartsWith('payload/update-files/',[System.StringComparison]::OrdinalIgnoreCase) -and -not ([string]$_.FullName).EndsWith('/') })) {
+            $preservedEntry = $targetArchive.CreateEntry([string]$updateEntry.FullName,[System.IO.Compression.CompressionLevel]::Optimal)
+            $sourceStream = $updateEntry.Open()
+            $targetStream = $preservedEntry.Open()
+            try { $sourceStream.CopyTo($targetStream) }
+            finally { $sourceStream.Dispose(); $targetStream.Dispose() }
         }
 
         if ([int]$profileFiles.Count -eq 0) { throw ("Snapshot curation retained no files for package '{0}'." -f $PackageId) }
@@ -277,11 +287,87 @@ function Set-ClagnosPortablePackageSnapshot {
     Write-Output ("{0}: curated {1} portable preference files" -f $PackageId, [int]$profileFiles.Count)
 }
 
+function Set-ClagnosPortableJawsPackageSnapshot {
+    param()
+
+    $zipPath = Join-Path $packageRoot 'builtin\windows\jaws\app-state\app-state.zip'
+    if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) { throw 'JAWS app-state archive is missing.' }
+    $settingsRoot = Join-Path $env:APPDATA 'Freedom Scientific\JAWS\2025\Settings'
+    $sourceFiles = @(
+        @{ Source = (Join-Path $settingsRoot 'enu\DEFAULT.JCF'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF' },
+        @{ Source = (Join-Path $settingsRoot 'enu\DEFAULT.JDF'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF' },
+        @{ Source = (Join-Path $settingsRoot 'enu\DEFAULT.JKM'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JKM' },
+        @{ Source = (Join-Path $settingsRoot 'enu\codex.JKM'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JKM' },
+        @{ Source = (Join-Path $settingsRoot 'enu\codex.JSS'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JSS' },
+        @{ Source = (Join-Path $settingsRoot 'enu\super_pi_mod.JSS'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\super_pi_mod.JSS' }
+    )
+    $voiceRoot = Join-Path $settingsRoot 'VoiceProfiles'
+    foreach ($voiceFile in @(Get-ChildItem -LiteralPath $voiceRoot -File -Filter '*.VPF' -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $sourceFiles += @{ Source = [string]$voiceFile.FullName; Relative = ('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\{0}' -f [string]$voiceFile.Name) }
+    }
+    $availableSources = @($sourceFiles | Where-Object { Test-Path -LiteralPath ([string]$_.Source) -PathType Leaf })
+    foreach ($requiredPath in @('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF','AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF')) {
+        if (@($availableSources | Where-Object { [string]::Equals([string]$_.Relative,$requiredPath,[StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) { throw ('Required local JAWS settings file was not found: ' + $requiredPath) }
+    }
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $temporaryZip = $zipPath + '.generalized'
+    if (Test-Path -LiteralPath $temporaryZip) { Remove-Item -LiteralPath $temporaryZip -Force }
+    $sourceArchive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    $targetArchive = $null
+    $profileRules = New-Object 'System.Collections.Generic.List[object]'
+    try {
+        $oldManifestEntry = $sourceArchive.GetEntry('app-state.manifest.json')
+        if ($null -eq $oldManifestEntry) { throw 'JAWS app-state archive has no manifest.' }
+        $reader = New-Object System.IO.StreamReader($oldManifestEntry.Open())
+        try { $oldManifest = ConvertFrom-Json -InputObject $reader.ReadToEnd() -ErrorAction Stop }
+        finally { $reader.Dispose() }
+
+        $targetArchive = [System.IO.Compression.ZipFile]::Open($temporaryZip,[System.IO.Compression.ZipArchiveMode]::Create)
+        foreach ($file in @($availableSources)) {
+            $leaf = [IO.Path]::GetFileName([string]$file.Relative)
+            $payloadPath = 'payload/profile-files/manager/{0}' -f $leaf
+            $newEntry = $targetArchive.CreateEntry($payloadPath,[System.IO.Compression.CompressionLevel]::Optimal)
+            $payloadBytes = ConvertTo-ClagnosPortableAppStatePayloadBytes -EntryName ([string]$file.Relative) -Bytes ([IO.File]::ReadAllBytes([string]$file.Source))
+            $outStream = $newEntry.Open()
+            try { $outStream.Write([byte[]]$payloadBytes,0,([byte[]]$payloadBytes).Length) }
+            finally { $outStream.Dispose() }
+            $profileRules.Add([ordered]@{ sourcePath = $payloadPath; relativeDestinationPath = [string]$file.Relative; targetProfiles = @('manager','assistant') }) | Out-Null
+        }
+        foreach ($updateFile in @($sourceArchive.Entries | Where-Object { ([string]$_.FullName).StartsWith('payload/update-files/',[StringComparison]::OrdinalIgnoreCase) -and -not ([string]$_.FullName).EndsWith('/') })) {
+            $newEntry = $targetArchive.CreateEntry([string]$updateFile.FullName,[System.IO.Compression.CompressionLevel]::Optimal)
+            $inStream = $updateFile.Open()
+            $outStream = $newEntry.Open()
+            try { $inStream.CopyTo($outStream) }
+            finally { $inStream.Dispose(); $outStream.Dispose() }
+        }
+        $newManifest = [ordered]@{ version = 3; taskName = [string]$oldManifest.taskName; machineDirectories = @(); machineFiles = @(); profileDirectories = @(); profileFiles = @($profileRules.ToArray()); registryImports = @() }
+        $manifestEntry = $targetArchive.CreateEntry('app-state.manifest.json',[System.IO.Compression.CompressionLevel]::Optimal)
+        $manifestStream = $manifestEntry.Open()
+        try {
+            $manifestBytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $newManifest -Depth 40))
+            $manifestStream.Write($manifestBytes,0,$manifestBytes.Length)
+        }
+        finally { $manifestStream.Dispose() }
+    }
+    finally {
+        if ($null -ne $targetArchive) { $targetArchive.Dispose() }
+        $sourceArchive.Dispose()
+    }
+
+    if ($Apply) { Move-Item -LiteralPath $temporaryZip -Destination $zipPath -Force }
+    else { Remove-Item -LiteralPath $temporaryZip -Force }
+    Write-Output ("jaws: {0} sanitized preference files for manager and assistant; update-files payload preserved" -f [int]$profileRules.Count)
+}
+
 $dropAppState = @(
     'anydesk','be-my-eyes','chocolatey','codex-app','docker-desktop','google-chrome','google-drive',
     'github-copilot-cli','icloud','itunes','microsoft-edge','microsoft-teams','onedrive','rclone','whatsapp','windscribe'
 )
-foreach ($id in @($dropAppState)) { Set-ClagnosPackageAppStatePolicy -PackageId $id -AppState $null -RemoveSnapshot }
+foreach ($id in @($dropAppState)) {
+    if ($JawsOnly) { continue }
+    Set-ClagnosPackageAppStatePolicy -PackageId $id -AppState $null -RemoveSnapshot
+}
 
 $policies = [ordered]@{
     'azure-cli' = [ordered]@{
@@ -313,9 +399,13 @@ $policies = [ordered]@{
     }
     'jaws' = [ordered]@{
         profileFiles = @(
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF' -TargetProfiles @('manager')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF' -TargetProfiles @('manager')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\*.VPF' -TargetProfiles @('manager'))
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF' -TargetProfiles @('manager','assistant')),
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF' -TargetProfiles @('manager','assistant')),
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JKM' -TargetProfiles @('manager','assistant')),
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JKM' -TargetProfiles @('manager','assistant')),
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JSS' -TargetProfiles @('manager','assistant')),
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\super_pi_mod.JSS' -TargetProfiles @('manager','assistant')),
+            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\*.VPF' -TargetProfiles @('manager','assistant'))
         )
         removeSnapshot = $false
     }
@@ -349,6 +439,7 @@ $policies = [ordered]@{
 }
 
 foreach ($id in @($policies.Keys)) {
+    if ($JawsOnly -and [string]$id -ne 'jaws') { continue }
     $state = [ordered]@{
         machineDirectories = @()
         machineFiles = @()
@@ -377,10 +468,17 @@ $snapshotRules = [ordered]@{
     'visual-studio-community' = @{ manager = @(@{ Pattern = '(?i)(?:Microsoft_VisualStudio/[^/]+/Settings/CurrentSettings\.vssettings|Microsoft_VisualStudio_.*_Settings_CurrentSettings\.vssettings)$'; Destination = 'AppData\Local\Microsoft\VisualStudio\%CLAGNOS_VS_INSTANCE_DIRECTORY%\Settings\CurrentSettings.vssettings' }) }
     'nvda' = @{ manager = @(@{ Pattern = '(?i)(?:AppData_Roaming_nvda/nvda\.ini|AppData_Roaming_nvda_nvda\.ini)$'; Destination = 'AppData\Roaming\nvda\nvda.ini' }) }
     'jaws' = @{ manager = @(
-        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/enu/DEFAULT\.JCF|Freedom Scientific_JAWS_2025_Settings_enu_DEFAULT\.JCF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF' },
-        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/enu/DEFAULT\.JDF|Freedom Scientific_JAWS_2025_Settings_enu_DEFAULT\.JDF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF' },
-        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/Eloquence\.VPF|Freedom Scientific_JAWS_2025_Settings_VoiceProfiles_Eloquence\.VPF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\Eloquence.VPF' },
-        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/SAPI 5X 64\.VPF|Freedom Scientific_JAWS_2025_Settings_VoiceProfiles_SAPI 5X 64\.VPF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\SAPI 5X 64.VPF' }
+        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/enu/DEFAULT\.JCF|Freedom Scientific_JAWS_2025_Settings_enu_DEFAULT\.JCF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/enu/DEFAULT\.JDF|Freedom Scientific_JAWS_2025_Settings_enu_DEFAULT\.JDF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/Eloquence\.VPF|Freedom Scientific_JAWS_2025_Settings_VoiceProfiles_Eloquence\.VPF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\Eloquence.VPF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/Microsoft Mobile\.VPF|Freedom Scientific_JAWS_2025_Settings_VoiceProfiles_Microsoft Mobile\.VPF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\Microsoft Mobile.VPF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/SAPI 5X 64\.VPF|Freedom Scientific_JAWS_2025_Settings_VoiceProfiles_SAPI 5X 64\.VPF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\SAPI 5X 64.VPF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/SAPI 5X\.VPF$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\SAPI 5X.VPF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)Freedom_Scientific_JAWS_2025_Settings/VoiceProfiles/spiker\.VPF$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\spiker.VPF'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)Freedom_Scientific_JAWS_2025_Settings/enu/DEFAULT\.JKM$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JKM'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)Freedom_Scientific_JAWS_2025_Settings/enu/codex\.JKM$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JKM'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)Freedom_Scientific_JAWS_2025_Settings/enu/codex\.JSS$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JSS'; TargetProfiles = @('manager','assistant') },
+        @{ Pattern = '(?i)Freedom_Scientific_JAWS_2025_Settings/enu/super_pi_mod\.JSS$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\super_pi_mod.JSS'; TargetProfiles = @('manager','assistant') }
     ) }
     'vlc' = @{ manager = @(
         @{ Pattern = '(?i)(?:AppData_Roaming_vlc/vlcrc|AppData_Roaming_vlc_vlcrc)$'; Destination = 'AppData\Roaming\vlc\vlcrc' },
@@ -389,8 +487,10 @@ $snapshotRules = [ordered]@{
 }
 
 foreach ($id in @($snapshotRules.Keys)) {
+    if ($JawsOnly -and [string]$id -ne 'jaws') { continue }
     if (-not $Apply) { Write-Output ("{0}: snapshot would be curated" -f $id); continue }
-    Set-ClagnosPortablePackageSnapshot -PackageId $id -FileRules $snapshotRules[$id]
+    if ([string]$id -eq 'jaws') { Set-ClagnosPortableJawsPackageSnapshot }
+    else { Set-ClagnosPortablePackageSnapshot -PackageId $id -FileRules $snapshotRules[$id] }
 }
 
 if ($Apply) { Write-Output 'Package app-state maintenance completed.' }

@@ -2,7 +2,6 @@
   "id": "windscribe",
   "displayName": "Windscribe",
   "category": "application",
-  "timeout": 60,
   "sortOrder": 112,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -11,12 +10,43 @@
   "repairScript": "repair.ps1",
   "updateStrategy": "winget",
   "statusCheck": {
-    "kind": "winget",
-    "value": "Windscribe.Windscribe"
+    "kind": "windscribe",
+    "value": "C:\\Program Files\\Windscribe\\Windscribe.exe"
   },
   "uninstall": {
-    "kind": "winget",
-    "value": "Windscribe.Windscribe"
+    "kind": "windscribe",
+    "value": "C:\\Program Files\\Windscribe\\uninstall.exe"
   },
-  "appStateKey": "112-install-windscribe-application"
+  "assets": [
+    {
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+    }
+  ],
+  "appStateKey": "112-install-windscribe-application",
+  "updatePackageId": "Windscribe.Windscribe",
+  "repairStrategy": "windscribe",
+  "repairPackageId": "Windscribe.Windscribe",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 240,
+    "update": 180,
+    "uninstall": 480,
+    "reinstall": 480
+  },
+  "operationTimeoutEvidence": {
+    "uninstall": {
+      "measuredSeconds": 430,
+      "timeoutSeconds": 480,
+      "measuredAtUtc": "2026-10-18T01:39:58Z",
+      "verification": "VC2 live run: the Authenticode-verified Windscribe two-phase uninstall was still running with CPU or disk activity at 430 seconds; the package remained installed, so the bounded timeout was raised to 480 seconds for a successful full-cycle verification."
+    },
+    "reinstall": {
+      "measuredSeconds": 430,
+      "timeoutSeconds": 480,
+      "measuredAtUtc": "2026-10-18T01:39:58Z",
+      "verification": "VC2 live run: the Authenticode-verified Windscribe two-phase uninstall is a required phase of reinstall and was still running with CPU or disk activity at 430 seconds; the bounded timeout was raised to 480 seconds for a successful full-cycle verification."
+    }
+  }
 }

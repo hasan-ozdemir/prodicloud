@@ -59,6 +59,11 @@ function Test-GitHealthy {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-GitExePath)))
 }
 
+function Test-GitChocolateyMetaPackageInstalled {
+    $packageOutput = & $chocoExe list --local-only --exact --limit-output git 2>$null | Out-String
+    return ([int]$LASTEXITCODE -eq 0 -and $packageOutput -match '(?im)^git\|[^|\s]+\s*$')
+}
+
 $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
 if (-not (Test-Path -LiteralPath $chocoExe)) {
     throw "choco was not found."
@@ -81,18 +86,21 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Refresh-SessionPath
 }
 
-if (Test-GitHealthy) {
+if ((Test-GitHealthy) -and (Test-GitChocolateyMetaPackageInstalled)) {
     Write-Host "Existing Git installation is already healthy. Skipping choco install."
     & (Resolve-GitExePath) --version
     Write-Host "Update task completed: install-git-tool"
     return
+}
+if (Test-GitHealthy) {
+    Write-Host 'Existing Git executable is healthy, but the Chocolatey git meta-package registration is absent; restoring package registration.'
 }
 
 foreach ($attempt in 1..2) {
     & $chocoExe install git -y --no-progress --ignore-detected-reboot
     $installExitCode = [int]$LASTEXITCODE
 
-    if (Test-GitHealthy) {
+    if ((Test-GitHealthy) -and (Test-GitChocolateyMetaPackageInstalled)) {
         & (Resolve-GitExePath) --version
         Write-Host "Update task completed: install-git-tool"
         return
@@ -113,8 +121,8 @@ foreach ($attempt in 1..2) {
 
 Refresh-SessionPath
 
-if (-not (Test-GitHealthy)) {
-    throw "git command was not found after installation."
+if (-not (Test-GitHealthy) -or -not (Test-GitChocolateyMetaPackageInstalled)) {
+    throw 'Git executable or Chocolatey meta-package registration was not found after installation.'
 }
 
 & (Resolve-GitExePath) --version

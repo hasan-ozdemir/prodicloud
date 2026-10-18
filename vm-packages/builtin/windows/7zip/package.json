@@ -2,20 +2,30 @@
   "id": "7zip",
   "displayName": "7-Zip",
   "category": "tool",
-  "timeout": 120,
   "sortOrder": 106,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
   "updateScript": "update.ps1",
   "uninstallScript": "uninstall.ps1",
   "repairScript": "repair.ps1",
-  "updateStrategy": "choco",
+  "updateStrategy": "winget",
   "statusCheck": {
-    "kind": "choco",
-    "value": "7zip"
+    "kind": "winget",
+    "value": "7zip.7zip"
   },
   "uninstall": {
-    "kind": "choco",
-    "value": "7zip"
+    "kind": "winget",
+    "value": "7zip.7zip",
+    "allVersions": true
+  },
+  "repairStrategy": "winget",
+  "repairPackageId": "7zip.7zip",
+  "operationTimeoutSeconds": {
+    "status": 30,
+    "install": 41,
+    "repair": 42,
+    "update": 38,
+    "uninstall": 30,
+    "reinstall": 43
   }
 }

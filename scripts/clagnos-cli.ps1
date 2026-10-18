@@ -1865,10 +1865,16 @@ function Show-ClagnosUiPackageCatalogMenu {
         }
         Write-Host 'e: enable package'
         Write-Host 'd: disable package'
-        Write-Host 'u: uninstall'
-        Write-Host 'i: install (repairs the installed version when already present)'
+        $uninstallUnsupported = ($null -ne $package.UninstallPolicy -and $null -ne $package.UninstallPolicy.PSObject.Properties['supported'] -and -not [bool]$package.UninstallPolicy.supported)
+        if ($uninstallUnsupported) {
+            Write-Host ('u: uninstall (unsupported: {0})' -f [string]$package.UninstallPolicy.reason) -ForegroundColor Yellow
+        }
+        else { Write-Host 'u: uninstall' }
+        Write-Host 'i: install (no-op when already installed)'
         Write-Host 'r: repair installed version'
         Write-Host 'v: update to a newer vendor version'
+        if ($uninstallUnsupported) { Write-Host 'x: reinstall (unavailable for this protected Windows component)' -ForegroundColor Yellow }
+        else { Write-Host 'x: force uninstall and reinstall' }
         Write-Host 's: status'
         if ($null -ne $package.PackageTask.AppStateSpec) { Write-Host 'a: manage package app-state' }
         Write-ClagnosUiNavigationFooter
@@ -1880,8 +1886,8 @@ function Show-ClagnosUiPackageCatalogMenu {
             Show-ClagnosUiPackageAppStateMenu -Vm $Vm -Package $package -Catalog $Catalog -Platform $platform
             continue
         }
-        if ($action -notin @('e','d','u','i','r','v','s')) { continue }
-        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 'r' { 'repair' } 'v' { 'update' } 's' { 'status' } default { '' } }
+        if ($action -notin @('e','d','u','i','r','v','x','s')) { continue }
+        $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 'r' { 'repair' } 'v' { 'update' } 'x' { 'reinstall' } 's' { 'status' } default { '' } }
         if ($packageAction -eq 'status' -and -not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) {
             Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
             Write-Host ('Status check requested for {0}; the catalog will show the result when the background check finishes.' -f [string]$package.DisplayName) -ForegroundColor DarkGray
@@ -1893,9 +1899,10 @@ function Show-ClagnosUiPackageCatalogMenu {
             $targetOptions = New-ClagnosUiTargetOptions -Vm $Vm
             foreach ($optionName in $targetOptions.Keys) { $options[[string]$optionName] = $targetOptions[$optionName] }
         }
-        if ($packageAction -eq 'uninstall') {
-            $confirm = (Read-ClagnosUiChoice ('Type UNINSTALL to remove {0}' -f [string]$package.DisplayName))
-            if ($confirm -cne 'UNINSTALL') { continue }
+        if ($packageAction -in @('uninstall','reinstall')) {
+            $confirmationToken = if ($packageAction -eq 'uninstall') { 'UNINSTALL' } else { 'REINSTALL' }
+            $confirm = (Read-ClagnosUiChoice ('Type {0} to {1} {2}' -f $confirmationToken,$packageAction,[string]$package.DisplayName))
+            if ($confirm -cne $confirmationToken) { continue }
             $options['yes'] = $true
         }
         $commandOptions = @{ action = $packageAction }
@@ -2575,6 +2582,17 @@ function Read-ClagnosUiWizardTextStep {
     }
 }
 
+function Get-ClagnosUiCreateDefaultValue {
+    param([hashtable]$Config,[string]$DefaultKey,[string]$LegacyKey = '',[string]$Fallback = '')
+
+    $value = [string](Get-ConfigValue -Config $Config -Key $DefaultKey -DefaultValue '')
+    if ([string]::IsNullOrWhiteSpace($value) -and -not [string]::IsNullOrWhiteSpace($LegacyKey)) {
+        $value = [string](Get-ConfigValue -Config $Config -Key $LegacyKey -DefaultValue '')
+    }
+    if ([string]::IsNullOrWhiteSpace($value)) { $value = [string]$Fallback }
+    return [string]$value
+}
+
 function Show-ClagnosUiCreateWizard {
     $envPath = Join-Path $script:ClagnosUiRepoRoot 'clagnos.env'
     $globalConfig = Read-DotEnvFile -Path $envPath -GlobalOnly
@@ -2586,7 +2604,7 @@ function Show-ClagnosUiCreateWizard {
         return
     }
 
-    $platformDefault = ([string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_OS' -DefaultValue '')).Trim().ToLowerInvariant()
+    $platformDefault = (Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_OS' -LegacyKey 'SELECTED_VM_OS' -Fallback 'windows').Trim().ToLowerInvariant()
     if ($platformDefault -notin @('windows','linux')) { $platformDefault = '' }
     $wizardValues = @{}
     $wizardSources = @{}
@@ -2604,32 +2622,36 @@ function Show-ClagnosUiCreateWizard {
 
     $platformDefaults = Get-ClagnosPlatformDefaults -Platform $platform
     $vmNameDefault = [string](Get-ConfigValue -Config $config -Key 'SELECTED_VM_NAME' -DefaultValue '')
-    $regionDefault = [string](Get-ConfigValue -Config $config -Key 'SELECTED_AZURE_REGION' -DefaultValue '')
+    $regionDefault = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_AZURE_REGION' -LegacyKey 'SELECTED_AZURE_REGION'
     $vmSizeKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_SIZE'
     $imageKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_IMAGE'
     $diskKey = Get-ClagnosPlatformVmConfigKey -Platform $platform -BaseKey 'VM_DISK_SIZE_GB'
-    $vmSizeDefault = [string](Get-ConfigValue -Config $config -Key $vmSizeKey -DefaultValue ([string]$platformDefaults.VmSizeDefault))
-    $imageRawDefault = [string](Get-ConfigValue -Config $config -Key $imageKey -DefaultValue ([string]$platformDefaults.VmImageDefault))
-    $storageSkuDefault = [string](Get-ConfigValue -Config $config -Key 'VM_STORAGE_SKU' -DefaultValue 'StandardSSD_LRS')
+    $defaultPlatformPrefix = if ($platform -eq 'windows') { 'WIN' } else { 'LIN' }
+    $vmSizeDefaultKey = 'DEFAULT_{0}_VM_SIZE' -f $defaultPlatformPrefix
+    $imageDefaultKey = 'DEFAULT_{0}_VM_IMAGE' -f $defaultPlatformPrefix
+    $diskDefaultKey = 'DEFAULT_{0}_VM_DISK_SIZE_GB' -f $defaultPlatformPrefix
+    $vmSizeDefault = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey $vmSizeDefaultKey -LegacyKey $vmSizeKey -Fallback ([string]$platformDefaults.VmSizeDefault)
+    $imageRawDefault = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey $imageDefaultKey -LegacyKey $imageKey -Fallback ([string]$platformDefaults.VmImageDefault)
+    $storageSkuDefault = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_STORAGE_SKU' -LegacyKey 'VM_STORAGE_SKU' -Fallback 'StandardSSD_LRS'
     if ([string]::IsNullOrWhiteSpace([string]$storageSkuDefault)) { $storageSkuDefault = 'StandardSSD_LRS' }
     $securityDefault = ''
-    try { $securityDefault = [string](Resolve-ClagnosSecurityTypeValue -RawValue ([string](Get-ConfigValue -Config $config -Key 'VM_SECURITY_TYPE' -DefaultValue 'Standard'))) }
+    try { $securityDefault = [string](Resolve-ClagnosSecurityTypeValue -RawValue (Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_SECURITY_TYPE' -LegacyKey 'VM_SECURITY_TYPE' -Fallback 'Standard')) }
     catch { Write-Host ('Configured VM_SECURITY_TYPE is invalid: {0}. Select a security type in the wizard.' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
-    if ([string]::IsNullOrWhiteSpace([string]$securityDefault) -and [string]::IsNullOrWhiteSpace([string](Get-ConfigValue -Config $config -Key 'VM_SECURITY_TYPE' -DefaultValue 'Standard'))) { $securityDefault = 'Standard' }
-    $hibernationDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_HIBERNATION' -DefaultValue $true
-    $nestedDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_NESTED_VIRTUALIZATION' -DefaultValue $true
-    $secureBootDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_SECURE_BOOT' -DefaultValue $true
-    $vtpmDefault = Get-ClagnosUiWizardBooleanDefault -Config $config -Key 'VM_ENABLE_VTPM' -DefaultValue $true
-    $diskDefaultRaw = [string](Get-ConfigValue -Config $config -Key $diskKey -DefaultValue ([string]$platformDefaults.VmDiskSizeDefault))
+    if ([string]::IsNullOrWhiteSpace([string]$securityDefault)) { $securityDefault = 'Standard' }
+    $hibernationDefault = Get-ClagnosUiWizardBooleanDefault -Config @{ VM_ENABLE_HIBERNATION = (Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_ENABLE_HIBERNATION' -LegacyKey 'VM_ENABLE_HIBERNATION' -Fallback 'true') } -Key 'VM_ENABLE_HIBERNATION' -DefaultValue $true
+    $nestedDefault = Get-ClagnosUiWizardBooleanDefault -Config @{ VM_ENABLE_NESTED_VIRTUALIZATION = (Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION' -LegacyKey 'VM_ENABLE_NESTED_VIRTUALIZATION' -Fallback 'true') } -Key 'VM_ENABLE_NESTED_VIRTUALIZATION' -DefaultValue $true
+    $secureBootDefault = Get-ClagnosUiWizardBooleanDefault -Config @{ VM_ENABLE_SECURE_BOOT = (Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_ENABLE_SECURE_BOOT' -LegacyKey 'VM_ENABLE_SECURE_BOOT' -Fallback 'true') } -Key 'VM_ENABLE_SECURE_BOOT' -DefaultValue $true
+    $vtpmDefault = Get-ClagnosUiWizardBooleanDefault -Config @{ VM_ENABLE_VTPM = (Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_ENABLE_VTPM' -LegacyKey 'VM_ENABLE_VTPM' -Fallback 'true') } -Key 'VM_ENABLE_VTPM' -DefaultValue $true
+    $diskDefaultRaw = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey $diskDefaultKey -LegacyKey $diskKey -Fallback ([string]$platformDefaults.VmDiskSizeDefault)
     $diskDefault = ''
     try { $diskDefault = ConvertTo-ClagnosOsDiskSizeGb -Value $diskDefaultRaw -FieldName $diskKey }
     catch { Write-Host ('Disk default will need an entered value: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
     $imageDefault = Resolve-ClagnosTemplate -Template $imageRawDefault -Tokens @{ SELECTED_VM_NAME = $vmNameDefault }
-    $sshPortDefaultRaw = [string](Get-ConfigValue -Config $config -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))
+    $sshPortDefaultRaw = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_SSH_PORT' -LegacyKey 'VM_SSH_PORT' -Fallback (Get-ClagnosDefaultSshPortText)
     $sshPortDefault = ''
     try { $sshPortDefault = Resolve-ClagnosTcpPortNumber -Value $sshPortDefaultRaw -Label 'VM_SSH_PORT' }
     catch { Write-Host ('SSH port default will need correction: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }
-    $rdpPortDefaultRaw = [string](Get-ConfigValue -Config $config -Key 'VM_RDP_PORT' -DefaultValue (Get-ClagnosDefaultRdpPortText))
+    $rdpPortDefaultRaw = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_VM_RDP_PORT' -LegacyKey 'VM_RDP_PORT' -Fallback (Get-ClagnosDefaultRdpPortText)
     $rdpPortDefault = ''
     if ($platform -eq 'windows') {
         try { $rdpPortDefault = Resolve-ClagnosTcpPortNumber -Value $rdpPortDefaultRaw -Label 'VM_RDP_PORT' }
@@ -2640,7 +2662,7 @@ function Show-ClagnosUiCreateWizard {
     if (-not [string]::IsNullOrWhiteSpace([string]$rdpPortDefault)) { $requiredPorts += $rdpPortDefault }
     $wizardValues['SshPort'] = [string]$sshPortDefault
     if ($platform -eq 'windows') { $wizardValues['RdpPort'] = [string]$rdpPortDefault }
-    $portsDefaultRaw = [string](Get-ConfigValue -Config $config -Key 'TCP_PORTS' -DefaultValue (Get-ClagnosDefaultTcpPortsCsv))
+    $portsDefaultRaw = Get-ClagnosUiCreateDefaultValue -Config $config -DefaultKey 'DEFAULT_TCP_PORTS' -LegacyKey 'TCP_PORTS' -Fallback (Get-ClagnosDefaultTcpPortsCsv)
     $portsDefault = ''
     try { $portsDefault = [string](Resolve-ClagnosTcpPortSpecification -Text $portsDefaultRaw -RequiredPorts $requiredPorts).CanonicalText }
     catch { Write-Host ('Port default will need correction: {0}' -f [string]$_.Exception.Message) -ForegroundColor Yellow }

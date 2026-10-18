@@ -82,7 +82,7 @@ function Reset-TuiScenario {
     $script:TuiLinuxVm = New-TuiVmFixture -Platform Linux
     $script:TuiVmDetailRecord = New-TuiVmDetailsFixture
     $script:TuiManagedGroups = @(
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1'; etag = 'fixture-group-etag'; name = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' }; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } }
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1'; etag = 'fixture-group-etag'; name = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' }; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } }
     )
     $script:TuiManagedGroupsByCall = @()
     $script:TuiVirtualComputers = @($script:TuiWindowsVm)
@@ -98,12 +98,12 @@ function Reset-TuiScenario {
     }
     $script:TuiPackageStatuses = @{ 'builtin-fixture' = 'installed'; 'disabled-fixture' = 'not-installed'; 'custom-fixture' = 'unknown' }
     $script:TuiCloudRows = @(
-        [pscustomobject]@{ id = 'sub-fixture-enabled'; name = 'Fixture Enabled'; state = 'Enabled'; tenantId = 'tenant-fixture'; isDefault = $true },
-        [pscustomobject]@{ id = 'sub-fixture-disabled'; name = 'Fixture Disabled'; state = 'Disabled'; tenantId = 'tenant-fixture'; isDefault = $false }
+        [pscustomobject]@{ id = '00000000-0000-4000-8000-000000000001'; name = 'Fixture Enabled'; state = 'Enabled'; tenantId = 'tenant-fixture'; isDefault = $true },
+        [pscustomobject]@{ id = '00000000-0000-4000-8000-000000000002'; name = 'Fixture Disabled'; state = 'Disabled'; tenantId = 'tenant-fixture'; isDefault = $false }
     )
-    $script:TuiSelectedContext = [pscustomobject]@{ SubscriptionId = 'sub-fixture-enabled'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
-    $script:TuiActiveSubscriptionId = 'sub-fixture-enabled'
-    $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = 'sub-fixture-enabled'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
+    $script:TuiSelectedContext = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
+    $script:TuiActiveSubscriptionId = '00000000-0000-4000-8000-000000000001'
+    $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
     $script:ClagnosUiSubscriptionError = ''
     $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
     $script:ClagnosUiSelectedResourceGroup = 'rg-fixture-eastus-g1'
@@ -114,15 +114,15 @@ function Reset-TuiScenario {
     $script:ClagnosUiReadCacheSeconds = 45
     $script:ClagnosUiInventoryCache = $null
     $fixtureResources = @(
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'; etag = 'fixture-vm-etag'; name = 'fixture-vc'; type = 'Microsoft.Compute/virtualMachines'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' } },
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/disks/disk-fixture-os'; etag = 'fixture-disk-etag'; name = 'disk-fixture-os'; type = 'Microsoft.Compute/disks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Premium_LRS' }; properties = [pscustomobject]@{ diskSizeGb = 128; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } } },
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture'; etag = 'fixture-vnet-etag'; name = 'vnet-fixture'; type = 'Microsoft.Network/virtualNetworks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ subnets = @([pscustomobject]@{ name = 'subnet-fixture'; id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }) } },
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkInterfaces/nic-fixture'; etag = 'fixture-nic-etag'; name = 'nic-fixture'; type = 'Microsoft.Network/networkInterfaces'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ primary = $true; enableAcceleratedNetworking = $true; enableIPForwarding = $false; networkSecurityGroup = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture' }; ipConfigurations = @([pscustomobject]@{ name = 'ipconfig-primary'; privateIPAddress = '10.1.0.4'; privateIPAllocationMethod = 'Dynamic'; primary = $true; subnet = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }; publicIPAddress = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture' } }) } },
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture'; etag = 'fixture-ip-etag'; name = 'pip-fixture'; type = 'Microsoft.Network/publicIPAddresses'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Standard' }; zones = @('1'); properties = [pscustomobject]@{ ipAddress = '203.0.113.8'; publicIPAllocationMethod = 'Static'; dnsSettings = [pscustomobject]@{ fqdn = 'fixture.eastus.cloudapp.azure.com'; domainNameLabel = 'fixture' } } },
-        [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture'; etag = 'fixture-nsg-etag'; name = 'nsg-fixture'; type = 'Microsoft.Network/networkSecurityGroups'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ securityRules = @() } }
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'; etag = 'fixture-vm-etag'; name = 'fixture-vc'; type = 'Microsoft.Compute/virtualMachines'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' } },
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/disks/disk-fixture-os'; etag = 'fixture-disk-etag'; name = 'disk-fixture-os'; type = 'Microsoft.Compute/disks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Premium_LRS' }; properties = [pscustomobject]@{ diskSizeGb = 128; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } } },
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture'; etag = 'fixture-vnet-etag'; name = 'vnet-fixture'; type = 'Microsoft.Network/virtualNetworks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ subnets = @([pscustomobject]@{ name = 'subnet-fixture'; id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }) } },
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkInterfaces/nic-fixture'; etag = 'fixture-nic-etag'; name = 'nic-fixture'; type = 'Microsoft.Network/networkInterfaces'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ primary = $true; enableAcceleratedNetworking = $true; enableIPForwarding = $false; networkSecurityGroup = [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture' }; ipConfigurations = @([pscustomobject]@{ name = 'ipconfig-primary'; privateIPAddress = '10.1.0.4'; privateIPAllocationMethod = 'Dynamic'; primary = $true; subnet = [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }; publicIPAddress = [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture' } }) } },
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture'; etag = 'fixture-ip-etag'; name = 'pip-fixture'; type = 'Microsoft.Network/publicIPAddresses'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Standard' }; zones = @('1'); properties = [pscustomobject]@{ ipAddress = '203.0.113.8'; publicIPAllocationMethod = 'Static'; dnsSettings = [pscustomobject]@{ fqdn = 'fixture.eastus.cloudapp.azure.com'; domainNameLabel = 'fixture' } } },
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture'; etag = 'fixture-nsg-etag'; name = 'nsg-fixture'; type = 'Microsoft.Network/networkSecurityGroups'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ securityRules = @() } }
     )
     $script:ClagnosUiInventoryCache = @{
-        SubscriptionId = 'sub-fixture-enabled'
+        SubscriptionId = '00000000-0000-4000-8000-000000000001'
         Groups = @($script:TuiManagedGroups)
         Resources = @($fixtureResources)
         VirtualMachines = @($script:TuiWindowsVm)
@@ -157,12 +157,12 @@ function Invoke-TuiTest {
 function New-TuiVmFixture {
     param([ValidateSet('Windows','Linux')][string]$Platform = 'Windows')
     return [pscustomobject]@{
-        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'
+        id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'
         etag = 'fixture-vm-etag'
         name = 'fixture-vc'
         location = 'eastus'
         ClagnosResourceGroup = 'rg-fixture-eastus-g1'
-        ClagnosSubscriptionId = 'sub-fixture-enabled'
+        ClagnosSubscriptionId = '00000000-0000-4000-8000-000000000001'
         storageProfile = [pscustomobject]@{
             osDisk = [pscustomobject]@{ osType = $Platform }
             dataDisks = @()
@@ -196,7 +196,7 @@ function New-TuiPackageFixture {
 
 function New-TuiVmDetailsFixture {
     return [pscustomobject]@{
-        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'
+        id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'
         vmId = 'vm-id-fixture'
         location = 'eastus'
         provisioningState = 'Succeeded'
@@ -234,7 +234,7 @@ function New-TuiVmDetailsFixture {
         tags = [pscustomobject]@{ 'managed-by' = 'clagnos'; purpose = 'tui-fixture' }
         networkProfile = [pscustomobject]@{
             networkInterfaces = @([pscustomobject]@{
-                id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkInterfaces/nic-fixture'
+                id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkInterfaces/nic-fixture'
                 resourceGroup = 'rg-fixture-eastus-g1'
                 primary = $true
             })
@@ -369,11 +369,11 @@ function Invoke-ClagnosUiAzJson {
     if ($query -like 'network nic show *') {
         return [pscustomobject]@{
             name = 'nic-fixture'; primary = $true; enableAcceleratedNetworking = $true; enableIPForwarding = $false
-            networkSecurityGroup = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture' }
+            networkSecurityGroup = [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture' }
             ipConfigurations = @([pscustomobject]@{
                 name = 'ipconfig-primary'; privateIPAddress = '10.1.0.4'; privateIPAllocationMethod = 'Dynamic'; primary = $true
-                subnet = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }
-                publicIPAddress = [pscustomobject]@{ id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture' }
+                subnet = [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/virtualNetworks/vnet-fixture/subnets/subnet-fixture' }
+                publicIPAddress = [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture' }
             })
         }
     }
@@ -394,7 +394,7 @@ function Read-DotEnvFile {
     if ([string]::Equals($fileName,'clagnos.env',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($fileName,'clagnos.env.example',[System.StringComparison]::OrdinalIgnoreCase)) {
         $globalConfig = @{
             ACTIVE_VM_NAME = 'fixture-vc'
-            SELECTED_AZURE_SUBSCRIPTION_ID = 'sub-fixture-enabled'
+            SELECTED_AZURE_SUBSCRIPTION_ID = '00000000-0000-4000-8000-000000000001'
             DEFAULT_VM_OS = 'windows'
             DEFAULT_AZURE_REGION = 'eastus'
             DEFAULT_VM_STORAGE_SKU = 'StandardSSD_LRS'
@@ -540,7 +540,7 @@ Invoke-TuiTest -Name 'Launcher points cg.cmd to the interactive Clagnos CLI' -Ac
 Invoke-TuiTest -Name 'TUI header shows the Clagnos tagline and selected subscription details' -Action {
     & $script:TuiOriginalHeader -Title 'Header fixture screen'
     Assert-TuiOutputContains -Text 'one tool for all common cloud operations' -Message 'The shared TUI header must render the product tagline.'
-    Assert-TuiOutputContains -Text 'Azure subscription: Fixture Enabled (sub-fixture-enabled)' -Message 'The header must identify the selected subscription.'
+    Assert-TuiOutputContains -Text 'Azure subscription: Fixture Enabled (00000000-0000-4000-8000-000000000001)' -Message 'The header must identify the selected subscription.'
     Assert-TuiOutputContains -Text 'Header fixture screen' -Message 'The header must show the requested screen title.'
 }
 
@@ -603,18 +603,18 @@ Invoke-TuiTest -Name 'Paged numbered picker supports every page key and keeps se
 Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state, and detects resource changes' -Action {
     $script:TuiCacheFixtureCalls = 0
     $script:TuiCacheGroup = [pscustomobject]@{
-        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-cache-fixture'
+        id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-cache-fixture'
         name = 'rg-cache-fixture'; etag = 'group-etag-1'; location = 'eastus'
         properties = [pscustomobject]@{ provisioningState = 'Succeeded' }
         tags = [pscustomobject]@{ 'managed-by' = 'clagnos' }
     }
     $script:TuiCacheResource = [pscustomobject]@{
-        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/disks/disk-cache'
+        id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/disks/disk-cache'
         etag = 'disk-etag-1'; name = 'disk-cache'; type = 'Microsoft.Compute/disks'; resourceGroup = 'rg-cache-fixture'
         location = 'eastus'; properties = [pscustomobject]@{ diskSizeGb = 64 }
     }
     $script:TuiCacheVm = [pscustomobject]@{
-        id = '/subscriptions/sub-fixture-enabled/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/virtualMachines/cache-vm'
+        id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/virtualMachines/cache-vm'
         etag = 'vm-etag-1'; name = 'cache-vm'; resourceGroup = 'rg-cache-fixture'; powerState = 'VM running'; provisioningState = 'Succeeded'
         hardwareProfile = [pscustomobject]@{ vmSize = 'Standard_B2s_v2' }; privateIps = '10.0.0.4'; publicIps = '203.0.113.4'; fqdns = 'cache.example.invalid'
         storageProfile = [pscustomobject]@{ osDisk = [pscustomobject]@{ osType = 'Linux' } }
@@ -661,13 +661,13 @@ Invoke-TuiTest -Name 'Persisted inventory refresh requests remain dirty until a 
     try {
         $env:CLAGNOS_TUI_CACHE_ROOT = $tempRoot
         $script:ClagnosUiInventoryMaximumStaleSeconds = 300
-        $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = 'sub-fixture-enabled'; SubscriptionName = 'Fixture Enabled' }
+        $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled' }
         $script:ClagnosUiInventoryCache = $null
         $script:ClagnosUiInventoryCacheFilePath = ''
-        $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId 'sub-fixture-enabled'
+        $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId '00000000-0000-4000-8000-000000000001'
         New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null
         $validatedAt = [DateTime]::UtcNow.AddSeconds(-5)
-        $snapshot = [ordered]@{ SubscriptionId = 'sub-fixture-enabled'; Groups = @(); Resources = @(); VirtualMachines = @(); Signature = 'fixture-signature'; LastValidatedAtUtc = $validatedAt.ToString('o'); IsDirty = $false; DirtyReason = ''; DirtyResourceGroup = ''; Changed = $false }
+        $snapshot = [ordered]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; Groups = @(); Resources = @(); VirtualMachines = @(); Signature = 'fixture-signature'; LastValidatedAtUtc = $validatedAt.ToString('o'); IsDirty = $false; DirtyReason = ''; DirtyResourceGroup = ''; Changed = $false }
         Set-Content -LiteralPath $paths.Cache -Value (ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress) -Encoding UTF8
         Set-Content -LiteralPath $paths.Request -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ASCII
 
@@ -725,10 +725,10 @@ Invoke-TuiTest -Name 'Create wizard skip-all and apply-all controls use validate
         DEFAULT_VM_STORAGE_SKU = 'StandardSSD_LRS'; DEFAULT_VM_SECURITY_TYPE = 'Standard'; DEFAULT_VM_ENABLE_HIBERNATION = 'true'; DEFAULT_VM_ENABLE_NESTED_VIRTUALIZATION = 'true'
         DEFAULT_VM_SSH_PORT = '22222'; DEFAULT_VM_RDP_PORT = '3390'; DEFAULT_TCP_PORTS = '80,3000-3300'
     }
-    Set-TuiChoices -Choices @('k','fixture-default-vc','l')
+    Set-TuiChoices -Choices @('k','fixture-vc2','l')
     & $script:TuiOriginalCreateWizard
     $call = Assert-TuiCommand -CommandName 'create'
-    Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-default-vc'
+    Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc2'
     Assert-Tui -Condition ([string]$call.FrontendContext.CreateWizardValues.DiskSizeGb -eq '128') -Message 'Skipping remaining steps must retain and validate the configured disk default.'
     Assert-TuiOutputContains -Text 'Create wizard — review' -Message 'Apply-all must lead to a complete review before create dispatch.'
 }
@@ -794,7 +794,7 @@ Invoke-TuiTest -Name 'Cloud subscriptions show selected and active state and sel
     Assert-TuiOutputContains -Text 'Clagnos selected: Fixture Enabled' -Message 'Screen must show the configured Clagnos selection.'
     Assert-TuiOutputContains -Text 'Azure CLI active: Fixture Enabled' -Message 'Screen must show the Azure CLI active selection.'
     Assert-TuiOutputContains -Text 'Fixture Disabled' -Message 'Screen must list disabled subscriptions.'
-    Assert-Tui -Condition ($script:TuiSubscriptionSelections.Count -eq 1 -and $script:TuiSubscriptionSelections[0] -eq 'sub-fixture-enabled') -Message 'Selecting an enabled subscription must update the selected subscription through the UI adapter.'
+    Assert-Tui -Condition ($script:TuiSubscriptionSelections.Count -eq 1 -and $script:TuiSubscriptionSelections[0] -eq '00000000-0000-4000-8000-000000000001') -Message 'Selecting an enabled subscription must update the selected subscription through the UI adapter.'
 }
 
 Invoke-TuiTest -Name 'Cloud subscriptions reject disabled rows without activating them' -Action {
@@ -869,7 +869,7 @@ Invoke-TuiTest -Name 'Virtual computer discovery enriches rows with managed grou
     $rows = @(& $script:TuiOriginalVmDiscovery)
     Assert-Tui -Condition ($rows.Count -eq 1) -Message 'Discovery must return the fixture VM.'
     Assert-Tui -Condition ([string]$rows[0].ClagnosResourceGroup -eq 'rg-fixture-eastus-g1') -Message 'Discovery must attach its managed resource group.'
-    Assert-Tui -Condition ([string]$rows[0].ClagnosSubscriptionId -eq 'sub-fixture-enabled') -Message 'Discovery must attach the selected subscription id.'
+    Assert-Tui -Condition ([string]$rows[0].ClagnosSubscriptionId -eq '00000000-0000-4000-8000-000000000001') -Message 'Discovery must attach the selected subscription id.'
     Assert-Tui -Condition ($script:TuiAzureReadQueries.Count -eq 0) -Message 'VM discovery must read the startup inventory snapshot without issuing screen-specific Azure reads.'
 }
 
@@ -986,6 +986,12 @@ Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, V
 }
 
 Invoke-TuiTest -Name 'Linux VC detail screen omits RDP and reports missing public endpoints' -Action {
+    $previousUiRepoRoot = [string]$script:ClagnosUiRepoRoot
+    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-vc-profile-fixture-' + [guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Path $profileRoot -Force
+    $script:ClagnosUiRepoRoot = $profileRoot
+    Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-vc.env') -Value @('SELECTED_VM_NAME=fixture-vc') -Encoding ASCII
+    try {
     $script:TuiVmDetailRecord.storageProfile.osDisk.osType = 'Linux'
     $script:TuiVmDetailRecord.networkProfile.networkInterfaces = @()
     $script:TuiVmDetailRecord.additionalCapabilities.hibernationEnabled = $false
@@ -1005,6 +1011,14 @@ Invoke-TuiTest -Name 'Linux VC detail screen omits RDP and reports missing publi
     Assert-TuiOutputContains -Text 'Public IP/DNS: (no public endpoint reported)' -Message 'VC details must clearly show when no public endpoint is reported.'
     Assert-TuiOutputContains -Text 'Hibernation enabled: False' -Message 'VC details must show disabled hibernation.'
     Assert-TuiNoRealCloudCalls
+    }
+    finally {
+        $script:ClagnosUiRepoRoot = $previousUiRepoRoot
+        $resolvedProfileRoot = [System.IO.Path]::GetFullPath($profileRoot)
+        $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'clagnos-vc-profile-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI profile fixture: {0}" -f $resolvedProfileRoot) }
+        if (Test-Path -LiteralPath $resolvedProfileRoot) { Remove-Item -LiteralPath $resolvedProfileRoot -Recurse -Force }
+    }
 }
 
 Invoke-TuiTest -Name 'Selected VC screen routes all visible shortcuts and confirms complete group deletion' -Action {
@@ -1095,11 +1109,13 @@ foreach ($packageActionCase in @(
     @{ Key = 'i'; Action = 'install' },
     @{ Key = 'r'; Action = 'repair' },
     @{ Key = 'v'; Action = 'update' },
+    @{ Key = 'x'; Action = 'reinstall' },
     @{ Key = 's'; Action = 'status' }
 )) {
     Invoke-TuiTest -Name ("Builtin package action '{0}' routes to the matching package operation" -f $packageActionCase.Action) -Action {
         $inputChoices = @('1','1', [string]$packageActionCase.Key)
         if ($packageActionCase.Key -eq 'u') { $inputChoices += 'UNINSTALL' }
+        if ($packageActionCase.Key -eq 'x') { $inputChoices += 'REINSTALL' }
         $inputChoices += @('b','b')
         Set-TuiChoices -Choices $inputChoices
         & $script:TuiOriginalPackageMenu -Vm $script:TuiWindowsVm
@@ -1678,7 +1694,9 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cli.ps1') -Force
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cache-worker.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cache-worker.ps1') -Force
         foreach ($catalogRoot in @('vm-packages\builtin\windows','vm-packages\custom\windows','vm-packages\builtin\linux','vm-packages\custom\linux')) {
-            New-Item -ItemType Directory -Path (Join-Path $sandboxRoot $catalogRoot) -Force | Out-Null
+            $catalogPath = Join-Path $sandboxRoot $catalogRoot
+            New-Item -ItemType Directory -Path $catalogPath -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $catalogPath 'tasks.toml') -Value '[tasks]' -Encoding ASCII
         }
         foreach ($fixtureName in @('az.cmd','az-fixture.ps1','az-fixture.cs')) {
             Copy-Item -LiteralPath (Join-Path $RepoRoot (Join-Path 'tests\tui\fixtures' $fixtureName)) -Destination (Join-Path $fixtureBin $fixtureName) -Force

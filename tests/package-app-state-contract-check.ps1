@@ -79,11 +79,15 @@ foreach ($packageId in @($expectedPortablePolicies)) {
 $jawsManifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPaths['jaws'] -Raw -ErrorAction Stop) -ErrorAction Stop
 $jawsAsset = @($jawsManifest.assets | Where-Object { [string]$_.local -eq 'app-state/app-state.zip' -and [string]$_.remote -eq 'C:/Windows/Temp/clagnos-jaws-app-state.zip' })
 Assert-ClagnosPackageAppState -Condition ($jawsAsset.Count -eq 1) -Message 'JAWS must publish its reviewed app-state archive to the installer as an explicit remote asset.'
+$jawsProfileRules = @($jawsManifest.appState.profileFiles)
+Assert-ClagnosPackageAppState -Condition (@($jawsProfileRules | Where-Object { @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'manager' -or @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'assistant' }).Count -eq 0) -Message 'Every JAWS app-state preference must target both manager and assistant profiles.'
+Assert-ClagnosPackageAppState -Condition (@($jawsProfileRules | Where-Object { [string]$_.path -match '(?i)\\(codex\.JSS|codex\.JKM|super_pi_mod\.JSS)$' }).Count -eq 3) -Message 'JAWS app-state must include the reviewed custom JSS and JKM source files.'
 $jawsInstallerPath = Join-Path $packageRoot 'builtin\windows\jaws\install.ps1'
 $jawsInstallerText = [string](Get-Content -LiteralPath $jawsInstallerPath -Raw -ErrorAction Stop)
-foreach ($requiredJawsInstallerText in @('Stop-JawsProcessForUpdate','Install-JawsUpdateFilesFromAppState','C:\Program Files\Freedom Scientific\JAWS\2025','payload/update-files/','JAWS (jfw.exe) is still running')) {
-    Assert-ClagnosPackageAppState -Condition ($jawsInstallerText.Contains($requiredJawsInstallerText)) -Message ("JAWS installer must stop jfw.exe and safely apply its update-files payload: missing '{0}'." -f $requiredJawsInstallerText)
-}
+$jawsOperationsPath = Join-Path $RepoRoot 'modules/commands/package/clagnos-package-operations.psm1'
+$jawsOperationsText = [string](Get-Content -LiteralPath $jawsOperationsPath -Raw -ErrorAction Stop)
+Assert-ClagnosPackageAppState -Condition ($jawsInstallerText.Contains('Install-ClagnosJawsAppStateUpdateFiles') -and $jawsInstallerText.Contains('C:\Program Files\Freedom Scientific\JAWS\2025')) -Message 'The JAWS installer must delegate its update-files payload to the shared package lifecycle helper and target JAWS 2025.'
+Assert-ClagnosPackageAppState -Condition ($jawsOperationsText.Contains("Get-Process -Name jfw") -and $jawsOperationsText.Contains('function Queue-ClagnosJawsUpdateFileReplacementForReboot') -and $jawsOperationsText.Contains('MOVEFILE_DELAY_UNTIL_REBOOT') -and $jawsOperationsText.Contains('JAWS update-files payload is verified against the package app-state archive')) -Message 'JAWS app-state replay must keep jfw.exe closed, verify update-file hashes, and defer a persistently locked proxy DLL to reboot without blocking indefinitely.'
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $forbiddenMemberPattern = '(?i)(auth\.json|cache\.bin|hosts\.yml|cookies|login data|history|workspacestorage|\.npmrc|\.db$|onedrive|whatsapp|local state|secure preferences)'
@@ -108,7 +112,7 @@ foreach ($archiveFile in @($archiveFiles)) {
             Assert-ClagnosPackageAppState -Condition ([string]$member.FullName -notmatch $forbiddenMemberPattern) -Message ("Package snapshot '{0}' contains a cache, history, login, or credential member." -f $packageId)
             if ($member.Length -le 0 -or $member.Length -gt 1500000 -or [string]::Equals([string]$member.FullName, 'app-state.manifest.json', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
             $extension = [IO.Path]::GetExtension($member.Name).ToLowerInvariant()
-            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.vssettings','.jcf','.jdf','.vpf','.vlcrc') -and $member.Name -ne 'config') { continue }
+            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.vssettings','.jcf','.jdf','.jss','.jkm','.vpf','.vlcrc') -and $member.Name -ne 'config') { continue }
             $reader = New-Object System.IO.StreamReader($member.Open())
             try { $content = [string]$reader.ReadToEnd() }
             finally { $reader.Dispose() }
@@ -144,6 +148,13 @@ foreach ($archiveFile in @($archiveFiles)) {
             $jawsUpdateFiles = @($archive.Entries | Where-Object { ([string]$_.FullName).StartsWith('payload/update-files/',[System.StringComparison]::OrdinalIgnoreCase) -and -not ([string]$_.FullName).EndsWith('/') } | ForEach-Object { ([string]$_.FullName).Substring('payload/update-files/'.Length) } | Sort-Object)
             $expectedJawsUpdateFiles = @('JawsCertificate.cer','netapi32.dll','version.dll') | Sort-Object
             Assert-ClagnosPackageAppState -Condition (($jawsUpdateFiles -join '|') -ceq ($expectedJawsUpdateFiles -join '|')) -Message 'JAWS app-state update-files payload must contain exactly the reviewed update files.'
+            $jawsSnapshotManifestEntry = $archive.GetEntry('app-state.manifest.json')
+            $jawsSnapshotReader = New-Object System.IO.StreamReader($jawsSnapshotManifestEntry.Open())
+            try { $jawsSnapshotManifest = ConvertFrom-Json -InputObject $jawsSnapshotReader.ReadToEnd() -ErrorAction Stop }
+            finally { $jawsSnapshotReader.Dispose() }
+            Assert-ClagnosPackageAppState -Condition (@($jawsSnapshotManifest.profileFiles | Where-Object { @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'manager' -or @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'assistant' }).Count -eq 0) -Message 'JAWS snapshot entries must replay to both managed profiles.'
+            $jawsPortableSources = @($jawsSnapshotManifest.profileFiles | ForEach-Object { [IO.Path]::GetFileName([string]$_.relativeDestinationPath) })
+            Assert-ClagnosPackageAppState -Condition (@($jawsPortableSources | Where-Object { [string]$_ -match '(?i)^(codex\.JSS|codex\.JKM|super_pi_mod\.JSS)$' }).Count -eq 3) -Message 'JAWS snapshot must contain the reviewed custom script and keymap source files.'
         }
     }
     finally { $archive.Dispose() }

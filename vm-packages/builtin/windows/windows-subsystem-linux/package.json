@@ -2,7 +2,6 @@
   "id": "windows-subsystem-linux",
   "displayName": "Windows Subsystem for Linux",
   "category": "feature",
-  "timeout": 1800,
   "sortOrder": 121,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -11,19 +10,13 @@
   "repairScript": "repair.ps1",
   "updateStrategy": "installer",
   "statusCheck": {
-    "kind": "appx",
-    "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
+    "kind": "wsl",
+    "value": "Windows Subsystem for Linux"
   },
   "uninstall": {
-    "kind": "appx",
-    "value": "MicrosoftCorporationII.WindowsSubsystemForLinux"
+    "kind": "wsl",
+    "value": "Windows Subsystem for Linux"
   },
-  "assets": [
-    {
-      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
-      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
-    }
-  ],
   "appStateKey": "121-install-wsl-feature",
   "appState": {
     "machineDirectories": [],
@@ -37,5 +30,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "wsl-msi",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
+    "reinstall": 360
   }
 }

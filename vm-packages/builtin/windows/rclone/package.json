@@ -18,5 +18,14 @@
     "kind": "winget",
     "value": "Rclone.Rclone"
   },
-  "appStateKey": "105-install-rclone-tool"
+  "appStateKey": "105-install-rclone-tool",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 60,
+    "repair": 60,
+    "update": 60,
+    "uninstall": 60,
+    "reinstall": 120
+  },
+  "repairStrategy": "winget"
 }

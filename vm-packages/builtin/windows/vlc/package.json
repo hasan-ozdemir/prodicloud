@@ -2,7 +2,6 @@
   "id": "vlc",
   "displayName": "VLC media player",
   "category": "application",
-  "timeout": 180,
   "sortOrder": 131,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -35,5 +34,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "winget",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 180,
+    "reinstall": 360
   }
 }

@@ -3,6 +3,21 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.18.426] - 2026-10-18
+
+### Added
+- Added an opt-in live Windows package lifecycle E2E runner with per-package reports, bounded operation budgets, activity observation, one retry after sustained inactivity, and infrastructure before/after comparison.
+
+### Changed
+- Hardened Windows builtin package install, repair, update, uninstall, reinstall, and status paths with explicit provider verification and finite timeouts.
+- Made Windscribe lifecycle operations headless: firewall state is read from the active service identity's persisted state, and signed uninstall work runs through a password-logon scheduled task without an RDP desktop.
+- Improved JAWS app-state update-file deployment and startup verification, Docker Desktop and Google Drive lifecycle behavior, and Ollama recovery from stale package-manager metadata.
+
+### Validation
+- Package lifecycle (36 manifests), package app-state, documentation, and sensitive-content checks passed. TUI coverage passed 180/180; live WinRM lifecycle cycles passed for Windscribe and Node.js, and the final inventory showed all 36 packages installed.
+- The live target remained running at its existing VM size with its disk and network resources unchanged.
+- The compatibility smoke suite passed 179 checks and still reports 14 unrelated legacy fixture/path/help/task-contract failures.
+
 ## [2026.10.16.425] - 2026-10-16
 
 ### Added

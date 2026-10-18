@@ -2,6 +2,21 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.18.426 - 2026-10-18
+
+### Summary
+Windows package lifecycle actions now have stronger verification, bounded execution, and unattended WinRM coverage.
+
+### Highlights
+- Added a package-by-package live E2E runner that records lifecycle outcomes, watches guest CPU, memory, network, and disk activity, and verifies Azure infrastructure is unchanged.
+- Windscribe uninstall and reinstall no longer require an RDP session or logged-on desktop; state checks use the active service identity and a password-logon scheduled task runs the signed vendor uninstaller.
+- Hardened package-specific repair/update/uninstall behavior, JAWS app-state and startup checks, Docker Desktop removal, Google Drive repair, and Ollama recovery.
+
+### Validation
+- Package lifecycle, app-state, documentation, sensitive-content, and TUI checks passed; TUI coverage was 180/180.
+- Live WinRM lifecycle checks passed all six actions for Windscribe and Node.js. The final read-only inventory reported 36/36 builtin packages installed; the VM remained running with its original size, disks, and network resources.
+- The full compatibility smoke suite still has 14 unrelated legacy fixture/path/help/task-contract failures (179 checks passed).
+
 ## Release 2026.10.16.425 - 2026-10-16
 
 ### Summary

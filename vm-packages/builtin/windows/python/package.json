@@ -2,7 +2,6 @@
   "id": "python",
   "displayName": "Python",
   "category": "tool",
-  "timeout": 180,
   "sortOrder": 128,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -23,5 +22,14 @@
       "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
       "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
     }
-  ]
+  ],
+  "repairStrategy": "choco",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 180,
+    "reinstall": 360
+  }
 }

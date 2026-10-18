@@ -5975,3 +5975,14 @@ Feature update: Add a top_status_lines true/false setting to the global Clagnos 
 **Assistant Summary**
 
 Added the TOP_STATUS_LINES boolean to the global environment contract and example, set the local clagnos.env value to false, and added a true/false picker under Configure > Advanced. The TUI now reads the preference on screen entry: false restores the compact header and disables status-row redraws; true enables the persistent two-row screen, VC, subscription, action, and cache display. PowerShell parsing and git diff check passed. TUI and live Azure tests were not run.
+
+### 2026-10-18 08:30 UTC
+**User Prompt**
+
+````text
+Complete the package lifecycle work for all 36 Windows VM setup packages. Ensure install, update, uninstall, repair, and reinstall are healthy and bounded; monitor guest CPU, memory, network, disk, and operation output; treat more than 60 seconds of inactivity as a stall, retry once if progress does not return, and report the precise failing phase. Run the lifecycle checks package by package on the existing VM, fixing a package before advancing and never rebuilding from the beginning. Review each package's app-state, and match local JAWS preferences, update files, logon-screen startup, and post-logon startup on the remote guest. The user clarified that package setup must run unattended and must not depend on an open RDP or desktop session.
+````
+
+**Assistant Summary**
+
+Hardened the Windows builtin package lifecycle paths, added a live WinRM package E2E runner with per-operation reports, bounded timeouts, guest activity observation, and Azure infrastructure comparison, and updated package-specific repair, update, uninstall, and reinstall behavior. Windscribe now reads the active service identity's persisted firewall state and runs its signed uninstall through a password-logon scheduled task without requiring an interactive desktop. Continued the package-by-package live sequence without rebuilding or restarting the full catalog: Windscribe and Node.js each passed install, repair, update, uninstall, install, reinstall, and final status; the Windscribe run confirmed `manager-desktop=absent`. The final read-only inventory showed all 36 builtin packages installed. The VM remained running at its existing size, disk, and network configuration. Package lifecycle, app-state, documentation, sensitive-content, and TUI checks passed (180/180 TUI scenarios). The compatibility smoke suite passed 179 checks and retains 14 unrelated legacy fixture, path, help, and task-contract failures. Windows Package Manager and Microsoft Edge uninstall/reinstall remain intentionally blocked by the Windows image policy.

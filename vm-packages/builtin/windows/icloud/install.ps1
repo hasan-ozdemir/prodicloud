@@ -14,9 +14,7 @@ $taskConfig = [ordered]@{
     ExecutableName = 'iCloudHome.exe'
     InteractiveTaskSuffix = 'interactive-install'
     LegacyRunOnceName = 'ClagnosInstallICloud'
-    InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
-    StoreSessionErrorRegex = '(?i)0x80070520|logon session|microsoft store|msstore'
     ExecutableCandidates = @(
         'C:\Program Files\iCloud\iCloudHome.exe',
         'C:\Program Files (x86)\iCloud\iCloudHome.exe',
@@ -259,16 +257,6 @@ if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName
     Write-Host 'store-install-cleanup => task=122-install-icloud-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
-if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'iCloud install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
-    throw ([string]$blockMessage.WarningMessage)
-}
-
 $workerTaskName = "{0}-{1}" -f $taskName, ([string]$taskConfig.InteractiveTaskSuffix)
 $paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
@@ -391,7 +379,7 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 }
 
 if (-not (Test-ICloudInstalled)) {
-    $installOutput = @(& $wingetExe install --id $packageId --source $packageSource --accept-source-agreements --accept-package-agreements 2>&1)
+    $installOutput = @(& $wingetExe install --id $packageId --source $packageSource --silent --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1)
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
@@ -423,7 +411,7 @@ try {
         -RunAsPassword $managerPassword `
         -WorkerScriptText $workerScript `
         -WaitTimeoutSeconds ([int]$taskConfig.WaitTimeoutSeconds) `
-        -RunAsMode 'interactiveToken'
+        -RunAsMode 'password'
 }
 catch {
     Invoke-ClagnosRefreshSessionPath
@@ -440,15 +428,8 @@ catch {
         return
     }
 
-    $interactiveError = [string]$_.Exception.Message
-    if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'iCloud install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
-        throw 'iCloud install requires an interactive Store-capable session and cannot be deferred to a later boot.'
-    }
-
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('iCloud interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    $installError = [string]$_.Exception.Message
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended iCloud install failed: {0}' -f $installError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
     Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }

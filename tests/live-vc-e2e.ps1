@@ -162,7 +162,6 @@ function Get-ClagnosE2ePackageInventory {
             RequiresWinget = [bool]($installerText -match '(?i)\bwinget(?:\.exe)?\b')
             RequiresChocolatey = [bool]($installerText -match '(?i)\b(?:choco(?:latey)?)(?:\.exe)?\b')
             RequiresNodeJs = [bool]($installerText -match '(?i)\bnpm(?:\.cmd)?\b')
-            RequiresInteractiveDesktop = [bool]($installerText -match '(?i)Wait-ClagnosUserInteractiveDesktopReady')
             DependsOn = @($dependsOn)
             Manifest = $manifest
             ManifestPath = $manifestPath
@@ -423,43 +422,11 @@ try {
         if ($resumeIndex -lt 0) { throw ("Resume package '{0}' is not an enabled package in the current install plan." -f $ResumeFromPackage) }
         $startIndex = $resumeIndex + 1
     }
-    $firstInteractivePackageIndex = 0
-    $jawsPackageIndex = 0
-    for ($candidate = 0; $candidate -lt $packageOrder.Count; $candidate++) {
-        if ([bool]$packageOrder[$candidate].RequiresInteractiveDesktop) { $firstInteractivePackageIndex = $candidate + 1; break }
-    }
-    for ($candidate = 0; $candidate -lt $packageOrder.Count; $candidate++) {
-        if ([string]$packageOrder[$candidate].Catalog -eq 'builtin' -and [string]$packageOrder[$candidate].Id -eq 'jaws') { $jawsPackageIndex = $candidate + 1; break }
-    }
-    $interactiveBootstrapThroughIndex = [Math]::Max($firstInteractivePackageIndex,$jawsPackageIndex)
-    $needsInteractiveDesktopBootstrap = ($firstInteractivePackageIndex -gt 0) -and (-not $ResumeExisting -or $startIndex -le $interactiveBootstrapThroughIndex)
-    $script:EarlyInstalledPackageKeys = @()
-    if ($needsInteractiveDesktopBootstrap) {
-        $jawsPrerequisite = @($packageOrder | Where-Object { [string]$_.Catalog -eq 'builtin' -and [string]$_.Id -eq 'jaws' })
-        if ($jawsPrerequisite.Count -ne 1) { throw 'The enabled builtin JAWS package is required before interactive autologon setup.' }
-        $null = Invoke-ClagnosE2eCommand -Label 'Install JAWS before its enabled vm-update maintenance task' -Arguments @('package','--action','install','--catalog','builtin','--package','jaws','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows','--yes')
-        $autologonCatalogPath = Join-Path $resolvedRepoRoot 'vm-update\windows\builtin\tasks.toml'
-        $autologonAvailability = Read-ClagnosTaskCatalogState -Path $autologonCatalogPath
-        if (-not $autologonAvailability.Entries.ContainsKey('102-configure-autologon-settings') -or -not [bool]$autologonAvailability.Entries['102-configure-autologon-settings']) { throw 'The enabled Store packages require vm-update task 102 to be enabled in tasks.toml.' }
-        $autologonOutput = Invoke-ClagnosE2eCommand -Label 'Enable the manager interactive desktop for Store packages' -Arguments @('task','--run-vm-update','102','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows')
-        if ($autologonOutput -notmatch '(?i)autologon-state\s*=>\s*AutoAdminLogon=1' -or $autologonOutput -notmatch 'TASK_REBOOT_REQUIRED:configure-autologon-settings') {
-            throw 'The autologon prerequisite did not verify and request the restart needed for Store package installation.'
-        }
-        $script:EarlyInstalledPackageKeys = @('builtin/jaws')
-    }
-    elseif ($ResumeExisting) {
-        Write-Host 'Store desktop bootstrap was already completed in the earlier E2E pass.' -ForegroundColor DarkCyan
-    }
     $index = 0
     if (-not $ResumeFromUpdate -and -not $ResumeAfterUpdate) {
         foreach ($package in @($packageOrder)) {
             $index++
             if ($index -lt $startIndex) { continue }
-            $packageKey = '{0}/{1}' -f [string]$package.Catalog,[string]$package.Id
-            if (@($script:EarlyInstalledPackageKeys) -contains $packageKey) {
-                Write-Host ("[PASS] Package prerequisite was installed early for an enabled task: {0}." -f $packageKey) -ForegroundColor Green
-                continue
-            }
             $packageLabel = ('{0} {1}/{2}: {3}/{4}' -f [string]$package.Catalog,$index,$packageOrder.Count,[string]$package.Id,[string]$package.DisplayName)
             $null = Invoke-ClagnosE2eCommand -Label ("Install VC add-on package {0}" -f $packageLabel) -Arguments @('package','--action','install','--catalog',[string]$package.Catalog,'--package',[string]$package.Id,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows','--yes')
         }

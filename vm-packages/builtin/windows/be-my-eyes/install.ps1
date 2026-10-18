@@ -11,9 +11,7 @@ $taskConfig = [ordered]@{
     StoreProductId = '9MSW46LTDWGF'
     InteractiveTaskSuffix = 'interactive-install'
     LegacyRunOnceName = 'ClagnosInstallBeMyEyes'
-    InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
-    StoreSessionErrorRegex = '(?i)0x80070520|logon session|microsoft store|msstore'
 }
 
 $taskName = [string]$taskConfig.TaskName
@@ -171,7 +169,7 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 }
 
 if (-not (Test-BeMyEyesInstalled)) {
-    $installOutput = @(& $wingetExe install --id $storeProductId --source msstore --accept-source-agreements --accept-package-agreements 2>&1)
+    $installOutput = @(& $wingetExe install --id $storeProductId --source msstore --silent --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1)
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
@@ -181,7 +179,7 @@ if (-not (Test-BeMyEyesInstalled)) {
 }
 
 if (-not (Test-BeMyEyesInstalled)) {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Be My Eyes install could not be verified after interactive winget install.'
+    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Be My Eyes install could not be verified after unattended WinGet install.'
     exit 1
 }
 
@@ -195,16 +193,6 @@ $workerScript = $workerScript.Replace('__TASK_NAME__', $workerTaskName)
 $workerScript = $workerScript.Replace('__STORE_PRODUCT_ID__', $storeProductId)
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', [string]$taskConfig.PortableWingetPath)
 
-$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
-if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Be My Eyes install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
-    throw ([string]$blockMessage.WarningMessage)
-}
-
 try {
     $null = Invoke-ClagnosInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
@@ -212,7 +200,7 @@ try {
         -RunAsPassword $managerPassword `
         -WorkerScriptText $workerScript `
         -WaitTimeoutSeconds ([int]$taskConfig.WaitTimeoutSeconds) `
-        -RunAsMode 'interactiveToken'
+        -RunAsMode 'password'
 }
 catch {
     Invoke-ClagnosRefreshSessionPath
@@ -226,15 +214,8 @@ catch {
         return
     }
 
-    $interactiveError = [string]$_.Exception.Message
-    if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'Be My Eyes install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
-        throw 'Be My Eyes install requires an interactive Store-capable session and cannot be deferred to a later boot.'
-    }
-
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes interactive install failed: {0}' -f $interactiveError) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    $installError = [string]$_.Exception.Message
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended Be My Eyes install failed: {0}' -f $installError) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
     Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }

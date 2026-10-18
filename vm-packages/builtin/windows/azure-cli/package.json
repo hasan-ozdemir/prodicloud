@@ -2,7 +2,6 @@
   "id": "azure-cli",
   "displayName": "Azure CLI",
   "category": "tool",
-  "timeout": 240,
   "sortOrder": 130,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -31,5 +30,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "winget",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 240,
+    "repair": 240,
+    "update": 240,
+    "uninstall": 240,
+    "reinstall": 360
   }
 }

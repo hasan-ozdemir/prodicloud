@@ -2,7 +2,6 @@
   "id": "google-drive",
   "displayName": "Google Drive",
   "category": "application",
-  "timeout": 180,
   "sortOrder": 129,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -15,8 +14,19 @@
     "value": "Google.GoogleDrive"
   },
   "uninstall": {
-    "kind": "winget",
-    "value": "Google.GoogleDrive"
+    "kind": "google-drive",
+    "value": "{6BBAE539-2232-434A-A4E5-9A33560C6283}"
   },
-  "appStateKey": "129-install-google-drive-application"
+  "appStateKey": "129-install-google-drive-application",
+  "repairStrategy": "google-drive-verify",
+  "repairPackageId": "Google.GoogleDrive",
+  "repairProductCode": "{6BBAE539-2232-434A-A4E5-9A33560C6283}",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 239,
+    "reinstall": 360
+  }
 }

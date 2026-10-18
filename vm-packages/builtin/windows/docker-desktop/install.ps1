@@ -5,8 +5,6 @@ $taskConfig = [ordered]@{
     TaskName = '134-install-docker-desktop-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    InteractiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
-    InteractiveLaunchTaskSuffix = 'interactive-launch'
     PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     DockerDesktopPackageId = 'Docker.DockerDesktop'
     DockerDesktopExecutablePath = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
@@ -17,26 +15,12 @@ $taskConfig = [ordered]@{
     DockerStartupShortcutPath = (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp\Docker Desktop.lnk')
     DockerInstallTimeoutSeconds = 900
     DockerVersionTimeoutSeconds = 8
-    DockerStatusTimeoutSeconds = 30
-    DockerInfoTimeoutSeconds = 45
-    DockerDesktopStartTimeoutSeconds = 90
-    DockerReadinessTimeoutSeconds = 360
-    DockerReadinessPollSeconds = 5
-    InteractiveDesktopWaitSeconds = 45
-    InteractiveLaunchTimeoutSeconds = 120
     DockerWslBootstrapTimeoutSeconds = 180
     DockerPrerequisiteServices = @('vmcompute', 'hns', 'wslservice', 'LxssManager')
     DockerLocalUsers = @('__VM_ADMIN_USER__', '__ASSISTANT_USER__')
 }
 
 Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
-
-$interactiveHelperPath = [string]$taskConfig.InteractiveHelperPath
-if (-not (Test-Path -LiteralPath $interactiveHelperPath)) {
-    throw ("Interactive session helper was not found: {0}" -f $interactiveHelperPath)
-}
-
-. $interactiveHelperPath
 
 function Refresh-SessionPath {
     Refresh-ClagnosSessionPath | Out-Null
@@ -350,26 +334,6 @@ function Ensure-DockerPrerequisiteServiceStarted {
     Write-Host ("docker-step-ok: prerequisite-service-started => {0}" -f [string]$service.Name)
 }
 
-function Start-DockerDesktopProcess {
-    param([string]$DockerDesktopExe)
-
-    $running = @(Get-Process -Name "Docker Desktop" -ErrorAction SilentlyContinue)
-    if (@($running).Count -gt 0) {
-        Write-Host "docker-step-ok: docker-desktop-process-already-running"
-        return [pscustomobject]@{
-            AlreadyRunning = $true
-            StartedNow = $false
-        }
-    }
-
-    Start-Process -FilePath $DockerDesktopExe -ArgumentList "--minimized" -WindowStyle Hidden
-    Write-Host "docker-step-ok: docker-desktop-process-started"
-    return [pscustomobject]@{
-        AlreadyRunning = $false
-        StartedNow = $true
-    }
-}
-
 function Get-ShortcutContract {
     param([string]$ShortcutPath)
 
@@ -433,91 +397,6 @@ function Ensure-DockerStartupShortcut {
     }
 
     Write-Host "docker-step-ok: startup-shortcut"
-}
-
-function Ensure-DockerDesktopInteractiveLaunch {
-    param([string]$DockerDesktopExe)
-
-    if ([string]::IsNullOrWhiteSpace([string]$DockerDesktopExe) -or -not (Test-Path -LiteralPath $DockerDesktopExe)) {
-        throw ("Docker Desktop interactive launch path is invalid: {0}" -f [string]$DockerDesktopExe)
-    }
-
-    if (Test-DockerDesktopInteractiveProcessRunning -ExpectedUserName ([string]$taskConfig.ManagerUser)) {
-        Write-Host 'docker-step-ok: docker-desktop-interactive-process-already-running'
-        return
-    }
-
-    Stop-NonInteractiveDockerDesktopProcesses -ExpectedUserName ([string]$taskConfig.ManagerUser)
-    Stop-DockerServiceForInteractiveLaunch
-
-    $interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName ([string]$taskConfig.ManagerUser) -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-    Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus -Label 'docker-interactive-desktop-state'
-    if (-not [bool]$interactiveDesktopStatus.Ready) {
-        $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Docker Desktop launch' -ExpectedUserName ([string]$taskConfig.ManagerUser) -Status $interactiveDesktopStatus
-        throw ([string]$blockMessage.WarningMessage)
-    }
-
-    $workerTaskName = "{0}-{1}" -f ([string]$taskConfig.TaskName), ([string]$taskConfig.InteractiveLaunchTaskSuffix)
-    $paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
-    $workerScript = @'
-$ErrorActionPreference = "Stop"
-$helperPath = "__HELPER_PATH__"
-$resultPath = "__RESULT_PATH__"
-$taskName = "__TASK_NAME__"
-$dockerDesktopExe = "__DOCKER_DESKTOP_EXE__"
-
-. $helperPath
-
-function Test-DockerDesktopRunning {
-    $processes = @(Get-Process -Name 'Docker Desktop' -IncludeUserName -ErrorAction SilentlyContinue)
-    foreach ($process in @($processes)) {
-        try {
-            $sessionId = [int]$process.SessionId
-            $userName = [string]$process.UserName
-            if ($sessionId -gt 0 -and [string]::Equals([string]$userName, '__EXPECTED_USER__', [System.StringComparison]::OrdinalIgnoreCase)) {
-                return $true
-            }
-        }
-        catch {
-        }
-    }
-
-    return $false
-}
-
-if (-not (Test-DockerDesktopRunning)) {
-    Start-Process -FilePath $dockerDesktopExe -ArgumentList '--minimized' -WindowStyle Hidden
-}
-
-$deadline = [DateTime]::UtcNow.AddSeconds(45)
-while ([DateTime]::UtcNow -lt $deadline) {
-    if (Test-DockerDesktopRunning) {
-        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Docker Desktop launched in the interactive desktop session.'
-        exit 0
-    }
-
-    Start-Sleep -Seconds 2
-}
-
-Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Docker Desktop did not appear in the interactive desktop session.'
-exit 1
-'@
-
-    $workerScript = $workerScript.Replace('__HELPER_PATH__', $interactiveHelperPath)
-    $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
-    $workerScript = $workerScript.Replace('__TASK_NAME__', $workerTaskName)
-    $workerScript = $workerScript.Replace('__DOCKER_DESKTOP_EXE__', [string]$DockerDesktopExe)
-    $workerScript = $workerScript.Replace('__EXPECTED_USER__', ('{0}\{1}' -f $env:COMPUTERNAME, ([string]$taskConfig.ManagerUser)))
-
-    $null = Invoke-ClagnosInteractiveDesktopAutomation `
-        -TaskName $workerTaskName `
-        -RunAsUser ([string]$taskConfig.ManagerUser) `
-        -RunAsPassword ([string]$taskConfig.ManagerPassword) `
-        -WorkerScriptText $workerScript `
-        -WaitTimeoutSeconds ([int]$taskConfig.InteractiveLaunchTimeoutSeconds) `
-        -RunAsMode 'interactiveToken'
-
-    Write-Host 'docker-step-ok: interactive-desktop-launch'
 }
 
 function Resolve-DockerServices {
@@ -662,94 +541,6 @@ function Ensure-DockerServicesStarted {
     Write-Host ("docker-step-ok: service-config => total={0}; running={1}" -f @($resolvedServices).Count, @($runningServices).Count)
 }
 
-function Ensure-DockerDesktopStarted {
-    param([string]$DockerExe)
-
-    if ([string]::IsNullOrWhiteSpace([string]$DockerExe)) {
-        throw 'docker.exe is not available. Docker Desktop start requires the Docker CLI.'
-    }
-
-    $startResult = Invoke-ProcessWithTimeout -Label 'docker desktop start' -FilePath $DockerExe -Arguments @('desktop', 'start') -TimeoutSeconds ([int]$taskConfig.DockerDesktopStartTimeoutSeconds)
-    if ($startResult.TimedOut) {
-        throw 'docker desktop start timed out.'
-    }
-
-    if (-not $startResult.Success) {
-        throw ("docker desktop start failed with exit code {0}." -f [int]$startResult.ExitCode)
-    }
-
-    Write-Host 'docker-step-ok: desktop-start-requested'
-}
-
-function Stop-DockerServiceForInteractiveLaunch {
-    $service = Get-Service -Name ([string]$taskConfig.DockerServiceName) -ErrorAction SilentlyContinue
-    if ($null -eq $service) {
-        return
-    }
-
-    $service.Refresh()
-    if ([string]$service.Status -ne 'Running') {
-        Write-Host ("docker-step-ok: service-stopped-before-interactive-launch => {0}" -f [string]$service.Name)
-        return
-    }
-
-    try {
-        Stop-Service -Name ([string]$service.Name) -Force -ErrorAction Stop
-    }
-    catch {
-        $service = Get-Service -Name ([string]$taskConfig.DockerServiceName) -ErrorAction SilentlyContinue
-        if ($null -ne $service -and [string]$service.Status -eq 'Running') {
-            throw ("docker service failed to stop before interactive launch: {0} ({1})" -f [string]$taskConfig.DockerServiceName, $_.Exception.Message)
-        }
-    }
-
-    Write-Host ("docker-step-ok: service-stopped-before-interactive-launch => {0}" -f [string]$taskConfig.DockerServiceName)
-}
-
-function Test-DockerDesktopInteractiveProcessRunning {
-    param([string]$ExpectedUserName)
-
-    $processes = @(Get-Process -Name 'Docker Desktop' -IncludeUserName -ErrorAction SilentlyContinue)
-    foreach ($process in @($processes)) {
-        $sessionId = 0
-        try { $sessionId = [int]$process.SessionId } catch { $sessionId = 0 }
-        $userName = ''
-        try { $userName = [string]$process.UserName } catch { $userName = '' }
-        if ($sessionId -gt 0 -and (Test-ClagnosUserNameMatch -ObservedUserName $userName -ExpectedUserName $ExpectedUserName)) {
-            return $true
-        }
-    }
-
-    return $false
-}
-
-function Stop-NonInteractiveDockerDesktopProcesses {
-    param([string]$ExpectedUserName)
-
-    $stoppedProcessIds = New-Object 'System.Collections.Generic.List[int]'
-    $processes = @(Get-Process -Name 'Docker Desktop' -IncludeUserName -ErrorAction SilentlyContinue)
-    foreach ($process in @($processes)) {
-        $sessionId = 0
-        try { $sessionId = [int]$process.SessionId } catch { $sessionId = 0 }
-        $userName = ''
-        try { $userName = [string]$process.UserName } catch { $userName = '' }
-        if ($sessionId -gt 0 -and (Test-ClagnosUserNameMatch -ObservedUserName $userName -ExpectedUserName $ExpectedUserName)) {
-            continue
-        }
-
-        try {
-            Stop-Process -Id ([int]$process.Id) -Force -ErrorAction Stop
-            [void]$stoppedProcessIds.Add([int]$process.Id)
-        }
-        catch {
-        }
-    }
-
-    if (@($stoppedProcessIds).Count -gt 0) {
-        Write-Host ("docker-step-ok: cleared-noninteractive-frontends => {0}" -f ((@($stoppedProcessIds) | ForEach-Object { [string]$_ }) -join ', '))
-    }
-}
-
 function Test-DockerDesktopProcessRunning {
     param([string]$DockerDesktopExe = '')
 
@@ -767,55 +558,6 @@ function Test-DockerDesktopProcessRunning {
         [string]::Equals([string]$_.ExecutablePath, $candidatePath, [System.StringComparison]::OrdinalIgnoreCase)
     })
     return (@($processes).Count -gt 0)
-}
-
-function Wait-DockerDaemonReady {
-    param([string]$DockerDesktopExe)
-
-    $dockerExe = Resolve-DockerExePath
-    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $lastDesktopStatusExitCode = -1
-    $lastInfoExitCode = -1
-    $desktopStartRequested = $false
-    while ($stopwatch.Elapsed.TotalSeconds -lt [int]$taskConfig.DockerReadinessTimeoutSeconds) {
-        Ensure-DockerPrerequisiteServiceStarted -ServiceName 'vmcompute'
-        Ensure-DockerPrerequisiteServiceStarted -ServiceName 'hns'
-
-        if (-not (Test-DockerDesktopInteractiveProcessRunning -ExpectedUserName ([string]$taskConfig.ManagerUser))) {
-            Ensure-DockerDesktopInteractiveLaunch -DockerDesktopExe $DockerDesktopExe
-            Start-Sleep -Seconds 2
-            $desktopStartRequested = $false
-        }
-
-        if (-not $desktopStartRequested) {
-            Ensure-DockerDesktopStarted -DockerExe $dockerExe
-            Start-Sleep -Seconds 5
-            $desktopStartRequested = $true
-        }
-
-        $dockerDesktopStatusResult = Invoke-ProcessWithTimeout -Label "docker desktop status" -FilePath $dockerExe -Arguments @("desktop", "status") -TimeoutSeconds ([int]$taskConfig.DockerStatusTimeoutSeconds)
-        $lastDesktopStatusExitCode = [int]$dockerDesktopStatusResult.ExitCode
-        $dockerInfoResult = Invoke-ProcessWithTimeout -Label "docker info" -FilePath $dockerExe -Arguments @("info") -TimeoutSeconds ([int]$taskConfig.DockerInfoTimeoutSeconds)
-        $lastInfoExitCode = [int]$dockerInfoResult.ExitCode
-
-        if ($dockerDesktopStatusResult.Success -and $dockerDesktopStatusResult.ExitCode -eq 0 -and $dockerInfoResult.Success -and $dockerInfoResult.ExitCode -eq 0) {
-            return [pscustomobject]@{
-                Success = $true
-                DesktopStatusExitCode = $lastDesktopStatusExitCode
-                InfoExitCode = $lastInfoExitCode
-            }
-        }
-
-        $desktopStartRequested = $false
-        Write-Host ("docker-step-wait: desktop-status-exit={0}; docker-info-exit={1}; elapsed={2:n0}s" -f $lastDesktopStatusExitCode, $lastInfoExitCode, $stopwatch.Elapsed.TotalSeconds)
-        Start-Sleep -Seconds ([int]$taskConfig.DockerReadinessPollSeconds)
-    }
-
-    return [pscustomobject]@{
-        Success = $false
-        DesktopStatusExitCode = $lastDesktopStatusExitCode
-        InfoExitCode = $lastInfoExitCode
-    }
 }
 
 function Remove-DockerDesktopDeferredStart {
@@ -1072,25 +814,10 @@ else {
     throw ("docker --version did not complete successfully (exit={0})." -f $dockerVersionResult.ExitCode)
 }
 
-Ensure-DockerDesktopInteractiveLaunch -DockerDesktopExe $dockerDesktopExe
-Write-Host "docker-step-ok: desktop-launch-requested"
 Ensure-DockerPrerequisiteServiceStarted -ServiceName 'vmcompute'
 Ensure-DockerPrerequisiteServiceStarted -ServiceName 'hns'
-
-Start-Sleep -Seconds 5
-if (Test-DockerDesktopInteractiveProcessRunning -ExpectedUserName ([string]$taskConfig.ManagerUser)) {
-    Write-Host "docker-step-ok: docker-desktop-interactive-process"
-}
-else {
-    Write-Host "docker-step-info: docker-desktop-interactive-process-not-yet-visible => continuing-with-daemon-readiness-check"
-}
-
-$dockerReadiness = Wait-DockerDaemonReady -DockerDesktopExe $dockerDesktopExe
-if (-not [bool]$dockerReadiness.Success) {
-    throw ("Docker Desktop did not become daemon-ready in time. desktop-status-exit={0}; docker-info-exit={1}" -f [int]$dockerReadiness.DesktopStatusExitCode, [int]$dockerReadiness.InfoExitCode)
-}
-Write-Host "docker-step-ok: docker-desktop-status"
-Write-Host "docker-step-ok: docker-engine-ready"
+Write-Host 'docker-step-info: Docker Desktop GUI launch is configured for managed-user sign-in and was not required in this unattended package operation.'
+Write-Host 'docker-step-info: Docker engine readiness is deferred until the managed desktop session starts.'
 
 $global:LASTEXITCODE = 0
 Write-Host "install-docker-desktop-application-completed"

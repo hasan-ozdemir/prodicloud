@@ -2,7 +2,6 @@
   "id": "openai-codex-cli",
   "displayName": "OpenAI Codex CLI",
   "category": "tool",
-  "timeout": 180,
   "sortOrder": 124,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -34,5 +33,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "npm",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 180,
+    "reinstall": 360
   }
 }

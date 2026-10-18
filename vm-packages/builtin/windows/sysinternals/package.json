@@ -9,13 +9,22 @@
   "updateScript": "update.ps1",
   "uninstallScript": "uninstall.ps1",
   "repairScript": "repair.ps1",
-  "updateStrategy": "choco",
+  "updateStrategy": "sysinternals",
   "statusCheck": {
-    "kind": "choco",
+    "kind": "sysinternals",
     "value": "sysinternals"
   },
   "uninstall": {
-    "kind": "choco",
+    "kind": "sysinternals",
     "value": "sysinternals"
-  }
+  },
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
+    "reinstall": 360
+  },
+  "repairStrategy": "sysinternals"
 }

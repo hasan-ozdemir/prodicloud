@@ -65,14 +65,52 @@ function Get-ClagnosPackageCatalog {
         if ($null -eq $uninstall -or [string]::IsNullOrWhiteSpace([string]$uninstall.kind) -or [string]::IsNullOrWhiteSpace([string]$uninstall.value)) {
             throw ("Package '{0}' requires uninstall.kind and uninstall.value." -f $id)
         }
-        if ([string]$statusCheck.kind -notin @('command','winget','choco','npm','appx','store-state','choco-self','dpkg','rpm')) {
+        if ([string]$statusCheck.kind -notin @('command','winget','choco','npm','appx','store-state','choco-self','sysinternals','windscribe','wsl','dpkg','rpm')) {
             throw ("Package '{0}' has unsupported status check '{1}'." -f $id, [string]$statusCheck.kind)
         }
-        if ([string]$uninstall.kind -notin @('winget','choco','npm','appx','windows-feature','choco-self','anydesk','apt','dnf','snap')) {
+        if ([string]$statusCheck.kind -eq 'wsl' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windows-subsystem-linux' -or [string]$statusCheck.value -ne 'Windows Subsystem for Linux')) {
+            throw 'The wsl status check is valid only for the builtin Windows Subsystem for Linux package.'
+        }
+        if ([string]$statusCheck.kind -eq 'windscribe' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windscribe' -or [string]$statusCheck.value -ne 'C:\Program Files\Windscribe\Windscribe.exe')) {
+            throw 'The windscribe status check is valid only for the builtin Windows windscribe package and its fixed signed executable path.'
+        }
+        if ([string]$uninstall.kind -notin @('winget','choco','npm','appx','windows-feature','choco-self','anydesk','docker-desktop','google-drive','windscribe','teams','nvda','wsl','sysinternals','apt','dnf','snap')) {
             throw ("Package '{0}' has unsupported uninstall action '{1}'." -f $id, [string]$uninstall.kind)
+        }
+        if ([string]$uninstall.kind -eq 'wsl' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windows-subsystem-linux' -or [string]$statusCheck.kind -ne 'wsl' -or [string]$uninstall.value -ne 'Windows Subsystem for Linux')) {
+            throw 'The wsl uninstall action is valid only for the builtin Windows Subsystem for Linux MSI package.'
+        }
+        if ([string]$uninstall.kind -eq 'nvda' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'nvda' -or [string]$statusCheck.kind -ne 'winget' -or [string]$uninstall.value -ne 'C:\Program Files\NVDA\uninstall.exe')) {
+            throw 'The nvda uninstall action is valid only for the builtin Windows NVDA package and its fixed vendor uninstaller path.'
+        }
+        if ([string]$uninstall.kind -eq 'teams' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'microsoft-teams' -or [string]$uninstall.value -ne 'MSTeams')) {
+            throw 'The teams uninstall action is valid only for the builtin Windows microsoft-teams package with value MSTeams.'
+        }
+        if ([string]$uninstall.kind -eq 'windscribe' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windscribe' -or [string]$uninstall.value -ne 'C:\Program Files\Windscribe\uninstall.exe')) {
+            throw 'The windscribe uninstall action is valid only for the builtin Windows windscribe package and its fixed signed vendor uninstaller path.'
+        }
+        if ($null -ne $uninstall.PSObject.Properties['allVersions']) {
+            if ([string]$uninstall.kind -ne 'winget' -or $uninstall.allVersions -isnot [bool]) {
+                throw ("Package '{0}' may set uninstall.allVersions only as a boolean with a WinGet uninstall action." -f $id)
+            }
+        }
+        if ($null -ne $uninstall.PSObject.Properties['removeDependencies']) {
+            if ([string]$uninstall.kind -ne 'choco' -or $uninstall.removeDependencies -isnot [bool]) {
+                throw ("Package '{0}' may set uninstall.removeDependencies only as a boolean with a Chocolatey uninstall action." -f $id)
+            }
+        }
+        $uninstallPolicy = $manifest.uninstallPolicy
+        if ($null -ne $uninstallPolicy -and $null -ne $uninstallPolicy.PSObject.Properties['supported'] -and -not [bool]$uninstallPolicy.supported -and [string]::IsNullOrWhiteSpace([string]$uninstallPolicy.reason)) {
+            throw ("Package '{0}' declares uninstall unsupported without a user-facing reason." -f $id)
         }
         if ([string]$uninstall.kind -eq 'anydesk' -and ([string]$id -ne 'anydesk' -or [string]$uninstall.value -ne 'C:\Program Files (x86)\AnyDesk\AnyDesk.exe')) {
             throw 'The anydesk uninstall action is valid only for the builtin AnyDesk package and its fixed machine installation path.'
+        }
+        if ([string]$uninstall.kind -eq 'google-drive' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'google-drive' -or [string]$statusCheck.kind -ne 'winget' -or [string]$uninstall.value -ne '{6BBAE539-2232-434A-A4E5-9A33560C6283}')) {
+            throw 'The google-drive uninstall action is valid only for the builtin Google Drive package and its fixed vendor product code.'
+        }
+        if ([string]$uninstall.kind -eq 'docker-desktop' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'docker-desktop' -or [string]$statusCheck.kind -ne 'winget' -or [string]$uninstall.value -ne 'Docker.DockerDesktop')) {
+            throw 'The docker-desktop uninstall action is valid only for the builtin Docker Desktop package and its exact WinGet identity.'
         }
 
         $installScript = [string]$manifest.installScript
@@ -86,7 +124,23 @@ function Get-ClagnosPackageCatalog {
         $lifecycleScriptPaths = @{}
         $lifecycleScriptText = @{}
         $operationsModulePath = ''
+        $repairStrategy = [string]$manifest.repairStrategy
         if ($Platform -eq 'windows') {
+            if (-not [string]::IsNullOrWhiteSpace($repairStrategy) -and $repairStrategy -notin @('winget','winget-prefix','winget-vscode','google-drive-verify','wsl-msi','choco','npm','choco-self','appx','startup','installer-verify','sysinternals','windscribe')) {
+                throw ("Package '{0}' has unsupported repairStrategy '{1}'" -f $id,$repairStrategy)
+            }
+            if ($repairStrategy -eq 'winget-prefix' -and ($Catalog -ne 'builtin' -or $id -ne 'nvda' -or [string]$statusCheck.kind -ne 'winget')) {
+                throw 'The winget-prefix repair strategy is reserved for the builtin Windows NVDA package.'
+            }
+            if ($repairStrategy -eq 'winget-vscode' -and ($Catalog -ne 'builtin' -or $id -ne 'visual-studio-code' -or [string]$statusCheck.kind -ne 'command' -or [string]$manifest.repairPackageId -ne 'Microsoft.VisualStudioCode')) {
+                throw 'The winget-vscode repair strategy is reserved for the builtin Windows Visual Studio Code package.'
+            }
+            if ($repairStrategy -eq 'google-drive-verify' -and ($Catalog -ne 'builtin' -or $id -ne 'google-drive' -or [string]$statusCheck.kind -ne 'winget' -or [string]$manifest.repairPackageId -ne 'Google.GoogleDrive' -or [string]$manifest.repairProductCode -ne '{6BBAE539-2232-434A-A4E5-9A33560C6283}')) {
+                throw 'The google-drive-verify repair strategy is reserved for the builtin Google Drive package and its exact provider identity.'
+            }
+            if ($repairStrategy -eq 'wsl-msi' -and ($Catalog -ne 'builtin' -or $id -ne 'windows-subsystem-linux' -or [string]$statusCheck.kind -ne 'wsl')) {
+                throw 'The wsl-msi repair strategy is reserved for the builtin Windows Subsystem for Linux MSI package.'
+            }
             foreach ($lifecycleAction in @('status','update','uninstall','repair')) {
                 $manifestKey = '{0}Script' -f $lifecycleAction
                 $scriptName = [string]$manifest.$manifestKey
@@ -110,17 +164,46 @@ function Get-ClagnosPackageCatalog {
                     'choco' { 'choco' }
                     'npm' { 'npm' }
                     'choco-self' { 'choco-self' }
+                    'sysinternals' { 'sysinternals' }
                     default { 'installer' }
                 }
             }
-            if ($updateStrategy -notin @('winget','choco','npm','choco-self','installer')) { throw ("Package '{0}' has unsupported updateStrategy '{1}'" -f $id,$updateStrategy) }
+            if ($updateStrategy -notin @('winget','winget-vscode','choco','npm','choco-self','installer','sysinternals','teams-bootstrapper','anydesk','windscribe')) { throw ("Package '{0}' has unsupported updateStrategy '{1}'" -f $id,$updateStrategy) }
+            $updatePackageId = [string]$manifest.updatePackageId
+            if (-not [string]::IsNullOrWhiteSpace($updatePackageId) -and $updateStrategy -notin @('winget','winget-vscode')) {
+                throw ("Package '{0}' may set updatePackageId only with a WinGet update strategy." -f $id)
+            }
+            if ([string]::IsNullOrWhiteSpace($updatePackageId) -and $updateStrategy -eq 'winget') { $updatePackageId = [string]$statusCheck.value }
+            if ($updateStrategy -eq 'winget-vscode' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'visual-studio-code' -or [string]$updatePackageId -ne 'Microsoft.VisualStudioCode')) {
+                throw 'The winget-vscode update strategy is reserved for the builtin Windows Visual Studio Code package.'
+            }
+            if ($updateStrategy -eq 'teams-bootstrapper' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'microsoft-teams')) {
+                throw 'The teams-bootstrapper update strategy is valid only for the builtin Windows microsoft-teams package.'
+            }
+            if ($updateStrategy -eq 'anydesk' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'anydesk')) {
+                throw 'The anydesk update strategy is valid only for the builtin Windows anydesk package.'
+            }
+            if ($updateStrategy -eq 'windscribe' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windscribe')) {
+                throw 'The windscribe update strategy is valid only for the builtin Windows windscribe package.'
+            }
             $operationsModulePath = Join-Path $repoRoot 'modules/commands/package/clagnos-package-operations.psm1'
             if (-not (Test-Path -LiteralPath $operationsModulePath -PathType Leaf)) { throw "The package lifecycle helper module is missing." }
         }
         else { $updateStrategy = '' }
 
         $enabled = [bool]$catalogState.Entries[[string]$folder.Name]
-        $timeoutSeconds = Convert-ClagnosTaskCatalogTimeout -Value $manifest.timeout -DefaultValue (Get-ClagnosTaskDefaultTimeoutSeconds)
+        $bootstrapTimeoutSeconds = Convert-ClagnosTaskCatalogTimeout -Value $manifest.timeout -DefaultValue (Get-ClagnosTaskDefaultTimeoutSeconds)
+        $operationTimeoutSeconds = @{}
+        foreach ($timeoutAction in @('status','install','repair','update','uninstall','reinstall')) {
+            $configuredTimeout = $null
+            if ($null -ne $manifest.operationTimeoutSeconds -and $null -ne $manifest.operationTimeoutSeconds.PSObject.Properties[$timeoutAction]) {
+                $configuredTimeout = $manifest.operationTimeoutSeconds.$timeoutAction
+            }
+            if ($timeoutAction -eq 'reinstall' -and $null -eq $configuredTimeout) { continue }
+            $operationTimeoutSeconds[$timeoutAction] = Convert-ClagnosTaskCatalogTimeout -Value $configuredTimeout -DefaultValue $bootstrapTimeoutSeconds
+        }
+        if (-not $operationTimeoutSeconds.ContainsKey('reinstall')) { $operationTimeoutSeconds['reinstall'] = [Math]::Min(7200,([int]$operationTimeoutSeconds['uninstall'] + [int]$operationTimeoutSeconds['install'])) }
+        $timeoutSeconds = [int]$operationTimeoutSeconds['install']
         $sortOrder = 0
         if ($null -ne $manifest.sortOrder -and [string]$manifest.sortOrder -match '^\d+$') { $sortOrder = [int]$manifest.sortOrder }
         $assetSpecs = @()
@@ -149,9 +232,14 @@ function Get-ClagnosPackageCatalog {
             Category = $category
             StatusCheck = $statusCheck
             Uninstall = $uninstall
+            UninstallPolicy = $uninstallPolicy
             UpdateStrategy = [string]$updateStrategy
-            RepairStrategy = [string]$manifest.repairStrategy
+            UpdatePackageId = [string]$updatePackageId
+            RepairStrategy = [string]$repairStrategy
+            RepairPackageId = [string]$manifest.repairPackageId
+            RepairProductCode = [string]$manifest.repairProductCode
             StartupPolicy = $manifest.startupPolicy
+            OperationTimeoutSeconds = $operationTimeoutSeconds
             Catalog = $Catalog
             AppStateKey = $appStateKey
             PostInstallTasks = @($postInstallTasks)
@@ -168,6 +256,7 @@ function Get-ClagnosPackageCatalog {
             DirectoryPath = [string]$folder.FullName
             StageRootDirectoryPath = [string]$root
             TimeoutSeconds = [int]$timeoutSeconds
+            OperationTimeoutSeconds = $operationTimeoutSeconds
             Priority = [int]$sortOrder
             AssetSpecs = @($assetSpecs)
             AppStateSpec = $appStateSpec
@@ -183,7 +272,9 @@ function Get-ClagnosPackageCatalog {
             LifecycleScriptPaths = $lifecycleScriptPaths
             LifecycleScriptText = $lifecycleScriptText
             UpdateStrategy = [string]$updateStrategy
-            RepairStrategy = [string]$manifest.repairStrategy
+            UpdatePackageId = [string]$updatePackageId
+            RepairStrategy = [string]$repairStrategy
+            RepairPackageId = [string]$manifest.repairPackageId
             StartupPolicy = $manifest.startupPolicy
             ObservedDurationSeconds = [double]::PositiveInfinity
         }
@@ -193,8 +284,13 @@ function Get-ClagnosPackageCatalog {
             Category = $category
             StatusCheck = $statusCheck
             Uninstall = $uninstall
+            UninstallPolicy = $uninstallPolicy
             UpdateStrategy = [string]$updateStrategy
-            RepairStrategy = [string]$manifest.repairStrategy
+            UpdatePackageId = [string]$updatePackageId
+            RepairStrategy = [string]$repairStrategy
+            RepairPackageId = [string]$manifest.repairPackageId
+            RepairProductCode = [string]$manifest.repairProductCode
+            OperationTimeoutSeconds = $operationTimeoutSeconds
             StartupPolicy = $manifest.startupPolicy
             LifecycleScriptPaths = $lifecycleScriptPaths
             StatusScriptText = [string]$lifecycleScriptText['status']
@@ -234,6 +330,17 @@ function Get-ClagnosPackageStatusCacheKey {
         '{0}:{1}:{2}:{3}' -f [string]$_.Catalog,[string]$_.Id,[string]$statusCheck,[bool]$_.Enabled
     } | Sort-Object) -join ','
     return ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'group'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name'), [string]$Platform, $transport, $catalogIdentity).ToLowerInvariant()
+}
+
+function Get-ClagnosPackageTimeoutSeconds {
+    param([Parameter(Mandatory = $true)][object]$Package,[Parameter(Mandatory = $true)][ValidateSet('status','install','repair','update','uninstall','reinstall')][string]$Action)
+
+    $timeouts = $Package.OperationTimeoutSeconds
+    if ($null -ne $timeouts -and $timeouts.ContainsKey($Action)) { return [int]$timeouts[$Action] }
+    if ($Action -eq 'reinstall' -and $null -ne $timeouts) {
+        return [Math]::Min(7200,([int]$timeouts['uninstall'] + [int]$timeouts['install']))
+    }
+    return [int]$Package.PackageTask.TimeoutSeconds
 }
 
 function Get-ClagnosPackageStatusDiskCachePath {
@@ -310,7 +417,10 @@ function Get-ClagnosPackageLifecycleSpecBase64 {
         statusCheck = $Package.StatusCheck
         uninstall = $Package.Uninstall
         updateStrategy = [string]$Package.UpdateStrategy
+        updatePackageId = [string]$Package.UpdatePackageId
         repairStrategy = [string]$Package.RepairStrategy
+        repairPackageId = [string]$Package.RepairPackageId
+        repairProductCode = [string]$Package.RepairProductCode
     }
     if ($null -ne $Package.PSObject.Properties['StartupPolicy']) { $spec.startupPolicy = $Package.StartupPolicy }
     if ($null -ne $Context) {
@@ -423,6 +533,15 @@ Invoke-ClagnosPackageLifecycle -Action __CLAGNOS_ACTION__ -PackageSpecBase64 '__
         }
     }
     if ([string]::IsNullOrWhiteSpace($template)) { return '' }
+    if ([string]$Action -eq 'uninstall' -and [string]$Package.Id -eq 'windscribe') {
+        if ($null -eq $Context -or [string]::IsNullOrWhiteSpace([string]$Context.VmUser) -or [string]::IsNullOrWhiteSpace([string]$Context.VmPass)) {
+            throw 'Windscribe uninstall requires the selected manager account to run its bounded firewall and package checks in an interactive session.'
+        }
+        $managerUserToken = ([string]$Context.VmUser).Replace("'","''")
+        $managerPasswordToken = ([string]$Context.VmPass).Replace("'","''")
+        $template = $template.Replace('__VM_ADMIN_USER__',$managerUserToken)
+        $template = $template.Replace('__VM_ADMIN_PASS__',$managerPasswordToken)
+    }
     $template = $template.Replace('__CLAGNOS_PACKAGE_SPEC_B64__',(Get-ClagnosPackageLifecycleSpecBase64 -Package $Package -Context $Context))
     if ($Action -in @('install','repair','update')) {
         $installSource = [string]$Package.PackageTask.Script
@@ -563,6 +682,8 @@ function Get-PackageStatus {
     `$value = [string]`$check.value
     switch ([string]`$check.kind) {
         'command' { if ((Test-Path -LiteralPath `$value -PathType Leaf) -or (Get-Command `$value -ErrorAction SilentlyContinue)) { return 'installed' }; return 'not-installed' }
+        'windscribe' { `$record = Get-ClagnosWindscribePackageRecord -Spec `$Package; return [string]`$record.Status }
+        'wsl' { `$record = Get-ClagnosWslPackageRecord -DisplayName `$value; return [string]`$record.Status }
         'winget' {
             if (-not `$wingetInventoryReady) { return 'unknown' }
             if (`$wingetInventory -match ('(?im)(?:^|\s)' + [regex]::Escape(`$value) + '(?:\s|$)')) { return 'installed' }
@@ -601,6 +722,7 @@ function Get-PackageStatus {
             try { `$state = Get-Content -LiteralPath `$path -Raw | ConvertFrom-Json; if ([string]`$state.State -eq 'installed') { return 'unknown' }; return 'not-installed' } catch { return 'unknown' }
         }
         'choco-self' { if (Test-Path -LiteralPath (Join-Path `$env:ProgramData 'chocolatey\bin\choco.exe')) { return 'installed' }; return 'not-installed' }
+        'sysinternals' { `$sysinternals = Get-ClagnosSysinternalsPackageRecord -Spec `$Package; return [string]`$sysinternals.Status }
         default { return 'unknown' }
     }
 }
@@ -608,10 +730,28 @@ function Get-PackageStatus {
 foreach (`$package in `$packages) {
     `$status = Get-PackageStatus -Package `$package
     `$detail = ''
-    if (`$status -eq 'installed') {
+    if ([string]`$package.id -eq 'windscribe') {
+        `$windscribeRecord = Get-ClagnosWindscribePackageRecord -Spec `$package
+        `$status = [string]`$windscribeRecord.Status
+        `$detail = [string]`$windscribeRecord.Detail
+    }
+    elseif ([string]`$package.id -eq 'windows-subsystem-linux') {
+        `$wslRecord = Get-ClagnosWslPackageRecord -DisplayName ([string]`$package.statusCheck.value)
+        `$status = [string]`$wslRecord.Status
+        `$detail = [string]`$wslRecord.Detail
+    }
+    elseif (`$status -eq 'installed') {
         if ([string]`$package.id -eq 'jaws' -and @(`$package.targetUsers).Count -gt 0) {
             `$missingUsers = @(`$package.targetUsers | Where-Object { -not (Test-ClagnosJawsPostLogonStartup -UserName ([string]`$_) -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe') })
-            if (`$missingUsers.Count -gt 0) { `$detail = 'JAWS startup is missing for: ' + (`$missingUsers -join ', '); `$status = 'installed-drifted' }
+                `$logonScreenReady = Test-ClagnosJawsLogonScreenStartup
+                if (`$missingUsers.Count -gt 0 -or -not `$logonScreenReady) {
+                    `$detailParts = @()
+                    if (`$missingUsers.Count -gt 0) { `$detailParts += 'post-logon startup is missing for: ' + (`$missingUsers -join ', ') }
+                    if (-not `$logonScreenReady) { `$detailParts += 'logon-screen startup Run=1 is missing' }
+                    `$detail = 'JAWS startup is incomplete: ' + (`$detailParts -join '; ')
+                    `$status = 'installed-drifted'
+                }
+                else { `$detail = 'JAWS starts at the Windows logon screen and after logon for manager and assistant.' }
         }
         elseif ([string]`$package.id -in @('ollama','docker-desktop')) {
             `$detail = Test-ClagnosPackageStartupState -Spec `$package
@@ -688,6 +828,7 @@ switch ([string]`$uninstall.kind) {
     'appx' { `$packages = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object { `$_.Name -like ('*' + `$value + '*') -or `$_.PackageFamilyName -like ('*' + `$value + '*') -or `$_.PackageFullName -like ('*' + `$value + '*') }); foreach (`$package in `$packages) { Remove-AppxPackage -Package `$package.PackageFullName -AllUsers -ErrorAction Stop } }
     'windows-feature' { Disable-WindowsOptionalFeature -Online -FeatureName `$value -NoRestart -ErrorAction Stop | Out-Null }
     'choco-self' { if (Test-Path -LiteralPath `$value) { Remove-Item -LiteralPath `$value -Recurse -Force }; Write-Output 'Chocolatey files removed.' }
+    'sysinternals' { Remove-ClagnosSysinternalsPackage -Spec `$package }
     default { throw ('Unsupported safe uninstall type: ' + [string]`$uninstall.kind) }
 }
 if ([string]`$package.statusCheck.kind -eq 'store-state') {
@@ -705,6 +846,7 @@ function Invoke-ClagnosPackageGuestScript {
         [string]$Platform,
         [string]$ScriptText,
         [string]$TaskLabel,
+        [int]$TimeoutSeconds = 300,
         [psobject]$Runtime = $null,
         [psobject]$Target = $null
     )
@@ -729,9 +871,9 @@ function Invoke-ClagnosPackageGuestScript {
         DirectoryPath = (Get-ClagnosRepoRoot)
         TaskRootPath = (Get-ClagnosRepoRoot)
         StageRootDirectoryPath = (Get-ClagnosRepoRoot)
-        TimeoutSeconds = 300
+        TimeoutSeconds = [int]$TimeoutSeconds
         Priority = 1
-        TaskType = 'normal'
+        TaskType = 'package'
         Source = 'managed-package-catalog'
         TaskNumber = 1
         AssetCopies = @()
@@ -775,7 +917,7 @@ function Invoke-ClagnosPackageGuestScript {
         -TaskOutcomeMode 'strict' `
         -PerfTaskCategory 'task-run' `
         -SshMaxRetries 1 `
-        -SshTaskTimeoutSeconds 300 `
+        -SshTaskTimeoutSeconds ([int]$TimeoutSeconds) `
         -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) `
         -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath))
 }
@@ -786,6 +928,7 @@ function Get-ClagnosPackageStatusSnapshot {
         [hashtable]$Options,
         [string]$Platform,
         [switch]$Force,
+        [int]$TimeoutSeconds = 0,
         [psobject]$Runtime = $null,
         [psobject]$Target = $null
     )
@@ -802,7 +945,14 @@ function Get-ClagnosPackageStatusSnapshot {
         New-ClagnosPackageLifecycleScript -Action 'status' -Package $Packages[0] -Context $Runtime.Context
     }
     else { New-ClagnosPackageGuestScript -Action 'status' -Packages $Packages -Platform $Platform -Context $Runtime.Context }
-    $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status' -Runtime $Runtime -Target $Target
+    $statusTimeoutSeconds = 300
+    if (@($Packages).Count -eq 1) { $statusTimeoutSeconds = Get-ClagnosPackageTimeoutSeconds -Package $Packages[0] -Action 'status' }
+    else {
+        $configuredStatusTimeouts = @($Packages | ForEach-Object { Get-ClagnosPackageTimeoutSeconds -Package $_ -Action 'status' })
+        if ($configuredStatusTimeouts.Count -gt 0) { $statusTimeoutSeconds = [int](($configuredStatusTimeouts | Measure-Object -Maximum).Maximum) }
+    }
+    if ($TimeoutSeconds -gt 0) { $statusTimeoutSeconds = [Math]::Min($statusTimeoutSeconds,[int]$TimeoutSeconds) }
+    $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status' -TimeoutSeconds $statusTimeoutSeconds -Runtime $Runtime -Target $Target
     $output = ''
     if ($result.TaskOutputs.Count -gt 0) { $output = [string]$result.TaskOutputs[0].Output }
     $match = [regex]::Match($output,'(?m)^CLAGNOS_PACKAGE_RESULTS:(?<json>\[.*\])\s*$')
@@ -1130,6 +1280,45 @@ function Invoke-ClagnosPackageSetupAll {
     return $result
 }
 
+function Restart-ClagnosPackageVmForPendingReboot {
+    param([psobject]$Runtime,[psobject]$Target,[hashtable]$Options,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag)
+
+    $subscription = Get-ClagnosResolvedSubscriptionContext
+    $subscriptionId = if ($null -ne $subscription) { [string]$subscription.SubscriptionId } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id') }
+    Write-ClagnosActionProgress -Action ("restart VM '{0}' because its completed package uninstall requested a reboot" -f [string]$Target.VmName)
+    $restartArgs = @(
+        '--vm-action=restart',
+        ('--group={0}' -f [string]$Target.ResourceGroup),
+        ('--vm-name={0}' -f [string]$Target.VmName),
+        ('--subscription-id={0}' -f $subscriptionId)
+    )
+    $parsedRestart = Parse-ClagnosCliArguments -CommandToken 'do' -RawArgs $restartArgs
+    Invoke-ClagnosCommandDispatcher -CommandName 'do' -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
+
+    $nextRuntime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+    $nextTarget = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $nextRuntime.EffectiveConfigMap -OperationName 'package'
+    $nextRuntime.Context.ResourceGroup = [string]$nextTarget.ResourceGroup
+    $nextRuntime.Context.VmName = [string]$nextTarget.VmName
+    $vmDetails = Get-ClagnosVmDetails -Context $nextRuntime.Context -AllowCachedInventory
+    $hostName = [string]$vmDetails.VmFqdn
+    if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = [string]$vmDetails.PublicIP }
+    if ([string]::IsNullOrWhiteSpace($hostName)) { throw 'The VM restarted for package servicing, but its guest endpoint could not be resolved.' }
+    $transport = Get-ClagnosPackageTransport -ConfigMap ([hashtable]$nextRuntime.EffectiveConfigMap)
+    if ($transport -eq 'winrm') {
+        $port = if ($nextRuntime.Context.PSObject.Properties.Match('PowerShellPort').Count -gt 0) { [int]$nextRuntime.Context.PowerShellPort } else { 5985 }
+        if (-not (Wait-ClagnosTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'WinRM after package-requested reboot')) {
+            throw 'WinRM did not become reachable within 10 minutes after the package-requested VM restart.'
+        }
+    }
+    else {
+        $port = if ($nextRuntime.Context.PSObject.Properties.Match('SshPort').Count -gt 0) { [int]$nextRuntime.Context.SshPort } else { 22 }
+        if (-not (Wait-ClagnosTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'SSH after package-requested reboot')) {
+            throw 'SSH did not become reachable within 10 minutes after the package-requested VM restart.'
+        }
+    }
+    return [pscustomobject]@{ Runtime = $nextRuntime; Target = $nextTarget }
+}
+
 function Invoke-ClagnosPackageOperation {
     param(
         [string]$Action,
@@ -1190,10 +1379,15 @@ function Invoke-ClagnosPackageOperation {
     $selected = @($catalogRuntime | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
     if (@($selected).Count -eq 0) { throw ("Package '{0}' was not found in the {1} catalog for {2}." -f $PackageId,$Catalog,$platform) }
     $package = $selected[0]
-    if ($Action -in @('install','repair','update') -and -not [bool]$package.Enabled) {
+    if ($Action -in @('install','repair','update','reinstall') -and -not [bool]$package.Enabled) {
         throw ("'{0}' is disabled in the {1} package catalog. Enable it before installing, repairing, or updating it." -f [string]$package.DisplayName,$Catalog)
     }
-    if ($Action -notin @('status','install','repair','update','uninstall')) { throw ("Unsupported package action '{0}'." -f $Action) }
+    if ($Action -notin @('status','install','repair','update','uninstall','reinstall')) { throw ("Unsupported package action '{0}'." -f $Action) }
+    if ($Action -in @('uninstall','reinstall') -and $null -ne $package.UninstallPolicy -and $null -ne $package.UninstallPolicy.PSObject.Properties['supported'] -and -not [bool]$package.UninstallPolicy.supported) {
+        $reason = [string]$package.UninstallPolicy.reason
+        if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'This package cannot be safely removed on the selected Windows image.' }
+        Throw-FriendlyError -Detail $reason -Code 66 -Summary ("'{0}' cannot be uninstalled on this Windows image." -f [string]$package.DisplayName) -Hint 'Keep the protected Windows component installed. Install, repair, update, and status remain available.'
+    }
     $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
@@ -1203,7 +1397,7 @@ function Invoke-ClagnosPackageOperation {
     if ($Action -eq 'status') {
         $requiresStartupDriftCheck = [string]$package.Id -in @('jaws','ollama','docker-desktop')
         $statusScriptText = if (-not $requiresStartupDriftCheck -and -not [string]::IsNullOrWhiteSpace([string]$package.StatusScriptText)) { New-ClagnosPackageLifecycleScript -Action 'status' -Package $package -Context $runtime.Context } else { New-ClagnosPackageGuestScript -Action 'status' -Packages @($package) -Platform $platform -Context $runtime.Context }
-        $statusResult = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $statusScriptText -TaskLabel ('package-status-' + [string]$package.Id) -Runtime $runtime -Target $target
+        $statusResult = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $statusScriptText -TaskLabel ('package-status-' + [string]$package.Id) -TimeoutSeconds (Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'status') -Runtime $runtime -Target $target
         $statusOutput = if ($statusResult.TaskOutputs.Count -gt 0) { [string]$statusResult.TaskOutputs[0].Output } else { '' }
         $singleStatusMatch = [regex]::Match($statusOutput,'(?m)^CLAGNOS_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
         $status = ''
@@ -1228,13 +1422,16 @@ function Invoke-ClagnosPackageOperation {
         return
     }
     if ($Action -in @('install','repair')) {
-        $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
+        $actionDeadlineUtc = [DateTime]::UtcNow.AddSeconds((Get-ClagnosPackageTimeoutSeconds -Package $package -Action $Action))
+        $remainingBeforeStatus = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+        if ($remainingBeforeStatus -lt 30) { throw ("Package {0} ended before its preflight status check." -f $Action) }
+        $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -TimeoutSeconds $remainingBeforeStatus -Runtime $runtime -Target $target
         $beforeStatus = [string]$before[[string]$package.Id]
         $effectivePackageAction = [string]$Action
         if ($beforeStatus -eq 'installed-drifted') { $beforeStatus = 'installed' }
         if ($Action -eq 'install' -and $beforeStatus -eq 'installed') {
-            Write-Host ("{0} is already installed on VM '{1}'; checking and repairing its installed version." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Cyan
-            $effectivePackageAction = 'repair'
+            Write-Host ("{0} is already installed on VM '{1}'; no install operation was run." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Cyan
+            return [pscustomobject]@{ Package = $package; Action = 'install'; Status = 'installed'; Changed = $false }
         }
         if ($effectivePackageAction -eq 'install' -and $beforeStatus -ne 'not-installed') { throw ("Cannot safely install '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
         if ($effectivePackageAction -eq 'repair' -and $beforeStatus -ne 'installed') { throw ("Cannot safely repair '{0}' because its current status is {1}; use install for an absent package." -f [string]$package.DisplayName,$beforeStatus) }
@@ -1250,6 +1447,9 @@ function Invoke-ClagnosPackageOperation {
         foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
         if ($effectivePackageAction -eq 'repair' -and $installTask.PSObject.Properties['AppStateSpec']) { $installTask.AppStateSpec = $null }
         if ($platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action $effectivePackageAction -Package $package -Context $runtime.Context }
+        $remainingInstallSeconds = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+        if ($remainingInstallSeconds -lt 30) { throw ("Package {0} ended before its {1} phase." -f $Action,$effectivePackageAction) }
+        $installTask.TimeoutSeconds = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action $effectivePackageAction),$remainingInstallSeconds)
         $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
         $structuredResult = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult $run } else { $null }
         if ($platform -eq 'windows' -and ($null -eq $structuredResult -or [string]$structuredResult.status -ne 'installed')) {
@@ -1268,7 +1468,10 @@ function Invoke-ClagnosPackageOperation {
     }
     if ($Action -eq 'update') {
         if ($platform -ne 'windows') { throw 'Separate package update scripts are currently supported only by the Windows package catalogs.' }
-        $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
+        $actionDeadlineUtc = [DateTime]::UtcNow.AddSeconds((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'update'))
+        $remainingBeforeStatus = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+        if ($remainingBeforeStatus -lt 30) { throw 'Package update ended before its preflight status check.' }
+        $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -TimeoutSeconds $remainingBeforeStatus -Runtime $runtime -Target $target
         $beforeStatus = [string]$before[[string]$package.Id]
         if ($beforeStatus -eq 'not-installed') {
             Write-Host ("{0} is not installed on VM '{1}'; update was not run." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Yellow
@@ -1296,6 +1499,9 @@ function Invoke-ClagnosPackageOperation {
             }
             $updateTask.PackageSpec = $updatedPackageSpec
         }
+        $remainingUpdateSeconds = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+        if ($remainingUpdateSeconds -lt 30) { throw "Package update ended before its vendor-update phase." }
+        $updateTask.TimeoutSeconds = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'update'),$remainingUpdateSeconds)
         $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $updateTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
         $structuredResult = Get-ClagnosPackageStructuredResult -TaskResult $run
         if ($null -eq $structuredResult -or [string]$structuredResult.status -ne 'installed') {
@@ -1320,7 +1526,7 @@ function Invoke-ClagnosPackageOperation {
         }
         if (-not $approved) { Write-Host 'Uninstall canceled.' -ForegroundColor Yellow; return }
         $scriptText = New-ClagnosPackageUninstallScript -Package $package -Platform $platform -Context $runtime.Context
-        $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $scriptText -TaskLabel ('package-uninstall-' + [string]$package.Id) -Runtime $runtime -Target $target
+        $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $scriptText -TaskLabel ('package-uninstall-' + [string]$package.Id) -TimeoutSeconds (Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'uninstall') -Runtime $runtime -Target $target
         $structuredResult = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult ([pscustomobject]@{ Result = $result }) } else { $null }
         if ($null -ne $structuredResult) {
             $uninstallStatus = [string]$structuredResult.status
@@ -1334,6 +1540,50 @@ function Invoke-ClagnosPackageOperation {
         Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $uninstallStatus -RefreshTimestamp -MarkIncomplete
         Write-Host ("Uninstall completed for {0}." -f [string]$package.DisplayName) -ForegroundColor Green
         return $result
+    }
+    if ($Action -eq 'reinstall') {
+        $approved = Get-ClagnosCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+        if (-not $approved -and -not $AutoMode) {
+            $answer = Read-Host ("Force uninstall and reinstall {0} on VM '{1}'? Type REINSTALL to confirm" -f [string]$package.DisplayName,[string]$target.VmName)
+            $approved = [string]::Equals([string]$answer,'REINSTALL',[System.StringComparison]::Ordinal)
+        }
+        if (-not $approved) { Write-Host 'Reinstall canceled.' -ForegroundColor Yellow; return }
+
+        $overallWatch = [Diagnostics.Stopwatch]::StartNew()
+        $overallTimeout = Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'reinstall'
+        Write-ClagnosActionProgress -Action ("reinstall package '{0}' with a {1}s total operation budget" -f [string]$package.Id,$overallTimeout)
+        Write-ClagnosActionProgress -Action ("reinstall phase 1/2: uninstall '{0}'" -f [string]$package.Id)
+        $uninstallText = New-ClagnosPackageUninstallScript -Package $package -Platform $platform -Context $runtime.Context
+        $remaining = [Math]::Max(30,($overallTimeout - [int][Math]::Ceiling($overallWatch.Elapsed.TotalSeconds)))
+        $uninstallBudget = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'uninstall'),$remaining)
+        $uninstallResult = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $uninstallText -TaskLabel ('package-reinstall-uninstall-' + [string]$package.Id) -TimeoutSeconds $uninstallBudget -Runtime $runtime -Target $target
+        $uninstallRecord = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult ([pscustomobject]@{ Result = $uninstallResult }) } else { $null }
+        if ($platform -eq 'windows' -and ($null -eq $uninstallRecord -or [string]$uninstallRecord.status -ne 'not-installed')) {
+            throw ("Reinstall failed during phase 'uninstall' for '{0}': absence was not verified." -f [string]$package.DisplayName)
+        }
+        if ($platform -eq 'windows' -and $null -ne $uninstallRecord -and [bool]$uninstallRecord.rebootRequired) {
+            $restarted = Restart-ClagnosPackageVmForPendingReboot -Runtime $runtime -Target $target -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+            $runtime = $restarted.Runtime
+            $target = $restarted.Target
+        }
+
+        Write-ClagnosActionProgress -Action ("reinstall phase 2/2: install '{0}'" -f [string]$package.Id)
+        $remaining = $overallTimeout - [int][Math]::Ceiling($overallWatch.Elapsed.TotalSeconds)
+        if ($remaining -lt 30) { throw ("Reinstall failed during phase 'install' for '{0}': total operation budget expired after verified uninstall." -f [string]$package.DisplayName) }
+        $installTask = [pscustomobject]@{}
+        foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
+        $installTask.Script = New-ClagnosPackageLifecycleScript -Action 'install' -Package $package -Context $runtime.Context
+        $installTask.TimeoutSeconds = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'install'),$remaining)
+        $installRun = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
+        $installRecord = Get-ClagnosPackageStructuredResult -TaskResult $installRun
+        if ($null -eq $installRecord -or [string]$installRecord.status -ne 'installed') {
+            $failureMessage = if ($null -ne $installRecord) { [string]$installRecord.message } else { 'No structured install result was returned.' }
+            throw ("Reinstall failed during phase 'install' for '{0}': {1}" -f [string]$package.DisplayName,$failureMessage)
+        }
+        $overallWatch.Stop()
+        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status 'installed' -RefreshTimestamp -MarkIncomplete
+        Write-Host ("Reinstall completed for {0} in {1}s; installed state verified." -f [string]$package.DisplayName,[int]$overallWatch.Elapsed.TotalSeconds) -ForegroundColor Green
+        return $installRun
     }
     throw ("Unsupported package action '{0}'." -f $Action)
 }

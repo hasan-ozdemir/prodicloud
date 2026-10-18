@@ -13,9 +13,7 @@ $taskConfig = [ordered]@{
     LegacyRunOnceName = 'ClagnosInstallWhatsApp'
     PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
     InteractiveTaskSuffix = 'interactive-install'
-    InteractiveDesktopWaitSeconds = 30
     WaitTimeoutSeconds = 240
-    StoreSessionErrorRegex = '(?i)0x80070520|logon session|microsoft store|msstore'
 }
 
 if (-not (Test-Path -LiteralPath $helperPath)) {
@@ -229,16 +227,6 @@ if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName
     Write-Host 'store-install-cleanup => task=119-install-whatsapp-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds ([int]$taskConfig.InteractiveDesktopWaitSeconds) -PollSeconds 5
-Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
-if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'WhatsApp install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ([string]$blockMessage.Summary) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
-    throw ([string]$blockMessage.WarningMessage)
-}
-
 $workerTaskName = "{0}-{1}" -f ([string]$taskConfig.TaskName), ([string]$taskConfig.InteractiveTaskSuffix)
 $paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
@@ -313,7 +301,7 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 }
 
 if (-not (Test-WhatsAppInstalled)) {
-    $installOutput = @(& $wingetExe install --id $packageId --source msstore --accept-source-agreements --accept-package-agreements 2>&1)
+    $installOutput = @(& $wingetExe install --id $packageId --source msstore --silent --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1)
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
@@ -344,7 +332,7 @@ try {
         -RunAsPassword $managerPassword `
         -WorkerScriptText $workerScript `
         -WaitTimeoutSeconds ([int]$taskConfig.WaitTimeoutSeconds) `
-        -RunAsMode 'interactiveToken'
+        -RunAsMode 'password'
 }
 catch {
     Invoke-ClagnosRefreshSessionPath
@@ -358,15 +346,8 @@ catch {
         return
     }
 
-    $interactiveError = [string]$_.Exception.Message
-    if ($interactiveError -match ([string]$taskConfig.StoreSessionErrorRegex)) {
-        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary 'WhatsApp install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
-        throw 'WhatsApp install requires an interactive Store-capable session and cannot be deferred to a later boot.'
-    }
-
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ('WhatsApp interactive install failed: {0}' -f $interactiveError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    $installError = [string]$_.Exception.Message
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName ([string]$taskConfig.TaskName) -State degraded -Summary ('Unattended WhatsApp install failed: {0}' -f $installError) -PackageId ([string]$taskConfig.PackageId) -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
     Write-ClagnosStoreInstallStateStatusLine -TaskName ([string]$taskConfig.TaskName) -StateRecord $stateRecord
     throw
 }

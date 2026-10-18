@@ -991,7 +991,7 @@ Invoke-Test -Name "Package status reads the same ProgramData stores used by inst
 
     $windscribe = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\windscribe\package.json') -Raw) -ErrorAction Stop
     $vsCode = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path $RepoRoot 'vm-packages\builtin\windows\visual-studio-code\package.json') -Raw) -ErrorAction Stop
-    Assert-True -Condition ([string]$windscribe.statusCheck.value -eq 'Windscribe.Windscribe') -Message 'Windscribe status must use the canonical winget package id.'
+    Assert-True -Condition ([string]$windscribe.statusCheck.kind -eq 'windscribe' -and [string]$windscribe.statusCheck.value -eq 'C:\Program Files\Windscribe\Windscribe.exe' -and [string]$windscribe.updatePackageId -eq 'Windscribe.Windscribe') -Message 'Windscribe status must verify the signed installed application while updates use the canonical winget package id.'
     Assert-True -Condition ([string]$vsCode.statusCheck.kind -eq 'command' -and [string]$vsCode.statusCheck.value -eq 'code') -Message 'VS Code status must use the installed command rather than a winget alias.'
 }
 
@@ -1397,7 +1397,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     Assert-True -Condition (@($builtinPackages | Where-Object { $_.Catalog -ne 'builtin' -or [string]::IsNullOrWhiteSpace([string]$_.DisplayName) -or $null -eq $_.StatusCheck -or $null -eq $_.Uninstall }).Count -eq 0) -Message 'Builtin package rows must carry their catalog label and validated package metadata.'
     Assert-True -Condition (@($builtinPackages | Where-Object { -not (Test-Path -LiteralPath (Join-Path $_.DirectoryPath 'package.json')) -or -not (Test-Path -LiteralPath $_.PackageTask.Path) }).Count -eq 0) -Message 'Every package entry must resolve to its package.json and installer script.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape("Join-Path 'vm-packages' (Join-Path `$Catalog `$Platform)")) -Message 'Builtin and custom packages must resolve under separate physical catalog roots.'
-    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -in @('install','repair','update') -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/repair/update target resolution.'
+    Assert-True -Condition ($packageRuntime -match [regex]::Escape("if (`$Action -in @('install','repair','update','reinstall') -and -not [bool]`$package.Enabled)")) -Message 'Disabled packages must be rejected before install/repair/update/reinstall target resolution.'
     Assert-True -Condition ($packageRuntime -match [regex]::Escape('Set-ClagnosTaskCatalogEnabled')) -Message 'Package enable/disable must update the owning tasks.toml catalog.'
     $updateInventory = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath (Join-Path $RepoRoot 'vm-update\windows') -Platform windows -Stage update -SuppressSkipMessages
     Assert-True -Condition (@($updateInventory.InventoryTasks).Count -gt 0) -Message 'The update task catalog must remain independently discoverable after packages are moved out.'
@@ -1415,7 +1415,7 @@ Invoke-Test -Name "Interactive Clagnos CLI exposes the complete command surface"
     foreach ($menuRoute in @("'create'", "'initialize'", "'update'", "'package'", "'component'", "'connect'", "'move'", "'resize'", "'set'", "'exec'", "'task'", "'show'", "'list'", "'delete'", "'configure'", "'help'")) {
         Assert-True -Condition ($uiText.Contains($menuRoute)) -Message ("The interactive UI must expose route {0}." -f $menuRoute)
     }
-    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from <vm-name>.env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
+    foreach ($menuLabel in @('2. Managed resource inventory','3. Cloud subscriptions','p: setup all program packages','m: manage program packages','1. Builtin package catalog','2. Custom package catalog','[builtin]','[custom]','i: initialize VC','k: reset managed-user passwords from <vm-name>.env','u: update VC','x: manage VC components','d: delete VC and its resources','q: quit','s: show properties','a: attach','t: detach','6. List disabled tasks','7. Enable/disable a task','e: enable package','d: disable package','u: uninstall','i: install','r: repair','v: update','x: force uninstall and reinstall','s: status','a: manage package app-state',' (disabled)','1. Change VM size','2. Expand OS disk','3. Show safe shrink guidance','VM action number','Clagnos selected:','Azure CLI active:')) {
         Assert-True -Condition ($uiText.Contains($menuLabel)) -Message ("The VC menu must expose '{0}'." -f $menuLabel)
     }
     Assert-True -Condition ($uiText -match [regex]::Escape('Get-ClagnosUiCachedInventoryRows -TypeName')) -Message 'The inventory submenu must render managed inventory from the validated snapshot.'
@@ -6560,7 +6560,7 @@ Invoke-Test -Name "Windows task and package catalogs are physically isolated" -A
     Assert-True -Condition (@($chrome.PackageTask.PackageSpec.DependsOn) -contains 'chocolatey') -Message 'Package dependencies must refer to package ids, not vm-update task names.'
     foreach ($storePackageId in @('microsoft-teams','be-my-eyes','whatsapp','codex-app','icloud')) {
         $storePackage = @($builtinPackages | Where-Object { $_.Id -eq $storePackageId })[0]
-        Assert-True -Condition (@($storePackage.PackageTask.PackageSpec.PostInstallTasks) -contains '10003-create-public-desktop-shortcuts') -Message ("Store package '{0}' must declare its public shortcut post-install task in package.json." -f $storePackageId)
+        Assert-True -Condition (@($storePackage.PackageTask.PackageSpec.PostInstallTasks).Count -eq 0) -Message ("Store package '{0}' must not re-run the global desktop-shortcut maintenance task during a package lifecycle action; vm-update owns that shared reconciliation." -f $storePackageId)
     }
 }
 Invoke-Test -Name "Exec quiet mode suppresses remote chatter but keeps local action progress visible" -Action {
@@ -6810,7 +6810,7 @@ Invoke-Test -Name "Windows Ollama task verifies API readiness" -Action {
     $taskJsonPath = Get-RepoTaskJsonPath -Platform windows -Stage update -TaskName '135-install-ollama-tool'
     $taskScript = [string](Get-Content -LiteralPath $taskPath -Raw)
     $taskJson = Get-Content -LiteralPath $taskJsonPath -Raw | ConvertFrom-Json
-    Assert-True -Condition ($taskScript -like '*ChocoPackageId = ''ollama''*') -Message 'Ollama install task must use the ollama Chocolatey package id.'
+    Assert-True -Condition ($taskScript -like '*WingetPackageId = ''Ollama.Ollama''*') -Message 'Ollama install task must use the same exact WinGet identity as the package status, update, and uninstall contract.'
     Assert-True -Condition ($taskScript -like '*127.0.0.1:11434*') -Message 'Ollama install task must check the default Ollama port.'
     Assert-True -Condition ($taskScript -like '*http://localhost:11434/api/version*') -Message 'Ollama install task must keep a localhost API probe fallback for slow local cold starts.'
     Assert-True -Condition ($taskScript -like '*/api/version*') -Message 'Ollama install task must validate the Ollama HTTP API endpoint.'
@@ -6823,15 +6823,15 @@ Invoke-Test -Name "Windows Ollama task verifies API readiness" -Action {
     Assert-True -Condition ($taskScript -like '*ollama-port-ready*') -Message 'Ollama install task must verify the local Ollama TCP port after bootstrap.'
     Assert-True -Condition (($taskScript.IndexOf('Wait-OllamaProcessReady -TimeoutSeconds ([int]$taskConfig.OllamaProcessWaitTimeoutSeconds)', [System.StringComparison]::Ordinal)) -ge 0) -Message 'Ollama install task must verify the process before treating ollama ls as the decisive check.'
     Assert-True -Condition (($taskScript.IndexOf('Wait-OllamaApiReady -TimeoutSeconds $apiTimeoutSeconds', [System.StringComparison]::Ordinal)) -ge 0) -Message 'Ollama install task must verify the API before treating ollama ls as the decisive check.'
-    Assert-True -Condition ($taskScript -like '*Existing Ollama installation is already healthy. Skipping choco install.*') -Message 'Ollama install task must short-circuit when an existing installation is already healthy.'
+    Assert-True -Condition ($taskScript -like '*Existing Ollama installation is already healthy. Skipping install.*') -Message 'Ollama install task must short-circuit when an existing installation is already healthy.'
     Assert-True -Condition ($taskScript -like '*RedirectStandardOutput*') -Message 'Ollama install task must bound external command output through redirected logs.'
     Assert-True -Condition ($taskScript -like '*RedirectStandardError*') -Message 'Ollama install task must bound external command error output through redirected logs.'
-    Assert-True -Condition ($taskScript -like '*WaitForExit*') -Message 'Ollama install task must bound choco and ollama command waits.'
+    Assert-True -Condition ($taskScript -like '*WaitForExit*') -Message 'Ollama install task must bound WinGet and Ollama command waits.'
     Assert-True -Condition ($taskScript -like '*timed out after*') -Message 'Ollama install task must fail clearly when install or list probes exceed the timeout.'
-    Assert-True -Condition ($taskScript -like '*choco install ollama -y --no-progress --ignore-detected-reboot*') -Message 'Ollama install task must install with choco install ollama.'
-    Assert-True -Condition ($taskScript -like '*ollama-cleanup-winget-exit*') -Message 'Ollama install task must clean old winget-based installs before a clean choco reinstall.'
+    Assert-True -Condition ($taskScript -like '*winget install --id {0} --exact --accept-source-agreements --accept-package-agreements --silent --disable-interactivity*') -Message 'Ollama install task must use a bounded unattended WinGet install with the exact catalog identity.'
+    Assert-True -Condition ($taskScript -like '*--skip-autouninstaller*' -and $taskScript -like '*--skip-powershell*' -and $taskScript -like '*stale Chocolatey Ollama registration*') -Message 'Ollama install must remove only a stale Chocolatey package registration without running its uninstall scripts or touching user models/configuration.'
     Assert-True -Condition (-not ($taskScript -like '*Write-Warning*')) -Message 'Ollama install task must avoid emitting warning-channel noise during bounded retries.'
-    Assert-True -Condition (-not ($taskScript -like '*winget install*')) -Message 'Ollama install task must no longer install through winget.'
+    Assert-True -Condition (-not ($taskScript -like '*choco install ollama*') -and -not ($taskScript -like '*Remove-OllamaArtifacts*')) -Message 'Ollama install must not leave a Chocolatey-first path or destructive broad cleanup fallback.'
     Assert-True -Condition ($taskScript -like '*Start-Process -FilePath $OllamaExe -ArgumentList ''serve''*') -Message 'Ollama install task must fall back to Start-Process ollama.exe serve when the detached ls bootstrap does not stay alive.'
     Assert-True -Condition (($taskScript.IndexOf('[string]$Host =', [System.StringComparison]::OrdinalIgnoreCase)) -lt 0) -Message 'Ollama install task must not shadow the built-in $Host variable with a parameter named Host.'
     Assert-True -Condition (($taskScript.IndexOf('[string]$HostName', [System.StringComparison]::Ordinal)) -ge 0) -Message 'Ollama install task must use a non-reserved host-name parameter for TCP probes.'
@@ -6874,17 +6874,13 @@ Invoke-Test -Name "Windows Docker Desktop task clears stale installer locks" -Ac
     Assert-True -Condition ($taskScript -like '*vmcompute*') -Message 'Docker Desktop task must explicitly satisfy the vmcompute prerequisite.'
     Assert-True -Condition ($taskScript -like '*wslservice*') -Message 'Docker Desktop task must explicitly satisfy the WSL service prerequisite when present.'
     Assert-True -Condition ($taskScript -like '*wsl --install --no-distribution*') -Message 'Docker Desktop task must bootstrap WSL prerequisites before daemon verification.'
-    Assert-True -Condition ($taskScript -like '*Wait-ClagnosUserInteractiveDesktopReady*') -Message 'Docker Desktop task must wait for the manager interactive desktop before launching Docker Desktop.'
-    Assert-True -Condition ($taskScript -like '*Invoke-ClagnosInteractiveDesktopAutomation*') -Message 'Docker Desktop task must launch Docker Desktop through interactive desktop automation.'
+    Assert-True -Condition ($taskScript -notlike '*Wait-ClagnosUserInteractiveDesktopReady*' -and $taskScript -notlike '*Invoke-ClagnosInteractiveDesktopAutomation*' -and $taskScript -notlike '*RunAsMode ''interactiveToken''*') -Message 'Docker Desktop package installation must not require an interactive desktop session.'
+    Assert-True -Condition ($taskScript -like '*Ensure-DockerStartupShortcut*' -and $taskScript -like '*Docker Desktop GUI launch is configured for managed-user sign-in*') -Message 'Docker Desktop install must configure startup and defer the GUI launch to a managed-user sign-in.'
     Assert-True -Condition ($taskScript -like '*master-profile-state*') -Message 'Docker Desktop task must seed the master Docker profile state before launch.'
     Assert-True -Condition ($taskScript -like '*currentContext": "desktop-linux"*') -Message 'Docker Desktop task must enforce the desktop-linux Docker context in the seeded profile.'
     Assert-True -Condition ($taskScript -like '*"LicenseTermsVersion": 2*') -Message 'Docker Desktop task must seed the accepted license terms version in the managed profile state.'
     Assert-True -Condition (($taskScript.IndexOf('docker-step-warning', [System.StringComparison]::Ordinal)) -lt 0) -Message 'Docker Desktop task must not keep soft warning-only service startup paths.'
-    Assert-True -Condition ($taskScript -like '*Wait-DockerDaemonReady*') -Message 'Docker Desktop task must keep the bounded daemon readiness loop.'
-    Assert-True -Condition ($taskScript -like '*docker desktop start*') -Message 'Docker Desktop task must explicitly request Docker Desktop backend startup before probing readiness.'
-    Assert-True -Condition ($taskScript -like '*docker desktop status*') -Message 'Docker Desktop task must include a bounded docker desktop status probe.'
-    Assert-True -Condition ($taskScript -like '*docker info*') -Message 'Docker Desktop task must include a bounded docker info probe.'
-    Assert-True -Condition ($taskScript -like '*Docker Desktop did not become daemon-ready in time*') -Message 'Docker Desktop task must fail when the daemon never becomes ready.'
+    Assert-True -Condition ($taskScript -notlike '*Wait-DockerDaemonReady*' -and $taskScript -like '*engine readiness is deferred until the managed desktop session starts*') -Message 'Docker Desktop unattended install must report deferred engine readiness instead of waiting for an interactive desktop.'
     Assert-True -Condition ($taskScript -like '*$global:LASTEXITCODE = 0*') -Message 'Docker Desktop task must clear non-fatal native exit codes before completing.'
 }
 
@@ -6900,7 +6896,7 @@ Invoke-Test -Name "Windows AnyDesk package avoids unbounded winget list checks a
     $manifestPath = Join-Path (Split-Path $taskPath -Parent) 'package.json'
     $manifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath $manifestPath -Raw) -ErrorAction Stop
     Assert-True -Condition ([string]$manifest.statusCheck.kind -eq 'command' -and [string]$manifest.statusCheck.value -eq 'C:\Program Files (x86)\AnyDesk\AnyDesk.exe') -Message 'AnyDesk status must use its direct executable check instead of winget source enumeration.'
-    Assert-True -Condition ([int]$manifest.timeout -ge 180) -Message 'AnyDesk package timeout must exceed its bounded winget installation window.'
+    Assert-True -Condition ([int]$manifest.operationTimeoutSeconds.install -ge 180 -and [int]$manifest.operationTimeoutSeconds.install -le 480) -Message 'AnyDesk package install timeout must be finite and exceed its bounded verified installer wait.'
 }
 
 Invoke-Test -Name "Windows VLC task verifies the executable after bounded winget waits" -Action {
@@ -6919,31 +6915,22 @@ Invoke-Test -Name "Windows WhatsApp task keeps a one-shot Store state contract" 
     $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '121-install-whatsapp-application'
     $taskScript = [string](Get-Content -LiteralPath $taskPath -Raw)
     Assert-True -Condition ($taskScript -like '*clagnos-store-install-state.psm1*') -Message 'WhatsApp task must import the shared Store install state helper.'
-    Assert-True -Condition ($taskScript -like '*Invoke-ClagnosInteractiveDesktopAutomation*') -Message 'WhatsApp task must run Store installation through the interactive desktop automation helper.'
-    Assert-True -Condition ($taskScript -like '*Get-ClagnosInteractivePaths*') -Message 'WhatsApp task must provision an interactive worker path.'
-    Assert-True -Condition ($taskScript -like '*RunAsMode ''interactiveToken''*') -Message 'WhatsApp task must use the manager interactive desktop token.'
-    Assert-True -Condition ($taskScript -like '*no next-boot follow-up was scheduled*') -Message 'WhatsApp task must classify incomplete Store installs without scheduling a later boot follow-up.'
-    Assert-True -Condition ($taskScript -like '*Wait-ClagnosUserInteractiveDesktopReady*') -Message 'WhatsApp task must wait briefly for the manager desktop when autologon is already configured.'
-    Assert-True -Condition ($taskScript -like '*New-ClagnosInteractiveDesktopBlockMessage*') -Message 'WhatsApp task must classify blocked desktop states with the shared helper message builder.'
-    Assert-True -Condition ($taskScript -like '*Write-ClagnosInteractiveDesktopStatusLine*') -Message 'WhatsApp task must log the resolved interactive desktop status before warning.'
-    Assert-True -Condition ($taskScript -like '*cannot be deferred to a later boot*') -Message 'WhatsApp task must fail explicitly instead of leaving deferred RunOnce work behind.'
+    Assert-True -Condition ($taskScript -like '*Invoke-ClagnosInteractiveDesktopAutomation*') -Message 'WhatsApp task must use the bounded scheduled-task worker for unattended Store installation.'
+    Assert-True -Condition ($taskScript -like '*Get-ClagnosInteractivePaths*') -Message 'WhatsApp task must use a bounded worker path for unattended execution.'
+    Assert-True -Condition ($taskScript -like '*RunAsMode ''password''*') -Message 'WhatsApp task must use password-logon rather than an interactive desktop token.'
+    Assert-True -Condition ($taskScript -notlike '*Wait-ClagnosUserInteractiveDesktopReady*') -Message 'WhatsApp task must not require an interactive desktop session.'
+    Assert-True -Condition ($taskScript -like '*--silent --accept-source-agreements --accept-package-agreements --disable-interactivity*') -Message 'WhatsApp WinGet install must disable UI and interactive prompts.'
     Assert-True -Condition ($taskScript -like '*Write-ClagnosStoreInstallState*') -Message 'WhatsApp task must persist explicit store install state records.'
     Assert-True -Condition ($taskScript -like '*9NKSQGP7F2NH*') -Message 'WhatsApp task must keep the Store package id in the install contract.'
-    Assert-True -Condition ($taskScript -like '*install --id $packageId --source msstore --accept-source-agreements --accept-package-agreements*') -Message 'WhatsApp task must keep the Microsoft Store winget install contract.'
+    Assert-True -Condition ($taskScript -like '*install --id $packageId --source msstore --silent --accept-source-agreements --accept-package-agreements --disable-interactivity*') -Message 'WhatsApp task must keep the unattended Microsoft Store WinGet install contract.'
 }
 
 Invoke-Test -Name "Windows Teams task keeps the shared Microsoft Store state contract" -Action {
     $taskPath = Get-RepoTaskScriptPath -Platform windows -Stage update -TaskName '118-install-teams-application'
     $taskScript = [string](Get-Content -LiteralPath $taskPath -Raw)
-    Assert-True -Condition ($taskScript -like '*clagnos-store-install-state.psm1*') -Message 'Teams task must import the shared Store install state helper.'
-    Assert-True -Condition ($taskScript -like '*Invoke-ClagnosInteractiveDesktopAutomation*') -Message 'Teams task must run Store installation through the interactive desktop automation helper.'
-    Assert-True -Condition ($taskScript -like '*Wait-ClagnosUserInteractiveDesktopReady*') -Message 'Teams task must wait briefly for the manager desktop when autologon is already configured.'
-    Assert-True -Condition ($taskScript -like '*New-ClagnosInteractiveDesktopBlockMessage*') -Message 'Teams task must classify blocked desktop states with the shared helper message builder.'
-    Assert-True -Condition ($taskScript -like '*Write-ClagnosInteractiveDesktopStatusLine*') -Message 'Teams task must log the resolved interactive desktop status before warning.'
-    Assert-True -Condition ($taskScript -like '*RunAsMode ''interactiveToken''*') -Message 'Teams task must use the manager interactive desktop token.'
-    Assert-True -Condition ($taskScript -like '*Write-ClagnosStoreInstallState*') -Message 'Teams task must persist explicit Store install state records.'
-    Assert-True -Condition ($taskScript -like '*cannot be deferred to a later boot*') -Message 'Teams task must fail explicitly instead of leaving deferred RunOnce work behind.'
-    Assert-True -Condition ($taskScript -like '*winget install "Microsoft Teams" -s msstore --accept-source-agreements --accept-package-agreements --silent --disable-interactivity*') -Message 'Teams task must keep the unattended Microsoft Store winget install contract.'
+    Assert-True -Condition ($taskScript -like '*Invoke-ClagnosTeamsBootstrapper -Action install*') -Message 'Teams task must use the signed headless Microsoft bootstrapper.'
+    Assert-True -Condition ($taskScript -notlike '*Wait-ClagnosUserInteractiveDesktopReady*' -and $taskScript -notlike '*RunAsMode ''interactiveToken''*') -Message 'Teams task must not require an interactive desktop token.'
+    Assert-True -Condition ($taskScript -like '*Set-ClagnosTeamsStoreInstallState*') -Message 'Teams task must persist explicit Store install state records.'
 }
 
 Invoke-Test -Name "Interactive session helper distinguishes Store desktop readiness states" -Action {
@@ -7061,9 +7048,9 @@ Invoke-Test -Name "Store package post-install tasks run synchronously with the i
         }
         $result = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options @{ 'vm-name' = 'samplevm' } -OperationName 'package' -Stage 'update' -Requested 'microsoft-teams' -PackageTaskBlock $packageTask -TaskOutcomeModeOverride strict
 
-        Assert-True -Condition ($null -ne $script:IsolatedStoreFollowUpInvocation) -Message 'Store package installation must invoke the SSH task runner.'
-        Assert-True -Condition ((@($script:IsolatedStoreFollowUpInvocation.TaskNames) -join ',') -eq 'microsoft-teams,10003-create-public-desktop-shortcuts') -Message 'The package manifest postInstallTasks list must append the shortcut refresh script.'
-        Assert-True -Condition ((@($result.TaskBlocks).Count) -eq 2) -Message 'Package install results must include the installer and its post-install task.'
+        Assert-True -Condition ($null -ne $script:IsolatedStoreFollowUpInvocation) -Message 'Explicitly declared package post-install tasks must invoke the SSH task runner.'
+        Assert-True -Condition ((@($script:IsolatedStoreFollowUpInvocation.TaskNames) -join ',') -eq 'microsoft-teams,10003-create-public-desktop-shortcuts') -Message 'Explicit package postInstallTasks entries must be appended to the package action.'
+        Assert-True -Condition ((@($result.TaskBlocks).Count) -eq 2) -Message 'Package install results must include the installer and its explicitly declared post-install task.'
         Assert-True -Condition ([string]$result.Task.Name -eq 'microsoft-teams') -Message 'Package install results must report the package id as the primary task.'
     }
     finally {
@@ -7792,10 +7779,9 @@ Invoke-Test -Name "Windows WSL and health contracts expose Docker prerequisite s
     $wslTaskText = [string](Get-Content -LiteralPath $wslTaskPath -Raw)
     $healthTaskText = [string](Get-Content -LiteralPath $healthTaskPath -Raw)
     $wslManifest = ConvertFrom-Json -InputObject (Get-Content -LiteralPath (Join-Path (Split-Path $wslTaskPath -Parent) 'package.json') -Raw) -ErrorAction Stop
-    Assert-True -Condition ([int]$wslManifest.timeout -ge 600) -Message 'WSL feature installation must allow enough time for servicing-stack DISM enablement.'
-    Assert-True -Condition (@($wslManifest.assets | Where-Object { [string]$_.local -eq '../../../../tools/scripts/clagnos-interactive-session-helper.ps1' -and [string]$_.remote -eq 'C:/Windows/Temp/clagnos-interactive-session-helper.ps1' }).Count -eq 1) -Message 'WSL Store package installation must carry the interactive desktop helper asset.'
-    Assert-True -Condition ($wslTaskText -like '*Install-WslAppxThroughInteractiveSession*' -and $wslTaskText -like '*RunAsMode ''interactiveToken''*') -Message 'WSL Store package installation must run in the interactive manager desktop session.'
-    Assert-True -Condition ($wslTaskText -like "*Get-AppxPackage -Name 'Microsoft.DesktopAppInstaller'*") -Message 'The interactive WSL installer must resolve winget from the registered App Installer package when no portable or per-user alias exists.'
+    Assert-True -Condition ([int]$wslManifest.operationTimeoutSeconds.install -ge 180 -and [int]$wslManifest.operationTimeoutSeconds.install -le 480) -Message 'WSL package installation must use its measured finite MSI and servicing-stack operation budget.'
+    Assert-True -Condition (@($wslManifest.assets | Where-Object { [string]$_.local -eq '../../../../tools/scripts/clagnos-interactive-session-helper.ps1' }).Count -eq 0) -Message 'WSL provisioning must not depend on the interactive session helper.'
+    Assert-True -Condition ([string]$wslManifest.statusCheck.kind -eq 'wsl' -and [string]$wslManifest.uninstall.kind -eq 'wsl' -and $wslTaskText -like '*Install-WslMsiUnattended*' -and $wslTaskText -like '*api.github.com/repos/microsoft/WSL/releases/latest*' -and $wslTaskText -like '*Get-FileHash*' -and $wslTaskText -notlike '*Wait-ClagnosUserInteractiveDesktopReady*' -and $wslTaskText -notlike '*wingetPath install --id Microsoft.WSL*') -Message 'WSL package install/status/uninstall must use the hash-verified official MSI path without a Store UI or desktop session.'
     Assert-True -Condition ($wslTaskText -like '*wsl.exe --update --web-download*') -Message 'WSL updates must use the non-Store web download path.'
 
     foreach ($fragment in @(
@@ -8732,16 +8718,16 @@ Invoke-Test -Name "Shortcut launcher threshold uses combined target and argument
 
 Invoke-Test -Name "Windows app install task contracts cover new shortcut-backed packages" -Action {
     $installTaskMap = [ordered]@{
-        '114-install-teams-application.ps1' = @('clagnos-store-install-state.psm1', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Wait-ClagnosUserInteractiveDesktopReady', 'New-ClagnosInteractiveDesktopBlockMessage', 'Write-ClagnosInteractiveDesktopStatusLine', 'Write-ClagnosStoreInstallState', 'cannot be deferred to a later boot', 'winget install "Microsoft Teams" -s msstore')
+        '114-install-teams-application.ps1' = @('Invoke-ClagnosTeamsBootstrapper -Action install', 'Set-ClagnosTeamsStoreInstallState', 'MSTeams')
         '103-install-edge-application.ps1' = @('Microsoft.Edge', 'msedge.exe')
         '104-install-onedrive-application.ps1' = @('Microsoft.OneDrive', 'OneDrive.exe')
         '105-install-rclone-tool.ps1' = @('Rclone.Rclone', 'rclone.exe')
         '115-install-nvda-application.ps1' = @('NVAccess.NVDA', 'nvd')
         '117-install-itunes-application.ps1' = @('Apple.iTunes', 'iTunes.exe')
-        '118-install-be-my-eyes-application.ps1' = @('9MSW46LTDWGF', '--source msstore', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Get-ClagnosInteractivePaths', 'RunAsMode ''interactiveToken''', 'Wait-ClagnosUserInteractiveDesktopReady', 'New-ClagnosInteractiveDesktopBlockMessage', 'Write-ClagnosInteractiveDesktopStatusLine', 'cannot be deferred to a later boot', 'Write-ClagnosStoreInstallState')
-        '119-install-whatsapp-application.ps1' = @('9NKSQGP7F2NH', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Get-ClagnosInteractivePaths', 'RunAsMode ''interactiveToken''', 'Wait-ClagnosUserInteractiveDesktopReady', 'New-ClagnosInteractiveDesktopBlockMessage', 'Write-ClagnosInteractiveDesktopStatusLine', 'Write-ClagnosStoreInstallState')
-        '120-install-codex-application.ps1' = @('9PLM9XGG6VKS', 'OpenAI.Codex', 'Codex.exe', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Get-ClagnosInteractivePaths', 'RunAsMode ''interactiveToken''', 'Wait-ClagnosUserInteractiveDesktopReady', 'New-ClagnosInteractiveDesktopBlockMessage', 'Write-ClagnosInteractiveDesktopStatusLine', 'Write-ClagnosStoreInstallState', 'cannot be deferred to a later boot')
-        '122-install-icloud-application.ps1' = @('9PKTQ5699M62', "PackageSource = 'msstore'", 'iCloudHome.exe', 'Get-StartApps', 'Invoke-ClagnosInteractiveDesktopAutomation', 'RunAsMode ''interactiveToken''', 'Wait-ClagnosUserInteractiveDesktopReady', 'New-ClagnosInteractiveDesktopBlockMessage', 'Write-ClagnosInteractiveDesktopStatusLine', 'cannot be deferred to a later boot', 'Write-ClagnosStoreInstallState')
+        '118-install-be-my-eyes-application.ps1' = @('9MSW46LTDWGF', '--source msstore', '--silent', '--disable-interactivity', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Get-ClagnosInteractivePaths', 'RunAsMode ''password''', 'Write-ClagnosStoreInstallState')
+        '119-install-whatsapp-application.ps1' = @('9NKSQGP7F2NH', '--source msstore', '--silent', '--disable-interactivity', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Get-ClagnosInteractivePaths', 'RunAsMode ''password''', 'Write-ClagnosStoreInstallState')
+        '120-install-codex-application.ps1' = @('9PLM9XGG6VKS', 'OpenAI.Codex', 'Codex.exe', '--source msstore', '--silent', '--disable-interactivity', 'Invoke-ClagnosInteractiveDesktopAutomation', 'Get-ClagnosInteractivePaths', 'RunAsMode ''password''', 'Write-ClagnosStoreInstallState')
+        '122-install-icloud-application.ps1' = @('9PKTQ5699M62', "PackageSource = 'msstore'", 'iCloudHome.exe', 'Get-StartApps', '--silent', '--disable-interactivity', 'Invoke-ClagnosInteractiveDesktopAutomation', 'RunAsMode ''password''', 'Write-ClagnosStoreInstallState')
         '124-install-openai-codex-tool.ps1' = @('@openai/codex@latest', '@openai/codex', '--loglevel error', 'Test-BenignNpmInstallNoiseLine', '2>&1', 'npm install exit code:', 'codex.cmd', 'install-openai-codex-tool-completed')
         '125-install-github-copilot-tool.ps1' = @('@github/copilot@latest', '@github/copilot', '--loglevel error', 'Test-BenignNpmInstallNoiseLine', '2>&1', 'npm install exit code:', 'copilot.cmd', 'install-github-copilot-tool-completed')
         '126-install-google-gemini-tool.ps1' = @('@google/gemini-cli@latest', '@google/gemini-cli', '--loglevel error', 'Test-BenignNpmInstallNoiseLine', '2>&1', 'npm install exit code:', 'gemini.cmd', 'install-google-gemini-tool-completed')
@@ -9258,7 +9244,7 @@ Invoke-Test -Name "Windows install tasks short-circuit healthy installs and avoi
         '106-install-7zip-tool.ps1' = @('Existing 7-Zip installation is already healthy. Skipping choco install.')
         '133-install-sysinternals-tool.ps1' = @('Existing Sysinternals installation is already healthy:', 'choco install sysinternals')
         '109-install-ffmpeg-tool.ps1' = @('Existing FFmpeg installation is already healthy. Skipping choco install.')
-        '135-install-ollama-tool.ps1' = @('Existing Ollama installation is already healthy. Skipping choco install.', 'choco install ollama')
+        '135-install-ollama-tool.ps1' = @('Existing Ollama installation is already healthy. Skipping install.', 'winget install --id')
         '112-install-azd-tool.ps1' = @('Existing azd installation is already healthy. Skipping winget install.')
         '118-install-teams-application.ps1' = @('Existing Microsoft Teams installation is already healthy. Skipping winget install.')
         '122-install-anydesk-application.ps1' = @('Existing AnyDesk installation is already healthy', 'function Test-AnyDeskInstalled')
@@ -9365,9 +9351,8 @@ Invoke-Test -Name "Be My Eyes task publishes interactive helper asset" -Action {
     $assetCopies = @($resolvedTask.AssetCopies)
     Assert-True -Condition ([string]$resolvedTask.Script -like '*clagnos-store-install-state.psm1*') -Message "Be My Eyes task must import the shared Store helper asset."
     Assert-True -Condition ([string]$resolvedTask.Script -like '*Invoke-ClagnosInteractiveDesktopAutomation*') -Message "Be My Eyes task must call the interactive helper."
-    Assert-True -Condition ([string]$resolvedTask.Script -like '*Wait-ClagnosUserInteractiveDesktopReady*') -Message "Be My Eyes task must wait briefly for the manager desktop when autologon is already configured."
-    Assert-True -Condition ([string]$resolvedTask.Script -like '*New-ClagnosInteractiveDesktopBlockMessage*') -Message "Be My Eyes task must classify blocked interactive-desktop states with the shared helper."
-    Assert-True -Condition ([string]$resolvedTask.Script -like '*cannot be deferred to a later boot*') -Message "Be My Eyes task must fail explicitly instead of scheduling a deferred install."
+    Assert-True -Condition ([string]$resolvedTask.Script -like '*RunAsMode ''password''*') -Message "Be My Eyes task must use password-logon without requiring an interactive desktop."
+    Assert-True -Condition ([string]$resolvedTask.Script -notlike '*Wait-ClagnosUserInteractiveDesktopReady*') -Message "Be My Eyes task must not block on desktop readiness."
     Assert-True -Condition ($assetCopies.Count -ge 2) -Message "Be My Eyes task must materialize helper assets."
 }
 
@@ -9388,9 +9373,8 @@ Invoke-Test -Name "iCloud task publishes interactive helper asset" -Action {
     $assetCopies = @($resolvedTask.AssetCopies)
     Assert-True -Condition ([string]$resolvedTask.Script -like '*clagnos-store-install-state.psm1*') -Message "iCloud task must import the shared Store helper asset."
     Assert-True -Condition ([string]$resolvedTask.Script -like '*Invoke-ClagnosInteractiveDesktopAutomation*') -Message "iCloud task must call the interactive helper."
-    Assert-True -Condition ([string]$resolvedTask.Script -like '*Wait-ClagnosUserInteractiveDesktopReady*') -Message "iCloud task must wait briefly for the manager desktop when autologon is already configured."
-    Assert-True -Condition ([string]$resolvedTask.Script -like '*New-ClagnosInteractiveDesktopBlockMessage*') -Message "iCloud task must classify blocked interactive-desktop states with the shared helper."
-    Assert-True -Condition ([string]$resolvedTask.Script -like '*cannot be deferred to a later boot*') -Message "iCloud task must fail explicitly instead of scheduling a deferred install."
+    Assert-True -Condition ([string]$resolvedTask.Script -like '*RunAsMode ''password''*') -Message "iCloud task must use password-logon without requiring an interactive desktop."
+    Assert-True -Condition ([string]$resolvedTask.Script -notlike '*Wait-ClagnosUserInteractiveDesktopReady*') -Message "iCloud task must not block on desktop readiness."
     Assert-True -Condition ($assetCopies.Count -ge 2) -Message "iCloud task must materialize helper assets."
 }
 

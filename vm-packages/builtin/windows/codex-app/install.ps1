@@ -11,9 +11,7 @@ $packageId = '9PLM9XGG6VKS'
 $legacyRunOnceName = 'ClagnosInstallCodexApp'
 $portableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
 $interactiveTaskSuffix = 'interactive-install'
-$interactiveDesktopWaitSeconds = 30
 $waitTimeoutSeconds = 240
-$storeSessionErrorRegex = '(?i)0x80070520|logon session|microsoft store|msstore'
 
 if (-not (Test-Path -LiteralPath $helperPath)) {
     throw ("Interactive session helper was not found: {0}" -f $helperPath)
@@ -181,16 +179,6 @@ if (Test-ClagnosRunOnceEntryPresent -Name $legacyRunOnceName) {
     Write-Host 'store-install-cleanup => task=120-install-codex-application; removed-stale-run-once=True'
 }
 
-$interactiveDesktopStatus = Wait-ClagnosUserInteractiveDesktopReady -UserName $managerUser -WaitSeconds $interactiveDesktopWaitSeconds -PollSeconds 5
-Write-ClagnosInteractiveDesktopStatusLine -Status $interactiveDesktopStatus
-if (-not [bool]$interactiveDesktopStatus.Ready) {
-    $blockMessage = New-ClagnosInteractiveDesktopBlockMessage -ActivityDescription 'Codex app install' -ExpectedUserName $managerUser -Status $interactiveDesktopStatus
-    Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ([string]$blockMessage.Summary) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
-    throw ([string]$blockMessage.WarningMessage)
-}
-
 $workerTaskName = "{0}-{1}" -f $taskName, $interactiveTaskSuffix
 $paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
@@ -273,7 +261,7 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 }
 
 if (-not (Test-CodexInstalled)) {
-    $installOutput = @(& $wingetExe install --id $packageId --source msstore --accept-source-agreements --accept-package-agreements 2>&1)
+    $installOutput = @(& $wingetExe install --id $packageId --source msstore --silent --accept-source-agreements --accept-package-agreements --disable-interactivity 2>&1)
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
@@ -304,7 +292,7 @@ try {
         -RunAsPassword $managerPassword `
         -WorkerScriptText $workerScript `
         -WaitTimeoutSeconds $waitTimeoutSeconds `
-        -RunAsMode 'interactiveToken'
+        -RunAsMode 'password'
 }
 catch {
     Invoke-ClagnosRefreshSessionPath
@@ -318,15 +306,8 @@ catch {
         return
     }
 
-    $interactiveError = [string]$_.Exception.Message
-    if ($interactiveError -match $storeSessionErrorRegex) {
-        Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
-        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary 'Codex app install requires an interactive Store-capable session and no next-boot follow-up was scheduled.' -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
-        throw 'Codex app install requires an interactive Store-capable session and cannot be deferred to a later boot.'
-    }
-
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app interactive install failed: {0}' -f $interactiveError) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    $installError = [string]$_.Exception.Message
+    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended Codex app install failed: {0}' -f $installError) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
     Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }

@@ -2,7 +2,6 @@
   "id": "ffmpeg",
   "displayName": "FFmpeg",
   "category": "tool",
-  "timeout": 90,
   "sortOrder": 113,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -17,5 +16,14 @@
   "uninstall": {
     "kind": "choco",
     "value": "ffmpeg"
+  },
+  "repairStrategy": "choco",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 90,
+    "repair": 90,
+    "update": 90,
+    "uninstall": 90,
+    "reinstall": 180
   }
 }

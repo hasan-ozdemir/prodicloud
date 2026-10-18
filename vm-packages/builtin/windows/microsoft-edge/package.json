@@ -18,5 +18,18 @@
     "kind": "winget",
     "value": "Microsoft.Edge"
   },
-  "appStateKey": "103-install-edge-application"
+  "appStateKey": "103-install-edge-application",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 60,
+    "repair": 60,
+    "update": 60,
+    "uninstall": 60,
+    "reinstall": 120
+  },
+  "repairStrategy": "installer-verify",
+  "uninstallPolicy": {
+    "supported": false,
+    "reason": "Microsoft Edge is a protected Windows component on this image. Windows rejected the WinGet uninstall with MSI exit 1603; forcing the vendor uninstaller is not supported by this package contract."
+  }
 }

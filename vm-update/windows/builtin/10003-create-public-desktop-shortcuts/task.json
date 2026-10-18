@@ -3,15 +3,15 @@
   "timeout": 120,
   "assets": [
     {
-      "local": "../../../modules/core/tasks/clagnos-store-install-state.psm1",
+      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
       "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
     },
     {
-      "local": "../../../tools/scripts/clagnos-interactive-session-helper.ps1",
+      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
       "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
     },
     {
-      "local": "../../../modules/core/tasks/clagnos-shortcut-launcher.psm1",
+      "local": "../../../../modules/core/tasks/clagnos-shortcut-launcher.psm1",
       "remote": "C:/Windows/Temp/clagnos-shortcut-launcher.psm1"
     }
   ]

@@ -330,18 +330,24 @@ function New-ClagnosPowerShellCredential {
 # Handles New-ClagnosPowerShellRemotingSession.
 function New-ClagnosPowerShellRemotingSession {
     param(
-        [psobject]$Runtime
+        [psobject]$Runtime,
+        [int]$OpenTimeoutSeconds = 30,
+        [int]$OperationTimeoutSeconds = 3600
     )
 
     $port = Resolve-ClagnosConnectionPortNumber -PortText ([string]$Runtime.VmPowerShellPort) -PortLabel 'PowerShell remoting'
     $credential = New-ClagnosPowerShellCredential -UserName ([string]$Runtime.SelectedUserName) -Password ([string]$Runtime.SelectedPassword)
     Write-ClagnosActionProgress -Action ("authenticate PowerShell remoting session to '{0}:{1}'" -f [string]$Runtime.ConnectionHost, $port)
     try {
+        $safeOpenTimeout = [Math]::Max(5,[Math]::Min(300,[int]$OpenTimeoutSeconds))
+        $safeOperationTimeout = [Math]::Max(30,[Math]::Min(7200,[int]$OperationTimeoutSeconds))
+        $sessionOptions = New-PSSessionOption -OpenTimeout ($safeOpenTimeout * 1000) -OperationTimeout ($safeOperationTimeout * 1000) -CancelTimeout 30000
         return (New-PSSession `
             -ComputerName ([string]$Runtime.ConnectionHost) `
             -Port $port `
             -Credential $credential `
             -Authentication Negotiate `
+            -SessionOption $sessionOptions `
             -ErrorAction Stop)
     }
     catch {

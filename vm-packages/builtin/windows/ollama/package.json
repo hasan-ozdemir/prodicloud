@@ -2,7 +2,6 @@
   "id": "ollama",
   "displayName": "Ollama",
   "category": "tool",
-  "timeout": 540,
   "sortOrder": 150,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -47,5 +46,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "winget",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
+    "reinstall": 360
   }
 }

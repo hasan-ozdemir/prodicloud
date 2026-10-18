@@ -2,7 +2,6 @@
   "id": "github-copilot-cli",
   "displayName": "GitHub Copilot CLI",
   "category": "tool",
-  "timeout": 180,
   "sortOrder": 125,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -21,5 +20,14 @@
   "appStateKey": "125-install-github-copilot-tool",
   "dependsOn": [
     "nodejs"
-  ]
+  ],
+  "repairStrategy": "npm",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 180,
+    "reinstall": 360
+  }
 }

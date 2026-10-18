@@ -17,5 +17,18 @@
   "uninstall": {
     "kind": "appx",
     "value": "Microsoft.DesktopAppInstaller"
+  },
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 60,
+    "repair": 60,
+    "update": 60,
+    "uninstall": 60,
+    "reinstall": 120
+  },
+  "repairStrategy": "installer-verify",
+  "uninstallPolicy": {
+    "supported": false,
+    "reason": "Microsoft.DesktopAppInstaller is a protected Windows system package. Windows rejected per-user AppX removal with 0x80070032; the package must remain installed on this image."
   }
 }

@@ -2,7 +2,6 @@
   "id": "docker-desktop",
   "displayName": "Docker Desktop",
   "category": "application",
-  "timeout": 600,
   "sortOrder": 134,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -16,15 +15,9 @@
     "value": "Docker.DockerDesktop"
   },
   "uninstall": {
-    "kind": "winget",
+    "kind": "docker-desktop",
     "value": "Docker.DockerDesktop"
   },
-  "assets": [
-    {
-      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
-      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
-    }
-  ],
   "appStateKey": "134-install-docker-desktop-application",
   "startupPolicy": {
     "roles": [
@@ -36,5 +29,13 @@
   },
   "dependsOn": [
     "windows-subsystem-linux"
-  ]
+  ],
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 120,
+    "update": 120,
+    "uninstall": 180,
+    "reinstall": 240
+  }
 }

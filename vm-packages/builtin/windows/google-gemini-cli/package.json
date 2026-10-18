@@ -2,7 +2,6 @@
   "id": "google-gemini-cli",
   "displayName": "Google Gemini CLI",
   "category": "tool",
-  "timeout": 300,
   "sortOrder": 126,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -34,5 +33,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "npm",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 300,
+    "repair": 300,
+    "update": 300,
+    "uninstall": 300,
+    "reinstall": 360
   }
 }

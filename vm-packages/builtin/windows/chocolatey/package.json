@@ -17,5 +17,14 @@
   "uninstall": {
     "kind": "choco-self",
     "value": "C:\\ProgramData\\chocolatey"
-  }
+  },
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 90,
+    "repair": 90,
+    "update": 90,
+    "uninstall": 90,
+    "reinstall": 180
+  },
+  "repairStrategy": "choco-self"
 }

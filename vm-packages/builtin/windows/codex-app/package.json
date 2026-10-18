@@ -2,7 +2,6 @@
   "id": "codex-app",
   "displayName": "Codex",
   "category": "application",
-  "timeout": 600,
   "sortOrder": 120,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -29,7 +28,13 @@
     }
   ],
   "appStateKey": "120-install-codex-application",
-  "postInstallTasks": [
-    "10003-create-public-desktop-shortcuts"
-  ]
+  "repairStrategy": "installer-verify",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
+    "reinstall": 360
+  }
 }

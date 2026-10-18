@@ -20,19 +20,8 @@ $taskConfig = [ordered]@{
         (Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'),
         'C:\Program Files\Ollama\ollama.exe'
     )
-    OllamaCleanupPaths = @(
-        (Join-Path $env:LOCALAPPDATA 'Programs\Ollama'),
-        'C:\Program Files\Ollama',
-        'C:\ProgramData\Ollama',
-        (Join-Path $env:LOCALAPPDATA 'Ollama'),
-        (Join-Path $env:APPDATA 'Ollama'),
-        (Join-Path $env:APPDATA 'ollama app.exe')
-    )
-    OllamaStartupShortcutPaths = @(
-        (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk')
-    )
     OllamaApiPort = 11434
-    ChocoInstallTimeoutSeconds = 600
+    WingetInstallTimeoutSeconds = 240
     OllamaExeWaitTimeoutSeconds = 45
     OllamaExeWaitPollSeconds = 3
     OllamaBootstrapSettleSeconds = 2
@@ -502,53 +491,6 @@ function Stop-OllamaProcesses {
     }
 }
 
-function Remove-OllamaArtifacts {
-    param([string]$ChocoExe)
-
-    Stop-OllamaProcesses
-
-    $wingetExe = Resolve-WingetExe
-    if (-not [string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-        Write-Host ("Running cleanup: winget uninstall --id {0} --exact --accept-source-agreements --disable-interactivity" -f [string]$taskConfig.WingetPackageId)
-        & $wingetExe uninstall --id ([string]$taskConfig.WingetPackageId) --exact --accept-source-agreements --disable-interactivity
-        Write-Host ("ollama-cleanup-winget-exit => {0}" -f [int]$LASTEXITCODE)
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace([string]$ChocoExe) -and (Test-Path -LiteralPath $ChocoExe)) {
-        Write-Host ("Running cleanup: choco uninstall {0} -y --no-progress" -f [string]$taskConfig.ChocoPackageId)
-        & $ChocoExe uninstall ([string]$taskConfig.ChocoPackageId) -y --no-progress
-        Write-Host ("ollama-cleanup-choco-exit => {0}" -f [int]$LASTEXITCODE)
-    }
-
-    foreach ($path in @([string[]]$taskConfig.OllamaCleanupPaths)) {
-        if ([string]::IsNullOrWhiteSpace([string]$path) -or -not (Test-Path -LiteralPath $path)) {
-            continue
-        }
-
-        try {
-            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
-            Write-Host ("ollama-cleanup-removed => {0}" -f [string]$path)
-        }
-        catch {
-            Write-Host ("ollama-cleanup-skip => {0} => {1}" -f [string]$path, [string]$_.Exception.Message)
-        }
-    }
-
-    foreach ($shortcutPath in @(Get-OllamaManagedStartupShortcutPaths) + @([string[]]$taskConfig.OllamaStartupShortcutPaths)) {
-        if ([string]::IsNullOrWhiteSpace([string]$shortcutPath) -or -not (Test-Path -LiteralPath $shortcutPath)) {
-            continue
-        }
-
-        try {
-            Remove-Item -LiteralPath $shortcutPath -Force -ErrorAction Stop
-            Write-Host ("ollama-cleanup-shortcut-removed => {0}" -f [string]$shortcutPath)
-        }
-        catch {
-            Write-Host ("ollama-cleanup-shortcut-skip => {0} => {1}" -f [string]$shortcutPath, [string]$_.Exception.Message)
-        }
-    }
-}
-
 function Confirm-OllamaRuntime {
     param(
         [Parameter(Mandatory = $true)]
@@ -639,7 +581,7 @@ Refresh-SessionPath
 
 $chocoExe = Resolve-ChocoExe
 if ([string]::IsNullOrWhiteSpace([string]$chocoExe)) {
-    throw 'choco command is not available.'
+    Write-Host 'Chocolatey is unavailable; Ollama install will continue through WinGet.'
 }
 
 $existingOllamaExe = Resolve-OllamaExe
@@ -651,7 +593,7 @@ if (-not [string]::IsNullOrWhiteSpace([string]$existingOllamaExe)) {
             $existingApiVersion = Get-OllamaApiVersion -TimeoutSeconds 3
             $existingHealth = Confirm-OllamaRuntime -OllamaExe $existingOllamaExe -Bootstrap:([string]::IsNullOrWhiteSpace([string]$existingApiVersion))
             if ($null -ne $existingHealth) {
-                Write-Host ("Existing Ollama installation is already healthy. Skipping choco install. version={0}; processCount={1}" -f [string]$existingHealth.Version, [int]$existingHealth.ProcessCount)
+                Write-Host ("Existing Ollama installation is already healthy. Skipping install. version={0}; processCount={1}" -f [string]$existingHealth.Version, [int]$existingHealth.ProcessCount)
                 Ensure-OllamaStartupShortcuts -OllamaExe $existingOllamaExe
                 Write-Host "Update task completed: install-ollama-tool"
                 return
@@ -665,28 +607,51 @@ if (-not [string]::IsNullOrWhiteSpace([string]$existingOllamaExe)) {
         Write-Host ("Existing Ollama executable failed version check with exit code {0}. Clean reinstall will be attempted." -f $existingVersionExit)
     }
 
-    Remove-OllamaArtifacts -ChocoExe $chocoExe
+    throw 'An Ollama executable is present but failed runtime verification. Use repair or uninstall explicitly; install will not delete user models or configuration.'
 }
 
-Write-Host 'Running: choco install ollama -y --no-progress --ignore-detected-reboot'
+$chocoRoot = [string][Environment]::GetEnvironmentVariable('ChocolateyInstall','Machine')
+if ([string]::IsNullOrWhiteSpace($chocoRoot)) { $chocoRoot = [string]$env:ChocolateyInstall }
+if ([string]::IsNullOrWhiteSpace($chocoRoot)) { $chocoRoot = Join-Path $env:ProgramData 'chocolatey' }
+$staleChocoPackageRoot = Join-Path (Join-Path $chocoRoot 'lib') ([string]$taskConfig.ChocoPackageId)
+if (Test-Path -LiteralPath $staleChocoPackageRoot -PathType Container) {
+    $currentExe = Resolve-OllamaExe
+    if ([string]::IsNullOrWhiteSpace([string]$currentExe)) {
+        if ([string]::IsNullOrWhiteSpace([string]$chocoExe) -or -not (Test-Path -LiteralPath $chocoExe -PathType Leaf)) { throw 'Stale Chocolatey Ollama metadata exists but the Chocolatey CLI is unavailable to remove the metadata-only registration.' }
+        Write-Host 'Doing: remove stale Chocolatey Ollama registration without running its uninstall script or automatic uninstaller'
+        $staleRecordCleanup = Invoke-ProcessWithTimeout `
+            -FilePath $chocoExe `
+            -ArgumentList @('uninstall',([string]$taskConfig.ChocoPackageId),'--skip-autouninstaller','--skip-powershell','-y','--no-progress') `
+            -TimeoutSeconds 60 `
+            -Label 'choco-remove-stale-ollama-registration'
+        if ([int]$staleRecordCleanup.ExitCode -ne 0 -and (Test-Path -LiteralPath $staleChocoPackageRoot -PathType Container)) {
+            throw ("Stale Chocolatey Ollama registration could not be removed safely. stdoutLog={0}; stderrLog={1}" -f [string]$staleRecordCleanup.StdoutLog,[string]$staleRecordCleanup.StderrLog)
+        }
+        if (Test-Path -LiteralPath $staleChocoPackageRoot -PathType Container) { throw 'The stale Chocolatey Ollama registration remained after its bounded metadata-only uninstall.' }
+    }
+}
+
+$wingetExe = Resolve-WingetExe
+if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) { throw 'WinGet is unavailable for the Ollama package install.' }
+Write-Host ("Running: winget install --id {0} --exact --accept-source-agreements --accept-package-agreements --silent --disable-interactivity" -f [string]$taskConfig.WingetPackageId)
 $installResult = Invoke-ProcessWithTimeout `
-    -FilePath $chocoExe `
-    -ArgumentList @('install', ([string]$taskConfig.ChocoPackageId), '-y', '--no-progress', '--ignore-detected-reboot') `
-    -TimeoutSeconds ([int]$taskConfig.ChocoInstallTimeoutSeconds) `
-    -Label 'choco-install-ollama-tool'
+    -FilePath $wingetExe `
+    -ArgumentList @('install','--id',[string]$taskConfig.WingetPackageId,'--exact','--accept-source-agreements','--accept-package-agreements','--silent','--disable-interactivity') `
+    -TimeoutSeconds ([int]$taskConfig.WingetInstallTimeoutSeconds) `
+    -Label 'winget-install-ollama-tool'
 $installExit = [int]$installResult.ExitCode
 
 Refresh-SessionPath
 $ollamaExe = Wait-OllamaExeReady -TimeoutSeconds ([int]$taskConfig.OllamaExeWaitTimeoutSeconds)
 if ([string]::IsNullOrWhiteSpace([string]$ollamaExe)) {
-    throw ("ollama executable was not found after choco install. exitCode={0}; stdoutLog={1}; stderrLog={2}" -f `
+    throw ("ollama executable was not found after winget install. exitCode={0}; stdoutLog={1}; stderrLog={2}" -f `
         $installExit, `
         [string]$installResult.StdoutLog, `
         [string]$installResult.StderrLog)
 }
 
-if ($installExit -notin @(0, 2, 1641, 3010)) {
-    Write-Host ("choco install {0} returned exit code {1}, but ollama.exe was resolved. Continuing with runtime validation." -f [string]$taskConfig.ChocoPackageId, $installExit)
+if ($installExit -notin @(0,-1978335189,1641,3010)) {
+    throw ("winget install {0} exited with code {1} despite resolving ollama.exe. stdoutLog={2}; stderrLog={3}" -f [string]$taskConfig.WingetPackageId,$installExit,[string]$installResult.StdoutLog,[string]$installResult.StderrLog)
 }
 
 Write-Host ("Resolved Ollama executable: {0}" -f [string]$ollamaExe)

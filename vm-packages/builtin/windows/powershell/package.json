@@ -2,7 +2,6 @@
   "id": "powershell",
   "displayName": "PowerShell",
   "category": "tool",
-  "timeout": 180,
   "sortOrder": 127,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -17,5 +16,14 @@
   "uninstall": {
     "kind": "choco",
     "value": "powershell-core"
+  },
+  "repairStrategy": "choco",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 180,
+    "repair": 180,
+    "update": 180,
+    "uninstall": 180,
+    "reinstall": 360
   }
 }

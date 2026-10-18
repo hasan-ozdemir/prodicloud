@@ -2,7 +2,6 @@
   "id": "nvda",
   "displayName": "NVDA",
   "category": "application",
-  "timeout": 120,
   "sortOrder": 115,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -15,8 +14,8 @@
     "value": "NVAccess.NVDA"
   },
   "uninstall": {
-    "kind": "winget",
-    "value": "NVAccess.NVDA"
+    "kind": "nvda",
+    "value": "C:\\Program Files\\NVDA\\uninstall.exe"
   },
   "appStateKey": "115-install-nvda-application",
   "appState": {
@@ -31,5 +30,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "winget-prefix",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 120,
+    "repair": 120,
+    "update": 120,
+    "uninstall": 120,
+    "reinstall": 240
   }
 }

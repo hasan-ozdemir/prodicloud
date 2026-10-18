@@ -2,7 +2,6 @@
   "id": "jaws",
   "displayName": "JAWS",
   "category": "application",
-  "timeout": 360,
   "sortOrder": 133,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -30,8 +29,9 @@
       "manager",
       "assistant"
     ],
-    "logonScreen": "installer-managed"
+    "logonScreen": "registry-managed"
   },
+  "repairStrategy": "winget",
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
@@ -40,23 +40,62 @@
       {
         "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JCF",
         "targetProfiles": [
-          "manager"
+          "manager",
+          "assistant"
         ]
       },
       {
         "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JDF",
         "targetProfiles": [
-          "manager"
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JKM",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JKM",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JSS",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\super_pi_mod.JSS",
+        "targetProfiles": [
+          "manager",
+          "assistant"
         ]
       },
       {
         "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\VoiceProfiles\\*.VPF",
         "targetProfiles": [
-          "manager"
+          "manager",
+          "assistant"
         ]
       }
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
+    "reinstall": 360
   }
 }

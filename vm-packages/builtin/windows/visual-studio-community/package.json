@@ -2,7 +2,6 @@
   "id": "visual-studio-community",
   "displayName": "Visual Studio Community",
   "category": "application",
-  "timeout": 1800,
   "sortOrder": 132,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -31,5 +30,14 @@
     ],
     "machineRegistryKeys": [],
     "userRegistryKeys": []
+  },
+  "repairStrategy": "choco",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
+    "reinstall": 360
   }
 }

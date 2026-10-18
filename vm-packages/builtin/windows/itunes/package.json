@@ -2,7 +2,6 @@
   "id": "itunes",
   "displayName": "iTunes",
   "category": "application",
-  "timeout": 90,
   "sortOrder": 117,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -18,5 +17,14 @@
     "kind": "winget",
     "value": "Apple.iTunes"
   },
-  "appStateKey": "117-install-itunes-application"
+  "appStateKey": "117-install-itunes-application",
+  "repairStrategy": "winget",
+  "operationTimeoutSeconds": {
+    "status": 300,
+    "install": 90,
+    "repair": 90,
+    "update": 90,
+    "uninstall": 90,
+    "reinstall": 180
+  }
 }
