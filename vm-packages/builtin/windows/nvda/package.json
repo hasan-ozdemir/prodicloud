@@ -2,6 +2,10 @@
   "id": "nvda",
   "displayName": "NVDA",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 115,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

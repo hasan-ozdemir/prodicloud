@@ -26,10 +26,10 @@
   "repairStrategy": "choco",
   "operationTimeoutSeconds": {
     "status": 300,
-    "install": 180,
-    "repair": 180,
-    "update": 180,
-    "uninstall": 180,
+    "install": 360,
+    "repair": 360,
+    "update": 360,
+    "uninstall": 360,
     "reinstall": 360
   }
 }

@@ -1762,6 +1762,7 @@ foreach ($commandName in @("choco", "git", "node", "python", "py", "pwsh", "gh",
     $resolvedCommandPath = switch ($commandName) {
         'az' { Resolve-CommandPath -CommandName 'az' -FallbackCandidates @('C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd') }
         'docker' { Resolve-CommandPath -CommandName 'docker' -FallbackCandidates @('C:\Program Files\Docker\Docker\resources\bin\docker.exe') }
+        '7z' { Resolve-CommandPath -CommandName '7z' -FallbackCandidates @('C:\ProgramData\chocolatey\bin\7z.exe','C:\Program Files\7-Zip\7z.exe','C:\Program Files (x86)\7-Zip\7z.exe') }
         'ollama' { Resolve-CommandPath -CommandName 'ollama' -FallbackCandidates @((Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'), 'C:\Program Files\Ollama\ollama.exe') }
         default { Resolve-CommandPath -CommandName $commandName }
     }
@@ -2197,10 +2198,17 @@ if ([string]::IsNullOrWhiteSpace([string]$dockerCliPath)) {
     Write-Host 'docker-desktop-status-probe => success=False; timed-out=False; exit-code=1'
     Write-Host 'docker-info-probe => success=False; timed-out=False; exit-code=1'
 }
+elseif (@($dockerDesktopProcesses).Count -eq 0 -and @($dockerServices | Where-Object { [string]$_.Status -eq 'Running' }).Count -eq 0) {
+    $dockerStatusResult = [pscustomobject]@{ Success = $false; TimedOut = $false; ExitCode = 1; Output = '' }
+    $dockerInfoResult = [pscustomobject]@{ Success = $false; TimedOut = $false; ExitCode = 1; Output = '' }
+    Write-Host 'docker-engine-deferred => Docker Desktop GUI and services are not running; daemon probes were skipped.' -ForegroundColor DarkCyan
+    Write-Host 'docker-desktop-status-probe => success=False; timed-out=False; exit-code=1; deferred=True'
+    Write-Host 'docker-info-probe => success=False; timed-out=False; exit-code=1; deferred=True'
+}
 else {
-    $dockerStatusResult = Invoke-NativeCommandProbe -FilePath $dockerCliPath -Arguments @('desktop', 'status') -TimeoutSeconds 20
+    $dockerStatusResult = Invoke-NativeCommandProbe -FilePath $dockerCliPath -Arguments @('desktop', 'status') -TimeoutSeconds 10
     Write-Host ("docker-desktop-status-probe => success={0}; timed-out={1}; exit-code={2}" -f [bool]$dockerStatusResult.Success, [bool]$dockerStatusResult.TimedOut, [int]$dockerStatusResult.ExitCode)
-    $dockerInfoResult = Invoke-NativeCommandProbe -FilePath $dockerCliPath -Arguments @('info') -TimeoutSeconds 20
+    $dockerInfoResult = Invoke-NativeCommandProbe -FilePath $dockerCliPath -Arguments @('info') -TimeoutSeconds 10
     Write-Host ("docker-info-probe => success={0}; timed-out={1}; exit-code={2}" -f [bool]$dockerInfoResult.Success, [bool]$dockerInfoResult.TimedOut, [int]$dockerInfoResult.ExitCode)
 }
 Write-Host ("docker-engine-ready => {0}" -f ([bool]$dockerCliResult.Success -and [bool]$dockerStatusResult.Success -and [bool]$dockerInfoResult.Success))
@@ -2227,8 +2235,15 @@ if (Test-Path -LiteralPath $ollamaStartupShortcutPath) {
 else {
     Write-Host ("ollama-startup-shortcut => missing => {0}" -f $ollamaStartupShortcutPath)
 }
-$ollamaApiWaitSeconds = if ($null -ne $ollamaStartupShortcutHealth -and [bool]$ollamaStartupShortcutHealth.Healthy) { 180 } else { 20 }
-$ollamaApiVersion = if ([bool]$ollamaCliResult.Success) { Wait-OllamaApiReady -TimeoutSeconds $ollamaApiWaitSeconds } else { Wait-OllamaApiReady -TimeoutSeconds $ollamaApiWaitSeconds }
+$ollamaProcessCount = @($ollamaProcesses).Count
+$ollamaApiWaitSeconds = if ($ollamaProcessCount -gt 0) { 30 } else { 0 }
+$ollamaApiVersion = ''
+if ($ollamaApiWaitSeconds -gt 0) {
+    $ollamaApiVersion = Wait-OllamaApiReady -TimeoutSeconds $ollamaApiWaitSeconds
+}
+else {
+    Write-Host 'ollama-api-deferred => Ollama process is not running; the configured startup shortcut will launch it at sign-in.' -ForegroundColor DarkCyan
+}
 if (-not [bool]$ollamaCliResult.Success -and -not [string]::IsNullOrWhiteSpace([string]$ollamaApiVersion) -and -not [string]::IsNullOrWhiteSpace([string]$ollamaExe)) {
     $ollamaCliResult = Invoke-NativeCommandProbe -FilePath $ollamaExe -Arguments @('ls') -TimeoutSeconds 20 -SuppressOutput
 }
@@ -2238,7 +2253,7 @@ Write-Host ("ollama-process-count => {0}" -f @($ollamaProcesses).Count)
 $ollamaPortOpen = Test-TcpPortReachable -HostName '127.0.0.1' -Port 11434 -TimeoutSeconds 5
 Write-Host ("ollama-port-11434-open => {0}" -f [bool]$ollamaPortOpen)
 Write-Host ("ollama-api-version => {0}" -f [string]$ollamaApiVersion)
-$ollamaApiProbeVersion = if (-not [string]::IsNullOrWhiteSpace([string]$ollamaApiVersion)) { [string]$ollamaApiVersion } else { Wait-OllamaApiReady -TimeoutSeconds 10 }
+$ollamaApiProbeVersion = if (-not [string]::IsNullOrWhiteSpace([string]$ollamaApiVersion)) { [string]$ollamaApiVersion } elseif ($ollamaProcessCount -gt 0) { Wait-OllamaApiReady -TimeoutSeconds 10 } else { '' }
 $ollamaApiProbeSuccess = -not [string]::IsNullOrWhiteSpace([string]$ollamaApiProbeVersion)
 $ollamaApiProbeTimedOut = $false
 if ($ollamaApiProbeSuccess) {

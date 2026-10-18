@@ -1181,6 +1181,10 @@ function Get-ClagnosPackageRecord {
 }
 
 function Resolve-ClagnosWingetExecutable {
+    $portableCandidate = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    if (Test-Path -LiteralPath $portableCandidate -PathType Leaf) {
+        return [string]$portableCandidate
+    }
     $command = Get-Command winget.exe -ErrorAction SilentlyContinue
     if (-not $command) { $command = Get-Command winget -ErrorAction SilentlyContinue }
     if ($command -and -not [string]::IsNullOrWhiteSpace([string]$command.Source)) { return [string]$command.Source }

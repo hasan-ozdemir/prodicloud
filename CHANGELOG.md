@@ -3,6 +3,24 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.18.429] - 2026-10-18
+
+### Added
+- Added shared profile-driven `setup-vc.ps1` and `remove-vc.ps1` engines with VC1/VC2 command launchers. Setup reuses matching managed infrastructure, reconciles safe drift, and rebuilds only when immutable profile settings require it. Removal records a local resumable journal, verifies resource absence, and is safe to repeat.
+- Persisted generated managed group and resource names into the selected VC profile before automatic Azure mutation.
+
+### Fixed
+- Added the portable WinGet bootstrap dependency to packages that require WinGet; verified AnyDesk installation can fall back to its signed official installer.
+- Raised Google Chrome and Visual Studio Code lifecycle budgets to cover active installers and required app-state verification.
+- Made queued Windows language installation idempotent across repeated setup runs; deferred capabilities no longer cause restart loops or false task failures.
+- Made Docker and Ollama health readback defer daemon/API probes until their processes are running, and gave the measured deep VM summary a bounded 360-second timeout.
+- Streamed redacted final-summary output from setup launchers, resolved NVDA shortcuts from either supported install directory, and resolved the 7-Zip executable when it is absent from the current PATH.
+
+### Validation
+- Package lifecycle contract passed for all 36 Windows builtin packages. Code quality passed; the PowerShell compatibility matrix passed on Windows PowerShell 5.1 and PowerShell 7 with 194/194 smoke and 180/180 TUI checks per host.
+- The live managed VM purge was repeated and verified idempotent; the profile-driven setup was repeated without recreating matching resources. Final setup verified 36/36 builtin packages installed, `setup-all` with zero install/repair/failure/skip actions, a running VM, and successful RDP, SSH, and WinRM checks.
+- The VM remains on its profile-selected SKU and disk with hibernation enabled. Nested virtualization remains unavailable on that SKU. The optional Turkish language capability is still deferred by Windows servicing; its user and regional preferences are applied, and a 24-hour cooldown prevents repeated download/restart attempts.
+
 ## [2026.10.18.428] - 2026-10-18
 
 ### Changed

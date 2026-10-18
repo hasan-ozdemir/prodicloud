@@ -2,6 +2,11 @@
   "id": "visual-studio-code",
   "displayName": "Visual Studio Code",
   "category": "application",
+  "timeout": 300,
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 116,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -40,10 +45,10 @@
   "repairPackageId": "Microsoft.VisualStudioCode",
   "operationTimeoutSeconds": {
     "status": 300,
-    "install": 120,
-    "repair": 120,
-    "update": 120,
-    "uninstall": 120,
-    "reinstall": 240
+    "install": 300,
+    "repair": 300,
+    "update": 300,
+    "uninstall": 240,
+    "reinstall": 360
   }
 }

@@ -207,12 +207,6 @@ function Invoke-ProcessWithTimeout {
 }
 
 Refresh-SessionPath
-$wingetExe = Resolve-WingetExe
-if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    throw "winget command is not available."
-}
-
-Write-Host "Resolved winget executable: $wingetExe"
 $existingAnyDesk = Test-AnyDeskInstalled
 if ([bool]$existingAnyDesk.Installed) {
     $existingSignature = Get-AnyDeskAuthenticodeInfo -Path ([string]$existingAnyDesk.Path)
@@ -236,6 +230,25 @@ if ([bool]$existingAnyDesk.Installed) {
     Write-Host "Update task completed: install-anydesk-application"
     return
 }
+
+$wingetExe = Resolve-WingetExe
+if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
+    Write-Warning 'WinGet is unavailable in this guest session; installing AnyDesk with the locally staged, signature-verified official installer.'
+    Install-AnyDeskFromVerifiedOfficialDownload
+    $verifiedAnyDesk = Test-AnyDeskInstalled
+    if (-not [bool]$verifiedAnyDesk.Installed) { throw 'The signature-verified official AnyDesk installer did not produce a detectable machine installation.' }
+    $verifiedInfo = Get-AnyDeskAuthenticodeInfo -Path ([string]$verifiedAnyDesk.Path)
+    if ([string]$verifiedInfo.Status -ne 'Valid' -or [string]$verifiedInfo.Signer -notmatch '(?i)O=AnyDesk Software GmbH' -or [string]$verifiedInfo.Company -ne 'AnyDesk Software GmbH' -or [string]$verifiedInfo.Product -notmatch '(?i)^AnyDesk$') {
+        throw 'The AnyDesk executable installed by the official fallback failed Authenticode verification.'
+    }
+    Write-Host ("install-anydesk-application-verified: signed official executable => {0}" -f [string]$verifiedAnyDesk.Path)
+    $global:LASTEXITCODE = 0
+    Write-Host 'install-anydesk-application-completed'
+    Write-Host 'Update task completed: install-anydesk-application'
+    return
+}
+
+Write-Host "Resolved winget executable: $wingetExe"
 
 Write-Host "Running: winget install anydesk.anydesk --accept-source-agreements --accept-package-agreements --silent --disable-interactivity"
 $installResult = Invoke-ProcessWithTimeout `

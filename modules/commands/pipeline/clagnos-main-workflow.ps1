@@ -232,7 +232,7 @@ function New-ClagnosWorkflowSummaryReadbackTaskBlock {
         TaskMetadataPath = ''
         StageRootDirectoryPath = ''
         AssetSpecs = @($assetSpecs)
-        TimeoutSeconds = 180
+        TimeoutSeconds = 360
         Priority = 0
         TaskType = 'builtin'
         Source = 'builtin'
@@ -317,7 +317,7 @@ function Invoke-ClagnosWorkflowSummaryReadback {
             -Shell $shell `
             -TaskName 'vm-summary-readback' `
             -TaskScript ([string]$resolvedTask.Script) `
-            -TimeoutSeconds 180
+            -TimeoutSeconds ([int]$resolvedTask.TimeoutSeconds)
 
         if ([int]$result.ExitCode -ne 0) {
             if (-not ([bool]$result.OutputRelayedLive) -and -not [string]::IsNullOrWhiteSpace([string]$result.Output)) {

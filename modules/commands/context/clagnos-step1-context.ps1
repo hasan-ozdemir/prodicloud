@@ -137,6 +137,13 @@ function Get-ClagnosStep1ContextPersistenceMap {
         SELECTED_AZURE_REGION = [string]$Context.AzLocation
         SELECTED_RESOURCE_GROUP = [string]$Context.ResourceGroup
         SELECTED_VM_NAME = [string]$Context.VmName
+        VNET_NAME = [string]$Context.VNET
+        SUBNET_NAME = [string]$Context.SUBNET
+        NSG_NAME = [string]$Context.NSG
+        NSG_RULE_NAME = [string]$Context.NsgRule
+        PUBLIC_IP_NAME = [string]$Context.IP
+        NIC_NAME = [string]$Context.NIC
+        VM_DISK_NAME = [string]$Context.VmDiskName
         VM_STORAGE_SKU = [string]$Context.VmStorageSku
         VM_SECURITY_TYPE = [string]$Context.VmSecurityType
         VM_ENABLE_HIBERNATION = ([bool]$Context.VmEnableHibernation).ToString().ToLowerInvariant()
@@ -1003,7 +1010,7 @@ function Invoke-ClagnosStep1Common {
     }
 
     $persistMap = Get-ClagnosStep1ContextPersistenceMap -Platform $Platform -Context $context
-    if (-not $AutoMode -and $PersistGeneratedResourceGroup) {
+    if ($PersistGeneratedResourceGroup) {
         if ($DeferEnvWrites) {
             $pendingEnvUpdates = $persistMap
         }

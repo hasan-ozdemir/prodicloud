@@ -2070,7 +2070,10 @@ $itunesExe = Resolve-ExistingOrFallbackPath -PreferredPath "C:\Program Files\iTu
     "C:\Program Files\iTunes\iTunes.exe",
     "C:\Program Files (x86)\iTunes\iTunes.exe"
 )) -FallbackPath "C:\Program Files\iTunes\iTunes.exe"
-$nvdaExe = "C:\Program Files (x86)\NVDA\nvda.exe"
+$nvdaExe = Resolve-CommandPath -CommandName "nvda.exe" -FallbackCandidates @(
+    "C:\Program Files\NVDA\nvda.exe",
+    "C:\Program Files (x86)\NVDA\nvda.exe"
+)
 $jawsExe = Resolve-JawsExecutablePath
 $edgeExe = Resolve-ExistingOrFallbackPath -PreferredPath "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" -ResolvedPath (Resolve-CommandPath -CommandName "msedge.exe" -FallbackCandidates @(
     "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",

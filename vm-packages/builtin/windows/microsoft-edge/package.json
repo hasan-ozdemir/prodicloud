@@ -2,6 +2,10 @@
   "id": "microsoft-edge",
   "displayName": "Microsoft Edge",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "timeout": 60,
   "sortOrder": 103,
   "installScript": "install.ps1",

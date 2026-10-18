@@ -2,6 +2,10 @@
   "id": "vlc",
   "displayName": "VLC media player",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 131,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

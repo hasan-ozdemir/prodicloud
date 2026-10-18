@@ -374,6 +374,48 @@ function Invoke-LanguageInteractiveAutomation {
     }
 }
 
+function Get-LanguageInstallQueueMarkerPath {
+    param([string]$LanguageTag)
+    $safeLanguageTag = [regex]::Replace([string]$LanguageTag,'[^A-Za-z0-9-]','_')
+    return (Join-Path (Join-Path $env:ProgramData 'clagnos\state') ('language-install-' + $safeLanguageTag + '.json'))
+}
+
+function Get-LanguageInstallQueueMarker {
+    param([string]$LanguageTag)
+    $path = Get-LanguageInstallQueueMarkerPath -LanguageTag $LanguageTag
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
+    try {
+        $marker = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -ErrorAction Stop
+        if ([int]$marker.schemaVersion -ne 1 -or -not [string]::Equals([string]$marker.languageTag,[string]$LanguageTag,[System.StringComparison]::OrdinalIgnoreCase)) { return $null }
+        $queuedAt = [DateTime]::Parse([string]$marker.queuedAtUtc,[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::AdjustToUniversal)
+        if (([DateTime]::UtcNow - $queuedAt).TotalHours -ge 24) { return $null }
+        return $marker
+    }
+    catch { return $null }
+}
+
+function Set-LanguageInstallQueueMarker {
+    param([string]$LanguageTag,[string]$Reason)
+    $path = Get-LanguageInstallQueueMarkerPath -LanguageTag $LanguageTag
+    $directory = Split-Path -Path $path -Parent
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $marker = [ordered]@{
+        schemaVersion = 1
+        languageTag = [string]$LanguageTag
+        queuedAtUtc = [DateTime]::UtcNow.ToString('o',[System.Globalization.CultureInfo]::InvariantCulture)
+        reason = [string]$Reason
+    }
+    $temporaryPath = $path + '.tmp'
+    [System.IO.File]::WriteAllText($temporaryPath,(ConvertTo-Json -InputObject $marker -Depth 4),[System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporaryPath -Destination $path -Force -ErrorAction Stop
+}
+
+function Remove-LanguageInstallQueueMarker {
+    param([string]$LanguageTag)
+    $path = Get-LanguageInstallQueueMarkerPath -LanguageTag $LanguageTag
+    if (Test-Path -LiteralPath $path -PathType Leaf) { Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
+}
+
 function Install-LanguageComponents {
     param(
         [string]$LanguageTag,
@@ -388,6 +430,7 @@ function Install-LanguageComponents {
     $existingBasicState = if ($existingCapabilityState.PSObject.Properties.Match('Language.Basic').Count -gt 0) { [string]$existingCapabilityState.'Language.Basic' } else { '' }
     $existingInstalledRows = @(Get-InstalledLanguageSafe -LanguageTag $LanguageTag)
     if (@($existingInstalledRows).Count -gt 0 -and $existingBasicState -eq 'Installed') {
+        Remove-LanguageInstallQueueMarker -LanguageTag $LanguageTag
         Write-StateSuccess ("Language components for {0} are already installed; no install worker or restart is needed." -f [string]$DisplayName)
         Write-Host ("language-components => {0} => {1}" -f [string]$LanguageTag, (Get-LanguageFeatureSummary -InstalledLanguage $existingInstalledRows[0]))
         Write-Host ("language-capabilities-current => {0} => {1}" -f [string]$LanguageTag, [string]$existingCapabilitySummary)
@@ -397,8 +440,24 @@ function Install-LanguageComponents {
             QueuedInstallAccepted = $false
             CapabilitySummary = [string]$existingCapabilitySummary
             InstalledLanguagePresent = $true
+            DeferredPending = $false
         }
     }
+
+    $pendingMarker = Get-LanguageInstallQueueMarker -LanguageTag $LanguageTag
+    if ($null -ne $pendingMarker) {
+        Write-StateSkip ("Language components for {0} remain queued after a prior restart; skip duplicate install/restart during the 24-hour retry window." -f [string]$DisplayName)
+        Write-Host ("language-install-deferred => {0} => queuedAtUtc={1}" -f [string]$LanguageTag,[string]$pendingMarker.queuedAtUtc) -ForegroundColor DarkCyan
+        return [pscustomobject]@{
+            LanguageTag = [string]$LanguageTag
+            RebootRequired = $false
+            QueuedInstallAccepted = $false
+            CapabilitySummary = [string]$existingCapabilitySummary
+            InstalledLanguagePresent = $false
+            DeferredPending = $true
+        }
+    }
+    Remove-LanguageInstallQueueMarker -LanguageTag $LanguageTag
 
     $interactiveTaskName = ('{0}-install-{1}' -f $taskName, (($LanguageTag -replace '[^a-zA-Z0-9]+', '-').Trim('-')))
     $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
@@ -557,7 +616,7 @@ catch {
         -RunAsPassword '' `
         -WorkerScriptText $workerScript `
         -LanguageTag $LanguageTag `
-        -WaitTimeoutSeconds 120
+        -WaitTimeoutSeconds 600
 
     $rebootRequired = $false
     $capabilitySummary = ''
@@ -594,6 +653,13 @@ catch {
         )
     )
 
+    if ($queuedInstallAccepted) {
+        Set-LanguageInstallQueueMarker -LanguageTag $LanguageTag -Reason 'Windows optional-language capability install is pending after restart.'
+    }
+    elseif (@($installedRows).Count -gt 0 -or $capabilityStateSatisfied) {
+        Remove-LanguageInstallQueueMarker -LanguageTag $LanguageTag
+    }
+
     if (@($installedRows).Count -lt 1 -and -not $capabilityStateSatisfied -and -not $queuedInstallAccepted) {
         throw ("Unable to verify installed language components for '{0}'." -f [string]$LanguageTag)
     }
@@ -619,6 +685,7 @@ catch {
         QueuedInstallAccepted = [bool]$queuedInstallAccepted
         CapabilitySummary = [string]$capabilitySummary
         InstalledLanguagePresent = (@($installedRows).Count -ge 1)
+        DeferredPending = $false
     }
 }
 
@@ -865,6 +932,10 @@ function Assert-LanguageStateReadyForRestart {
 
             $allowDeferredVerification = $false
             if ($null -ne $componentResult) {
+                if ($componentResult.PSObject.Properties.Match('DeferredPending').Count -gt 0 -and [bool]$componentResult.DeferredPending) {
+                    Write-Host ("language-capabilities-deferred => {0} => install remains queued inside its retry window; {1}" -f [string]$languageTag, [string]$capabilitySummary) -ForegroundColor DarkCyan
+                    continue
+                }
                 if ($componentResult.PSObject.Properties.Match('QueuedInstallAccepted').Count -gt 0 -and [bool]$componentResult.QueuedInstallAccepted) {
                     $allowDeferredVerification = $true
                 }

@@ -657,10 +657,14 @@ foreach (`$entry in @(`$parsedPackageInput)) {
 `$wingetInventory = ''
 `$wingetInventoryReady = `$false
 if (`$hasWingetPackages) {
-    `$wingetExe = Get-Command winget.exe -ErrorAction SilentlyContinue
-    if (`$wingetExe) {
+    `$wingetExePath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    if (-not (Test-Path -LiteralPath `$wingetExePath -PathType Leaf)) {
+        `$wingetExe = Get-Command winget.exe -ErrorAction SilentlyContinue
+        if (`$wingetExe -and -not [string]::IsNullOrWhiteSpace([string]`$wingetExe.Source)) { `$wingetExePath = [string]`$wingetExe.Source }
+    }
+    if (Test-Path -LiteralPath `$wingetExePath -PathType Leaf) {
         Write-Output 'Doing: read one winget package inventory'
-        `$wingetInventory = & `$wingetExe.Source list --accept-source-agreements --disable-interactivity 2>`$null | Out-String
+        `$wingetInventory = & `$wingetExePath list --accept-source-agreements --disable-interactivity 2>`$null | Out-String
         `$wingetInventoryReady = ([int]`$LASTEXITCODE -eq 0)
     }
 }

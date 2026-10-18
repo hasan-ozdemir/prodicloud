@@ -11,8 +11,8 @@
   "repairScript": "repair.ps1",
   "updateStrategy": "installer",
   "statusCheck": {
-    "kind": "appx",
-    "value": "Microsoft.DesktopAppInstaller"
+    "kind": "command",
+    "value": "C:\\ProgramData\\clagnos\\tools\\winget-x64\\winget.exe"
   },
   "uninstall": {
     "kind": "appx",
@@ -20,9 +20,9 @@
   },
   "operationTimeoutSeconds": {
     "status": 300,
-    "install": 60,
+    "install": 300,
     "repair": 60,
-    "update": 60,
+    "update": 300,
     "uninstall": 60,
     "reinstall": 120
   },

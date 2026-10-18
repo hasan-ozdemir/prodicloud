@@ -573,7 +573,7 @@ Invoke-Test -Name "global and VC environment profile contracts" -Action {
     foreach ($key in @('ACTIVE_VM_NAME','SELECTED_AZURE_SUBSCRIPTION_ID','DEFAULT_VM_OS','DEFAULT_AZURE_REGION','DEFAULT_VM_ADMIN_USER','DEFAULT_VM_ASSISTANT_USER','DEFAULT_WIN_VM_IMAGE','DEFAULT_WIN_VM_SIZE','DEFAULT_TCP_PORTS','RESOURCE_GROUP_TEMPLATE','AZURE_COMMAND_TIMEOUT_SECONDS','PYSSH_CLIENT_PATH')) {
         Assert-True -Condition ($globalKeys -contains $key) -Message ("clagnos.env.example is missing global key '{0}'." -f $key)
     }
-    foreach ($key in @('SELECTED_VM_NAME','SELECTED_RESOURCE_GROUP','SELECTED_VM_OS','SELECTED_AZURE_REGION','VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','VM_ENABLE_HIBERNATION','VM_ENABLE_NESTED_VIRTUALIZATION','VM_SSH_PORT','VM_RDP_PORT','PACKAGE_TRANSPORT','WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB')) {
+    foreach ($key in @('SELECTED_VM_NAME','SELECTED_RESOURCE_GROUP','SELECTED_VM_OS','SELECTED_AZURE_REGION','VNET_NAME','SUBNET_NAME','NSG_NAME','NSG_RULE_NAME','PUBLIC_IP_NAME','NIC_NAME','VM_DISK_NAME','VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSISTANT_PASS','VM_ENABLE_HIBERNATION','VM_ENABLE_NESTED_VIRTUALIZATION','VM_SSH_PORT','VM_RDP_PORT','PACKAGE_TRANSPORT','WIN_VM_IMAGE','WIN_VM_SIZE','WIN_VM_DISK_SIZE_GB')) {
         Assert-True -Condition ($vmKeys -contains $key) -Message ("vc.env.example is missing VC key '{0}'." -f $key)
     }
     Assert-True -Condition ((Get-ClagnosSupportedDotEnvKeys) -contains 'SELECTED_AZURE_SUBSCRIPTION_ID') -Message 'Global settings must include the Azure subscription selector.'
@@ -1205,6 +1205,7 @@ Invoke-Test -Name "Workflow pipeline delegates restarts to task runners and star
     Assert-True -Condition ($pipelineText -match [regex]::Escape('Invoke-ClagnosWorkflowSummaryReadback')) -Message 'Pipeline summary must invoke the shared summary readback helper.'
     Assert-True -Condition ($workflowText -match [regex]::Escape('function Invoke-ClagnosWorkflowSummaryReadback')) -Message 'Workflow helpers must expose the vm-summary readback helper.'
     Assert-True -Condition ($workflowText -match [regex]::Escape('vm-summary-readback')) -Message 'Workflow summary readback helper must build a dedicated readback task block.'
+    Assert-True -Condition ($workflowText -match [regex]::Escape('TimeoutSeconds = 360')) -Message 'The measured deep VM summary readback must have a finite 360-second task budget.'
 }
 
 Invoke-Test -Name "Create waits for provisioning recovery before vm-init and extends redeploy timeout" -Action {
@@ -7341,6 +7342,8 @@ Invoke-Test -Name "Windows public desktop shortcut contract includes refreshed p
     $shortcutTaskJsonText = [string](Get-Content -LiteralPath $shortcutTaskJsonPath -Raw)
     $healthTaskPath = Get-RepoSummaryReadbackScriptPath -Platform windows
     $healthTaskScript = [string](Get-Content -LiteralPath $healthTaskPath -Raw)
+    Assert-True -Condition ($shortcutTaskScript.Contains('$nvdaExe = Resolve-CommandPath -CommandName "nvda.exe"') -and $shortcutTaskScript.Contains('C:\Program Files\NVDA\nvda.exe') -and $shortcutTaskScript.Contains('C:\Program Files (x86)\NVDA\nvda.exe')) -Message 'The NVDA public shortcut must resolve both supported 64-bit install locations before skipping the target.'
+    Assert-True -Condition ($healthTaskScript.Contains("'7z' { Resolve-CommandPath -CommandName '7z'") -and $healthTaskScript.Contains('C:\Program Files\7-Zip\7z.exe')) -Message 'VM summary must resolve the verified 7-Zip executable even when the current process PATH is stale.'
     $cicekSepetiLabel = ConvertFrom-UnicodeCodePoints -CodePoints @(0x00C7, 0x0069, 0x00E7, 0x0065, 0x006B, 0x0053, 0x0065, 0x0070, 0x0065, 0x0074, 0x0069)
     $eksiSozlukLabel = ConvertFrom-UnicodeCodePoints -CodePoints @(0x0045, 0x006B, 0x015F, 0x0069, 0x0053, 0x00F6, 0x007A, 0x006C, 0x00FC, 0x006B)
     $generatedShortcutNames = @(
@@ -7824,6 +7827,8 @@ Invoke-Test -Name "Windows WSL and health contracts expose Docker prerequisite s
         'ollama-ls-probe =>',
         'ollama-process-count =>',
         'Wait-OllamaApiReady',
+        'docker-engine-deferred => Docker Desktop GUI and services are not running; daemon probes were skipped.',
+        'elseif (@($dockerDesktopProcesses).Count -eq 0',
         'docker-wsl-prereq-ready =>',
         'WSL HEALTH:'
     )) {
@@ -8784,6 +8789,24 @@ Invoke-Test -Name "Windows PATH refresh is centralized and refreshenv is gone" -
     }
 }
 
+Invoke-Test -Name "Auto lifecycle persists generated VC settings before Azure mutations" -Action {
+    $contextText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\context\clagnos-step1-context.ps1') -Raw)
+    $mainText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'modules\commands\pipeline\clagnos-main-command.ps1') -Raw)
+    $mapStart = $contextText.IndexOf('function Get-ClagnosStep1ContextPersistenceMap',[System.StringComparison]::Ordinal)
+    $mapEnd = $contextText.IndexOf('function ConvertFrom-ClagnosStep1SecureString',$mapStart,[System.StringComparison]::Ordinal)
+    $mapText = if ($mapStart -ge 0 -and $mapEnd -gt $mapStart) { $contextText.Substring($mapStart,$mapEnd - $mapStart) } else { '' }
+    $persistCondition = $contextText.IndexOf('if ($PersistGeneratedResourceGroup)',[System.StringComparison]::Ordinal)
+    $deferredMap = $contextText.IndexOf('$pendingEnvUpdates = $persistMap',$persistCondition,[System.StringComparison]::Ordinal)
+    $persistBeforeGroup = $mainText.IndexOf('Invoke-ClagnosPersistPendingSelections -Context $step1Context -EnvFilePath $envFilePath',[System.StringComparison]::Ordinal)
+    $groupMutation = $mainText.IndexOf('Invoke-ClagnosResourceGroupStep -Context $step1Context',[System.StringComparison]::Ordinal)
+    $networkMutation = $mainText.IndexOf('Invoke-ClagnosNetworkStep -Context $step1Context',[System.StringComparison]::Ordinal)
+    $vmMutation = $mainText.IndexOf('Invoke-ClagnosVmCreateStep -Context $step1Context',[System.StringComparison]::Ordinal)
+    Assert-True -Condition ($persistCondition -ge 0 -and $deferredMap -gt $persistCondition -and $persistBeforeGroup -ge 0 -and $groupMutation -gt $persistBeforeGroup -and $networkMutation -gt $persistBeforeGroup -and $vmMutation -gt $persistBeforeGroup) -Message 'Create and update must persist resolved group/resource names and all selected VC settings in the named profile before the first Azure group, network, or VM mutation, including auto mode.'
+    foreach ($nameKey in @('VNET_NAME','SUBNET_NAME','NSG_NAME','NSG_RULE_NAME','PUBLIC_IP_NAME','NIC_NAME','VM_DISK_NAME')) {
+        Assert-True -Condition ($mapText -match ('(?m)^\s*' + [regex]::Escape($nameKey) + '\s*=')) -Message ("VC settings persistence map is missing generated resource name '{0}'." -f $nameKey)
+    }
+}
+
 Invoke-Test -Name "Windows run-command tasks extend Azure CLI timeout to the task budget" -Action {
     $runnerPath = Join-Path $RepoRoot 'modules\tasks\run-command\runner.ps1'
     $azCliHelperPath = Join-Path $RepoRoot 'modules\core\system\clagnos-az-cli.ps1'
@@ -9131,7 +9154,7 @@ Invoke-Test -Name "Windows auto-start task applies the approved startup profile 
     }
     Assert-True -Condition (($healthTaskText.IndexOf('Get-ManagerContext', [System.StringComparison]::Ordinal)) -ge 0) -Message "Health snapshot must read manager-scope startup locations through the manager hive."
     Assert-True -Condition (($healthTaskText.IndexOf('ollama-api-version-response => {{"version":"{0}"}}', [System.StringComparison]::Ordinal)) -ge 0) -Message "Health snapshot must escape literal JSON braces when formatting the Ollama API version response."
-    Assert-True -Condition (($healthTaskText.IndexOf('$ollamaApiWaitSeconds = if ($null -ne $ollamaStartupShortcutHealth -and [bool]$ollamaStartupShortcutHealth.Healthy) { 180 } else { 20 }', [System.StringComparison]::Ordinal)) -ge 0) -Message "Health snapshot must extend the Ollama API wait when the managed startup shortcut is already healthy."
+    Assert-True -Condition (($healthTaskText.IndexOf('$ollamaApiWaitSeconds = if ($ollamaProcessCount -gt 0) { 30 } else { 0 }', [System.StringComparison]::Ordinal)) -ge 0 -and $healthTaskText -like '*ollama-api-deferred => Ollama process is not running*') -Message 'Health snapshot must defer the Ollama API probe until the runtime process is actually running instead of waiting for an unstarted app.'
     Assert-True -Condition (($healthTaskText.IndexOf('if (-not [bool]$ollamaCliResult.Success -and -not [string]::IsNullOrWhiteSpace([string]$ollamaApiVersion) -and -not [string]::IsNullOrWhiteSpace([string]$ollamaExe)) {', [System.StringComparison]::Ordinal)) -ge 0) -Message "Health snapshot must rerun ollama ls after the API becomes reachable."
 }
 
@@ -9168,6 +9191,8 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
         'Collecting final language verification output',
         'language-capabilities-final => {0} => {1}',
         'language-capabilities-deferred => {0} => {1}',
+        'install remains queued inside its retry window',
+        'DeferredPending',
         'Assert-LanguageStateReadyForRestart',
         'Assert-LanguageStateReadyForRestart -ComponentResults $systemLanguageState.ComponentResults',
         'direct apply for ''{0}'' is queued and will finish after the next restart or sign-in.'
@@ -9188,7 +9213,8 @@ Invoke-Test -Name "Windows language task and health contract" -Action {
     }
 
     Assert-True -Condition ($taskJsonText -like '*"timeout": 1635*') -Message 'Language settings task must keep the normalized timeout 1635.'
-    Assert-True -Condition ($taskText -like '*-WaitTimeoutSeconds 120*') -Message 'Language settings task must short-circuit the SYSTEM language worker after the reduced bounded wait.'
+    Assert-True -Condition ($taskText -like '*-WaitTimeoutSeconds 600*') -Message 'Language settings task must allow its SYSTEM language worker a bounded 600-second window within the 1635-second task budget.'
+    Assert-True -Condition ($taskText -like '*function Get-LanguageInstallQueueMarker*' -and $taskText -like '*function Set-LanguageInstallQueueMarker*' -and $taskText -like '*function Remove-LanguageInstallQueueMarker*' -and $taskText -like '*24-hour retry window*' -and $taskText -like '*skip duplicate install/restart*') -Message 'A language capability queued for restart must have a durable, expiring pending marker so repeated vm-update runs do not restart-loop.'
     Assert-True -Condition ($taskText -like '*interactive-worker-timeout-recovered=true*') -Message 'Language settings task must recover timeout cases when capability state is already satisfied.'
     Assert-True -Condition ($taskText -like '*interactive-worker-queued=true*') -Message 'Language settings task must accept the queued background install state when the SYSTEM worker is still running at timeout.'
     Assert-True -Condition ($taskText -like '*$queuedInstallAccepted = (*') -Message 'Language settings task must explicitly preserve the queued-install verification path after the interactive worker returns.'

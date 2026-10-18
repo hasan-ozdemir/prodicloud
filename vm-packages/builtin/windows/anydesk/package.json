@@ -2,6 +2,10 @@
   "id": "anydesk",
   "displayName": "AnyDesk",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 109,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

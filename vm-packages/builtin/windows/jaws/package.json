@@ -2,6 +2,10 @@
   "id": "jaws",
   "displayName": "JAWS",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 133,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

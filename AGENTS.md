@@ -87,7 +87,7 @@ Use these sources in this order when maintaining the repo:
 - Runtime precedence is: CLI override > selected VC `<vm-name>.env` value > global `clagnos.env` default > hard-coded default. New VC passwords are prompted for during interactive create and stored only in that VC's profile.
 - `clagnos.env` is local-only and must remain untracked.
 - `clagnos.env.example` is the committed configuration contract and must stay current.
-- `<vm-name>.env` files are the local-only source of truth for VM name/group/OS/region, VM features, credentials, ports, transport, image, SKU, and disk size. Every managed VC must have an identity-matching profile before target operations run.
+- `<vm-name>.env` files are the local-only source of truth for VM name/group/OS/region, generated resource names, VM features, credentials, ports, transport, image, SKU, and disk size. Create persists the resolved group and component names before the first Azure mutation. Every managed VC must have an identity-matching profile before target operations run.
 - `vc.env.example` is the committed per-VC profile template. Git-ignore all `*.env` runtime files.
 - Keep app-wide customization, Azure subscription selection, operator identity, naming templates, Azure/SSH timeouts, task paths, and non-secret `DEFAULT_*` create defaults in `clagnos.env`. Never store VM passwords in the global file.
 - `ACTIVE_VM_NAME` in `clagnos.env` selects the default VC profile when a command has no explicit target. Selecting a VC in the TUI updates this pointer.

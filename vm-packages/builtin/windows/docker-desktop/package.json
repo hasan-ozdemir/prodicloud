@@ -28,7 +28,8 @@
     "launchArgument": "--minimized"
   },
   "dependsOn": [
-    "windows-subsystem-linux"
+    "windows-subsystem-linux",
+    "windows-package-manager"
   ],
   "operationTimeoutSeconds": {
     "status": 300,

@@ -2,6 +2,10 @@
   "id": "itunes",
   "displayName": "iTunes",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 117,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

@@ -2,6 +2,10 @@
   "id": "google-drive",
   "displayName": "Google Drive",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 129,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

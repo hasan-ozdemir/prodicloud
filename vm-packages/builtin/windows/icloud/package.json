@@ -2,6 +2,10 @@
   "id": "icloud",
   "displayName": "iCloud",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 122,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

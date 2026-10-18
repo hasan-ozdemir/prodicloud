@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.18.429 - 2026-10-18
+
+### Summary
+VC setup and hard-purge scripts now share idempotent, profile-driven engines. Repeated setup preserves matching Azure resources, while repeated removal resumes a local journal until Azure confirms the managed resources are absent.
+
+### Highlights
+- Added VC1/VC2 command frontends over shared setup and removal PowerShell runners.
+- Persisted generated resource names before Azure mutations and added final checks for managed VM, OS disk, network bindings, feature state, and connection transports.
+- Fixed WinGet dependency ordering, portable WinGet status, signed AnyDesk fallback, and installation budgets for Chrome and Visual Studio Code.
+- Repeated language updates now honor a durable cooldown for queued Windows capabilities. VM summary skips Docker/Ollama readiness probes when their guest processes are stopped and completes within a bounded timeout.
+
+### Validation
+- Package lifecycle checks passed for all 36 Windows builtin packages. Code quality passed, as did Windows PowerShell 5.1 and PowerShell 7 compatibility: smoke 194/194 and TUI 180/180 for each host.
+- Live setup completed idempotently with 36/36 builtin packages installed, no setup-all actions needed on the final pass, a running VM, and successful RDP, SSH, and WinRM checks. Repeated purge and setup completed without leaving a partial Azure resource chain.
+- The selected VM SKU does not expose nested virtualization. Docker Desktop is installed with startup configured; engine readiness is deferred until a managed desktop session starts. Windows has queued the optional Turkish language capability, so the UI/culture/keyboard settings are active while that feature remains deferred.
+
 ## Release 2026.10.18.428 - 2026-10-18
 
 ### Summary

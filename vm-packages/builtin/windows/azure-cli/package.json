@@ -2,6 +2,10 @@
   "id": "azure-cli",
   "displayName": "Azure CLI",
   "category": "tool",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 130,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

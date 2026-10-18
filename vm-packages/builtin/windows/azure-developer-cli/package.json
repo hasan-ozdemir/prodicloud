@@ -2,6 +2,10 @@
   "id": "azure-developer-cli",
   "displayName": "Azure Developer CLI",
   "category": "tool",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 108,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

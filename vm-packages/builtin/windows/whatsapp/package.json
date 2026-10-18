@@ -2,6 +2,10 @@
   "id": "whatsapp",
   "displayName": "WhatsApp",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 119,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

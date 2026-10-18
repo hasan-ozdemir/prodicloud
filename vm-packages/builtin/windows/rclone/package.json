@@ -2,6 +2,10 @@
   "id": "rclone",
   "displayName": "Rclone",
   "category": "tool",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "timeout": 60,
   "sortOrder": 105,
   "installScript": "install.ps1",

@@ -2,6 +2,10 @@
   "id": "be-my-eyes",
   "displayName": "Be My Eyes",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 118,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

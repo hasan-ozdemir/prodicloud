@@ -2,7 +2,7 @@
   "id": "google-chrome",
   "displayName": "Google Chrome",
   "category": "application",
-  "timeout": 90,
+  "timeout": 300,
   "sortOrder": 3,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",
@@ -24,11 +24,11 @@
   ],
   "operationTimeoutSeconds": {
     "status": 300,
-    "install": 90,
-    "repair": 90,
-    "update": 90,
-    "uninstall": 90,
-    "reinstall": 180
+    "install": 300,
+    "repair": 300,
+    "update": 300,
+    "uninstall": 300,
+    "reinstall": 360
   },
   "repairStrategy": "choco"
 }

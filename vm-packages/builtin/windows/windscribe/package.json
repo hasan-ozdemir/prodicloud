@@ -2,6 +2,10 @@
   "id": "windscribe",
   "displayName": "Windscribe",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 112,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

@@ -200,15 +200,30 @@ It runs install, same-version repair, update, uninstall, reinstall, and status v
 
 The builtin JAWS package installs only the ENU product language and uses the vendor-supported `/InstallerUILanguage enu` and `/DisableExternalServices` arguments through WinGet `--custom`; its [status check](https://www.freedomscientific.com/training/enterprise/installation/) verifies the ENU-only and offline-feature policy. The versioned JAWS app-state archive includes the local `Settings\enu\*.j*` files and voice profiles, sanitized for reuse by both managed users. JAWS uninstall uses the signed Freedom Scientific silent shared-uninstall mode only when no other main Freedom Scientific product is installed; its cleanup is bounded and limited to JAWS-owned paths. If Windows has a JAWS `version.dll` loaded in other processes, Clagnos preserves that one locked file for the package's hash-verified replacement path and requests a restart only when Windows must apply the replacement.
 
-For the repeatable VC2 setup, use the repository launcher:
+### Repeatable VC Setup And Purge
+
+The profile-driven launchers use the current repository checkout and the selected subscription id in `clagnos.env`:
 
 ```powershell
+.\setup-vc1.cmd -PreflightOnly
+.\remove-vc1.cmd -PreflightOnly
+.\remove-vc1.cmd
+.\remove-vc1.cmd       # verifies absence and returns successfully
+.\setup-vc1.cmd
+.\setup-vc1.cmd        # reconciles the same live VC without rebuilding a healthy target
+
 .\setup-vc2.cmd -PreflightOnly
 .\setup-vc2.cmd
 .\setup-vc2.cmd -ResumeAtPackageStage
+.\remove-vc2.cmd
 ```
 
-The runner uses the Windows image selected by `WIN_VM_IMAGE` in local `vc2.env`, the `az2vs` subscription selected by `SELECTED_AZURE_SUBSCRIPTION_ID`, `germanywestcentral`, `Standard_B2s_v2`, a 160 GB OS disk, and hibernation. It temporarily stages create values and persists setup values in `vc2.env` and restores only temporary package-transport overrides. Nested virtualization is disabled for this VM because B2s_v2 does not expose the required guest CPU extensions. When no managed `vc2` exists, the runner creates a fresh resource group and VM; on reruns it reuses the managed VM, expands a smaller disk or corrects its size/hibernation through Clagnos, and stops if the OS, region, ownership, or disk state is incompatible. It runs vm-init, bootstraps Chocolatey and Sysinternals over WinRM for the autologon maintenance task, runs vm-update, applies setup-all for enabled builtin/custom packages over WinRM, and reruns vm-update to verify package-dependent startup and shortcut tasks. It then tests RDP/SSH/WinRM and final Azure status, leaving the VM running. Each invocation writes a local transcript under `%TEMP%\clagnos-setup-vc2-*.log`. AnyDesk’s signed vendor installer is verified locally, copied over WinRM, and hash-checked on the VM before package installation. `-PreflightOnly` performs read-only target checks without applying corrections. `-ResumeAtPackageStage` requires an existing compatible managed VC2 and skips create, init, and the first update pass so operators can continue after those phases completed; it still verifies prerequisites, runs package setup, performs the final update, and checks all three transports. This resume mode never changes disk or network resources. If AnyDesk staging or another package fails, the runner records the issue and still lets setup-all finish independent packages before returning a nonzero result when any package remains unverified.
+Both setup launchers call the shared `setup-vc.ps1` engine and read `{vm-name}.env`. WinGet-dependent packages declare the builtin Windows Package Manager as a setup dependency, and its status check requires a usable WinGet executable. The engine validates the saved OS, region, image, VM SKU, disk size/storage SKU, security and feature settings, managed NIC/VNet/subnet/NSG/public IP attachments, inbound TCP ports, and credentials before Azure changes. It persists normalized profile values before provisioning; Clagnos persists generated group/resource names before creating them. Existing VCs record Azure-verified network resource names in their VC profile, and setup verifies profile port ranges against the attached NSG rule. Each Azure command is pinned to the selected subscription id, regardless of the Azure CLI default subscription. Setup creates a missing VC, purges and recreates an interrupted managed partial create, safely resizes the VM or expands its OS disk when needed, re-runs idempotent vm-init/vm-update and package setup, and verifies the final Azure state plus RDP/SSH/WinRM. Package failures are reported after independent package work and final health checks. Transcripts are written under `%TEMP%\clagnos-setup-{vm-name}-*.log`; AnyDesk’s signed installer is verified locally and on the VM before installation.
+
+Setup automatically removes and recreates the selected managed resource group when the VM’s region, OS image/type, security settings, disk storage SKU/size, or required resource inventory cannot be reconciled safely in place. Recreate deletes guest data on that VM. Unmanaged targets and ambiguous ownership stop before deletion. `-PreflightOnly` is read-only. `-ResumeAtPackageStage` requires an existing compatible managed VM and resumes at package prerequisites.
+
+The shared `remove-vc.ps1` engine backs `remove-vc1.cmd` and `remove-vc2.cmd`. It inventories every resource in the profile’s Clagnos-managed resource group, writes a git-ignored purge journal before deletion, deletes the whole group through `cg.cmd`, waits with a bounded timeout, and rechecks the group and captured resource IDs. If a run is interrupted, the next invocation resumes from that journal. Repeated removal completes any remaining cleanup or returns a verified no-op when the VC and its resources are already absent. The local VC profile remains available for the next setup run. Provider-level retention that prevents immediate purge is reported as a failure instead of a successful hard purge.
+
 ### Daily Operator Shortcuts
 ```powershell
 .\cg.cmd --version
@@ -870,7 +885,7 @@ This matters because:
 ### Global And VC Environment Files
 `clagnos.env` contains app-wide values: `ACTIVE_VM_NAME`, the Azure subscription selector, operator identity and shortcut overrides, naming templates, timeouts, task paths, and non-secret `DEFAULT_*` values used to seed newly created VCs. `configure` edits this global file only.
 
-Each VC has a `<vm-name>.env` file containing its `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, operating system, Azure region, VM image/size/disk, storage and security settings, hibernation/nested-virtualization intent, login users/passwords, connection ports, allowed ports, and package transport. The create wizard creates that file; target commands verify its name matches the profile identity. Passwords never go into `clagnos.env`.
+Each VC has a `<vm-name>.env` file containing its `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, generated VNet/subnet/NSG/rule/public-IP/NIC/disk names, operating system, Azure region, VM image/size/disk, storage and security settings, hibernation/nested-virtualization intent, login users/passwords, connection ports, allowed ports, and package transport. The create wizard creates that file; target commands verify its name matches the profile identity. Passwords never go into `clagnos.env`.
 
 `SELECTED_AZURE_SUBSCRIPTION_ID`, company/employee identity keys, `VM_PRICE_COUNT_HOURS`, `AZURE_COMMAND_TIMEOUT_SECONDS`, and `PYSSH_CLIENT_PATH` are global. `PYSSH_CLIENT_PATH` defaults to `tools/pyssh/ssh_client.py`. `DEFAULT_*` keys seed create only; once a VC exists, its profile wins over global defaults.
 

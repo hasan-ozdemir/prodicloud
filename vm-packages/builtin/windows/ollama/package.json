@@ -2,6 +2,10 @@
   "id": "ollama",
   "displayName": "Ollama",
   "category": "tool",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 150,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

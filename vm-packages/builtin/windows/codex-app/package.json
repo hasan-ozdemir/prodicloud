@@ -2,6 +2,10 @@
   "id": "codex-app",
   "displayName": "Codex",
   "category": "application",
+
+  "dependsOn": [
+    "windows-package-manager"
+  ],
   "sortOrder": 120,
   "installScript": "install.ps1",
   "statusScript": "status.ps1",

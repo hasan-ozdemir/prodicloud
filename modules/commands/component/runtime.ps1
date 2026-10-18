@@ -568,10 +568,25 @@ function Invoke-ClagnosComponentDelete {
 
     if ([string]::Equals($Type,'group',[System.StringComparison]::OrdinalIgnoreCase)) {
         Invoke-ClagnosComponentAzMutation -Arguments @('group','delete','--name',$ResourceGroup,'--yes','--no-wait') -Label ("az group delete {0}" -f $ResourceGroup)
-        $subscription = Get-ClagnosResolvedSubscriptionContext
-        az group wait --name $ResourceGroup --deleted --subscription ([string]$subscription.SubscriptionId) --only-show-errors
-        Assert-LastExitCode 'az group wait --deleted'
-        Write-Host ("Resource group '{0}' and all listed resources were deleted." -f $ResourceGroup) -ForegroundColor Green
+        $deletionWatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $groupDeleted = $false
+        for ($attempt = 1; $attempt -le 20; $attempt++) {
+            $subscription = Get-ClagnosResolvedSubscriptionContext
+            Write-ClagnosActionProgress -Action ("verify resource group '{0}' deletion (check {1}/20)" -f $ResourceGroup,$attempt)
+            $groupExists = az group exists --name $ResourceGroup --subscription ([string]$subscription.SubscriptionId) --only-show-errors
+            Assert-LastExitCode 'az group exists (delete verification)'
+            if ([string]::Equals([string]$groupExists,'false',[System.StringComparison]::OrdinalIgnoreCase)) {
+                $groupDeleted = $true
+                break
+            }
+            if ($attempt -lt 20) {
+                Write-ClagnosActionProgress -Action ("resource group '{0}' is still deleting; next check in 30 seconds ({1:N0}s elapsed)" -f $ResourceGroup,$deletionWatch.Elapsed.TotalSeconds)
+                Start-Sleep -Seconds 30
+            }
+        }
+        $deletionWatch.Stop()
+        if (-not $groupDeleted) { throw ("Resource group '{0}' was not deleted within the bounded 600-second verification window." -f $ResourceGroup) }
+        Write-Host ("Resource group '{0}' and all listed resources were deleted ({1:N1}s)." -f $ResourceGroup,$deletionWatch.Elapsed.TotalSeconds) -ForegroundColor Green
         return
     }
 
