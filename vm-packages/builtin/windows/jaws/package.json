@@ -14,7 +14,7 @@
     "value": "FreedomScientific.JAWS.2025"
   },
   "uninstall": {
-    "kind": "winget",
+    "kind": "jaws",
     "value": "FreedomScientific.JAWS.2025"
   },
   "assets": [
@@ -31,12 +31,75 @@
     ],
     "logonScreen": "registry-managed"
   },
-  "repairStrategy": "winget",
+  "repairStrategy": "jaws",
   "appState": {
     "machineDirectories": [],
     "machineFiles": [],
     "profileDirectories": [],
     "profileFiles": [
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\agy.JCF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\agy.JDF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\chrome.JCF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\claude-code.JCF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JCF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JKM",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.jsb",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JSD",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JSS",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
       {
         "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JCF",
         "targetProfiles": [
@@ -59,14 +122,42 @@
         ]
       },
       {
-        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JKM",
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.jsb",
         "targetProfiles": [
           "manager",
           "assistant"
         ]
       },
       {
-        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\codex.JSS",
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JSD",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\DEFAULT.JSS",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\GitHub.JDF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\super_pi_mod.JCF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\super_pi_mod.jsb",
         "targetProfiles": [
           "manager",
           "assistant"
@@ -74,6 +165,20 @@
       },
       {
         "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\super_pi_mod.JSS",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\WindowsTerminal.JCF",
+        "targetProfiles": [
+          "manager",
+          "assistant"
+        ]
+      },
+      {
+        "path": "AppData\\Roaming\\Freedom Scientific\\JAWS\\2025\\Settings\\enu\\WsaClient.JCF",
         "targetProfiles": [
           "manager",
           "assistant"

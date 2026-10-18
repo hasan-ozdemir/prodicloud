@@ -127,7 +127,7 @@ function ConvertTo-ClagnosPortableAppStatePayloadBytes {
     param([string]$EntryName, [byte[]]$Bytes)
 
     $extension = [IO.Path]::GetExtension([string]$EntryName).ToLowerInvariant()
-    if ($extension -notin @('.json','.yml','.yaml','.xml','.ini','.config','.toml','.txt','.vssettings','.jcf','.jdf','.jss','.jkm','.vpf','.vlcrc') -and [IO.Path]::GetFileName([string]$EntryName) -ne 'config') {
+    if ($extension -notin @('.json','.yml','.yaml','.xml','.ini','.config','.toml','.txt','.vssettings','.jcf','.jdf','.jss','.jkm','.jsb','.jsd','.vpf','.vlcrc') -and [IO.Path]::GetFileName([string]$EntryName) -ne 'config') {
         return ,$Bytes
     }
     $memory = New-Object System.IO.MemoryStream(,([byte[]]$Bytes))
@@ -293,20 +293,18 @@ function Set-ClagnosPortableJawsPackageSnapshot {
     $zipPath = Join-Path $packageRoot 'builtin\windows\jaws\app-state\app-state.zip'
     if (-not (Test-Path -LiteralPath $zipPath -PathType Leaf)) { throw 'JAWS app-state archive is missing.' }
     $settingsRoot = Join-Path $env:APPDATA 'Freedom Scientific\JAWS\2025\Settings'
-    $sourceFiles = @(
-        @{ Source = (Join-Path $settingsRoot 'enu\DEFAULT.JCF'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF' },
-        @{ Source = (Join-Path $settingsRoot 'enu\DEFAULT.JDF'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF' },
-        @{ Source = (Join-Path $settingsRoot 'enu\DEFAULT.JKM'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JKM' },
-        @{ Source = (Join-Path $settingsRoot 'enu\codex.JKM'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JKM' },
-        @{ Source = (Join-Path $settingsRoot 'enu\codex.JSS'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JSS' },
-        @{ Source = (Join-Path $settingsRoot 'enu\super_pi_mod.JSS'); Relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\super_pi_mod.JSS' }
-    )
+    $sourceFiles = @()
+    $enuSettingsRoot = Join-Path $settingsRoot 'enu'
+    foreach ($jawsFile in @(Get-ChildItem -LiteralPath $enuSettingsRoot -File -Filter '*.j*' -ErrorAction SilentlyContinue | Sort-Object Name)) {
+        $relative = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\{0}' -f [string]$jawsFile.Name
+        $sourceFiles += @{ Source = [string]$jawsFile.FullName; Relative = $relative }
+    }
     $voiceRoot = Join-Path $settingsRoot 'VoiceProfiles'
     foreach ($voiceFile in @(Get-ChildItem -LiteralPath $voiceRoot -File -Filter '*.VPF' -ErrorAction SilentlyContinue | Sort-Object Name)) {
         $sourceFiles += @{ Source = [string]$voiceFile.FullName; Relative = ('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\{0}' -f [string]$voiceFile.Name) }
     }
     $availableSources = @($sourceFiles | Where-Object { Test-Path -LiteralPath ([string]$_.Source) -PathType Leaf })
-    foreach ($requiredPath in @('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF','AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF')) {
+    foreach ($requiredPath in @('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF','AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF','AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JKM','AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JSS')) {
         if (@($availableSources | Where-Object { [string]::Equals([string]$_.Relative,$requiredPath,[StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) { throw ('Required local JAWS settings file was not found: ' + $requiredPath) }
     }
 
@@ -369,6 +367,13 @@ foreach ($id in @($dropAppState)) {
     Set-ClagnosPackageAppStatePolicy -PackageId $id -AppState $null -RemoveSnapshot
 }
 
+$jawsEnuRules = @()
+$jawsEnuRoot = Join-Path (Join-Path $env:APPDATA 'Freedom Scientific\JAWS\2025\Settings') 'enu'
+foreach ($jawsFile in @(Get-ChildItem -LiteralPath $jawsEnuRoot -File -Filter '*.j*' -ErrorAction SilentlyContinue | Sort-Object Name)) {
+    $jawsEnuRules += New-ClagnosProfileFileRule -Path ('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\{0}' -f [string]$jawsFile.Name) -TargetProfiles @('manager','assistant')
+}
+$jawsEnuRules += New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\*.VPF' -TargetProfiles @('manager','assistant')
+
 $policies = [ordered]@{
     'azure-cli' = [ordered]@{
         profileFiles = @((New-ClagnosProfileFileRule -Path '.azure\config'))
@@ -398,15 +403,7 @@ $policies = [ordered]@{
         removeSnapshot = $false
     }
     'jaws' = [ordered]@{
-        profileFiles = @(
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF' -TargetProfiles @('manager','assistant')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JDF' -TargetProfiles @('manager','assistant')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JKM' -TargetProfiles @('manager','assistant')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JKM' -TargetProfiles @('manager','assistant')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\codex.JSS' -TargetProfiles @('manager','assistant')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\super_pi_mod.JSS' -TargetProfiles @('manager','assistant')),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\*.VPF' -TargetProfiles @('manager','assistant'))
-        )
+        profileFiles = @($jawsEnuRules)
         removeSnapshot = $false
     }
     'vlc' = [ordered]@{

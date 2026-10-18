@@ -3,6 +3,19 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.18.428] - 2026-10-18
+
+### Changed
+- JAWS installs only the ENU product language with English installer UI and the vendor-supported external-services disable flag. The package records and verifies the selected installer policy; status rejects Turkish language registration or missing managed preferences.
+- Expanded the tracked JAWS app-state archive to every local `Settings\enu\*.j*` file plus voice profiles, sanitizing/generalizing the payload before it is committed and replaying it to both managed profiles.
+- JAWS uninstall and repair now use the signed Freedom Scientific setup bundle with bounded silent shared-component removal, target-scoped cleanup, and exact-version preflight for repair. A process-loaded `version.dll` is preserved until the verified replacement path can safely apply it.
+- Replaced synchronous JAWS WinGet calls with bounded child-process monitoring, output heartbeats, CPU/I/O/network/disk activity checks, and process-tree cleanup after 60 seconds of measured inactivity.
+
+### Validation
+- Package lifecycle and package app-state contract checks passed; the sensitive-content, code-quality, documentation, and release checks passed.
+- The live WinRM JAWS matrix passed install, repair, update, uninstall, install, and reinstall. Final status verified ENU-only language, disabled external services, 52/52 replayed profile files, JAWS update-file hashes, logon-screen startup, and managed post-logon startup. The VM remained running at `Standard_B2s_v2`; the infrastructure snapshot showed no disk, NIC, endpoint, or size changes.
+- One normal VM restart was used during initial cleanup to release a system-loaded JAWS DLL; the subsequent six-action lifecycle run required no package-requested restart.
+
 ## [2026.10.18.427] - 2026-10-18
 
 ### Fixed

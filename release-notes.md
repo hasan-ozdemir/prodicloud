@@ -2,6 +2,22 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.18.428 - 2026-10-18
+
+### Summary
+JAWS lifecycle operations now reproduce the local English JAWS profile on a clean VC, install only ENU, and disable external product services during first install.
+
+### Highlights
+- WinGet passes the Freedom Scientific `/Language enu`, `/InstallerUILanguage enu`, and `/DisableExternalServices` options and records the verified installer policy for status checks.
+- JAWS app-state now carries every local ENU `.j*` settings/script file and the local voice profiles in a sanitized, tracked archive for both managed users.
+- JAWS uninstall removes the signed vendor package and, when safe, its shared components. Cleanup is limited to JAWS-owned program, profile, ProgramData, and temporary paths; repair verifies the exact installed version before reinstalling.
+- Bounded WinGet subprocess monitoring reports heartbeats and guest activity, stops the process tree after measured inactivity, and prevents an orphaned install from turning a retry into a false no-op.
+
+### Validation
+- Package lifecycle and app-state contracts passed, along with the code-quality, documentation, release-package, and sensitive-content checks.
+- The live VC2 WinRM lifecycle matrix passed all six JAWS actions; final package state was installed and healthy. VC2 remained running at `Standard_B2s_v2`, with the E2E Azure snapshot unchanged for size, disks, NICs, and endpoints.
+- One normal VC restart during initial cleanup released a system-loaded JAWS DLL; the six lifecycle operations themselves requested no restart.
+
 ## Release 2026.10.18.427 - 2026-10-18
 
 ### Summary

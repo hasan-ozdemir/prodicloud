@@ -4,6 +4,9 @@ Write-Host "Update task started: install-jaws-application"
 $taskConfig = [ordered]@{
     PortableWingetPath = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
     PackageId = 'FreedomScientific.JAWS.2025'
+    ProductLanguage = 'enu'
+    InstallerUiLanguage = 'enu'
+    DisableExternalServices = $true
     ManagerUser = '__VM_ADMIN_USER__'
     AssistantUser = '__ASSISTANT_USER__'
     AcceptableWingetExitCodes = @(0, -1978335189, -2147024894)
@@ -17,6 +20,10 @@ $taskConfig = [ordered]@{
     )
     JawsInstallDirectory = 'C:\Program Files\Freedom Scientific\JAWS\2025'
     WingetSourceTimeoutSeconds = 45
+    WingetCommandTimeoutSeconds = 120
+    WingetInstallTimeoutSeconds = 300
+    WingetInactivitySeconds = 60
+    WingetHeartbeatSeconds = 15
     InstallVerifyTimeoutSeconds = 90
     InstallVerifyPollSeconds = 5
 }
@@ -113,18 +120,148 @@ function Set-JawsPostLogonStartup {
     Set-ClagnosJawsPostLogonStartup -UserNames @([string]$taskConfig.ManagerUser,[string]$taskConfig.AssistantUser) -Executable $ExecutablePath
 }
 
-function Invoke-WingetCommand {
-    param(
-        [string]$WingetExe,
-        [string[]]$Arguments
-    )
+function Get-WingetProcessActivitySnapshot {
+    param([int]$RootProcessId)
 
-    & $WingetExe @Arguments | ForEach-Object {
-        if ($null -ne $_) {
-            Write-Host ([string]$_)
+    try { $processRows = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop) }
+    catch { return $null }
+    $trackedIds = New-Object 'System.Collections.Generic.HashSet[int]'
+    [void]$trackedIds.Add([int]$RootProcessId)
+    $expanded = $true
+    while ($expanded) {
+        $expanded = $false
+        foreach ($process in @($processRows)) {
+            if ($trackedIds.Contains([int]$process.ParentProcessId) -and $trackedIds.Add([int]$process.ProcessId)) { $expanded = $true }
         }
     }
-    return [int]$LASTEXITCODE
+    $cpuSeconds = 0.0
+    $ioBytes = 0.0
+    $memoryBytes = 0.0
+    foreach ($process in @($processRows | Where-Object { $trackedIds.Contains([int]$_.ProcessId) })) {
+        $cpuSeconds += ([double]$process.UserModeTime + [double]$process.KernelModeTime) / 10000000.0
+        $ioBytes += [double]$process.ReadTransferCount + [double]$process.WriteTransferCount
+        $memoryBytes += [double]$process.WorkingSetSize
+    }
+    $networkBytesPerSecond = 0.0
+    $diskBytesPerSecond = 0.0
+    try {
+        foreach ($adapter in @(Get-CimInstance -ClassName Win32_PerfFormattedData_Tcpip_NetworkInterface -ErrorAction Stop)) {
+            $networkBytesPerSecond += [double]$adapter.BytesReceivedPersec + [double]$adapter.BytesSentPersec
+        }
+    }
+    catch { }
+    try {
+        $disk = @(Get-CimInstance -ClassName Win32_PerfFormattedData_PerfDisk_PhysicalDisk -Filter "Name='_Total'" -ErrorAction Stop | Select-Object -First 1)
+        if ($disk.Count -gt 0) { $diskBytesPerSecond = [double]$disk[0].DiskReadBytesPersec + [double]$disk[0].DiskWriteBytesPersec }
+    }
+    catch { }
+    return [pscustomobject]@{
+        ProcessCount = [int]$trackedIds.Count
+        CpuSeconds = [double]$cpuSeconds
+        IoBytes = [double]$ioBytes
+        MemoryBytes = [double]$memoryBytes
+        NetworkBytesPerSecond = [double]$networkBytesPerSecond
+        DiskBytesPerSecond = [double]$diskBytesPerSecond
+    }
+}
+
+function Stop-WingetProcessTree {
+    param([int]$ProcessId)
+
+    $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+    if (Test-Path -LiteralPath $taskkill -PathType Leaf) { & $taskkill /F /T /PID ([string]$ProcessId) 2>$null | Out-Null }
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+function Invoke-BoundedWingetCommand {
+    param(
+        [string]$WingetExe,
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds = 120,
+        [int]$InactivitySeconds = 60
+    )
+
+    $runId = [Guid]::NewGuid().ToString('N')
+    $stdoutPath = Join-Path $env:TEMP ('clagnos-jaws-winget-' + $runId + '.stdout.log')
+    $stderrPath = Join-Path $env:TEMP ('clagnos-jaws-winget-' + $runId + '.stderr.log')
+    $argumentLine = (@($Arguments | ForEach-Object {
+        $argument = [string]$_
+        if ($argument -match '[\s"]') { '"' + $argument.Replace('"','\"') + '"' } else { $argument }
+    }) -join ' ')
+    $startedAt = [DateTime]::UtcNow
+    $process = $null
+    try {
+        Write-Host ("Doing: start bounded WinGet process (timeout={0}s; inactivity={1}s)" -f $TimeoutSeconds,$InactivitySeconds)
+        $process = Start-Process -FilePath $WingetExe -ArgumentList $argumentLine -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -ErrorAction Stop
+        $deadline = $startedAt.AddSeconds([int]$TimeoutSeconds)
+        $lastProgressAt = [DateTime]::UtcNow
+        $nextHeartbeatAt = [DateTime]::UtcNow.AddSeconds([int]$taskConfig.WingetHeartbeatSeconds)
+        $previousActivity = Get-WingetProcessActivitySnapshot -RootProcessId ([int]$process.Id)
+        $previousLogLength = 0L
+        while ($true) {
+            $process.Refresh()
+            if ($process.HasExited) { break }
+            if ([DateTime]::UtcNow -ge $deadline) {
+                Stop-WingetProcessTree -ProcessId ([int]$process.Id)
+                throw ("WinGet '{0}' exceeded its finite {1}-second deadline." -f [string]$Arguments[0],$TimeoutSeconds)
+            }
+
+            $currentLogLength = 0L
+            foreach ($logPath in @($stdoutPath,$stderrPath)) { if (Test-Path -LiteralPath $logPath -PathType Leaf) { $currentLogLength += [int64](Get-Item -LiteralPath $logPath).Length } }
+            $activity = Get-WingetProcessActivitySnapshot -RootProcessId ([int]$process.Id)
+            $moved = ($currentLogLength -gt $previousLogLength)
+            if ($null -ne $activity -and $null -ne $previousActivity) {
+                if ([double]$activity.CpuSeconds - [double]$previousActivity.CpuSeconds -ge 0.25) { $moved = $true }
+                if ([double]$activity.IoBytes -gt [double]$previousActivity.IoBytes) { $moved = $true }
+                if ([Math]::Abs([double]$activity.MemoryBytes - [double]$previousActivity.MemoryBytes) -ge 32MB) { $moved = $true }
+                if ([int]$activity.ProcessCount -ne [int]$previousActivity.ProcessCount) { $moved = $true }
+                if ([double]$activity.NetworkBytesPerSecond -ge 4096.0 -or [double]$activity.DiskBytesPerSecond -ge 4096.0) { $moved = $true }
+            }
+            if ($moved) { $lastProgressAt = [DateTime]::UtcNow }
+            $previousActivity = $activity
+            $previousLogLength = $currentLogLength
+
+            if (([DateTime]::UtcNow - $lastProgressAt).TotalSeconds -ge [int]$InactivitySeconds) {
+                Stop-WingetProcessTree -ProcessId ([int]$process.Id)
+                throw ("WinGet '{0}' made no measurable output, process, network, or disk progress for {1} seconds." -f [string]$Arguments[0],$InactivitySeconds)
+            }
+            if ([DateTime]::UtcNow -ge $nextHeartbeatAt) {
+                $elapsed = [int]([DateTime]::UtcNow - $startedAt).TotalSeconds
+                $cpu = if ($null -ne $activity) { [Math]::Round([double]$activity.CpuSeconds,1) } else { -1 }
+                $io = if ($null -ne $activity) { [Math]::Round([double]$activity.IoBytes / 1MB,1) } else { -1 }
+                $processCount = if ($null -ne $activity) { [int]$activity.ProcessCount } else { -1 }
+                Write-Host ("Doing: WinGet '{0}' is running ({1}s; child-processes={2}; cpu={3}s; io={4}MB; log={5}bytes)" -f [string]$Arguments[0],$elapsed,$processCount,$cpu,$io,$currentLogLength) -ForegroundColor DarkCyan
+                $nextHeartbeatAt = [DateTime]::UtcNow.AddSeconds([int]$taskConfig.WingetHeartbeatSeconds)
+            }
+            Start-Sleep -Seconds 3
+        }
+        $process.WaitForExit()
+        $exitCode = [int]$process.ExitCode
+        foreach ($logPath in @($stdoutPath,$stderrPath)) {
+            if (-not (Test-Path -LiteralPath $logPath -PathType Leaf)) { continue }
+            foreach ($line in @(Get-Content -LiteralPath $logPath -Tail 120 -ErrorAction SilentlyContinue)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$line)) { Write-Host ([string]$line) }
+            }
+        }
+        $global:LASTEXITCODE = $exitCode
+        return [pscustomobject]@{ ExitCode = [int]$exitCode; Output = (($stdoutPath,$stderrPath | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | ForEach-Object { Get-Content -LiteralPath $_ -Raw -ErrorAction SilentlyContinue }) -join [Environment]::NewLine) }
+    }
+    catch {
+        if ($null -ne $process) { Stop-WingetProcessTree -ProcessId ([int]$process.Id) }
+        throw
+    }
+    finally {
+        foreach ($logPath in @($stdoutPath,$stderrPath)) { if (Test-Path -LiteralPath $logPath -PathType Leaf) { Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue } }
+    }
+}
+
+function Invoke-WingetCommand {
+    param([string]$WingetExe,[string[]]$Arguments)
+    $commandTimeout = [int]$taskConfig.WingetCommandTimeoutSeconds
+    if (@($Arguments).Count -gt 0 -and [string]$Arguments[0] -eq 'source') { $commandTimeout = [int]$taskConfig.WingetSourceTimeoutSeconds }
+    if (@($Arguments).Count -gt 0 -and [string]$Arguments[0] -eq 'install') { $commandTimeout = [int]$taskConfig.WingetInstallTimeoutSeconds }
+    $result = Invoke-BoundedWingetCommand -WingetExe $WingetExe -Arguments $Arguments -TimeoutSeconds $commandTimeout -InactivitySeconds ([int]$taskConfig.WingetInactivitySeconds)
+    return [int]$result.ExitCode
 }
 
 function Ensure-WingetSourcesReady {
@@ -152,17 +289,48 @@ function Ensure-WingetSourcesReady {
 
 function Wait-JawsInstallVerified {
     $deadline = [DateTime]::UtcNow.AddSeconds([int]$taskConfig.InstallVerifyTimeoutSeconds)
+    $startedAt = [DateTime]::UtcNow
+    $nextHeartbeatAt = $startedAt.AddSeconds([int]$taskConfig.WingetHeartbeatSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         Refresh-SessionPath
         $resolvedExe = Resolve-JawsExe
         if (-not [string]::IsNullOrWhiteSpace([string]$resolvedExe)) {
             return [string]$resolvedExe
         }
+        if ([DateTime]::UtcNow -ge $nextHeartbeatAt) {
+            Write-Host ("Doing: wait for JAWS executable registration ({0}s elapsed)" -f [int]([DateTime]::UtcNow - $startedAt).TotalSeconds) -ForegroundColor DarkCyan
+            $nextHeartbeatAt = [DateTime]::UtcNow.AddSeconds([int]$taskConfig.WingetHeartbeatSeconds)
+        }
 
         Start-Sleep -Seconds ([int]$taskConfig.InstallVerifyPollSeconds)
     }
 
     return (Resolve-JawsExe)
+}
+
+function Save-JawsInstallPolicyState {
+    param([string]$ExecutablePath,[string]$InstallerArguments)
+
+    $stateDirectory = Join-Path $env:ProgramData 'clagnos\state\packages'
+    if (-not (Test-Path -LiteralPath $stateDirectory -PathType Container)) { New-Item -ItemType Directory -Path $stateDirectory -Force -ErrorAction Stop | Out-Null }
+    $statePath = Join-Path $stateDirectory 'jaws-install-policy.json'
+    $version = ''
+    try { $version = [string](Get-Item -LiteralPath $ExecutablePath -ErrorAction Stop).VersionInfo.ProductVersion } catch { }
+    $state = [ordered]@{
+        PackageId = [string]$taskConfig.PackageId
+        ProductLanguage = [string]$taskConfig.ProductLanguage
+        InstallerUiLanguage = [string]$taskConfig.InstallerUiLanguage
+        DisableExternalServices = [bool]$taskConfig.DisableExternalServices
+        InstallerArguments = [string]$InstallerArguments
+        InstalledVersion = [string]$version
+        RecordedAtUtc = [DateTime]::UtcNow.ToString('o')
+    }
+    [IO.File]::WriteAllText($statePath,(ConvertTo-Json -InputObject $state -Depth 8 -Compress),(New-Object System.Text.UTF8Encoding($false)))
+    $verified = Get-Content -LiteralPath $statePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    if ([string]$verified.PackageId -ne [string]$taskConfig.PackageId -or [string]$verified.ProductLanguage -ne 'enu' -or [string]$verified.InstallerUiLanguage -ne 'enu' -or -not [bool]$verified.DisableExternalServices -or [string]$verified.InstallerArguments -notmatch '(?i)/Language\s+enu' -or [string]$verified.InstallerArguments -notmatch '(?i)/DisableExternalServices') {
+        throw 'JAWS ENU/offline install policy state did not verify after the successful installer run.'
+    }
+    Write-Host 'JAWS installation policy verified: product language ENU, installer UI ENU, external services disabled.'
 }
 
 function Test-JawsPackageListed {
@@ -172,9 +340,9 @@ function Test-JawsPackageListed {
     )
 
     Write-Host ("Running: winget list --id {0} --exact" -f $PackageId)
-    $listOutput = & $WingetExe list --id $PackageId --exact
-    $listExit = [int]$LASTEXITCODE
-    $listText = [string]($listOutput | Out-String)
+    $listResult = Invoke-BoundedWingetCommand -WingetExe $WingetExe -Arguments @('list','--id',$PackageId,'--exact','--accept-source-agreements','--disable-interactivity') -TimeoutSeconds ([int]$taskConfig.WingetCommandTimeoutSeconds) -InactivitySeconds ([int]$taskConfig.WingetInactivitySeconds)
+    $listExit = [int]$listResult.ExitCode
+    $listText = [string]$listResult.Output
     return ($listExit -eq 0 -and -not [string]::IsNullOrWhiteSpace($listText) -and $listText.ToLowerInvariant().Contains("jaws"))
 }
 
@@ -214,9 +382,20 @@ Ensure-WingetSourcesReady -WingetExe $wingetExe
 
 $finalInstallExit = 0
 $installedExe = ""
+$customInstallerArguments = @('/Language',[string]$taskConfig.ProductLanguage,'/InstallerUILanguage',[string]$taskConfig.InstallerUiLanguage)
+if ([bool]$taskConfig.DisableExternalServices) { $customInstallerArguments += '/DisableExternalServices' }
+$customInstallerArgumentString = $customInstallerArguments -join ' '
+$requiredVersion = [string]$env:CLAGNOS_JAWS_REQUIRED_VERSION
+$forceInstall = [string]$env:CLAGNOS_JAWS_FORCE_INSTALL -match '^(?i)(1|true|yes|on)$'
+if (-not [string]::IsNullOrWhiteSpace($requiredVersion)) {
+    Write-Host ("JAWS repair is pinned to installed version {0}." -f $requiredVersion)
+}
 foreach ($attempt in 1..2) {
-    Write-Host ("Running: winget install --id {0} --exact --accept-source-agreements --accept-package-agreements --silent --disable-interactivity" -f $packageId)
-    $finalInstallExit = Invoke-WingetCommand -WingetExe $wingetExe -Arguments @('install', '--id', $packageId, '--exact', '--accept-source-agreements', '--accept-package-agreements', '--silent', '--disable-interactivity')
+    $installArguments = @('install', '--id', $packageId, '--exact', '--accept-source-agreements', '--accept-package-agreements', '--silent', '--disable-interactivity', '--custom', $customInstallerArgumentString)
+    if (-not [string]::IsNullOrWhiteSpace($requiredVersion)) { $installArguments += @('--version',$requiredVersion) }
+    if ($forceInstall) { $installArguments += '--force' }
+    Write-Host ("Running: winget {0}" -f (($installArguments | ForEach-Object { if ([string]$_ -match '\s') { '"' + [string]$_ + '"' } else { [string]$_ } }) -join ' '))
+    $finalInstallExit = Invoke-WingetCommand -WingetExe $wingetExe -Arguments $installArguments
 
     $installedExe = Wait-JawsInstallVerified
     if (-not [string]::IsNullOrWhiteSpace([string]$installedExe)) {
@@ -251,5 +430,6 @@ if ([string]::IsNullOrWhiteSpace([string]$installedExe)) {
 
 Install-ClagnosJawsAppStateUpdateFiles
 Set-JawsPostLogonStartup -ExecutablePath $installedExe
+Save-JawsInstallPolicyState -ExecutablePath $installedExe -InstallerArguments $customInstallerArgumentString
 Write-Host "install-jaws-application-completed"
 Write-Host "Update task completed: install-jaws-application"

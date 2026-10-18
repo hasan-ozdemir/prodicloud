@@ -1165,6 +1165,12 @@ function Get-ClagnosPackageRecord {
             $jawsDetailParts.Add([string]$updateFileDetail) | Out-Null
             if ([string]$updateFileDetail -match '(?i)pending reboot|not verified|could not be read') { $status = 'installed-drifted' }
         }
+        $phaseVariable = Get-Variable -Name CLAGNOS_PACKAGE_LIFECYCLE_PHASE -Scope Global -ErrorAction SilentlyContinue
+        $currentPhase = if ($null -ne $phaseVariable) { [string]$phaseVariable.Value } else { '' }
+        $skipAppStateReadback = $currentPhase -in @('install-verification','repair-verification','update-verification')
+        $jawsPackageState = Get-ClagnosJawsPackageStatusDetails -Spec $Spec -SkipProfileState:$skipAppStateReadback
+        if (-not [bool]$jawsPackageState.Healthy) { $status = 'installed-drifted' }
+        if (-not [string]::IsNullOrWhiteSpace([string]$jawsPackageState.Detail)) { $jawsDetailParts.Add([string]$jawsPackageState.Detail) | Out-Null }
         if ($jawsDetailParts.Count -gt 0) { $detail = $jawsDetailParts -join '; ' }
     }
     elseif ($status -eq 'installed' -and [string]$Spec.id -in @('ollama','docker-desktop')) {
@@ -1333,6 +1339,317 @@ function Test-ClagnosJawsPostLogonStartup {
     catch { return $false }
 }
 
+function Get-ClagnosJawsUninstallEntries {
+    param()
+
+    $rows = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($registryRoot in @(
+        'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )) {
+        if (-not (Test-Path -LiteralPath $registryRoot)) { continue }
+        foreach ($key in @(Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue)) {
+            try { $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop }
+            catch { continue }
+            $displayNameProperty = $entry.PSObject.Properties['DisplayName']
+            $displayName = if ($null -ne $displayNameProperty) { [string]$displayNameProperty.Value } else { '' }
+            if ($displayName -match '(?i)^Freedom Scientific JAWS 2025(?:\s|$)') {
+                $displayVersionProperty = $entry.PSObject.Properties['DisplayVersion']
+                $uninstallStringProperty = $entry.PSObject.Properties['UninstallString']
+                $quietUninstallStringProperty = $entry.PSObject.Properties['QuietUninstallString']
+                $rows.Add([pscustomobject]@{
+                    DisplayName = $displayName
+                    DisplayVersion = if ($null -ne $displayVersionProperty) { [string]$displayVersionProperty.Value } else { '' }
+                    UninstallString = if ($null -ne $uninstallStringProperty) { [string]$uninstallStringProperty.Value } else { '' }
+                    QuietUninstallString = if ($null -ne $quietUninstallStringProperty) { [string]$quietUninstallStringProperty.Value } else { '' }
+                }) | Out-Null
+            }
+        }
+    }
+    return @($rows.ToArray() | Sort-Object DisplayName -Unique)
+}
+
+function Get-ClagnosJawsSetupPackagePath {
+    param([switch]$VerifySignature)
+
+    $mainEntry = @(Get-ClagnosJawsUninstallEntries | Where-Object { [string]::Equals([string]$_.DisplayName,'Freedom Scientific JAWS 2025',[StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    if ($mainEntry.Count -ne 1) { throw 'The registered JAWS 2025 setup package entry could not be resolved.' }
+    $commandLines = @([string]$mainEntry[0].QuietUninstallString,[string]$mainEntry[0].UninstallString) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+    $installerPath = ''
+    foreach ($commandLine in $commandLines) {
+        $match = [regex]::Match([string]$commandLine,'^\s*"(?<quoted>[^"]*JAWS setup package\.exe)"|^\s*(?<plain>.*?JAWS setup package\.exe)(?:\s|$)',[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if ($match.Success) {
+            $installerPath = if ($match.Groups['quoted'].Success) { [string]$match.Groups['quoted'].Value } else { [string]$match.Groups['plain'].Value }
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($installerPath)) { throw 'The JAWS 2025 vendor setup executable is not present in its uninstall registration.' }
+    $installerPath = [IO.Path]::GetFullPath($installerPath)
+    $packageCacheRoot = [IO.Path]::GetFullPath((Join-Path $env:ProgramData 'Package Cache')).TrimEnd('\') + '\'
+    if (-not $installerPath.StartsWith($packageCacheRoot,[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($installerPath) -ine 'JAWS setup package.exe') {
+        throw 'The registered JAWS setup executable is outside the expected Package Cache location.'
+    }
+    if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) { throw 'The registered JAWS setup executable is missing.' }
+    if ($VerifySignature) {
+        $signature = Get-AuthenticodeSignature -LiteralPath $installerPath -ErrorAction Stop
+        $signer = if ($null -ne $signature.SignerCertificate) { [string]$signature.SignerCertificate.Subject } else { '' }
+        if ([string]$signature.Status -ne 'Valid' -or $signer -notmatch '(?i)Freedom Scientific|Vispero') {
+            throw 'The registered JAWS setup executable does not have a valid Freedom Scientific/Vispero signature.'
+        }
+    }
+    return [string]$installerPath
+}
+
+function Test-ClagnosJawsOtherMainProductsInstalled {
+    foreach ($registryRoot in @(
+        'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )) {
+        if (-not (Test-Path -LiteralPath $registryRoot)) { continue }
+        foreach ($key in @(Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue)) {
+            $entry = $null
+            try { $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction Stop } catch { continue }
+            $displayNameProperty = $entry.PSObject.Properties['DisplayName']
+            $displayName = if ($null -ne $displayNameProperty) { [string]$displayNameProperty.Value } else { '' }
+            if ($displayName -match '(?i)^Freedom Scientific (?:ZoomText|MAGic|OpenBook)(?:\s|$)' -or $displayName -match '(?i)^Freedom Scientific Fusion(?:\s|$)' -and $displayName -notmatch '(?i)Fusion Interface') {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
+function Get-ClagnosJawsVersionDllLoadedProcesses {
+    param([string]$FilePath)
+
+    $loadedBy = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($process in @(Get-Process -ErrorAction SilentlyContinue)) {
+        try {
+            if (@($process.Modules | Where-Object { [string]::Equals([string]$_.FileName,[string]$FilePath,[StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) {
+                $loadedBy.Add([string]$process.ProcessName) | Out-Null
+            }
+        }
+        catch { }
+    }
+    return @($loadedBy.ToArray() | Sort-Object -Unique)
+}
+
+function Remove-ClagnosJawsProgramDirectory {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) { return }
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        return
+    }
+    catch {
+        $loadedVersionDll = Join-Path $Path 'version.dll'
+        if (-not (Test-Path -LiteralPath $loadedVersionDll -PathType Leaf)) { throw }
+        $loadedBy = @(Get-ClagnosJawsVersionDllLoadedProcesses -FilePath $loadedVersionDll)
+        if ($loadedBy.Count -eq 0) { throw }
+        Write-Output ('Doing: preserve the JAWS version.dll currently loaded by Windows processes; the package update helper will replace it safely and request a reboot if needed')
+        foreach ($file in @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction Stop | Where-Object { -not [string]::Equals([string]$_.FullName,[string]$loadedVersionDll,[StringComparison]::OrdinalIgnoreCase) })) {
+            try { Remove-Item -LiteralPath $file.FullName -Force -ErrorAction Stop }
+            catch { throw ('Could not remove a JAWS program file while preserving the loaded proxy DLL: ' + [string]$file.Name) }
+        }
+        foreach ($directory in @(Get-ChildItem -LiteralPath $Path -Recurse -Directory -Force -ErrorAction Stop | Sort-Object { $_.FullName.Length } -Descending)) {
+            if (@(Get-ChildItem -LiteralPath $directory.FullName -Force -ErrorAction SilentlyContinue).Count -eq 0) {
+                Remove-Item -LiteralPath $directory.FullName -Force -ErrorAction Stop
+            }
+        }
+        $remaining = @(Get-ChildItem -LiteralPath $Path -Force -ErrorAction Stop)
+        if ($remaining.Count -ne 1 -or -not [string]::Equals([string]$remaining[0].FullName,[string]$loadedVersionDll,[StringComparison]::OrdinalIgnoreCase)) {
+            throw 'JAWS program directory contains unexpected leftovers after lock-aware cleanup.'
+        }
+    }
+}
+
+function Clear-ClagnosJawsOwnedData {
+    param([psobject]$Spec,[switch]$ClearSharedComponents,[switch]$PreservePackageAssets)
+
+    $otherMainProductInstalled = Test-ClagnosJawsOtherMainProductsInstalled
+    $programRoots = @($env:ProgramFiles,[string]${env:ProgramFiles(x86)}) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique
+    foreach ($programRoot in @($programRoots)) {
+        $jawsPath = Join-Path ([string]$programRoot) 'Freedom Scientific\JAWS\2025'
+        if (Test-Path -LiteralPath $jawsPath) {
+            Write-Output ('Doing: remove JAWS 2025 program files from ' + $jawsPath)
+            Remove-ClagnosJawsProgramDirectory -Path $jawsPath
+        }
+        if ($ClearSharedComponents -and -not $otherMainProductInstalled) {
+            $sharedPath = Join-Path ([string]$programRoot) 'Freedom Scientific\Shared'
+            if (Test-Path -LiteralPath $sharedPath) {
+                Write-Output ('Doing: remove Freedom Scientific shared components after verifying no other main Freedom Scientific product remains')
+                Remove-Item -LiteralPath $sharedPath -Recurse -Force -ErrorAction Stop
+            }
+        }
+    }
+
+    $programDataPaths = @(
+        (Join-Path $env:ProgramData 'Freedom Scientific\JAWS\2025'),
+        (Join-Path $env:ProgramData 'Freedom Scientific\JAWS\2025\SETTINGS')
+    ) | Select-Object -Unique
+    foreach ($path in @($programDataPaths)) {
+        if (Test-Path -LiteralPath $path) {
+            Write-Output ('Doing: remove JAWS 2025 program data from ' + $path)
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+        }
+    }
+
+    $profiles = @(Get-CimInstance -ClassName Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.LocalPath) })
+    foreach ($userName in @($Spec.targetUsers | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)) {
+        $profile = @($profiles | Where-Object { [string]::Equals((Split-Path -Leaf ([string]$_.LocalPath)),[string]$userName,[StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        $profileRoot = if ($profile.Count -gt 0) { [string]$profile[0].LocalPath } else { Join-Path $env:SystemDrive ('Users\' + [string]$userName) }
+        $fullProfileRoot = [IO.Path]::GetFullPath($profileRoot).TrimEnd('\') + '\'
+        foreach ($scope in @('Roaming','Local')) {
+            $path = [IO.Path]::GetFullPath((Join-Path (Join-Path $profileRoot ('AppData\' + $scope)) 'Freedom Scientific\JAWS\2025'))
+            if (-not $path.StartsWith($fullProfileRoot,[StringComparison]::OrdinalIgnoreCase)) { throw 'JAWS profile cleanup resolved outside the selected manager/assistant profile.' }
+            if (Test-Path -LiteralPath $path) {
+                Write-Output ('Doing: remove JAWS 2025 ' + $scope.ToLowerInvariant() + ' settings for a selected managed user')
+                Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            }
+        }
+        $tempRoot = Join-Path (Join-Path $profileRoot 'AppData\Local') 'Temp'
+        if (Test-Path -LiteralPath $tempRoot) {
+            foreach ($tempEntry in @(Get-ChildItem -LiteralPath $tempRoot -Force -ErrorAction SilentlyContinue | Where-Object { [string]$_.Name -match '(?i)^(?:jaws|jfw|fsjaws|freedom.?scientific.?jaws)' })) {
+                Write-Output ('Doing: remove JAWS-specific temporary data entry ' + [string]$tempEntry.Name)
+                Remove-Item -LiteralPath $tempEntry.FullName -Recurse -Force -ErrorAction Stop
+            }
+        }
+    }
+
+    $windowsTemp = Join-Path $env:SystemRoot 'Temp'
+    if (Test-Path -LiteralPath $windowsTemp) {
+        foreach ($tempEntry in @(Get-ChildItem -LiteralPath $windowsTemp -Force -ErrorAction SilentlyContinue | Where-Object { [string]$_.Name -match '(?i)^(?:jaws|jfw|fsjaws|freedom.?scientific.?jaws)' })) {
+            Write-Output ('Doing: remove JAWS-specific Windows temporary data entry ' + [string]$tempEntry.Name)
+            Remove-Item -LiteralPath $tempEntry.FullName -Recurse -Force -ErrorAction Stop
+        }
+    }
+    $jawsAsset = 'C:\Windows\Temp\clagnos-jaws-app-state.zip'
+    if (-not $PreservePackageAssets -and (Test-Path -LiteralPath $jawsAsset -PathType Leaf)) { Remove-Item -LiteralPath $jawsAsset -Force -ErrorAction Stop }
+    $jawsUpdateState = Join-Path (Join-Path $env:ProgramData 'clagnos\state\packages') 'jaws-update-files.json'
+    if (Test-Path -LiteralPath $jawsUpdateState -PathType Leaf) { Remove-Item -LiteralPath $jawsUpdateState -Force -ErrorAction Stop }
+    $jawsInstallPolicyState = Join-Path (Join-Path $env:ProgramData 'clagnos\state\packages') 'jaws-install-policy.json'
+    if (Test-Path -LiteralPath $jawsInstallPolicyState -PathType Leaf) { Remove-Item -LiteralPath $jawsInstallPolicyState -Force -ErrorAction Stop }
+
+    if ($ClearSharedComponents -and -not $otherMainProductInstalled) {
+        foreach ($programRoot in @($programRoots)) {
+            $sharedPath = Join-Path ([string]$programRoot) 'Freedom Scientific\Shared'
+            if (Test-Path -LiteralPath $sharedPath) { throw ('Freedom Scientific shared components remain after JAWS cleanup: ' + $sharedPath) }
+        }
+    }
+}
+
+function Invoke-ClagnosJawsVendorUninstall {
+    param([psobject]$Spec,[switch]$CleanSharedComponents,[switch]$PreservePackageAssets)
+
+    if ([string]$Spec.id -ne 'jaws' -or [string]$Spec.uninstall.value -ne 'FreedomScientific.JAWS.2025') { throw 'The JAWS vendor remover is reserved for the builtin Freedom Scientific JAWS 2025 package.' }
+    $currentProductEntry = @(Get-ClagnosJawsUninstallEntries | Where-Object { [string]::Equals([string]$_.DisplayName,'Freedom Scientific JAWS 2025',[StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+    $installedVersion = if ($currentProductEntry.Count -gt 0) { [string]$currentProductEntry[0].DisplayVersion } else { '' }
+    $setupPackagePath = Get-ClagnosJawsSetupPackagePath -VerifySignature
+    $otherMainProductInstalled = Test-ClagnosJawsOtherMainProductsInstalled
+    $setupType = if ($CleanSharedComponents -and -not $otherMainProductInstalled) { 'SilentSharedUninstall' } else { 'SilentUninstall' }
+    foreach ($process in @(Get-Process -Name jfw -ErrorAction SilentlyContinue)) {
+        Write-Output 'Doing: close jfw.exe before JAWS 2025 removal'
+        Stop-Process -Id ([int]$process.Id) -Force -ErrorAction Stop
+    }
+    $processDeadline = [DateTime]::UtcNow.AddSeconds(30)
+    while (@(Get-Process -Name jfw -ErrorAction SilentlyContinue).Count -gt 0 -and [DateTime]::UtcNow -lt $processDeadline) { Start-Sleep -Seconds 1 }
+    if (@(Get-Process -Name jfw -ErrorAction SilentlyContinue).Count -gt 0) { throw 'jfw.exe remained active; JAWS uninstall was not started.' }
+
+    Write-Output ("Doing: run the signed JAWS 2025 {0} to remove the product{1}" -f $setupType,$(if ($setupType -eq 'SilentSharedUninstall') { ' and its shared components' } else { '' }))
+    $startedAt = [DateTime]::UtcNow
+    $uninstaller = Start-Process -FilePath $setupPackagePath -ArgumentList @('/type',$setupType) -WindowStyle Hidden -PassThru -ErrorAction Stop
+    $deadline = $startedAt.AddSeconds(300)
+    $nextHeartbeat = $startedAt.AddSeconds(15)
+    while (-not $uninstaller.HasExited) {
+        if ([DateTime]::UtcNow -ge $deadline) {
+            $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+            if (Test-Path -LiteralPath $taskkill -PathType Leaf) { & $taskkill /F /T /PID ([string]$uninstaller.Id) 2>$null | Out-Null }
+            Stop-Process -Id ([int]$uninstaller.Id) -Force -ErrorAction SilentlyContinue
+            throw 'JAWS vendor uninstaller exceeded its finite 300-second deadline.'
+        }
+        if ([DateTime]::UtcNow -ge $nextHeartbeat) {
+            Write-Output ('Doing: JAWS vendor uninstall is still running ({0}s elapsed)' -f [int]([DateTime]::UtcNow - $startedAt).TotalSeconds)
+            $nextHeartbeat = [DateTime]::UtcNow.AddSeconds(15)
+        }
+        Start-Sleep -Milliseconds 500
+        $uninstaller.Refresh()
+    }
+    $uninstaller.WaitForExit()
+    if ([int]$uninstaller.ExitCode -eq 3010) {
+        $global:CLAGNOS_PACKAGE_REBOOT_REQUIRED = $true
+        Write-Output 'Doing: JAWS vendor uninstall requested a reboot; package verification will continue without powering off the VM.'
+    }
+    elseif ([int]$uninstaller.ExitCode -ne 0) { throw ('JAWS vendor uninstaller exited with code ' + [int]$uninstaller.ExitCode) }
+
+    $absenceDeadline = [DateTime]::UtcNow.AddSeconds(45)
+    do {
+        $remainingEntries = @(Get-ClagnosJawsUninstallEntries)
+        $jawsExecutablePresent = Test-Path -LiteralPath 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe' -PathType Leaf
+        $jawsExecutablePresent = $jawsExecutablePresent -or (Test-Path -LiteralPath 'C:\Program Files (x86)\Freedom Scientific\JAWS\2025\jfw.exe' -PathType Leaf)
+        if ($remainingEntries.Count -eq 0 -and -not $jawsExecutablePresent) { break }
+        if ([DateTime]::UtcNow -ge $absenceDeadline) { throw ('JAWS uninstall did not verify product and language removal; registration count={0}; executablePresent={1}.' -f $remainingEntries.Count,$jawsExecutablePresent) }
+        Write-Output ('Doing: wait for JAWS 2025 product and language registrations to disappear')
+        Start-Sleep -Seconds 3
+    } while ($true)
+
+    Remove-ClagnosPackageStartupArtifacts -Spec $Spec
+    Clear-ClagnosJawsOwnedData -Spec $Spec -ClearSharedComponents:$CleanSharedComponents -PreservePackageAssets:$PreservePackageAssets
+    if (@(Get-ClagnosJawsUninstallEntries).Count -gt 0) { throw 'JAWS 2025 registration remained after vendor uninstall and targeted cleanup.' }
+    $global:CLAGNOS_JAWS_VENDOR_UNINSTALL_RESULT = [pscustomobject]@{ InstallerPath = [string]$setupPackagePath; Version = [string]$installedVersion; SetupType = [string]$setupType }
+    return
+}
+
+function Get-ClagnosJawsPackageStatusDetails {
+    param([psobject]$Spec,[switch]$SkipProfileState)
+
+    $details = New-Object 'System.Collections.Generic.List[string]'
+    $healthy = $true
+    $registrations = @(Get-ClagnosJawsUninstallEntries)
+    $enuPresent = @($registrations | Where-Object { [string]$_.DisplayName -match '(?i)^Freedom Scientific JAWS 2025 ENU$' }).Count -gt 0
+    $trkPresent = @($registrations | Where-Object { [string]$_.DisplayName -match '(?i)^Freedom Scientific JAWS 2025 TRK$' }).Count -gt 0
+    if (-not $enuPresent) { $details.Add('English (United States) ENU component is not registered') | Out-Null; $healthy = $false }
+    if ($trkPresent) { $details.Add('unexpected Turkish TRK component is installed') | Out-Null; $healthy = $false }
+
+    $policyStatePath = Join-Path (Join-Path $env:ProgramData 'clagnos\state\packages') 'jaws-install-policy.json'
+    $offlinePolicyVerified = $false
+    if (Test-Path -LiteralPath $policyStatePath -PathType Leaf) {
+        try {
+            $policyState = Get-Content -LiteralPath $policyStatePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $installerArguments = [string]$policyState.InstallerArguments
+            $offlinePolicyVerified = ([string]$policyState.PackageId -eq 'FreedomScientific.JAWS.2025' -and [string]$policyState.ProductLanguage -eq 'enu' -and [string]$policyState.InstallerUiLanguage -eq 'enu' -and [bool]$policyState.DisableExternalServices -and $installerArguments -match '(?i)/Language\s+enu' -and $installerArguments -match '(?i)/InstallerUILanguage\s+enu' -and $installerArguments -match '(?i)/DisableExternalServices')
+        }
+        catch { $offlinePolicyVerified = $false }
+    }
+    if (-not $offlinePolicyVerified) { $details.Add('ENU/offline installer policy record is missing or invalid') | Out-Null; $healthy = $false }
+
+    if (-not $SkipProfileState) {
+        $targetUsers = @($Spec.targetUsers | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+        for ($targetUserIndex = 0; $targetUserIndex -lt $targetUsers.Count; $targetUserIndex++) {
+            $userName = [string]$targetUsers[$targetUserIndex]
+            $targetRole = if ($targetUserIndex -eq 0) { 'manager' } elseif ($targetUserIndex -eq 1) { 'assistant' } else { '' }
+            $profile = @(Get-CimInstance -ClassName Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object { [string]::Equals((Split-Path -Leaf ([string]$_.LocalPath)),[string]$userName,[StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+            $profileRoot = if ($profile.Count -gt 0) { [string]$profile[0].LocalPath } else { Join-Path $env:SystemDrive ('Users\' + [string]$userName) }
+            $trkDirectory = Join-Path $profileRoot 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\trk'
+            if (Test-Path -LiteralPath $trkDirectory -PathType Container) { $details.Add(('Turkish profile settings remain for ' + [string]$userName)) | Out-Null; $healthy = $false }
+            foreach ($rule in @($Spec.appState.profileFiles)) {
+                if ([string]::IsNullOrWhiteSpace($targetRole) -or @($rule.targetProfiles | Where-Object { [string]::Equals([string]$_,$targetRole,[StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { continue }
+                $relative = [string]$rule.path
+                if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or $relative -match '(^|[\\/])\.\.([\\/]|$)') { $details.Add('JAWS app-state contains an unsafe profile path') | Out-Null; $healthy = $false; continue }
+                $candidate = Join-Path $profileRoot $relative
+                $parent = Split-Path -Parent $candidate
+                $leafPattern = Split-Path -Leaf $candidate
+                $matchedPreferenceFiles = @()
+                if ($leafPattern.Contains('*') -or $leafPattern.Contains('?')) { $matchedPreferenceFiles = @(Get-ChildItem -LiteralPath $parent -File -Filter $leafPattern -ErrorAction SilentlyContinue) }
+                elseif (Test-Path -LiteralPath $candidate -PathType Leaf) { $matchedPreferenceFiles = @((Get-Item -LiteralPath $candidate)) }
+                if (@($matchedPreferenceFiles).Count -eq 0) { $details.Add(('missing JAWS preference ' + $leafPattern + ' for ' + [string]$userName)) | Out-Null; $healthy = $false }
+            }
+        }
+    }
+    if ($details.Count -eq 0) { $details.Add('ENU-only install, offline external-service restrictions, managed JAWS preferences, and startup policy are verified') | Out-Null }
+    return [pscustomobject]@{ Healthy = [bool]$healthy; Detail = ($details.ToArray() -join '; ') }
+}
+
 function Remove-ClagnosPackageStartupArtifacts {
     param([psobject]$Spec)
 
@@ -1497,6 +1814,20 @@ function Set-ClagnosPackageStartupState {
             break
         }
     }
+}
+
+function Invoke-ClagnosPackageScriptStreamed {
+    param([Parameter(Mandatory = $true)][string]$ScriptText)
+
+    $outputLines = New-Object 'System.Collections.Generic.List[string]'
+    & ([scriptblock]::Create($ScriptText)) *>&1 | ForEach-Object {
+        $line = [string]($_ | Out-String).TrimEnd()
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            $outputLines.Add($line) | Out-Null
+            Write-Host $line
+        }
+    }
+    return [string]($outputLines.ToArray() -join [Environment]::NewLine)
 }
 
 function Test-ClagnosPackageStartupState {
@@ -1725,7 +2056,11 @@ function Invoke-ClagnosPackageLifecycle {
     if ($Action -eq 'uninstall') {
         if ($record.Status -eq 'not-installed') {
             Remove-ClagnosPackageStartupArtifacts -Spec $spec
-            $uninstallMessage = if ([string]$spec.id -eq 'windscribe' -and [string]$env:CLAGNOS_WINDSCRIBE_UNINSTALL_COMPLETED -eq 'true') { 'Windscribe was removed through the verified password-logon scheduled task; absence was confirmed.' } else { 'Package was already absent; no uninstall action was run.' }
+            if ([string]$spec.id -eq 'jaws') {
+                Write-Output 'Doing: clean only residual JAWS 2025 program, shared, profile, and temporary data after package absence was confirmed'
+                Clear-ClagnosJawsOwnedData -Spec $spec -ClearSharedComponents
+            }
+            $uninstallMessage = if ([string]$spec.id -eq 'windscribe' -and [string]$env:CLAGNOS_WINDSCRIBE_UNINSTALL_COMPLETED -eq 'true') { 'Windscribe was removed through the verified password-logon scheduled task; absence was confirmed.' } elseif ([string]$spec.id -eq 'jaws') { 'JAWS was already absent; remaining JAWS 2025 data was cleaned and verified.' } else { 'Package was already absent; no uninstall action was run.' }
             Write-ClagnosPackageOperationResult -Spec $spec -Action $Action -Record $record -Message $uninstallMessage
             return
         }
@@ -1736,6 +2071,14 @@ function Invoke-ClagnosPackageLifecycle {
         $packageUninstallRebootRequired = $false
         Write-Output ('Doing: uninstall package {0} using {1}' -f [string]$spec.id,[string]$uninstall.kind)
         switch ([string]$uninstall.kind) {
+            'jaws' {
+                $global:CLAGNOS_JAWS_VENDOR_UNINSTALL_RESULT = $null
+                Invoke-ClagnosJawsVendorUninstall -Spec $spec -CleanSharedComponents
+                $jawsRemoval = $global:CLAGNOS_JAWS_VENDOR_UNINSTALL_RESULT
+                if ($null -eq $jawsRemoval) { throw 'JAWS vendor uninstall completed without a structured cleanup result.' }
+                $packageUninstallRebootRequired = [bool]$global:CLAGNOS_PACKAGE_REBOOT_REQUIRED
+                $uninstallOutput = ('Freedom Scientific signed {0} completed; JAWS 2025, its language registrations, and selected profile data were removed.' -f [string]$jawsRemoval.SetupType)
+            }
             'winget' {
                 $command = Get-Command winget.exe -ErrorAction Stop
                 $uninstallArguments = @('uninstall','--id',$value,'--exact','--silent','--accept-source-agreements','--disable-interactivity')
@@ -1997,8 +2340,13 @@ function Invoke-ClagnosPackageLifecycle {
         $installSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($InstallScriptBase64))
         Set-ClagnosPackageLifecyclePhase -Phase 'installer'
         Write-Output ('Doing: install package {0} using its package installer' -f [string]$spec.id)
-        $installOutput = & ([scriptblock]::Create($installSource)) *>&1 | Out-String
-        if (-not [string]::IsNullOrWhiteSpace($installOutput)) { Write-Output $installOutput.TrimEnd() }
+        if ([string]$spec.id -eq 'jaws') {
+            $installOutput = Invoke-ClagnosPackageScriptStreamed -ScriptText $installSource
+        }
+        else {
+            $installOutput = & ([scriptblock]::Create($installSource)) *>&1 | Out-String
+            if (-not [string]::IsNullOrWhiteSpace($installOutput)) { Write-Output $installOutput.TrimEnd() }
+        }
         Set-ClagnosPackageLifecyclePhase -Phase 'startup-reconciliation'
         if ([string]$spec.id -eq 'jaws') {
             $jawsUsers = @($spec.targetUsers | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
@@ -2030,6 +2378,37 @@ function Invoke-ClagnosPackageLifecycle {
         Set-ClagnosPackageLifecyclePhase -Phase 'same-version-repair'
         Write-Output ('Doing: repair package {0} at installed version {1} using {2}' -f [string]$spec.id,[string]$record.Version,$repairStrategy)
         switch ($repairStrategy) {
+            'jaws' {
+                if ([string]$spec.id -ne 'jaws' -or [string]$spec.statusCheck.value -ne 'FreedomScientific.JAWS.2025') { throw 'The jaws repair strategy is reserved for the builtin Freedom Scientific JAWS 2025 package.' }
+                if ([string]::IsNullOrWhiteSpace([string]$record.Version)) { throw 'The installed JAWS version is unavailable; exact-version repair was not started.' }
+                $command = Get-Command winget.exe -ErrorAction Stop
+                Write-Output ('Doing: verify JAWS WinGet release {0} is still available before the same-version repair changes the guest' -f [string]$record.Version)
+                $availabilityOutput = & $command.Source show --id ([string]$spec.statusCheck.value) --exact --version ([string]$record.Version) --accept-source-agreements --disable-interactivity 2>&1 | Out-String
+                $availabilityCode = [int]$LASTEXITCODE
+                if ($availabilityCode -ne 0 -or $availabilityOutput -notmatch ('(?im)^\s*Version:\s*' + [regex]::Escape([string]$record.Version) + '\s*$')) {
+                    throw ("JAWS exact provider version '{0}' is not verifiable; no repair mutation was attempted. {1}" -f [string]$record.Version,$availabilityOutput.Trim())
+                }
+                if ([string]::IsNullOrWhiteSpace($InstallScriptBase64)) { throw 'JAWS same-version repair requires its validated ENU/offline package installer.' }
+                $repairSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($InstallScriptBase64))
+                $global:CLAGNOS_JAWS_VENDOR_UNINSTALL_RESULT = $null
+                Invoke-ClagnosJawsVendorUninstall -Spec $spec -CleanSharedComponents -PreservePackageAssets
+                if ($null -eq $global:CLAGNOS_JAWS_VENDOR_UNINSTALL_RESULT) { throw 'JAWS vendor cleanup completed without a structured same-version repair result.' }
+                $previousRequiredVersion = [string]$env:CLAGNOS_JAWS_REQUIRED_VERSION
+                $previousForceInstall = [string]$env:CLAGNOS_JAWS_FORCE_INSTALL
+                try {
+                    $env:CLAGNOS_JAWS_REQUIRED_VERSION = [string]$record.Version
+                    $env:CLAGNOS_JAWS_FORCE_INSTALL = 'true'
+                    $repairOutput = Invoke-ClagnosPackageScriptStreamed -ScriptText $repairSource
+                    if ($null -ne $global:LASTEXITCODE -and [int]$global:LASTEXITCODE -notin @(0,-1978335189,-2147024894)) {
+                        throw ('JAWS same-version install script exited with ' + [int]$global:LASTEXITCODE + '. ' + $repairOutput.Trim())
+                    }
+                }
+                finally {
+                    $env:CLAGNOS_JAWS_REQUIRED_VERSION = $previousRequiredVersion
+                    $env:CLAGNOS_JAWS_FORCE_INSTALL = $previousForceInstall
+                }
+                if ([bool]$global:CLAGNOS_PACKAGE_REBOOT_REQUIRED) { $repairRebootRequired = $true }
+            }
             'installer-verify' {
                 if ([string]::IsNullOrWhiteSpace($InstallScriptBase64)) { throw ('Package {0} same-version repair requires its validated installer/health script.' -f [string]$spec.id) }
                 $repairSource = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($InstallScriptBase64))
@@ -2318,4 +2697,4 @@ function Invoke-ClagnosPackageLifecycle {
     Write-ClagnosPackageOperationResult -Spec $spec -Action $Action -Record $verified -Message $message -DurationSeconds $operationWatch.Elapsed.TotalSeconds -RebootRequired:$updateRebootRequired
 }
 
-Export-ModuleMember -Function Invoke-ClagnosPackageLifecycle,Invoke-ClagnosTeamsBootstrapper,Set-ClagnosTeamsStoreInstallState,Get-ClagnosWindscribePackageRecord,Get-ClagnosWslPackageRecord,Get-ClagnosWindscribeUnattendedFirewallState,ConvertFrom-ClagnosWindscribePersistentFirewallState,Stop-ClagnosStaleWindscribeUninstallerProcesses,Set-ClagnosJawsPostLogonStartup,Test-ClagnosJawsPostLogonStartup,Set-ClagnosJawsLogonScreenStartup,Test-ClagnosJawsLogonScreenStartup,Install-ClagnosJawsAppStateUpdateFiles,Set-ClagnosPackageStartupState,Test-ClagnosPackageStartupState,Get-ClagnosSysinternalsPackageRecord
+Export-ModuleMember -Function Invoke-ClagnosPackageLifecycle,Invoke-ClagnosTeamsBootstrapper,Set-ClagnosTeamsStoreInstallState,Get-ClagnosWindscribePackageRecord,Get-ClagnosWslPackageRecord,Get-ClagnosWindscribeUnattendedFirewallState,ConvertFrom-ClagnosWindscribePersistentFirewallState,Stop-ClagnosStaleWindscribeUninstallerProcesses,Set-ClagnosJawsPostLogonStartup,Test-ClagnosJawsPostLogonStartup,Set-ClagnosJawsLogonScreenStartup,Test-ClagnosJawsLogonScreenStartup,Get-ClagnosJawsPackageStatusDetails,Invoke-ClagnosJawsVendorUninstall,Install-ClagnosJawsAppStateUpdateFiles,Set-ClagnosPackageStartupState,Test-ClagnosPackageStartupState,Get-ClagnosSysinternalsPackageRecord

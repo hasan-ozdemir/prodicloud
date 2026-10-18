@@ -402,7 +402,24 @@ function Assert-ClagnosPackageAppStateArchivePortable {
             if ([string]$entry.FullName -match $forbiddenMemberPattern) { throw 'Package app-state archive contains a login, history, workspace, or cache file.' }
             if ($entry.Length -le 0 -or $entry.Length -gt 5000000 -or [string]::Equals([string]$entry.FullName, 'app-state.manifest.json', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
             $extension = [System.IO.Path]::GetExtension([string]$entry.Name).ToLowerInvariant()
-            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.properties','.vssettings','.jcf','.jdf','.vpf','.vlcrc') -and [string]$entry.Name -ne 'config') { continue }
+            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.properties','.vssettings','.jcf','.jdf','.jss','.jkm','.jsb','.jsd','.vpf','.vlcrc') -and [string]$entry.Name -ne 'config') { continue }
+            if ($extension -eq '.jsb') {
+                $binaryStream = $entry.Open()
+                try {
+                    $binaryMemory = New-Object System.IO.MemoryStream
+                    try {
+                        $binaryStream.CopyTo($binaryMemory)
+                        $binaryBytes = [byte[]]$binaryMemory.ToArray()
+                    }
+                    finally { $binaryMemory.Dispose() }
+                }
+                finally { $binaryStream.Dispose() }
+                $binaryProbe = [System.Text.Encoding]::ASCII.GetString($binaryBytes) + [System.Text.Encoding]::Unicode.GetString($binaryBytes)
+                if ([regex]::IsMatch($binaryProbe, '(?i)[A-Z]:\\Users\\[^\\/\s"'']+|S-1-5-21-\d+-\d+-\d+-\d+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|[A-Z]:\\[^\s"'']{2,}')) {
+                    throw ("Package app-state binary payload '{0}' contains source-machine identity or a machine-specific path." -f [string]$entry.Name)
+                }
+                continue
+            }
             $reader = New-Object System.IO.StreamReader($entry.Open())
             try { $content = [string]$reader.ReadToEnd() }
             finally { $reader.Dispose() }

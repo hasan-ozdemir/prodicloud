@@ -5997,3 +5997,21 @@ Complete the remaining plan work by realistically fixing all 14 legacy fixture, 
 **Assistant Summary**
 
 Fixed the runtime and fixture causes behind all 14 smoke failures. Package catalog enable/disable and disabled-action checks now run without resolving an Azure target or loading the active VC profile. Explicit VM lifecycle targets read only global configuration before resolving their requested profile. VM-scoped environment writes seed and validate `SELECTED_VM_NAME`; the TUI selection test now uses an isolated temporary repo profile and cannot alter the operator's local files. Updated tests to discover moved task paths, match the current CLI help and package installers, include WinRM session options, construct realistic task catalog metadata, and validate actual Git ignore behavior. Restored the local active VM pointer after cleaning a test-generated fixture profile. The PowerShell compatibility matrix passed on Windows PowerShell 5.1 and PowerShell 7, with 193/193 smoke checks and 180/180 TUI checks on each. Code-quality, package lifecycle, app-state, documentation, release-package, and sensitive-content checks passed. No Azure resource was changed.
+
+### 2026-10-18 11:07 UTC
+**User Prompt**
+
+````text
+Setup package fix: update and correct the JAWS install, uninstall, reinstall, and repair operations.
+
+- Install only the ENU (English - United States) JAWS product language; the current target also has Turkish installed. Set this through the WinGet installer arguments.
+- Install with the vendor option that disables online services so JAWS product features run offline.
+- Match the local JAWS 2025 roaming profile, including the system-tray setting, logon-screen and post-logon automatic startup, DEFAULT.JCF/JKM/JSS, and all local `.j*` settings. Include these files in the app-state archive and apply them through the package PowerShell scripts.
+- Before testing, clean only JAWS-owned target program/shared files, LocalAppData, RoamingAppData, temporary data, and ProgramData. Run and verify the five JAWS package lifecycle operations on a clean VC.
+````
+
+**Assistant Summary**
+
+Updated the builtin JAWS package to request `enu` and English installer UI, and to pass Freedom Scientific's `/DisableExternalServices` option through a bounded WinGet runner that emits progress and stops the child process tree after a real 60-second stall or its 300-second deadline. The sanitized, tracked JAWS app-state archive now includes all 21 local ENU `.j*` files plus five voice profiles and replays 52 profile files across manager and assistant. JAWS status verifies ENU-only registration, no TRK component, the recorded offline installer policy, all managed profile files, update-file hashes, and logon-screen/post-logon startup. JAWS removal uses the vendor-signed `SilentSharedUninstall` mode only when no other main Freedom Scientific product is registered, then removes JAWS-owned paths; a system-loaded `version.dll` is preserved until its hash-verified replacement can be applied safely.
+
+The live VC2 WinRM matrix passed install (170.2s), repair (217.3s), update (63.0s), uninstall (69.7s), install (158.8s), and reinstall (218.6s). Final status was installed and healthy, with all 52 profile-file replays verified. The VM remained running at `Standard_B2s_v2`; E2E before/after snapshots showed no size, disk, NIC, or endpoint changes. One normal VM restart was needed during initial cleanup to release a JAWS DLL loaded by Windows processes; the six package operations themselves required no restart. Package lifecycle, app-state, code-quality, documentation, release-package, and sensitive-content checks passed.

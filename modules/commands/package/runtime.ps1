@@ -74,8 +74,11 @@ function Get-ClagnosPackageCatalog {
         if ([string]$statusCheck.kind -eq 'windscribe' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windscribe' -or [string]$statusCheck.value -ne 'C:\Program Files\Windscribe\Windscribe.exe')) {
             throw 'The windscribe status check is valid only for the builtin Windows windscribe package and its fixed signed executable path.'
         }
-        if ([string]$uninstall.kind -notin @('winget','choco','npm','appx','windows-feature','choco-self','anydesk','docker-desktop','google-drive','windscribe','teams','nvda','wsl','sysinternals','apt','dnf','snap')) {
+        if ([string]$uninstall.kind -notin @('winget','choco','npm','appx','windows-feature','choco-self','anydesk','docker-desktop','google-drive','windscribe','teams','nvda','jaws','wsl','sysinternals','apt','dnf','snap')) {
             throw ("Package '{0}' has unsupported uninstall action '{1}'." -f $id, [string]$uninstall.kind)
+        }
+        if ([string]$uninstall.kind -eq 'jaws' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'jaws' -or [string]$statusCheck.kind -ne 'winget' -or [string]$uninstall.value -ne 'FreedomScientific.JAWS.2025')) {
+            throw 'The jaws uninstall action is valid only for the builtin Windows JAWS 2025 package and its exact WinGet identity.'
         }
         if ([string]$uninstall.kind -eq 'wsl' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windows-subsystem-linux' -or [string]$statusCheck.kind -ne 'wsl' -or [string]$uninstall.value -ne 'Windows Subsystem for Linux')) {
             throw 'The wsl uninstall action is valid only for the builtin Windows Subsystem for Linux MSI package.'
@@ -126,8 +129,11 @@ function Get-ClagnosPackageCatalog {
         $operationsModulePath = ''
         $repairStrategy = [string]$manifest.repairStrategy
         if ($Platform -eq 'windows') {
-            if (-not [string]::IsNullOrWhiteSpace($repairStrategy) -and $repairStrategy -notin @('winget','winget-prefix','winget-vscode','google-drive-verify','wsl-msi','choco','npm','choco-self','appx','startup','installer-verify','sysinternals','windscribe')) {
+            if (-not [string]::IsNullOrWhiteSpace($repairStrategy) -and $repairStrategy -notin @('winget','winget-prefix','winget-vscode','google-drive-verify','wsl-msi','choco','npm','choco-self','appx','startup','installer-verify','sysinternals','windscribe','jaws')) {
                 throw ("Package '{0}' has unsupported repairStrategy '{1}'" -f $id,$repairStrategy)
+            }
+            if ($repairStrategy -eq 'jaws' -and ($Catalog -ne 'builtin' -or $id -ne 'jaws' -or [string]$statusCheck.kind -ne 'winget' -or [string]$statusCheck.value -ne 'FreedomScientific.JAWS.2025')) {
+                throw 'The jaws repair strategy is reserved for the builtin Windows JAWS 2025 package.'
             }
             if ($repairStrategy -eq 'winget-prefix' -and ($Catalog -ne 'builtin' -or $id -ne 'nvda' -or [string]$statusCheck.kind -ne 'winget')) {
                 throw 'The winget-prefix repair strategy is reserved for the builtin Windows NVDA package.'
@@ -239,6 +245,7 @@ function Get-ClagnosPackageCatalog {
             RepairPackageId = [string]$manifest.repairPackageId
             RepairProductCode = [string]$manifest.repairProductCode
             StartupPolicy = $manifest.startupPolicy
+            AppState = $manifest.appState
             OperationTimeoutSeconds = $operationTimeoutSeconds
             Catalog = $Catalog
             AppStateKey = $appStateKey
@@ -292,6 +299,7 @@ function Get-ClagnosPackageCatalog {
             RepairProductCode = [string]$manifest.repairProductCode
             OperationTimeoutSeconds = $operationTimeoutSeconds
             StartupPolicy = $manifest.startupPolicy
+            AppState = $manifest.appState
             LifecycleScriptPaths = $lifecycleScriptPaths
             StatusScriptText = [string]$lifecycleScriptText['status']
             UpdateScriptText = [string]$lifecycleScriptText['update']
@@ -423,6 +431,7 @@ function Get-ClagnosPackageLifecycleSpecBase64 {
         repairProductCode = [string]$Package.RepairProductCode
     }
     if ($null -ne $Package.PSObject.Properties['StartupPolicy']) { $spec.startupPolicy = $Package.StartupPolicy }
+    if ($null -ne $Package.PSObject.Properties['AppState'] -and $null -ne $Package.AppState) { $spec.appState = $Package.AppState }
     if ($null -ne $Context) {
         $targetUsers = @()
         foreach ($userName in @([string]$Context.VmUser,[string]$Context.VmAssistantUser)) {
@@ -581,6 +590,7 @@ function New-ClagnosPackageGuestScript {
                 statusCheck = $_.StatusCheck
                 uninstall = $_.Uninstall
                 startupPolicy = $_.StartupPolicy
+                appState = $_.AppState
                 targetUsers = @($(if ($null -ne $Context) { @([string]$Context.VmUser,[string]$Context.VmAssistantUser) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } } else { @() }))
             }
         }
@@ -744,14 +754,17 @@ foreach (`$package in `$packages) {
         if ([string]`$package.id -eq 'jaws' -and @(`$package.targetUsers).Count -gt 0) {
             `$missingUsers = @(`$package.targetUsers | Where-Object { -not (Test-ClagnosJawsPostLogonStartup -UserName ([string]`$_) -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe') })
                 `$logonScreenReady = Test-ClagnosJawsLogonScreenStartup
+                `$jawsState = Get-ClagnosJawsPackageStatusDetails -Spec `$package
                 if (`$missingUsers.Count -gt 0 -or -not `$logonScreenReady) {
                     `$detailParts = @()
                     if (`$missingUsers.Count -gt 0) { `$detailParts += 'post-logon startup is missing for: ' + (`$missingUsers -join ', ') }
                     if (-not `$logonScreenReady) { `$detailParts += 'logon-screen startup Run=1 is missing' }
+                    if (-not [bool]`$jawsState.Healthy -and -not [string]::IsNullOrWhiteSpace([string]`$jawsState.Detail)) { `$detailParts += [string]`$jawsState.Detail }
                     `$detail = 'JAWS startup is incomplete: ' + (`$detailParts -join '; ')
                     `$status = 'installed-drifted'
                 }
-                else { `$detail = 'JAWS starts at the Windows logon screen and after logon for manager and assistant.' }
+                elseif (-not [bool]`$jawsState.Healthy) { `$detail = [string]`$jawsState.Detail; `$status = 'installed-drifted' }
+                else { `$detail = 'JAWS starts at the Windows logon screen and after logon for manager and assistant; ENU-only, offline, and app-state checks passed.' }
         }
         elseif ([string]`$package.id -in @('ollama','docker-desktop')) {
             `$detail = Test-ClagnosPackageStartupState -Spec `$package

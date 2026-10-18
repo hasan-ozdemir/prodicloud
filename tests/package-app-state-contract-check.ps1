@@ -81,7 +81,12 @@ $jawsAsset = @($jawsManifest.assets | Where-Object { [string]$_.local -eq 'app-s
 Assert-ClagnosPackageAppState -Condition ($jawsAsset.Count -eq 1) -Message 'JAWS must publish its reviewed app-state archive to the installer as an explicit remote asset.'
 $jawsProfileRules = @($jawsManifest.appState.profileFiles)
 Assert-ClagnosPackageAppState -Condition (@($jawsProfileRules | Where-Object { @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'manager' -or @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'assistant' }).Count -eq 0) -Message 'Every JAWS app-state preference must target both manager and assistant profiles.'
-Assert-ClagnosPackageAppState -Condition (@($jawsProfileRules | Where-Object { [string]$_.path -match '(?i)\\(codex\.JSS|codex\.JKM|super_pi_mod\.JSS)$' }).Count -eq 3) -Message 'JAWS app-state must include the reviewed custom JSS and JKM source files.'
+Assert-ClagnosPackageAppState -Condition (@($jawsProfileRules | Where-Object { [string]$_.path -match '(?i)\\Settings\\trk\\' }).Count -eq 0) -Message 'JAWS app-state must only target the ENU profile language.'
+$requiredJawsSettingNames = @('agy.JCF','agy.JDF','chrome.JCF','claude-code.JCF','codex.JCF','codex.JKM','codex.JSB','codex.JSD','codex.JSS','DEFAULT.JCF','DEFAULT.JDF','DEFAULT.JKM','DEFAULT.JSB','DEFAULT.JSD','DEFAULT.JSS','GitHub.JDF','super_pi_mod.JCF','super_pi_mod.JSB','super_pi_mod.JSS','WindowsTerminal.JCF','WsaClient.JCF')
+foreach ($requiredName in $requiredJawsSettingNames) {
+    Assert-ClagnosPackageAppState -Condition (@($jawsProfileRules | Where-Object { [IO.Path]::GetFileName([string]$_.path) -ieq $requiredName }).Count -eq 1) -Message ("JAWS app-state policy must include local JAWS preference file '{0}'." -f $requiredName)
+}
+$requiredJawsFileNames = @($requiredJawsSettingNames | ForEach-Object { $_.ToLowerInvariant() } | Sort-Object)
 $jawsInstallerPath = Join-Path $packageRoot 'builtin\windows\jaws\install.ps1'
 $jawsInstallerText = [string](Get-Content -LiteralPath $jawsInstallerPath -Raw -ErrorAction Stop)
 $jawsOperationsPath = Join-Path $RepoRoot 'modules/commands/package/clagnos-package-operations.psm1'
@@ -112,7 +117,15 @@ foreach ($archiveFile in @($archiveFiles)) {
             Assert-ClagnosPackageAppState -Condition ([string]$member.FullName -notmatch $forbiddenMemberPattern) -Message ("Package snapshot '{0}' contains a cache, history, login, or credential member." -f $packageId)
             if ($member.Length -le 0 -or $member.Length -gt 1500000 -or [string]::Equals([string]$member.FullName, 'app-state.manifest.json', [System.StringComparison]::OrdinalIgnoreCase)) { continue }
             $extension = [IO.Path]::GetExtension($member.Name).ToLowerInvariant()
-            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.vssettings','.jcf','.jdf','.jss','.jkm','.vpf','.vlcrc') -and $member.Name -ne 'config') { continue }
+            if ($extension -eq '.jsb') {
+                $binaryReader = New-Object IO.BinaryReader($member.Open())
+                try { $binaryBytes = $binaryReader.ReadBytes([int]$member.Length) }
+                finally { $binaryReader.Dispose() }
+                $binaryProbe = [Text.Encoding]::ASCII.GetString($binaryBytes) + [Text.Encoding]::Unicode.GetString($binaryBytes)
+                Assert-ClagnosPackageAppState -Condition (-not [regex]::IsMatch($binaryProbe,'(?i)[A-Z]:\\Users\\[^\\/\s"'']+|S-1-5-21-\d+-\d+-\d+-\d+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|[A-Z]:\\[^\s"'']{2,}')) -Message ("Package snapshot '{0}' contains machine-specific identity in a compiled JAWS script." -f $packageId)
+                continue
+            }
+            if ($extension -notin @('.json','.xml','.ini','.yml','.yaml','.toml','.txt','.config','.vssettings','.jcf','.jdf','.jss','.jkm','.jsd','.vpf','.vlcrc') -and $member.Name -ne 'config') { continue }
             $reader = New-Object System.IO.StreamReader($member.Open())
             try { $content = [string]$reader.ReadToEnd() }
             finally { $reader.Dispose() }
@@ -153,8 +166,8 @@ foreach ($archiveFile in @($archiveFiles)) {
             try { $jawsSnapshotManifest = ConvertFrom-Json -InputObject $jawsSnapshotReader.ReadToEnd() -ErrorAction Stop }
             finally { $jawsSnapshotReader.Dispose() }
             Assert-ClagnosPackageAppState -Condition (@($jawsSnapshotManifest.profileFiles | Where-Object { @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'manager' -or @($_.targetProfiles | ForEach-Object { [string]$_ }) -notcontains 'assistant' }).Count -eq 0) -Message 'JAWS snapshot entries must replay to both managed profiles.'
-            $jawsPortableSources = @($jawsSnapshotManifest.profileFiles | ForEach-Object { [IO.Path]::GetFileName([string]$_.relativeDestinationPath) })
-            Assert-ClagnosPackageAppState -Condition (@($jawsPortableSources | Where-Object { [string]$_ -match '(?i)^(codex\.JSS|codex\.JKM|super_pi_mod\.JSS)$' }).Count -eq 3) -Message 'JAWS snapshot must contain the reviewed custom script and keymap source files.'
+            $jawsPortableSources = @($archive.Entries | Where-Object { [string]$_.FullName -match '(?i)^payload/profile-files/manager/[^/]+\.j[a-z0-9]*$' } | ForEach-Object { [IO.Path]::GetFileName([string]$_.FullName).ToLowerInvariant() } | Sort-Object)
+            Assert-ClagnosPackageAppState -Condition (($jawsPortableSources -join '|') -ceq ($requiredJawsFileNames -join '|')) -Message 'The JAWS snapshot must contain every curated local .j* settings and script file, including default JCF/JKM/JSS files.'
         }
     }
     finally { $archive.Dispose() }
