@@ -1,27 +1,25 @@
-$ErrorActionPreference = "Stop"
-Write-Host "Update task started: install-ffmpeg-tool"
+$ErrorActionPreference = 'Stop'
+Write-Output 'Doing: install FFmpeg through its Chocolatey package'
 
 Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
 
-function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
-}
+Refresh-ClagnosSessionPath | Out-Null
 
-$chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
-if (-not (Test-Path -LiteralPath $chocoExe)) { throw "choco was not found." }
-Refresh-SessionPath
+$chocolateyRoot = [string][Environment]::GetEnvironmentVariable('ChocolateyInstall','Machine')
+if ([string]::IsNullOrWhiteSpace($chocolateyRoot)) { $chocolateyRoot = [string]$env:ChocolateyInstall }
+if ([string]::IsNullOrWhiteSpace($chocolateyRoot)) { $chocolateyRoot = Join-Path $env:ProgramData 'chocolatey' }
+$chocoExe = Join-Path ([IO.Path]::GetFullPath($chocolateyRoot)) 'bin\choco.exe'
+if (-not (Test-Path -LiteralPath $chocoExe -PathType Leaf)) { throw ("Chocolatey executable was not found at '{0}'." -f $chocoExe) }
 
-if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
-    Write-Host "Existing FFmpeg installation is already healthy. Skipping choco install."
-    ffmpeg -version
-    Write-Host "Update task completed: install-ffmpeg-tool"
-    return
-}
-
+Write-Output 'Doing: run unattended Chocolatey install for FFmpeg'
 & $chocoExe install ffmpeg -y --no-progress --ignore-detected-reboot
-if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) { throw "choco install ffmpeg failed with exit code $LASTEXITCODE." }
-Refresh-SessionPath
-if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { throw "ffmpeg command was not found after install." }
-ffmpeg -version
-Write-Host "Update task completed: install-ffmpeg-tool"
+if ($LASTEXITCODE -notin @(0,2)) { throw ("Chocolatey install ffmpeg failed with exit code {0}." -f [int]$LASTEXITCODE) }
+Refresh-ClagnosSessionPath | Out-Null
+$ffmpegRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId 'ffmpeg' -ExecutableName 'ffmpeg.exe'
+if ([string]$ffmpegRecord.Status -ne 'installed') {
+    throw ("FFmpeg installation did not produce a runnable ffmpeg.exe. {0}" -f [string]$ffmpegRecord.Detail)
+}
+Write-Output ('FFmpeg executable verified: {0}' -f [string]$ffmpegRecord.Path)
+Write-Output ([string]$ffmpegRecord.VersionText)
+Write-Output 'FFmpeg install script completed.'
 

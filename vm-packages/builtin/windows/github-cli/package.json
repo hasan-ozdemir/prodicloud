@@ -12,7 +12,14 @@
   "updateStrategy": "choco",
   "statusCheck": {
     "kind": "choco",
-    "value": "gh"
+    "value": "gh",
+    "executable": "gh.exe",
+    "versionArgument": "--version",
+    "executablePaths": [
+      "%ProgramFiles%\\GitHub CLI\\gh.exe",
+      "%ProgramFiles(x86)%\\GitHub CLI\\gh.exe",
+      "%LOCALAPPDATA%\\Programs\\GitHub CLI\\gh.exe"
+    ]
   },
   "uninstall": {
     "kind": "choco",

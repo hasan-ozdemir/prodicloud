@@ -1170,6 +1170,50 @@ Invoke-TuiTest -Name 'Builtin package uninstall passes confirmation to its comma
     Assert-TuiOption -Call $call -Name 'yes' -Expected 'True'
 }
 
+Invoke-TuiTest -Name 'Background package status shows the refreshed result and pauses before returning' -Action {
+    $functionNames = @('Test-ClagnosUiBackgroundCacheWorkerDisabled','Request-ClagnosUiPackageStatusRefresh','Get-ClagnosPackageStatusCacheEntry')
+    $originalFunctions = @{}
+    foreach ($functionName in $functionNames) {
+        $command = Get-Command $functionName -ErrorAction Stop
+        $originalFunctions[$functionName] = $command.ScriptBlock
+    }
+    $script:TuiPackageStatusRequestCount = 0
+    $script:TuiStatusCacheEntry = $null
+
+    function Test-ClagnosUiBackgroundCacheWorkerDisabled { return $false }
+    function Request-ClagnosUiPackageStatusRefresh {
+        param([psobject]$Vm,[string[]]$Catalogs = @('builtin'),[switch]$Force)
+        $script:TuiPackageStatusRequestCount++
+        $statuses = @{ 'builtin-fixture' = 'not-installed'; 'disabled-fixture' = 'not-installed' }
+        if ($Force) { $statuses['builtin-fixture'] = 'installed' }
+        $script:TuiStatusCacheEntry = @{
+            CreatedAtUtc = [DateTime]::UtcNow.AddSeconds(1)
+            Complete = $true
+            StatusByPackage = $statuses
+        }
+        return $true
+    }
+    function Get-ClagnosPackageStatusCacheEntry {
+        param([object[]]$Packages,[hashtable]$Options,[string]$Platform)
+        if ($null -eq $script:TuiStatusCacheEntry) { return $null }
+        return [pscustomobject]@{ Entry = $script:TuiStatusCacheEntry; IsFresh = $true; AgeSeconds = 0 }
+    }
+
+    try {
+        Set-TuiChoices -Choices @('1','1','s','b','b')
+        & $script:TuiOriginalPackageMenu -Vm $script:TuiWindowsVm
+        Assert-TuiOutputContains -Text 'Package status: Builtin Fixture' -Message 'The explicit status action must open a persistent result screen.'
+        Assert-TuiOutputContains -Text 'Status: installed' -Message 'The result screen must display the refreshed package status.'
+        Assert-Tui -Condition ($script:TuiWaitCount -eq 1) -Message 'The refreshed package result must pause until Enter.'
+        Assert-Tui -Condition ($script:TuiPackageStatusRequestCount -ge 2) -Message 'Opening the catalog and selecting status must request background package refreshes.'
+    }
+    finally {
+        foreach ($functionName in $functionNames) {
+            Set-Item -Path ("Function:\{0}" -f $functionName) -Value $originalFunctions[$functionName]
+        }
+    }
+}
+
 Invoke-TuiTest -Name 'Package status failures render unavailable rows without leaving the catalog' -Action {
     $script:TuiPackageStatusShouldThrow = $true
     Set-TuiChoices -Choices @('1','b','b')
@@ -1522,11 +1566,13 @@ Invoke-TuiTest -Name 'Task menu ignores an invalid item and returns on b' -Actio
 
 $powerActionCases = @(
     @{ Number = '1'; Action = 'status' }, @{ Number = '2'; Action = 'start' },
-    @{ Number = '3'; Action = 'shutdown' }, @{ Number = '4'; Action = 'hibernate-stop' },
-    @{ Number = '5'; Action = 'hibernate-deallocate' }, @{ Number = '6'; Action = 'resume' },
-    @{ Number = '7'; Action = 'restart' }, @{ Number = '8'; Action = 'power-off'; Confirmation = 'POWER OFF' },
-    @{ Number = '9'; Action = 'reset'; Confirmation = 'RESET' }, @{ Number = '10'; Action = 'deallocate' },
-    @{ Number = '11'; Action = 'reapply' }, @{ Number = '12'; Action = 'redeploy' }
+    @{ Number = '3'; Action = 'shutdown' }, @{ Number = '4'; Action = 'shutdown-deallocate' },
+    @{ Number = '5'; Action = 'hibernate-stop' }, @{ Number = '6'; Action = 'hibernate-deallocate' },
+    @{ Number = '7'; Action = 'resume' }, @{ Number = '8'; Action = 'restart' },
+    @{ Number = '9'; Action = 'power-off'; Confirmation = 'POWER OFF' },
+    @{ Number = '10'; Action = 'power-off-deallocate'; Confirmation = 'POWER OFF AND DEALLOCATE' },
+    @{ Number = '11'; Action = 'reset'; Confirmation = 'RESET' }, @{ Number = '12'; Action = 'deallocate' },
+    @{ Number = '13'; Action = 'reapply' }, @{ Number = '14'; Action = 'redeploy' }
 )
 foreach ($powerActionCase in $powerActionCases) {
     Invoke-TuiTest -Name ("Operations power choice {0} dispatches '{1}'" -f $powerActionCase.Number, $powerActionCase.Action) -Action {
@@ -1543,15 +1589,27 @@ foreach ($powerActionCase in $powerActionCases) {
 }
 
 Invoke-TuiTest -Name 'Power-off cancellation returns without dispatching an operation' -Action {
-    Set-TuiChoices -Choices @('1','8','no','b')
+    Set-TuiChoices -Choices @('1','9','no','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Power-off must require the exact typed confirmation.'
 }
 
 Invoke-TuiTest -Name 'Reset cancellation returns without dispatching an operation' -Action {
-    Set-TuiChoices -Choices @('1','9','no','b')
+    Set-TuiChoices -Choices @('1','11','no','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Reset must require the exact typed confirmation.'
+}
+
+Invoke-TuiTest -Name 'Power-off-and-deallocate requires exact typed confirmation' -Action {
+    Set-TuiChoices -Choices @('1','10','no','b')
+    & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
+    Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Non-graceful power-off and deallocation must require exact typed confirmation.'
+}
+
+Invoke-TuiTest -Name 'Linux VC Operations does not offer Windows guest hibernate' -Action {
+    Set-TuiChoices -Choices @('1','b','b')
+    & $script:TuiOriginalOperationsMenu -Vm $script:TuiLinuxVm
+    Assert-Tui -Condition (-not ((@($script:TuiRenderedLines) -join "`n") -match 'hibernate guest \(Windows')) -Message 'Windows shutdown.exe guest hibernate must not be offered for a Linux VM.'
 }
 
 Invoke-TuiTest -Name 'Operations resize menu routes compute resize' -Action {
@@ -1834,7 +1892,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $uiWorkerSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerCacheFiles[0].FullName -Raw -ErrorAction Stop))
         Assert-Tui -Condition ([string]$uiWorkerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$uiWorkerSnapshot.VirtualMachines[0].ClagnosResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message ("The live TUI must import complete worker VM identity data. Snapshot={0}" -f (ConvertTo-Json -InputObject $uiWorkerSnapshot.VirtualMachines[0] -Depth 6 -Compress))
 
-        foreach ($choice in @('1','1','m','1','1','b','b','x','3','b','b','o','1','b','5','x','b','b','2','b','3','b','q')) {
+        foreach ($choice in @('1','1','m','1','1','b','b','x','3','b','b','o','1','1','','5','x','b','b','2','b','3','b','q')) {
             $process.StandardInput.WriteLine([string]$choice)
         }
         $process.StandardInput.Close()
@@ -1868,8 +1926,10 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Manage programs on tui-fixture-vc',
             'No packages are registered in the builtin catalog for windows.',
             'Components of tui-fixture-vc',
-            'Operations for tui-fixture-vc',
+            'VC Operations for tui-fixture-vc',
             '1. Power, status, and repair',
+            'VM lifecycle status for ''tui-fixture-vc'' in group ''rg-tui-fixture-eastus-g1'':',
+            'Press Enter to continue:',
             'p: PowerShell session',
             'Managed resource inventory',
             'Cloud subscriptions',

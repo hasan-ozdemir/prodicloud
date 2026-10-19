@@ -20,13 +20,13 @@ The suite contains 173 fixture-backed scenarios, including a process-level launc
 | Numbered selection and create wizard | Default markers, page navigation (`p/n/g/f/t`), rejecting numbers outside the visible page, all create steps, wizard controls, disk/port validation, and the create dispatch context |
 | Cloud subscriptions | Active/selected markers, enabled selection, disabled selection, invalid selection, inventory errors, and exit |
 | Virtual computers | Empty inventory, numeric selection, create, refresh, legacy group migration flow, inventory errors, and exit |
-| Selected VC | Detail refresh, initialize, update, programs, components, operations, delete confirmation/cancellation, back, and exit |
+| Selected VC | Detail refresh, initialize, update, programs, components, VC Operations, delete confirmation/cancellation, back, and exit |
 | VC details | Compute, image, disks, NIC/VNet/subnet/NSG, IP/DNS, security/features, tags, attached resources, SSH/RDP credentials for both user roles, and the Windows WinRM endpoint |
-| Manage programs | Builtin/custom catalog, package status and disabled markers, enable/disable/install/status/uninstall, uninstall confirmation, app-state save/restore and Windows/Linux local-target handling |
+| Manage programs | Builtin/custom catalog, package status and disabled markers, enable/disable/install/status/uninstall, background status refresh results with Enter pause, uninstall confirmation, app-state save/restore and Windows/Linux local-target handling |
 | Managed inventory | All ten numbered filters, optional resource-group filtering, unfiltered inventory, invalid input, back, and exit |
 | Components | All nine component types; list/show/create/update/delete; disk/NIC attach/detach; invalid input and navigation |
 | Tasks | Init/update listing and isolated runs, disabled task listing, local task-run history, app-state save/restore for VM and local Windows, and task availability enable/disable for both stages |
-| Operations | All twelve lifecycle choices with command-contract-valid target options, force confirmations/cancellation, compute and disk resize, move, both feature toggles, SSH/RDP/PowerShell connection and tests, PowerShell command routing, SSH remote command/shell, task/component submenus, text report and JSON export, invalid input, and exit |
+| VC Operations | All fourteen Windows lifecycle choices (Linux omits Windows-only guest hibernate), composed shutdown/power-off and deallocation, command-contract-valid target options, force confirmations/cancellation, compute and disk resize, move, both feature toggles, SSH/RDP/PowerShell connection and tests, PowerShell command routing, SSH remote command/shell, task/component submenus, text report and JSON export, invalid input, and exit |
 
 ## Azure safety boundary
 

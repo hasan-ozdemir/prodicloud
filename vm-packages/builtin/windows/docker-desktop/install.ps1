@@ -51,7 +51,7 @@ function Resolve-DockerExePath {
         return [string]$candidate
     }
 
-    return 'docker'
+    return ''
 }
 
 function Convert-CimDateTimeToUtc {
@@ -801,11 +801,10 @@ foreach ($localUser in @($taskConfig.DockerLocalUsers)) {
 
 Ensure-DockerMasterProfileState
 
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw "docker command is not available after installation."
-}
-
 $dockerExe = Resolve-DockerExePath
+if ([string]::IsNullOrWhiteSpace([string]$dockerExe)) {
+    throw 'Docker CLI executable was not found in PATH or at its managed Docker Desktop installation path.'
+}
 $dockerVersionResult = Invoke-ProcessWithTimeout -Label "docker --version" -FilePath $dockerExe -Arguments @("--version") -TimeoutSeconds ([int]$taskConfig.DockerVersionTimeoutSeconds)
 if ($dockerVersionResult.Success) {
     Write-Host "docker-step-ok: docker-client-version"

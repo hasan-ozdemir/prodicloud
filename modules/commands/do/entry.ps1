@@ -29,6 +29,11 @@ function Invoke-ClagnosDoCommand {
     $resourceGroup = [string]$target.ResourceGroup
     $vmName = [string]$target.VmName
     $initialNormalizedState = [string]$snapshot.NormalizedState
+    if ($action -in @('shutdown-deallocate','power-off-deallocate') -and $initialNormalizedState -eq 'deallocated') {
+        Write-Host ("Do completed: VM '{0}' in resource group '{1}' is already deallocated; no lifecycle action was needed." -f $vmName,$resourceGroup) -ForegroundColor Green
+        Write-ClagnosDoStatusReport -Snapshot $snapshot
+        return
+    }
     $desiredState = ''
     $completionMessage = ''
     $finalSnapshot = $null
@@ -84,6 +89,32 @@ function Invoke-ClagnosDoCommand {
                 -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm stop (graceful shutdown)'
         }
+        'shutdown-deallocate' {
+            $desiredState = 'deallocated'
+            $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was shut down gracefully and deallocated." -f $vmName,$resourceGroup)
+            if ($initialNormalizedState -eq 'started') {
+                Invoke-ClagnosDoAzureAction `
+                    -ActionName $action `
+                    -ResourceGroup $resourceGroup `
+                    -VmName $vmName `
+                    -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
+                    -AzContext 'az vm stop before graceful shutdown-deallocate'
+                $stoppedSnapshot = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState 'stopped' -MaxAttempts 24 -DelaySeconds 10
+                if ($null -eq $stoppedSnapshot) {
+                    Throw-FriendlyError `
+                        -Detail ("Graceful shutdown completed or was accepted for VM '{0}', but Azure did not confirm the stopped state. No deallocation was attempted." -f $vmName) `
+                        -Code 66 `
+                        -Summary "Shutdown-and-deallocate stopped before deallocation." `
+                        -Hint "Run '--vm-action=status'; when the VM is stopped, retry '--vm-action=shutdown-deallocate' to release compute allocation."
+                }
+            }
+            Invoke-ClagnosDoAzureAction `
+                -ActionName $action `
+                -ResourceGroup $resourceGroup `
+                -VmName $vmName `
+                -AzArguments @('vm','deallocate','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
+                -AzContext 'az vm deallocate after graceful shutdown'
+        }
         'stop' {
             $desiredState = 'stopped'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now stopped." -f $vmName, $resourceGroup)
@@ -103,6 +134,32 @@ function Invoke-ClagnosDoCommand {
                 -VmName $vmName `
                 -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'--skip-shutdown','-o','none','--only-show-errors') `
                 -AzContext 'az vm stop --skip-shutdown'
+        }
+        'power-off-deallocate' {
+            $desiredState = 'deallocated'
+            $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was force powered off and deallocated." -f $vmName,$resourceGroup)
+            if ($initialNormalizedState -eq 'started') {
+                Invoke-ClagnosDoAzureAction `
+                    -ActionName $action `
+                    -ResourceGroup $resourceGroup `
+                    -VmName $vmName `
+                    -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'--skip-shutdown','-o','none','--only-show-errors') `
+                    -AzContext 'az vm stop --skip-shutdown before power-off-deallocate'
+                $stoppedSnapshot = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState 'stopped' -MaxAttempts 24 -DelaySeconds 10
+                if ($null -eq $stoppedSnapshot) {
+                    Throw-FriendlyError `
+                        -Detail ("Force power-off was accepted for VM '{0}', but Azure did not confirm the stopped state. No deallocation was attempted." -f $vmName) `
+                        -Code 66 `
+                        -Summary "Power-off-and-deallocate stopped before deallocation." `
+                        -Hint "Run '--vm-action=status'; when the VM is stopped, retry '--vm-action=power-off-deallocate' to release compute allocation."
+                }
+            }
+            Invoke-ClagnosDoAzureAction `
+                -ActionName $action `
+                -ResourceGroup $resourceGroup `
+                -VmName $vmName `
+                -AzArguments @('vm','deallocate','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
+                -AzContext 'az vm deallocate after force power-off'
         }
         'deallocate' {
             $desiredState = 'deallocated'

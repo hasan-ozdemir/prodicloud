@@ -11,7 +11,8 @@
   "updateStrategy": "choco",
   "statusCheck": {
     "kind": "choco",
-    "value": "ffmpeg"
+    "value": "ffmpeg",
+    "executable": "ffmpeg.exe"
   },
   "uninstall": {
     "kind": "choco",

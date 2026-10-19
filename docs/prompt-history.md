@@ -6101,3 +6101,19 @@ Plan update: Update the vm-update task for Turkish language installation so it i
 Renamed the active task folder and script to `136-install-turkish-language-features`, removed the retired task-name alias, and replaced its old optional-feature-skip contract. The task now installs the Turkish display pack plus every capability exposed by the target edition: Basic, text-to-speech, speech recognition, OCR, handwriting, and Pan-European supplemental fonts. It checks ISO CAB presence and submits missing capabilities in a single DISM call with Basic and TTS ahead of dependent features. Edition-unavailable capabilities are reported; Retail Demo content is excluded. English remains the system UI default.
 
 Ran the new task through Clagnos over WinRM on VC1. The first run completed in 225 seconds after downloading the 5.96 GiB Microsoft ISO; Basic and OCR were already installed, and TTS, handwriting, and supplemental fonts were installed. Windows reported Turkish speech recognition as unavailable. The display-language default remained `en-US`, no restart was required, and a second run short-circuited in about 30 seconds without another ISO download. PowerShell 5.1/7 smoke checks passed 195/195 and TUI checks passed 180/180 on both hosts; code-quality, documentation, app-state, package-lifecycle, and sensitive-content checks passed.
+
+### 2026-10-19 10:56 UTC
+**User Prompt**
+
+````text
+Fix and improve the Clagnos CLI:
+1. Keep VC details and one-shot result screens, including status results, visible with a “Press Enter to continue” pause.
+2. Rename the selected-VC operations menu to “VC Operations” and expose supported VM actions, including start, shutdown, restart, hibernate/resume, force power-off/reset, deallocation, and graceful/forceful shutdown-and-deallocate combinations.
+3. Fix the FFmpeg install failure after uninstall, audit all packages for the same class of false post-install failures, and ensure install, uninstall, repair, update, and status behave correctly.
+````
+
+**Assistant Summary**
+
+Changed result screens to display an explicit Enter prompt; package status now waits for its background refresh with bounded progress and renders the result before returning. Renamed the submenu to `VC Operations`, added retryable state-checked shutdown/power-off deallocation actions, and restricted Windows guest hibernate to Windows targets. Documented force reset as Azure redeploy and force power-off as skipping guest shutdown.
+
+The package audit found PATH-only post-install checks in FFmpeg and GitHub CLI; both now verify Chocolatey registration and a runnable executable through the package/shim or manifest-declared vendor paths, using each executable's correct version flag. Azure Developer CLI and Docker Desktop also resolve their executable before version validation. On an existing Windows VM, `cg.cmd` completed FFmpeg uninstall, install-after-uninstall, update, same-version repair, reinstall, and final status; FFmpeg is installed and runnable at 9.0.2. GitHub CLI status passed at 2.102.0. The VM remained running; no Azure infrastructure mutations were run. TUI passed 185/185, smoke passed 195/195, and the package lifecycle contract passed for all 36 Windows builtin packages.

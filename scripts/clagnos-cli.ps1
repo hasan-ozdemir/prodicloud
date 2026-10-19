@@ -1142,7 +1142,8 @@ function Read-ClagnosUiValidatedText {
 }
 
 function Wait-ClagnosUiContinue {
-    [void](Read-Host 'Press Enter to return')
+    Write-Host 'Press Enter to continue:' -NoNewline
+    [void][Console]::ReadLine()
 }
 
 function Invoke-ClagnosUiCommand {
@@ -1193,10 +1194,91 @@ function Invoke-ClagnosUiCommand {
         # command attempt and let the next screen reconcile against Azure.
         Invalidate-ClagnosUiResourceCache -Reason ("TUI {0} operation" -f $CommandName) -ResourceGroup ([string](Get-ClagnosCliOptionText -Options $Options -Name 'group'))
     }
-    Set-ClagnosUiStatusAction -Action 'Operation complete; press Enter to return'
+    Set-ClagnosUiStatusAction -Action 'Operation complete; press Enter to continue'
     Wait-ClagnosUiContinue
     Set-ClagnosUiStatusAction -Action ''
     Update-ClagnosUiSubscription
+}
+
+function Show-ClagnosUiPackageStatusResult {
+    param(
+        [Parameter(Mandatory = $true)][psobject]$Vm,
+        [Parameter(Mandatory = $true)][psobject]$Package,
+        [ValidateSet('builtin','custom')][string]$Catalog,
+        [ValidateSet('windows','linux')][string]$Platform
+    )
+
+    $options = New-ClagnosUiTargetOptions -Vm $Vm
+    $options['catalog'] = $Catalog
+    $options['package'] = [string]$Package.Id
+    $options[$Platform] = $true
+
+    if (Test-ClagnosUiBackgroundCacheWorkerDisabled) {
+        $commandOptions = @{ action = 'status' }
+        foreach ($optionName in $options.Keys) { $commandOptions[[string]$optionName] = $options[$optionName] }
+        Invoke-ClagnosUiCommand -CommandName 'package' -Options $commandOptions
+        return
+    }
+
+    Write-ClagnosUiHeader -Title ('Package status: {0}' -f [string]$Package.DisplayName)
+    Write-Host ('Catalog: [{0}] | VC: {1}' -f $Catalog,[string]$Vm.name)
+    Write-Host ("Doing: refresh package status for '{0}'" -f [string]$Package.DisplayName) -ForegroundColor DarkCyan
+
+    $requestStartedAtUtc = [DateTime]::UtcNow
+    try {
+        $requestQueued = Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force
+        if (-not [bool]$requestQueued) {
+            throw 'The background package status worker could not accept the refresh request.'
+        }
+
+        $packages = @(Get-ClagnosPackageCatalog -Platform $Platform -Catalog $Catalog)
+        $deadline = [DateTime]::UtcNow.AddSeconds(300)
+        $nextHeartbeat = [DateTime]::UtcNow.AddSeconds(30)
+        $completedEntry = $null
+        while ([DateTime]::UtcNow -lt $deadline) {
+            $cacheEntry = Get-ClagnosPackageStatusCacheEntry -Packages $packages -Options $options -Platform $Platform
+            if ($null -ne $cacheEntry -and
+                [bool]$cacheEntry.Entry.Complete -and
+                [DateTime]$cacheEntry.Entry.CreatedAtUtc -gt $requestStartedAtUtc) {
+                $completedEntry = $cacheEntry.Entry
+                break
+            }
+
+            $workerStatus = Get-ClagnosUiBackgroundCacheStatus
+            if ($null -ne $workerStatus -and
+                [string]$workerStatus.State -eq 'error' -and
+                -not [string]::IsNullOrWhiteSpace([string]$workerStatus.UpdatedAtUtc) -and
+                (ConvertTo-ClagnosUiUtcDateTime -Value $workerStatus.UpdatedAtUtc) -gt $requestStartedAtUtc) {
+                throw ([string]$workerStatus.Message)
+            }
+
+            if ([DateTime]::UtcNow -ge $nextHeartbeat) {
+                $elapsedSeconds = [int]([DateTime]::UtcNow - $requestStartedAtUtc).TotalSeconds
+                Write-Host ("Doing: package status refresh is still running ({0}s elapsed)" -f $elapsedSeconds) -ForegroundColor DarkCyan
+                $nextHeartbeat = $nextHeartbeat.AddSeconds(30)
+            }
+            Start-Sleep -Milliseconds 500
+        }
+
+        if ($null -eq $completedEntry) {
+            $workerStatus = Get-ClagnosUiBackgroundCacheStatus
+            $workerMessage = if ($null -ne $workerStatus -and -not [string]::IsNullOrWhiteSpace([string]$workerStatus.Message)) { ' ' + [string]$workerStatus.Message } else { '' }
+            Write-Host ('Package status refresh did not finish within 300 seconds.{0}' -f $workerMessage) -ForegroundColor Yellow
+            return
+        }
+
+        $status = if ($completedEntry.StatusByPackage.ContainsKey([string]$Package.Id)) { [string]$completedEntry.StatusByPackage[[string]$Package.Id] } else { 'unknown' }
+        Write-Host ('Package: {0}' -f [string]$Package.DisplayName)
+        Write-Host ('Catalog: [{0}]' -f $Catalog)
+        Write-Host ('Status: {0}' -f $status) -ForegroundColor $(if ($status -eq 'installed') { 'Green' } elseif ($status -eq 'installed-drifted') { 'Yellow' } else { 'Cyan' })
+        Write-Host ('Checked: {0} UTC' -f ([DateTime]$completedEntry.CreatedAtUtc).ToUniversalTime().ToString('u')) -ForegroundColor DarkGray
+    }
+    catch {
+        Write-ClagnosUiError -ErrorRecord $_
+    }
+    finally {
+        Wait-ClagnosUiContinue
+    }
 }
 
 function Invoke-ClagnosUiAzJson {
@@ -1889,8 +1971,7 @@ function Show-ClagnosUiPackageCatalogMenu {
         if ($action -notin @('e','d','u','i','r','v','x','s')) { continue }
         $packageAction = switch ($action) { 'e' { 'enable' } 'd' { 'disable' } 'u' { 'uninstall' } 'i' { 'install' } 'r' { 'repair' } 'v' { 'update' } 'x' { 'reinstall' } 's' { 'status' } default { '' } }
         if ($packageAction -eq 'status' -and -not (Test-ClagnosUiBackgroundCacheWorkerDisabled)) {
-            Request-ClagnosUiPackageStatusRefresh -Vm $Vm -Catalogs @($Catalog) -Force | Out-Null
-            Write-Host ('Status check requested for {0}; the catalog will show the result when the background check finishes.' -f [string]$package.DisplayName) -ForegroundColor DarkGray
+            Show-ClagnosUiPackageStatusResult -Vm $Vm -Package $package -Catalog $Catalog -Platform $platform
             continue
         }
         $options = @{ catalog = $Catalog; package = [string]$package.Id }
@@ -2292,7 +2373,7 @@ function Show-ClagnosUiOperationsMenu {
     param([psobject]$Vm)
 
     while ($true) {
-        Write-ClagnosUiHeader -Title ('Operations for {0}' -f [string]$Vm.name)
+        Write-ClagnosUiHeader -Title ('VC Operations for {0}' -f [string]$Vm.name)
         Write-Host '1. Power, status, and repair'
         Write-Host '2. Resize VM or disk'
         Write-Host '3. Move to another region'
@@ -2313,17 +2394,24 @@ function Show-ClagnosUiOperationsMenu {
             '1' {
                 $actions = @(
                     [pscustomobject]@{ Action = 'status'; Label = 'status (read-only)' },
-                    [pscustomobject]@{ Action = 'start'; Label = 'start VM' },
-                    [pscustomobject]@{ Action = 'shutdown'; Label = 'shutdown gracefully (stays allocated)' },
-                    [pscustomobject]@{ Action = 'hibernate-stop'; Label = 'hibernate through guest OS (stays allocated)' },
-                    [pscustomobject]@{ Action = 'hibernate-deallocate'; Label = 'hibernate and deallocate' },
-                    [pscustomobject]@{ Action = 'resume'; Label = 'resume hibernated VM' },
-                    [pscustomobject]@{ Action = 'restart'; Label = 'restart VM' },
-                    [pscustomobject]@{ Action = 'power-off'; Label = 'power off immediately (skip guest shutdown)' },
-                    [pscustomobject]@{ Action = 'reset'; Label = 'reset (force restart through Azure redeploy)' },
-                    [pscustomobject]@{ Action = 'deallocate'; Label = 'deallocate VM' },
-                    [pscustomobject]@{ Action = 'reapply'; Label = 'reapply VM configuration' },
-                    [pscustomobject]@{ Action = 'redeploy'; Label = 'redeploy VM to Azure host' }
+                    [pscustomobject]@{ Action = 'start'; Label = 'start VC' },
+                    [pscustomobject]@{ Action = 'shutdown'; Label = 'shutdown/stop gracefully (remains allocated)' },
+                    [pscustomobject]@{ Action = 'shutdown-deallocate'; Label = 'shutdown gracefully and deallocate' }
+                )
+                $isWindowsVm = [string]::Equals([string]$Vm.storageProfile.osDisk.osType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)
+                if ($isWindowsVm) {
+                    $actions += [pscustomobject]@{ Action = 'hibernate-stop'; Label = 'hibernate guest (Windows; remains allocated)' }
+                }
+                $actions += @(
+                    [pscustomobject]@{ Action = 'hibernate-deallocate'; Label = 'hibernate and deallocate (Azure)' },
+                    [pscustomobject]@{ Action = 'resume'; Label = 'resume hibernated VC' },
+                    [pscustomobject]@{ Action = 'restart'; Label = 'restart VC' },
+                    [pscustomobject]@{ Action = 'power-off'; Label = 'force power off (skip guest shutdown; remains allocated)' },
+                    [pscustomobject]@{ Action = 'power-off-deallocate'; Label = 'force power off and deallocate' },
+                    [pscustomobject]@{ Action = 'reset'; Label = 'reboot / force reset through Azure redeploy' },
+                    [pscustomobject]@{ Action = 'deallocate'; Label = 'deallocate VC' },
+                    [pscustomobject]@{ Action = 'reapply'; Label = 'reapply VC configuration' },
+                    [pscustomobject]@{ Action = 'redeploy'; Label = 'redeploy VC to Azure host' }
                 )
                 for ($index = 0; $index -lt $actions.Count; $index++) { Write-Host ('{0}. {1}' -f ($index + 1), [string]$actions[$index].Label) }
                 $actionChoice = Read-ClagnosUiMenuChoice 'VM action number'
@@ -2334,8 +2422,11 @@ function Show-ClagnosUiOperationsMenu {
                 if ($selectedAction -eq 'power-off') {
                     if ((Read-ClagnosUiChoice 'Type POWER OFF to force an immediate guest power-off') -cne 'POWER OFF') { continue }
                 }
+                elseif ($selectedAction -eq 'power-off-deallocate') {
+                    if ((Read-ClagnosUiChoice 'Type POWER OFF AND DEALLOCATE to force power off and release compute') -cne 'POWER OFF AND DEALLOCATE') { continue }
+                }
                 elseif ($selectedAction -eq 'reset') {
-                    if ((Read-ClagnosUiChoice 'Type RESET to force a restart through Azure redeploy') -cne 'RESET') { continue }
+                    if ((Read-ClagnosUiChoice 'Type RESET to force reboot through Azure redeploy') -cne 'RESET') { continue }
                 }
                 $options['vm-action'] = $selectedAction
                 [void]$options.Remove('windows')
@@ -2446,7 +2537,7 @@ function Show-ClagnosUiVmMenu {
         Write-Host 'u: update VC'
         Write-Host 'm: manage program packages'
         Write-Host 'x: manage VC components'
-        Write-Host 'o: operations'
+        Write-Host 'o: VC Operations'
         Write-Host 'd: delete VC and its resources'
         Write-Host 'r: refresh details'
         Write-ClagnosUiNavigationFooter

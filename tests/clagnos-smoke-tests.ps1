@@ -3615,7 +3615,9 @@ Invoke-Test -Name "Do command accepts vm-name and valid vm-action" -Action {
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ 'vm-name' = 'samplevm'; 'vm-action' = 'status' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'resume' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'shutdown' }
+    Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'shutdown-deallocate' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'power-off' }
+    Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'power-off-deallocate' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'reset' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'deallocate' }
     Assert-ClagnosCommandOptions -CommandName 'do' -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'hibernate-deallocate' }
@@ -3667,17 +3669,20 @@ Invoke-Test -Name "Do help, README, and interactive operations document lifecycl
     $readmeText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'README.md') -Raw)
     $uiText = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Raw)
 
-    Assert-True -Condition ($helpText -match [regex]::Escape('--vm-action=<status|start|resume|restart|reset|shutdown|stop|power-off|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>')) -Message 'CLI help must list all supported lifecycle actions.'
+    Assert-True -Condition ($helpText -match [regex]::Escape('--vm-action=<status|start|resume|restart|reset|shutdown|stop|shutdown-deallocate|power-off|power-off-deallocate|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>')) -Message 'CLI help must list all supported lifecycle actions.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=reapply --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a reapply example.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=redeploy --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a redeploy example.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=hibernate-stop --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a hibernate-stop example.'
     Assert-True -Condition ($helpText -match [regex]::Escape('clagnos do --vm-action=hibernate-deallocate --group <resource-group> --vm-name <vm-name>')) -Message 'CLI help must show a hibernate-deallocate example.'
-    Assert-True -Condition ($readmeText -match [regex]::Escape('Gives operators lifecycle commands for status, start/resume, restart/reset, shutdown, immediate power-off, reapply, redeploy, stop, deallocate, hibernate-stop, hibernate-deallocate')) -Message 'README must mention lifecycle actions in the command summary.'
-    Assert-True -Condition ($readmeText -match [regex]::Escape('o: operations')) -Message 'README must describe the selected-VC operations shortcut.'
-    Assert-True -Condition ($uiText -match [regex]::Escape("Write-Host 'o: operations'")) -Message 'Selected VC menu must expose the operations shortcut.'
-    foreach ($lifecycleActionName in @('status','start','shutdown','hibernate-stop','hibernate-deallocate','resume','restart','power-off','reset','deallocate','reapply','redeploy')) {
+    Assert-True -Condition ($readmeText -match [regex]::Escape('Gives operators lifecycle commands for status, start/resume, restart/reset, shutdown, shutdown-and-deallocate, immediate power-off, power-off-and-deallocate, reapply, redeploy, stop, deallocate, hibernate-stop, hibernate-deallocate')) -Message 'README must mention lifecycle actions in the command summary.'
+    Assert-True -Condition ($readmeText -match [regex]::Escape('o: VC Operations')) -Message 'README must describe the selected-VC operations shortcut.'
+    Assert-True -Condition ($uiText -match [regex]::Escape("Write-Host 'o: VC Operations'")) -Message 'Selected VC menu must expose the VC Operations shortcut.'
+    Assert-True -Condition ($uiText -match [regex]::Escape("Write-Host 'Press Enter to continue:' -NoNewline")) -Message 'Result screens must visibly print the Enter-to-continue pause prompt before waiting.'
+    foreach ($lifecycleActionName in @('status','start','shutdown','shutdown-deallocate','hibernate-stop','hibernate-deallocate','resume','restart','power-off','power-off-deallocate','reset','deallocate','reapply','redeploy')) {
         Assert-True -Condition ($uiText -match [regex]::Escape("Action = '$lifecycleActionName'")) -Message ("Operations menu must expose '{0}'." -f $lifecycleActionName)
     }
+    Assert-True -Condition ($uiText -match [regex]::Escape("Status: {0}")) -Message 'The asynchronous package status path must render a result screen instead of returning to the catalog immediately.'
+    Assert-True -Condition ($uiText -match [regex]::Escape('AddSeconds(300)')) -Message 'The foreground package-status result wait must have a finite five-minute deadline.'
     Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd do --vm-action=reapply --group=<resource-group> --vm-name=<vm-name>')) -Message 'README must include a reapply usage example.'
     Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd do --vm-action=redeploy --group=<resource-group> --vm-name=<vm-name>')) -Message 'README must include a redeploy usage example.'
     Assert-True -Condition ($readmeText -match [regex]::Escape('.\cg.cmd do --vm-action=hibernate-stop --group=<resource-group> --vm-name=<vm-name>')) -Message 'README must include a hibernate-stop usage example.'
@@ -4459,6 +4464,7 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
             [string]$NormalizedState,
             [string]$PowerStateDisplay,
             [bool]$HibernationEnabled = $true,
+            [string]$OsType = 'Windows',
             [string]$ProvisioningStateCode = 'ProvisioningState/succeeded',
             [string]$ProvisioningStateDisplay = 'Provisioning succeeded',
             [string]$HibernationStateDisplay = '',
@@ -4468,6 +4474,7 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
         return [pscustomobject]@{
             ResourceGroup = 'rg-samplevm-ate1-g1'
             VmName = 'samplevm'
+            OsType = $OsType
             NormalizedState = $NormalizedState
             PowerStateDisplay = $PowerStateDisplay
             PowerStateCode = ''
@@ -4484,7 +4491,13 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
     Assert-ClagnosDoActionAllowed -ActionName 'restart' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
     Assert-ClagnosDoActionAllowed -ActionName 'reset' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
     Assert-ClagnosDoActionAllowed -ActionName 'shutdown' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'shutdown-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'shutdown-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'stopped' -PowerStateDisplay 'VM stopped')
+    Assert-ClagnosDoActionAllowed -ActionName 'shutdown-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'deallocated' -PowerStateDisplay 'VM deallocated')
     Assert-ClagnosDoActionAllowed -ActionName 'power-off' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'power-off-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
+    Assert-ClagnosDoActionAllowed -ActionName 'power-off-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'stopped' -PowerStateDisplay 'VM stopped')
+    Assert-ClagnosDoActionAllowed -ActionName 'power-off-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'deallocated' -PowerStateDisplay 'VM deallocated')
     Assert-ClagnosDoActionAllowed -ActionName 'deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'hibernated' -PowerStateDisplay 'VM deallocated' -HibernationStateDisplay 'Hibernated' -HibernationStateCode 'HibernationState/hibernated')
     Assert-ClagnosDoActionAllowed -ActionName 'hibernate-deallocate' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
     Assert-ClagnosDoActionAllowed -ActionName 'hibernate-stop' -Snapshot (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running')
@@ -4496,6 +4509,9 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
         @{ Action = 'resume'; Snapshot = (New-TestDoSnapshot -NormalizedState 'stopped' -PowerStateDisplay 'VM stopped') },
         @{ Action = 'hibernate-deallocate'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -HibernationEnabled:$false) },
         @{ Action = 'hibernate-stop'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -HibernationEnabled:$false) },
+        @{ Action = 'hibernate-stop'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -OsType 'Linux') },
+        @{ Action = 'shutdown-deallocate'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -ProvisioningStateCode 'ProvisioningState/updating' -ProvisioningStateDisplay 'Updating') },
+        @{ Action = 'power-off-deallocate'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -ProvisioningStateCode 'ProvisioningState/updating' -ProvisioningStateDisplay 'Updating') },
         @{ Action = 'stop'; Snapshot = (New-TestDoSnapshot -NormalizedState 'started' -PowerStateDisplay 'VM running' -ProvisioningStateCode 'ProvisioningState/updating' -ProvisioningStateDisplay 'Updating') }
     )
 
@@ -4513,6 +4529,7 @@ Invoke-Test -Name "Do action eligibility contract" -Action {
 
 Invoke-Test -Name "Do resume, shutdown, power-off, and reset use the intended Azure actions" -Action {
     $script:DoActionDispatchCall = $null
+    $script:DoActionDispatchCalls = New-Object 'System.Collections.Generic.List[object]'
     $script:DoActionDispatchState = 'started'
     $originalFunctionDefinitions = @{}
     foreach ($functionName in @(
@@ -4558,6 +4575,7 @@ Invoke-Test -Name "Do resume, shutdown, power-off, and reset use the intended Az
             AzArguments = @($AzArguments)
             AzContext = $AzContext
         }
+        $script:DoActionDispatchCalls.Add($script:DoActionDispatchCall) | Out-Null
     }
     function Wait-ClagnosDoLifecycleState {
         param([string]$ResourceGroup, [string]$VmName, [string]$DesiredState, [int]$MaxAttempts, [int]$DelaySeconds)
@@ -4576,12 +4594,38 @@ Invoke-Test -Name "Do resume, shutdown, power-off, and reset use the intended Az
         foreach ($case in @($cases)) {
             $script:DoActionDispatchState = [string]$case.SourceState
             $script:DoActionDispatchCall = $null
+            $script:DoActionDispatchCalls.Clear()
             Invoke-ClagnosDoCommand -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = [string]$case.Action }
             Assert-True -Condition ($null -ne $script:DoActionDispatchCall) -Message ("'{0}' must call the Azure lifecycle wrapper." -f [string]$case.Action)
             Assert-True -Condition ([string]$script:DoActionDispatchCall.ActionName -eq [string]$case.Action) -Message ("'{0}' must preserve its lifecycle action name." -f [string]$case.Action)
             Assert-True -Condition ((@($script:DoActionDispatchCall.AzArguments) -join ' ') -eq [string]$case.Expected) -Message ("'{0}' must use the expected Azure CLI operation." -f [string]$case.Action)
             Assert-True -Condition ([string]$script:DoActionDispatchCall.AzContext -eq [string]$case.Context) -Message ("'{0}' must use a descriptive Azure progress label." -f [string]$case.Action)
         }
+
+        $combinedCases = @(
+            @{ Action = 'shutdown-deallocate'; SourceState = 'started'; Expected = @('vm stop -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors','vm deallocate -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors') },
+            @{ Action = 'shutdown-deallocate'; SourceState = 'stopped'; Expected = @('vm deallocate -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors') },
+            @{ Action = 'power-off-deallocate'; SourceState = 'started'; Expected = @('vm stop -g rg-samplevm-ate1-g1 -n samplevm --skip-shutdown -o none --only-show-errors','vm deallocate -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors') },
+            @{ Action = 'power-off-deallocate'; SourceState = 'stopped'; Expected = @('vm deallocate -g rg-samplevm-ate1-g1 -n samplevm -o none --only-show-errors') }
+        )
+        foreach ($case in @($combinedCases)) {
+            $script:DoActionDispatchState = [string]$case.SourceState
+            $script:DoActionDispatchCall = $null
+            $script:DoActionDispatchCalls.Clear()
+            Invoke-ClagnosDoCommand -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = [string]$case.Action }
+            $observed = @($script:DoActionDispatchCalls | ForEach-Object { @($_.AzArguments) -join ' ' })
+            Assert-True -Condition (($observed -join "`n") -eq (@($case.Expected) -join "`n")) -Message ("'{0}' must perform only its required stop and deallocate phases from '{1}'. Observed: {2}" -f [string]$case.Action,[string]$case.SourceState,($observed -join ' | '))
+            if ([string]$case.SourceState -eq 'started') {
+                Assert-True -Condition ([string]$script:DoActionDispatchCalls[0].AzContext -match '(?i)before') -Message ("'{0}' must label its stop phase before deallocation." -f [string]$case.Action)
+                Assert-True -Condition ([string]$script:DoActionDispatchCalls[1].AzContext -match '(?i)after') -Message ("'{0}' must label the deallocation phase after stopping." -f [string]$case.Action)
+            }
+        }
+
+        $script:DoActionDispatchState = 'deallocated'
+        $script:DoActionDispatchCall = $null
+        $script:DoActionDispatchCalls.Clear()
+        Invoke-ClagnosDoCommand -Options @{ group = 'rg-samplevm-ate1-g1'; 'vm-name' = 'samplevm'; 'vm-action' = 'shutdown-deallocate' }
+        Assert-True -Condition ($script:DoActionDispatchCalls.Count -eq 0) -Message 'Repeating shutdown-deallocate on an already deallocated VM must be a no-op.'
     }
     finally {
         foreach ($functionName in @('Resolve-ClagnosManagedVmTarget','Get-ClagnosVmLifecycleSnapshot','Invoke-ClagnosDoAzureAction','Wait-ClagnosDoLifecycleState','Write-ClagnosDoStatusReport')) {
@@ -4598,6 +4642,7 @@ Invoke-Test -Name "Do interactive action selection" -Action {
     $snapshot = [pscustomobject]@{
         ResourceGroup = 'rg-samplevm-ate1-g1'
         VmName = 'samplevm'
+        OsType = 'Windows'
         NormalizedState = 'stopped'
         PowerStateDisplay = 'VM stopped'
         PowerStateCode = 'PowerState/stopped'
@@ -4615,39 +4660,43 @@ Invoke-Test -Name "Do interactive action selection" -Action {
 
         function Read-Host { param([string]$Prompt) return '5' }
         $pickedAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
-        Assert-True -Condition ([string]$pickedAction -eq 'deallocate') -Message "Interactive do action selection by number failed."
+        Assert-True -Condition ([string]$pickedAction -eq 'shutdown-deallocate') -Message "Interactive do action selection by number failed."
 
-        function Read-Host { param([string]$Prompt) return '6' }
+        function Read-Host { param([string]$Prompt) return '7' }
         $hibernateDeallocateAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$hibernateDeallocateAction -eq 'hibernate-deallocate') -Message "Interactive do action selection must expose hibernate-deallocate."
 
-        function Read-Host { param([string]$Prompt) return '7' }
+        function Read-Host { param([string]$Prompt) return '6' }
         $hibernateStopAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$hibernateStopAction -eq 'hibernate-stop') -Message "Interactive do action selection must expose hibernate-stop."
 
-        function Read-Host { param([string]$Prompt) return '8' }
+        function Read-Host { param([string]$Prompt) return '13' }
         $reapplyAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$reapplyAction -eq 'reapply') -Message "Interactive do action selection must expose reapply."
 
-        function Read-Host { param([string]$Prompt) return '9' }
+        function Read-Host { param([string]$Prompt) return '14' }
         $redeployAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$redeployAction -eq 'redeploy') -Message "Interactive do action selection must expose redeploy."
 
-        function Read-Host { param([string]$Prompt) return '10' }
+        function Read-Host { param([string]$Prompt) return '4' }
         $shutdownAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$shutdownAction -eq 'shutdown') -Message "Interactive do action selection must expose graceful shutdown."
 
-        function Read-Host { param([string]$Prompt) return '11' }
+        function Read-Host { param([string]$Prompt) return '8' }
         $resumeAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$resumeAction -eq 'resume') -Message "Interactive do action selection must expose resume."
 
-        function Read-Host { param([string]$Prompt) return '12' }
+        function Read-Host { param([string]$Prompt) return '9' }
         $powerOffAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$powerOffAction -eq 'power-off') -Message "Interactive do action selection must expose immediate power-off."
 
-        function Read-Host { param([string]$Prompt) return '13' }
+        function Read-Host { param([string]$Prompt) return '11' }
         $resetAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
         Assert-True -Condition ([string]$resetAction -eq 'reset') -Message "Interactive do action selection must expose forced reset."
+
+        function Read-Host { param([string]$Prompt) return '10' }
+        $powerOffDeallocateAction = Read-ClagnosDoActionInteractive -Snapshot $snapshot
+        Assert-True -Condition ([string]$powerOffDeallocateAction -eq 'power-off-deallocate') -Message "Interactive do action selection must expose power-off-and-deallocate."
     }
     finally {
         Remove-Item Function:\global:Read-Host -ErrorAction SilentlyContinue
@@ -9371,12 +9420,12 @@ Invoke-Test -Name "Windows install tasks short-circuit healthy installs and avoi
         '103-install-python-tool.ps1' = @('Existing Python installation is already healthy. Skipping choco install.', 'choco install python312')
         '104-install-node-tool.ps1' = @('Existing Node.js installation is already healthy. Skipping choco install.', 'choco install nodejs-lts')
         '105-install-azure-cli-tool.ps1' = @('Existing Azure CLI installation is already healthy:', 'choco install azure-cli')
-        '107-install-gh-tool.ps1' = @('Existing GitHub CLI installation is already healthy. Skipping choco install.')
+        '107-install-gh-tool.ps1' = @('Get-ClagnosChocolateyPackageExecutableRecord', 'runnable gh.exe', 'choco install gh')
         '106-install-7zip-tool.ps1' = @('Existing 7-Zip installation is already healthy at', 'Skipping install.', 'winget install --id 7zip.7zip')
         '133-install-sysinternals-tool.ps1' = @('Install-ClagnosSysinternalsPackage -Spec $spec')
-        '109-install-ffmpeg-tool.ps1' = @('Existing FFmpeg installation is already healthy. Skipping choco install.')
+        '109-install-ffmpeg-tool.ps1' = @('Get-ClagnosChocolateyPackageExecutableRecord', 'runnable ffmpeg.exe', 'install ffmpeg -y')
         '135-install-ollama-tool.ps1' = @('Existing Ollama installation is already healthy. Skipping install.', 'winget install --id')
-        '112-install-azd-tool.ps1' = @('Existing azd installation is already healthy. Skipping winget install.')
+        '112-install-azd-tool.ps1' = @('Resolve-AzdExecutablePath', 'Existing azd installation is already healthy at', 'winget install microsoft.azd')
         '118-install-teams-application.ps1' = @('Existing Microsoft Teams package is present for', 'install script will not upgrade during install or repair.', 'Invoke-ClagnosTeamsBootstrapper -Action install -TimeoutSeconds 240')
         '122-install-anydesk-application.ps1' = @('Existing AnyDesk installation is already healthy', 'function Test-AnyDeskInstalled')
         '123-install-windscribe-application.ps1' = @('Existing Windscribe installation is already healthy. Skipping winget install.', 'function Test-WindscribeInstalled')

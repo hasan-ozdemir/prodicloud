@@ -2,7 +2,7 @@
 
 # Handles Get-ClagnosDoActionNames.
 function Get-ClagnosDoActionNames {
-    return @('status','start','resume','restart','reset','shutdown','stop','power-off','deallocate','hibernate-deallocate','hibernate-stop','reapply','redeploy')
+    return @('status','start','resume','restart','reset','shutdown','stop','shutdown-deallocate','power-off','power-off-deallocate','deallocate','hibernate-deallocate','hibernate-stop','reapply','redeploy')
 }
 
 # Handles Get-ClagnosDoActionHintText.
@@ -241,7 +241,9 @@ function Get-ClagnosDoAllowedSourceStates {
         'reset' { return @('started') }
         'shutdown' { return @('started') }
         'stop' { return @('started') }
+        'shutdown-deallocate' { return @('started','stopped','deallocated') }
         'power-off' { return @('started') }
+        'power-off-deallocate' { return @('started','stopped','deallocated') }
         'deallocate' { return @('started','stopped','hibernated') }
         'hibernate-deallocate' { return @('started') }
         'hibernate-stop' { return @('started') }
@@ -284,6 +286,14 @@ function Assert-ClagnosDoActionAllowed {
             -Code 66 `
             -Summary "Hibernate action is not available for this VM." `
             -Hint "Enable hibernation support first, or use stop/deallocate instead."
+    }
+
+    if ($ActionName -eq 'hibernate-stop' -and -not [string]::Equals([string]$Snapshot.OsType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)) {
+        Throw-FriendlyError `
+            -Detail ("Guest hibernate-stop uses Windows 'shutdown /h /f' and is unsupported for VM '{0}' with OS type '{1}'." -f [string]$Snapshot.VmName,[string]$Snapshot.OsType) `
+            -Code 66 `
+            -Summary "Guest hibernate-stop is unavailable for this operating system." `
+            -Hint "Use --vm-action=hibernate-deallocate for Azure-managed hibernation."
     }
 
     $allowedStates = @(Get-ClagnosDoAllowedSourceStates -ActionName $ActionName)
@@ -474,16 +484,22 @@ function Read-ClagnosDoActionInteractive {
         [pscustomobject]@{ Number = 1; Action = 'status'; Label = 'status (read-only)' },
         [pscustomobject]@{ Number = 2; Action = 'start'; Label = 'start' },
         [pscustomobject]@{ Number = 3; Action = 'restart'; Label = 'restart' },
-        [pscustomobject]@{ Number = 4; Action = 'stop'; Label = 'stop' },
-        [pscustomobject]@{ Number = 5; Action = 'deallocate'; Label = 'deallocate' },
-        [pscustomobject]@{ Number = 6; Action = 'hibernate-deallocate'; Label = 'hibernate-deallocate (Azure)' },
-        [pscustomobject]@{ Number = 7; Action = 'hibernate-stop'; Label = 'hibernate-stop (guest via SSH)' },
-        [pscustomobject]@{ Number = 8; Action = 'reapply'; Label = 'reapply (Azure repair)' },
-        [pscustomobject]@{ Number = 9; Action = 'redeploy'; Label = 'redeploy (Azure host repair)' },
-        [pscustomobject]@{ Number = 10; Action = 'shutdown'; Label = 'shutdown gracefully (stays allocated)' },
-        [pscustomobject]@{ Number = 11; Action = 'resume'; Label = 'resume a hibernated VM' },
-        [pscustomobject]@{ Number = 12; Action = 'power-off'; Label = 'power off immediately (skip guest shutdown)' },
-        [pscustomobject]@{ Number = 13; Action = 'reset'; Label = 'reset (force restart through redeploy)' }
+        [pscustomobject]@{ Number = 4; Action = 'shutdown'; Label = 'shutdown/stop gracefully (stays allocated)' },
+        [pscustomobject]@{ Number = 5; Action = 'shutdown-deallocate'; Label = 'shutdown gracefully and deallocate' }
+    )
+    if ([string]::Equals([string]$Snapshot.OsType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)) {
+        $choices += [pscustomobject]@{ Number = 6; Action = 'hibernate-stop'; Label = 'hibernate guest (Windows; stays allocated)' }
+    }
+    $nextNumber = $choices.Count + 1
+    $choices += @(
+        [pscustomobject]@{ Number = $nextNumber; Action = 'hibernate-deallocate'; Label = 'hibernate and deallocate (Azure)' },
+        [pscustomobject]@{ Number = ($nextNumber + 1); Action = 'resume'; Label = 'resume a hibernated VM' },
+        [pscustomobject]@{ Number = ($nextNumber + 2); Action = 'power-off'; Label = 'force power-off (skip guest shutdown; stays allocated)' },
+        [pscustomobject]@{ Number = ($nextNumber + 3); Action = 'power-off-deallocate'; Label = 'force power-off and deallocate' },
+        [pscustomobject]@{ Number = ($nextNumber + 4); Action = 'reset'; Label = 'reboot / force reset through Azure redeploy' },
+        [pscustomobject]@{ Number = ($nextNumber + 5); Action = 'deallocate'; Label = 'deallocate' },
+        [pscustomobject]@{ Number = ($nextNumber + 6); Action = 'reapply'; Label = 'reapply (Azure repair)' },
+        [pscustomobject]@{ Number = ($nextNumber + 7); Action = 'redeploy'; Label = 'redeploy (Azure host repair)' }
     )
 
     foreach ($choice in @($choices)) {

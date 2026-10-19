@@ -2,6 +2,20 @@
 
 This document uses `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## Release 2026.10.19.432 - 2026-10-19
+
+### Summary
+Clagnos keeps operation results visible until Enter, completes the VC power-operation menu, and verifies Chocolatey package executables independently of the WinRM process PATH.
+
+### Highlights
+- The selected-VC submenu is now `VC Operations`, with graceful shutdown/deallocation and force power-off/deallocation paths. Reboot/reset and power-off labels match Azure's actual force/redeploy and skip-shutdown behaviors.
+- Package `s: status` shows a completed background refresh on a result screen, pauses for Enter, reports failures, and stops waiting after five minutes.
+- FFmpeg and GitHub CLI package status/install checks now verify Chocolatey registration and a runnable executable using declared version flags and vendor paths. Azure Developer CLI and Docker Desktop installation checks resolve their executable paths before validating versions.
+
+### Validation
+- TUI passed 185/185, smoke passed 195/195, and the package lifecycle contract passed for 36 Windows builtin packages.
+- An existing Windows VM passed FFmpeg status, uninstall, install, update, repair, reinstall, and final status via `cg.cmd`; final state is installed/runnable at 9.0.2. GitHub CLI status also passed at version 2.102.0 through its declared vendor path. The VM remained running; no Azure infrastructure mutations were issued.
+
 ## Release 2026.10.18.431 - 2026-10-18
 
 ### Summary

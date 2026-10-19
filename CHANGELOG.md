@@ -3,6 +3,20 @@
 All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
 
+## [2026.10.19.432] - 2026-10-19
+
+### Changed
+- One-shot TUI result screens now print `Press Enter to continue:` and stay visible until acknowledged. Explicit package `s: status` waits for the requested background refresh, shows its result, and has a five-minute deadline with 30-second progress heartbeats.
+- Renamed the selected-VC submenu to `VC Operations`. Added graceful shutdown-and-deallocate and force power-off-and-deallocate as state-checked, retryable lifecycle actions. Guest-only `hibernate-stop` is Windows-only; Azure hibernate-and-deallocate remains the cross-platform path.
+- Documented force reboot as Azure `az vm restart --force` redeploy behavior and force power-off as skipping guest shutdown, with their allocation effects stated separately.
+- Audited the Windows package catalog for PATH-only post-install verification. Chocolatey FFmpeg and GitHub CLI now verify package registration plus runnable executables resolved from Chocolatey and vendor install paths, with package-specific version flags. Azure Developer CLI and Docker Desktop also verify resolved executables without relying on PATH visibility alone.
+
+### Validation
+- TUI coverage passed 185/185, smoke coverage passed 195/195, and the package lifecycle contract passed for all 36 Windows builtin packages.
+- On an existing Windows VM, `cg.cmd` completed FFmpeg status, uninstall, install-after-uninstall, update, same-version repair, reinstall, and final status. Final status is installed and runnable at version 9.0.2.
+- The same VM’s GitHub CLI status verified its Chocolatey registration and `C:\Program Files\GitHub CLI\gh.exe` at version 2.102.0 using the manifest-declared `--version` flag.
+- The VM remained running. Live checks invoked package guest operations and Azure reads only; no Azure disk, network, size, or resource mutation was run.
+
 ## [2026.10.18.431] - 2026-10-18
 
 ### Changed

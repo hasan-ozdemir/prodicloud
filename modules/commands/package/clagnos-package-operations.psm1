@@ -8,6 +8,64 @@ function Get-ClagnosChocolateyRoot {
     return [IO.Path]::GetFullPath($configuredRoot.Trim())
 }
 
+function Get-ClagnosChocolateyPackageExecutableRecord {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageId,
+        [Parameter(Mandatory = $true)][string]$ExecutableName,
+        [string]$VersionArgument = '-version',
+        [string[]]$AdditionalPaths = @()
+    )
+
+    if ($PackageId -notmatch '^[A-Za-z0-9._-]+$' -or [IO.Path]::GetFileName($ExecutableName) -cne $ExecutableName -or $ExecutableName -notmatch '^[A-Za-z0-9._-]+\.exe$' -or $VersionArgument -notmatch '^--?[A-Za-z0-9][A-Za-z0-9-]*$') {
+        return [pscustomobject]@{ Status = 'unknown'; Path = ''; VersionText = ''; Detail = 'Chocolatey executable health-check metadata is invalid.' }
+    }
+
+    $root = Get-ClagnosChocolateyRoot
+    $toolsRoot = Join-Path (Join-Path (Join-Path $root 'lib') $PackageId) 'tools'
+    $executableStem = [IO.Path]::GetFileNameWithoutExtension($ExecutableName)
+    $versionPattern = '(?i)\b{0}\s+version\b' -f [regex]::Escape($executableStem)
+    $candidatePaths = New-Object 'System.Collections.Generic.List[string]'
+    $shimPath = Join-Path (Join-Path $root 'bin') $ExecutableName
+    if (Test-Path -LiteralPath $shimPath -PathType Leaf) { $candidatePaths.Add([IO.Path]::GetFullPath($shimPath)) | Out-Null }
+    foreach ($rawPath in @($AdditionalPaths)) {
+        $candidatePath = [Environment]::ExpandEnvironmentVariables([string]$rawPath)
+        if ([IO.Path]::IsPathRooted($candidatePath) -and (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+            $fullPath = [IO.Path]::GetFullPath($candidatePath)
+            if (-not $candidatePaths.Contains($fullPath)) { $candidatePaths.Add($fullPath) | Out-Null }
+        }
+    }
+    if (Test-Path -LiteralPath $toolsRoot -PathType Container) {
+        foreach ($candidate in @(Get-ChildItem -LiteralPath $toolsRoot -Filter $ExecutableName -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending)) {
+            $candidatePath = [IO.Path]::GetFullPath([string]$candidate.FullName)
+            if (-not $candidatePaths.Contains($candidatePath)) { $candidatePaths.Add($candidatePath) | Out-Null }
+        }
+    }
+
+    $sawExecutable = ($candidatePaths.Count -gt 0)
+    foreach ($candidatePath in @($candidatePaths.ToArray())) {
+        $previousErrorActionPreference = $ErrorActionPreference
+        $outputLines = @()
+        $exitCode = -1
+        try {
+            $ErrorActionPreference = 'Continue'
+            $outputLines = @(& $candidatePath $VersionArgument 2>&1 | ForEach-Object { [string]$_ })
+            $exitCode = [int]$LASTEXITCODE
+        }
+        catch { $outputLines = @([string]$_.Exception.Message) }
+        finally { $ErrorActionPreference = $previousErrorActionPreference }
+
+        $versionText = (@($outputLines | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }) -join ' ').Trim()
+        if ($exitCode -eq 0 -and $versionText -match $versionPattern) {
+            return [pscustomobject]@{ Status = 'installed'; Path = $candidatePath; VersionText = $versionText; Detail = 'Chocolatey package executable is present and runnable.' }
+        }
+    }
+
+    if ($sawExecutable) {
+            return [pscustomobject]@{ Status = 'installed-drifted'; Path = [string]$candidatePaths[0]; VersionText = ''; Detail = ('Chocolatey package executable exists but did not pass its bounded {0} health check.' -f $VersionArgument) }
+    }
+    return [pscustomobject]@{ Status = 'not-found'; Path = ''; VersionText = ''; Detail = ('Chocolatey package executable {0} was not found in the package tools directory or Chocolatey bin directory.' -f $ExecutableName) }
+}
+
 function Write-ClagnosPackageResult {
     param([hashtable]$Result)
     Write-Output ('CLAGNOS_PACKAGE_RESULT:' + (ConvertTo-Json -InputObject $Result -Depth 8 -Compress))
@@ -1072,8 +1130,34 @@ function Get-ClagnosPackageRecord {
             catch { $status = 'unknown'; $detail = 'Chocolatey package detection failed'; break }
             $exitCode = [int]$LASTEXITCODE
             $match = [regex]::Match($output,'(?im)^' + [regex]::Escape($value) + '\|(?<version>[^\s|]+)\s*$')
-            if ($exitCode -eq 0 -and $match.Success) { $status = 'installed'; $version = [string]$match.Groups['version'].Value }
-            elseif ($exitCode -eq 0) { $status = 'not-installed' }
+            $executableName = if ($null -ne $Spec.statusCheck.PSObject.Properties['executable']) { [string]$Spec.statusCheck.executable } else { '' }
+            if ($exitCode -eq 0 -and $match.Success) {
+                $status = 'installed'
+                $version = [string]$match.Groups['version'].Value
+                if (-not [string]::IsNullOrWhiteSpace($executableName)) {
+                    $executablePaths = if ($null -ne $Spec.statusCheck.PSObject.Properties['executablePaths']) { @($Spec.statusCheck.executablePaths | ForEach-Object { [string]$_ }) } else { @() }
+                    $versionArgument = if ($null -ne $Spec.statusCheck.PSObject.Properties['versionArgument']) { [string]$Spec.statusCheck.versionArgument } else { '-version' }
+                    $executableRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId $value -ExecutableName $executableName -VersionArgument $versionArgument -AdditionalPaths $executablePaths
+                    if ([string]$executableRecord.Status -ne 'installed') {
+                        $status = 'installed-drifted'
+                        $detail = [string]$executableRecord.Detail
+                    }
+                    else { $detail = [string]$executableRecord.Detail }
+                }
+            }
+            elseif ($exitCode -eq 0) {
+                if (-not [string]::IsNullOrWhiteSpace($executableName)) {
+                    $executablePaths = if ($null -ne $Spec.statusCheck.PSObject.Properties['executablePaths']) { @($Spec.statusCheck.executablePaths | ForEach-Object { [string]$_ }) } else { @() }
+                    $versionArgument = if ($null -ne $Spec.statusCheck.PSObject.Properties['versionArgument']) { [string]$Spec.statusCheck.versionArgument } else { '-version' }
+                    $executableRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId $value -ExecutableName $executableName -VersionArgument $versionArgument -AdditionalPaths $executablePaths
+                    if ([string]$executableRecord.Status -in @('installed','installed-drifted')) {
+                        $status = 'unknown'
+                        $detail = 'The executable exists but Chocolatey has no matching local package registration; no destructive action was attempted.'
+                    }
+                    else { $status = 'not-installed' }
+                }
+                else { $status = 'not-installed' }
+            }
             else { $status = 'unknown'; $detail = ('Chocolatey inventory exited with {0}' -f $exitCode) }
         }
         'npm' {
@@ -2701,4 +2785,4 @@ function Invoke-ClagnosPackageLifecycle {
     Write-ClagnosPackageOperationResult -Spec $spec -Action $Action -Record $verified -Message $message -DurationSeconds $operationWatch.Elapsed.TotalSeconds -RebootRequired:$updateRebootRequired
 }
 
-Export-ModuleMember -Function Invoke-ClagnosPackageLifecycle,Invoke-ClagnosTeamsBootstrapper,Set-ClagnosTeamsStoreInstallState,Get-ClagnosWindscribePackageRecord,Get-ClagnosWslPackageRecord,Get-ClagnosWindscribeUnattendedFirewallState,ConvertFrom-ClagnosWindscribePersistentFirewallState,Stop-ClagnosStaleWindscribeUninstallerProcesses,Set-ClagnosJawsPostLogonStartup,Test-ClagnosJawsPostLogonStartup,Set-ClagnosJawsLogonScreenStartup,Test-ClagnosJawsLogonScreenStartup,Get-ClagnosJawsPackageStatusDetails,Invoke-ClagnosJawsVendorUninstall,Install-ClagnosJawsAppStateUpdateFiles,Set-ClagnosPackageStartupState,Test-ClagnosPackageStartupState,Get-ClagnosSysinternalsPackageRecord
+Export-ModuleMember -Function Invoke-ClagnosPackageLifecycle,Invoke-ClagnosTeamsBootstrapper,Set-ClagnosTeamsStoreInstallState,Get-ClagnosWindscribePackageRecord,Get-ClagnosWslPackageRecord,Get-ClagnosWindscribeUnattendedFirewallState,ConvertFrom-ClagnosWindscribePersistentFirewallState,Stop-ClagnosStaleWindscribeUninstallerProcesses,Set-ClagnosJawsPostLogonStartup,Test-ClagnosJawsPostLogonStartup,Set-ClagnosJawsLogonScreenStartup,Test-ClagnosJawsLogonScreenStartup,Get-ClagnosJawsPackageStatusDetails,Invoke-ClagnosJawsVendorUninstall,Install-ClagnosJawsAppStateUpdateFiles,Set-ClagnosPackageStartupState,Test-ClagnosPackageStartupState,Get-ClagnosSysinternalsPackageRecord,Get-ClagnosChocolateyPackageExecutableRecord

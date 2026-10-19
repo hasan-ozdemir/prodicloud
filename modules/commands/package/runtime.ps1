@@ -74,6 +74,29 @@ function Get-ClagnosPackageCatalog {
         if ([string]$statusCheck.kind -notin @('command','winget','choco','npm','appx','store-state','choco-self','sysinternals','windscribe','wsl','dpkg','rpm')) {
             throw ("Package '{0}' has unsupported status check '{1}'." -f $id, [string]$statusCheck.kind)
         }
+        if ($null -ne $statusCheck.PSObject.Properties['executable']) {
+            $executableName = [string]$statusCheck.executable
+            if ($Platform -ne 'windows' -or [string]$statusCheck.kind -ne 'choco' -or [IO.Path]::GetFileName($executableName) -cne $executableName -or $executableName -notmatch '^[A-Za-z0-9._-]+\.exe$') {
+                throw ("Package '{0}' may declare statusCheck.executable only as a Windows Chocolatey package's executable file name." -f $id)
+            }
+        }
+        if ($null -ne $statusCheck.PSObject.Properties['executablePaths']) {
+            if ($Platform -ne 'windows' -or [string]$statusCheck.kind -ne 'choco' -or $null -eq $statusCheck.PSObject.Properties['executable']) {
+                throw ("Package '{0}' may declare statusCheck.executablePaths only for a Windows Chocolatey package." -f $id)
+            }
+            foreach ($candidatePath in @($statusCheck.executablePaths)) {
+                $pathText = [string]$candidatePath
+                if ($pathText -notmatch '^(?i)%(?:ProgramFiles|ProgramFiles\(x86\)|LOCALAPPDATA)%\\(?:[A-Za-z0-9 ._-]+\\)*[A-Za-z0-9._-]+\.exe$' -or $pathText -match '\.\.') {
+                    throw ("Package '{0}' has an unsafe statusCheck.executablePaths entry." -f $id)
+                }
+            }
+        }
+        if ($null -ne $statusCheck.PSObject.Properties['versionArgument']) {
+            $versionArgument = [string]$statusCheck.versionArgument
+            if ($Platform -ne 'windows' -or [string]$statusCheck.kind -ne 'choco' -or $null -eq $statusCheck.PSObject.Properties['executable'] -or $versionArgument -notmatch '^--?[A-Za-z0-9][A-Za-z0-9-]*$') {
+                throw ("Package '{0}' may declare statusCheck.versionArgument only as a simple version flag for a Windows Chocolatey executable." -f $id)
+            }
+        }
         if ([string]$statusCheck.kind -eq 'wsl' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windows-subsystem-linux' -or [string]$statusCheck.value -ne 'Windows Subsystem for Linux')) {
             throw 'The wsl status check is valid only for the builtin Windows Subsystem for Linux package.'
         }
@@ -668,6 +691,7 @@ foreach (`$entry in @(`$parsedPackageInput)) {
 `$hasChocoPackages = @(`$packages | Where-Object { [string]`$_.statusCheck.kind -eq 'choco' }).Count -gt 0
 `$hasNpmPackages = @(`$packages | Where-Object { [string]`$_.statusCheck.kind -eq 'npm' }).Count -gt 0
 `$hasAppxPackages = @(`$packages | Where-Object { [string]`$_.statusCheck.kind -in @('appx','store-state') }).Count -gt 0
+$script:PackageStatusDetails = @{}
 `$wingetInventory = ''
 `$wingetInventoryReady = `$false
 if (`$hasWingetPackages) {
@@ -719,7 +743,23 @@ function Get-PackageStatus {
         }
         'choco' {
             if (-not `$chocoInventoryReady) { return 'unknown' }
-            if (`$chocoInventory -match ('(?im)^' + [regex]::Escape(`$value) + '\|[^|\s]+\s*$')) { return 'installed' }
+            if (`$chocoInventory -match ('(?im)^' + [regex]::Escape(`$value) + '\|[^|\s]+\s*$')) {
+                if (-not [string]::IsNullOrWhiteSpace([string]`$check.executable)) {
+                    `$versionArgument = if ([string]::IsNullOrWhiteSpace([string]`$check.versionArgument)) { '-version' } else { [string]`$check.versionArgument }
+                    `$executableRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId `$value -ExecutableName ([string]`$check.executable) -VersionArgument `$versionArgument -AdditionalPaths @(`$check.executablePaths)
+                    `$script:PackageStatusDetails[[string]`$Package.id] = [string]`$executableRecord.Detail
+                    if ([string]`$executableRecord.Status -ne 'installed') { return 'installed-drifted' }
+                }
+                return 'installed'
+            }
+            if (-not [string]::IsNullOrWhiteSpace([string]`$check.executable)) {
+                `$versionArgument = if ([string]::IsNullOrWhiteSpace([string]`$check.versionArgument)) { '-version' } else { [string]`$check.versionArgument }
+                `$executableRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId `$value -ExecutableName ([string]`$check.executable) -VersionArgument `$versionArgument -AdditionalPaths @(`$check.executablePaths)
+                if ([string]`$executableRecord.Status -in @('installed','installed-drifted')) {
+                    `$script:PackageStatusDetails[[string]`$Package.id] = 'The executable exists without a matching Chocolatey registration.'
+                    return 'unknown'
+                }
+            }
             return 'not-installed'
         }
         'npm' {
@@ -757,7 +797,7 @@ function Get-PackageStatus {
 `$results = @()
 foreach (`$package in `$packages) {
     `$status = Get-PackageStatus -Package `$package
-    `$detail = ''
+    `$detail = if (`$script:PackageStatusDetails.ContainsKey([string]`$package.id)) { [string]`$script:PackageStatusDetails[[string]`$package.id] } else { '' }
     if ([string]`$package.id -eq 'windscribe') {
         `$windscribeRecord = Get-ClagnosWindscribePackageRecord -Spec `$package
         `$status = [string]`$windscribeRecord.Status

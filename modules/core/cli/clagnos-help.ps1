@@ -247,7 +247,7 @@ function Show-ClagnosCommandHelpDetailed {
                 'Command: do'
                 'Description: apply one VM lifecycle action or print the current VM lifecycle state.'
                 'Usage:'
-                '  clagnos do [--group <resource-group>] [--vm-name <vm-name>] [--vm-action=<status|start|resume|restart|reset|shutdown|stop|power-off|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>] [--subscription-id <subscription-id>] [--perf]'
+                '  clagnos do [--group <resource-group>] [--vm-name <vm-name>] [--vm-action=<status|start|resume|restart|reset|shutdown|stop|shutdown-deallocate|power-off|power-off-deallocate|deallocate|hibernate-deallocate|hibernate-stop|reapply|redeploy>] [--subscription-id <subscription-id>] [--perf]'
                 'Examples:'
                 '  clagnos do --vm-action=status --vm-name <vm-name>'
                 '  clagnos do --vm-action=reapply --group <resource-group> --vm-name <vm-name>'
@@ -255,8 +255,10 @@ function Show-ClagnosCommandHelpDetailed {
                 '  clagnos do --vm-action=hibernate-stop --group <resource-group> --vm-name <vm-name>'
                 '  clagnos do --vm-action=hibernate-deallocate --group <resource-group> --vm-name <vm-name>'
                 '  clagnos do --vm-action=power-off --group <resource-group> --vm-name <vm-name>'
+                '  clagnos do --vm-action=shutdown-deallocate --group <resource-group> --vm-name <vm-name>'
+                '  clagnos do --vm-action=power-off-deallocate --group <resource-group> --vm-name <vm-name>'
                 '  clagnos do --vm-action=reset --group <resource-group> --vm-name <vm-name>'
-                "Notes: shutdown asks the guest OS to stop and leaves the VM allocated; stop is the equivalent existing spelling. power-off uses 'az vm stop --skip-shutdown' and also leaves it allocated. resume starts only a hibernated VM. reset uses 'az vm restart --force', which Azure implements by redeploying an unresponsive VM. hibernate-stop uses SSH to run 'shutdown /h /f' inside a running VM and waits until the guest is no longer running without Azure deallocation. hibernate-deallocate uses Azure's deallocation-based hibernate path. Reapply calls 'az vm reapply' and then prints refreshed VM status; unlike the power actions, it remains available when provisioning is not currently succeeded. Redeploy calls 'az vm redeploy', waits for provisioning recovery, and restores the original started/stopped lifecycle state when Azure reports it deterministically."
+                "Notes: shutdown asks the guest OS to stop and leaves the VM allocated; stop is the equivalent existing spelling. shutdown-deallocate runs graceful stop, verifies the stopped state, then deallocates; if retried after a partial failure, it resumes from the current stopped state. power-off uses 'az vm stop --skip-shutdown' to skip graceful guest shutdown and leaves the VM allocated; power-off-deallocate then verifies the stopped state and deallocates. resume starts only a hibernated VM. reset is the force-reboot action and uses 'az vm restart --force', which Azure implements by redeploying an unresponsive VM rather than simulating a physical reset button. hibernate-stop is Windows-only: it uses SSH to run 'shutdown /h /f' and waits until the guest is no longer running without Azure deallocation. hibernate-deallocate uses Azure's deallocation-based hibernate path. Reapply calls 'az vm reapply' and then prints refreshed VM status; unlike the power actions, it remains available when provisioning is not currently succeeded. Redeploy calls 'az vm redeploy', waits for provisioning recovery, and restores the original started/stopped lifecycle state when Azure reports it deterministically."
             )
             return
         }

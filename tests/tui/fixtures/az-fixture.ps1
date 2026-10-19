@@ -133,7 +133,20 @@ switch -Regex ($commandText) {
         else { $result = @($managedGroup) }
         break
     }
-    '^vm list$' { $result = @($vm); break }
+    '^group exists$' {
+        $groupName = ''
+        for ($index = 0; $index -lt ($AzArguments.Count - 1); $index++) {
+            if ([string]$AzArguments[$index] -in @('-n','--name')) { $groupName = [string]$AzArguments[$index + 1]; break }
+        }
+        $result = [bool][string]::Equals($groupName,$resourceGroup,[System.StringComparison]::OrdinalIgnoreCase)
+        break
+    }
+    '^group show$' { $result = $managedGroup; break }
+    '^vm list$' {
+        if ($queryText -eq '[].name') { $result = @([string]$vm.name) }
+        else { $result = @($vm) }
+        break
+    }
     '^vm get-instance-view$' {
         $result = [pscustomobject]@{ statuses = @(
             [pscustomobject]@{ code = 'ProvisioningState/succeeded'; displayStatus = 'Provisioning succeeded' },

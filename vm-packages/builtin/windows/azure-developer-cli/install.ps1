@@ -7,6 +7,34 @@ function Refresh-SessionPath {
     Refresh-ClagnosSessionPath | Out-Null
 }
 
+function Resolve-AzdExecutablePath {
+    $command = Get-Command azd -ErrorAction SilentlyContinue
+    if ($command -and -not [string]::IsNullOrWhiteSpace([string]$command.Source) -and (Test-Path -LiteralPath ([string]$command.Source) -PathType Leaf)) {
+        return [string]$command.Source
+    }
+
+    $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+    $programFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+    $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    $candidates = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($root in @($programFiles,$programFilesX86)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$root)) {
+            $candidates.Add((Join-Path $root 'Azure Dev CLI\azd.exe')) | Out-Null
+            $candidates.Add((Join-Path $root 'Microsoft SDKs\Azure\Azure Developer CLI\azd.exe')) | Out-Null
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$localAppData)) {
+        $candidates.Add((Join-Path $localAppData 'Programs\Azure Dev CLI\azd.exe')) | Out-Null
+        $candidates.Add((Join-Path $localAppData 'Programs\Azure Dev CLI\azd-windows-amd64.exe')) | Out-Null
+    }
+    foreach ($candidate in @($candidates)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$candidate) -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return [string]$candidate
+        }
+    }
+    return ''
+}
+
 function Resolve-WingetExe {
     $portableCandidate = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
     if (Test-Path -LiteralPath $portableCandidate) {
@@ -22,15 +50,16 @@ function Resolve-WingetExe {
 }
 
 Refresh-SessionPath
-if (Get-Command azd -ErrorAction SilentlyContinue) {
-    Write-Host "Existing azd installation is already healthy. Skipping winget install."
-    azd version
-    if ($LASTEXITCODE -ne 0) {
-        throw "azd version failed with exit code $LASTEXITCODE."
+$existingAzdPath = Resolve-AzdExecutablePath
+if (-not [string]::IsNullOrWhiteSpace([string]$existingAzdPath)) {
+    & $existingAzdPath version
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ("Existing azd installation is already healthy at {0}. Skipping winget install." -f $existingAzdPath)
+        Write-Host "install-azd-tool-completed"
+        Write-Host "Update task completed: install-azd-tool"
+        return
     }
-    Write-Host "install-azd-tool-completed"
-    Write-Host "Update task completed: install-azd-tool"
-    return
+    Write-Host ("Existing azd executable failed its version check (exit {0}); continuing with unattended WinGet install." -f [int]$LASTEXITCODE) -ForegroundColor Yellow
 }
 
 $wingetExe = Resolve-WingetExe
@@ -47,13 +76,14 @@ if ($installExit -ne 0 -and $installExit -ne -1978335189) {
 }
 
 Refresh-SessionPath
-if (-not (Get-Command azd -ErrorAction SilentlyContinue)) {
-    throw "azd command was not found after installation."
+$azdPath = Resolve-AzdExecutablePath
+if ([string]::IsNullOrWhiteSpace([string]$azdPath)) {
+    throw 'azd.exe was not found in PATH or a supported Azure Developer CLI installation directory after installation.'
 }
 
-azd version
+& $azdPath version
 if ($LASTEXITCODE -ne 0) {
-    throw "azd version failed with exit code $LASTEXITCODE."
+    throw ("azd version failed at '{0}' with exit code {1}." -f $azdPath,[int]$LASTEXITCODE)
 }
 
 Write-Host "install-azd-tool-completed"

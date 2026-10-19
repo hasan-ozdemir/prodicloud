@@ -9,7 +9,7 @@ Each package directory contains `package.json` and one installer script (`instal
 
 Each `builtin/<platform>/` and `custom/<platform>/` directory contains a `tasks.toml` catalog. It lists each package id exactly once as a boolean under `[tasks]`; this is the only source of package availability. Package manifests must not contain an `enabled` field.
 
-Required manifest fields are `id`, `displayName`, `category`, `statusCheck`, and `uninstall`. Optional fields are `timeout`, `sortOrder`, `assets`, `appState`, `appStateKey`, `dependsOn`, and `postInstallTasks`. `dependsOn` lists package ids that should be installed before this package; the package command installs only the selected package. `statusCheck` and `uninstall` use the validated action kinds from the runtime package catalog. Relative asset paths resolve from the package directory.
+Required manifest fields are `id`, `displayName`, `category`, `statusCheck`, and `uninstall`. Optional fields are `timeout`, `sortOrder`, `assets`, `appState`, `appStateKey`, `dependsOn`, and `postInstallTasks`. `dependsOn` lists package ids that should be installed before this package; the package command installs only the selected package. `statusCheck` and `uninstall` use the validated action kinds from the runtime package catalog. For a Windows Chocolatey package, optional `statusCheck.executable` adds a runnable-file health check; `versionArgument` selects that executable's version flag, and `executablePaths` lists additional absolute locations rooted at `%ProgramFiles%`, `%ProgramFiles(x86)%`, or `%LOCALAPPDATA%`. Relative asset paths resolve from the package directory.
 
 ## Package app-state
 
