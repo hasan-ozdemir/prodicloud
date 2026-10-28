@@ -3,8 +3,8 @@
   "timeout": 120,
   "assets": [
     {
-      "local": "../../../../tools/scripts/clagnos-interactive-session-helper.ps1",
-      "remote": "C:/Windows/Temp/clagnos-interactive-session-helper.ps1"
+      "local": "../../../../tools/scripts/prodicloud-interactive-session-helper.ps1",
+      "remote": "C:/Windows/Temp/prodicloud-interactive-session-helper.ps1"
     }
   ],
   "extensions": {

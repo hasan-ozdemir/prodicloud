@@ -1,10 +1,10 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-powershell-tool"
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-PwshExePath {

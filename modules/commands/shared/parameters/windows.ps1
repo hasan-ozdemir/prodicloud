@@ -1,5 +1,5 @@
 # Shared 'windows' command option specification.
 
-function Get-ClagnosSharedWindowsOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'windows')
+function Get-ProdicloudSharedWindowsOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'windows')
 }

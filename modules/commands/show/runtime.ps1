@@ -1,6 +1,6 @@
 # Show command runtime helpers.
 
-function Get-ClagnosShowCommandRuntime {
+function Get-ProdicloudShowCommandRuntime {
     param(
         [hashtable]$Options
     )
@@ -10,20 +10,20 @@ function Get-ClagnosShowCommandRuntime {
     }
 }
 
-function Resolve-ClagnosShowFocusedTarget {
+function Resolve-ProdicloudShowFocusedTarget {
     param(
         [hashtable]$Options,
         [hashtable]$ConfigMap,
         [object[]]$SelectedGroupDumps
     )
 
-    $groupOption = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
-    $vmNameOption = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+    $groupOption = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'group')
+    $vmNameOption = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-name')
     $requestedGroup = if ([string]::IsNullOrWhiteSpace([string]$groupOption)) { '' } else { $groupOption.Trim() }
     $requestedVmName = if ([string]::IsNullOrWhiteSpace([string]$vmNameOption)) { '' } else { $vmNameOption.Trim() }
 
     if (-not [string]::IsNullOrWhiteSpace([string]$requestedGroup) -or -not [string]::IsNullOrWhiteSpace([string]$requestedVmName)) {
-        return (Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $ConfigMap -OperationName 'show' -AutoSelectSingleVm)
+        return (Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $ConfigMap -OperationName 'show' -AutoSelectSingleVm)
     }
 
     $vmRows = @()
@@ -46,7 +46,7 @@ function Resolve-ClagnosShowFocusedTarget {
     return $null
 }
 
-function Get-ClagnosShowTargetDerivedConfiguration {
+function Get-ProdicloudShowTargetDerivedConfiguration {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -57,7 +57,7 @@ function Get-ClagnosShowTargetDerivedConfiguration {
         return $null
     }
 
-    $targetState = Get-ClagnosConfigureTargetState -ResourceGroup $ResourceGroup -VmName $VmName -ConfigBefore $ConfigMap
+    $targetState = Get-ProdicloudConfigureTargetState -ResourceGroup $ResourceGroup -VmName $VmName -ConfigBefore $ConfigMap
     return [ordered]@{
         ResourceGroup = [string]$ResourceGroup
         VmName = [string]$VmName

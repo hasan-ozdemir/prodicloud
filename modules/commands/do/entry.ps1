@@ -1,37 +1,37 @@
 # Do command entry.
 
-# Handles Invoke-ClagnosDoCommand.
-function Invoke-ClagnosDoCommand {
+# Handles Invoke-ProdicloudDoCommand.
+function Invoke-ProdicloudDoCommand {
     param(
         [hashtable]$Options
     )
 
-    $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot 'clagnos.env'
-    $hasExplicitTarget = -not [string]::IsNullOrWhiteSpace([string](Get-ClagnosCliOptionText -Options $Options -Name 'group')) -or
-        -not [string]::IsNullOrWhiteSpace([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name'))
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Join-Path $repoRoot 'prodicloud.env'
+    $hasExplicitTarget = -not [string]::IsNullOrWhiteSpace([string](Get-ProdicloudCliOptionText -Options $Options -Name 'group')) -or
+        -not [string]::IsNullOrWhiteSpace([string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-name'))
     $configMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly:$hasExplicitTarget
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'do'
-    $action = Resolve-ClagnosDoActionName -RawValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-action')) -AllowEmpty
-    $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup ([string]$target.ResourceGroup) -VmName ([string]$target.VmName)
+    $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'do'
+    $action = Resolve-ProdicloudDoActionName -RawValue ([string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-action')) -AllowEmpty
+    $snapshot = Get-ProdicloudVmLifecycleSnapshot -ResourceGroup ([string]$target.ResourceGroup) -VmName ([string]$target.VmName)
 
     if ([string]::IsNullOrWhiteSpace([string]$action)) {
-        $action = Read-ClagnosDoActionInteractive -Snapshot $snapshot
+        $action = Read-ProdicloudDoActionInteractive -Snapshot $snapshot
     }
 
     if ($action -eq 'status') {
-        Write-ClagnosDoStatusReport -Snapshot $snapshot
+        Write-ProdicloudDoStatusReport -Snapshot $snapshot
         return
     }
 
-    Assert-ClagnosDoActionAllowed -ActionName $action -Snapshot $snapshot
+    Assert-ProdicloudDoActionAllowed -ActionName $action -Snapshot $snapshot
 
     $resourceGroup = [string]$target.ResourceGroup
     $vmName = [string]$target.VmName
     $initialNormalizedState = [string]$snapshot.NormalizedState
     if ($action -in @('shutdown-deallocate','power-off-deallocate') -and $initialNormalizedState -eq 'deallocated') {
         Write-Host ("Do completed: VM '{0}' in resource group '{1}' is already deallocated; no lifecycle action was needed." -f $vmName,$resourceGroup) -ForegroundColor Green
-        Write-ClagnosDoStatusReport -Snapshot $snapshot
+        Write-ProdicloudDoStatusReport -Snapshot $snapshot
         return
     }
     $desiredState = ''
@@ -42,7 +42,7 @@ function Invoke-ClagnosDoCommand {
         'start' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now started." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -52,7 +52,7 @@ function Invoke-ClagnosDoCommand {
         'resume' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: hibernated VM '{0}' in resource group '{1}' has resumed and is now started." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -62,7 +62,7 @@ function Invoke-ClagnosDoCommand {
         'restart' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now restarted." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -72,7 +72,7 @@ function Invoke-ClagnosDoCommand {
         'reset' {
             $desiredState = 'started'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was force-restarted through Azure redeploy." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -82,7 +82,7 @@ function Invoke-ClagnosDoCommand {
         'shutdown' {
             $desiredState = 'stopped'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was shut down gracefully and remains allocated." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -93,13 +93,13 @@ function Invoke-ClagnosDoCommand {
             $desiredState = 'deallocated'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was shut down gracefully and deallocated." -f $vmName,$resourceGroup)
             if ($initialNormalizedState -eq 'started') {
-                Invoke-ClagnosDoAzureAction `
+                Invoke-ProdicloudDoAzureAction `
                     -ActionName $action `
                     -ResourceGroup $resourceGroup `
                     -VmName $vmName `
                     -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                     -AzContext 'az vm stop before graceful shutdown-deallocate'
-                $stoppedSnapshot = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState 'stopped' -MaxAttempts 24 -DelaySeconds 10
+                $stoppedSnapshot = Wait-ProdicloudDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState 'stopped' -MaxAttempts 24 -DelaySeconds 10
                 if ($null -eq $stoppedSnapshot) {
                     Throw-FriendlyError `
                         -Detail ("Graceful shutdown completed or was accepted for VM '{0}', but Azure did not confirm the stopped state. No deallocation was attempted." -f $vmName) `
@@ -108,7 +108,7 @@ function Invoke-ClagnosDoCommand {
                         -Hint "Run '--vm-action=status'; when the VM is stopped, retry '--vm-action=shutdown-deallocate' to release compute allocation."
                 }
             }
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -118,7 +118,7 @@ function Invoke-ClagnosDoCommand {
         'stop' {
             $desiredState = 'stopped'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now stopped." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -128,7 +128,7 @@ function Invoke-ClagnosDoCommand {
         'power-off' {
             $desiredState = 'stopped'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was powered off immediately and remains allocated." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -139,13 +139,13 @@ function Invoke-ClagnosDoCommand {
             $desiredState = 'deallocated'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was force powered off and deallocated." -f $vmName,$resourceGroup)
             if ($initialNormalizedState -eq 'started') {
-                Invoke-ClagnosDoAzureAction `
+                Invoke-ProdicloudDoAzureAction `
                     -ActionName $action `
                     -ResourceGroup $resourceGroup `
                     -VmName $vmName `
                     -AzArguments @('vm','stop','-g',$resourceGroup,'-n',$vmName,'--skip-shutdown','-o','none','--only-show-errors') `
                     -AzContext 'az vm stop --skip-shutdown before power-off-deallocate'
-                $stoppedSnapshot = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState 'stopped' -MaxAttempts 24 -DelaySeconds 10
+                $stoppedSnapshot = Wait-ProdicloudDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState 'stopped' -MaxAttempts 24 -DelaySeconds 10
                 if ($null -eq $stoppedSnapshot) {
                     Throw-FriendlyError `
                         -Detail ("Force power-off was accepted for VM '{0}', but Azure did not confirm the stopped state. No deallocation was attempted." -f $vmName) `
@@ -154,7 +154,7 @@ function Invoke-ClagnosDoCommand {
                         -Hint "Run '--vm-action=status'; when the VM is stopped, retry '--vm-action=power-off-deallocate' to release compute allocation."
                 }
             }
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -164,7 +164,7 @@ function Invoke-ClagnosDoCommand {
         'deallocate' {
             $desiredState = 'deallocated'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now deallocated." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -174,7 +174,7 @@ function Invoke-ClagnosDoCommand {
         'hibernate-deallocate' {
             $desiredState = 'hibernated'
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' is now hibernated and deallocated." -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
@@ -183,8 +183,8 @@ function Invoke-ClagnosDoCommand {
         }
         'hibernate-stop' {
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' accepted guest hibernate-stop and is no longer running." -f $vmName, $resourceGroup)
-            $hibernateStopInvocation = Invoke-ClagnosDoGuestHibernateStopCommand -ResourceGroup $resourceGroup -VmName $vmName
-            $finalSnapshot = Wait-ClagnosDoHibernateStopCompletion -Runtime $hibernateStopInvocation.Runtime -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 24 -DelaySeconds 10
+            $hibernateStopInvocation = Invoke-ProdicloudDoGuestHibernateStopCommand -ResourceGroup $resourceGroup -VmName $vmName
+            $finalSnapshot = Wait-ProdicloudDoHibernateStopCompletion -Runtime $hibernateStopInvocation.Runtime -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 24 -DelaySeconds 10
             if ($null -eq $finalSnapshot) {
                 $launchOutput = if ($null -eq $hibernateStopInvocation -or $null -eq $hibernateStopInvocation.LaunchResult) { '' } else { [string]$hibernateStopInvocation.LaunchResult.Output }
                 $launchExitCode = if ($null -eq $hibernateStopInvocation -or $null -eq $hibernateStopInvocation.LaunchResult) { -1 } else { [int]$hibernateStopInvocation.LaunchResult.ExitCode }
@@ -197,24 +197,24 @@ function Invoke-ClagnosDoCommand {
         }
         'reapply' {
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was reapplied. Current status:" -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
                 -AzArguments @('vm','reapply','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm reapply'
-            $finalSnapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
+            $finalSnapshot = Get-ProdicloudVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
         }
         'redeploy' {
             $completionMessage = ("Do completed: VM '{0}' in resource group '{1}' was redeployed. Current status:" -f $vmName, $resourceGroup)
-            Invoke-ClagnosDoAzureAction `
+            Invoke-ProdicloudDoAzureAction `
                 -ActionName $action `
                 -ResourceGroup $resourceGroup `
                 -VmName $vmName `
                 -AzArguments @('vm','redeploy','-g',$resourceGroup,'-n',$vmName,'-o','none','--only-show-errors') `
                 -AzContext 'az vm redeploy'
 
-            $provisioningWaitResult = Wait-ClagnosProvisioningSucceeded -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 30 -DelaySeconds 10
+            $provisioningWaitResult = Wait-ProdicloudProvisioningSucceeded -ResourceGroup $resourceGroup -VmName $vmName -MaxAttempts 30 -DelaySeconds 10
             if (-not [bool]$provisioningWaitResult.Ready) {
                 Throw-FriendlyError `
                     -Detail ("VM '{0}' in resource group '{1}' did not return to provisioning succeeded after Azure redeploy." -f $vmName, $resourceGroup) `
@@ -225,7 +225,7 @@ function Invoke-ClagnosDoCommand {
 
             $finalSnapshot = $provisioningWaitResult.Snapshot
             if ([string]$initialNormalizedState -in @('started','stopped')) {
-                $stateAfterRedeploy = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $initialNormalizedState -MaxAttempts 24 -DelaySeconds 10
+                $stateAfterRedeploy = Wait-ProdicloudDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $initialNormalizedState -MaxAttempts 24 -DelaySeconds 10
                 if ($null -eq $stateAfterRedeploy) {
                     Throw-FriendlyError `
                         -Detail ("VM '{0}' in resource group '{1}' did not return to '{2}' after Azure redeploy." -f $vmName, $resourceGroup, $initialNormalizedState) `
@@ -243,7 +243,7 @@ function Invoke-ClagnosDoCommand {
     }
 
     if ($null -eq $finalSnapshot) {
-        $finalSnapshot = Wait-ClagnosDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $desiredState -MaxAttempts 24 -DelaySeconds 10
+        $finalSnapshot = Wait-ProdicloudDoLifecycleState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $desiredState -MaxAttempts 24 -DelaySeconds 10
     }
     if ($null -eq $finalSnapshot) {
         Throw-FriendlyError `
@@ -254,5 +254,5 @@ function Invoke-ClagnosDoCommand {
     }
 
     Write-Host $completionMessage -ForegroundColor Green
-    Write-ClagnosDoStatusReport -Snapshot $finalSnapshot
+    Write-ProdicloudDoStatusReport -Snapshot $finalSnapshot
 }

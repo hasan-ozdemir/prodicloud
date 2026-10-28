@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-jaws-application"
 
 $taskConfig = [ordered]@{
-    PortableWingetPath = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
+    PortableWingetPath = "C:\ProgramData\prodicloud\tools\winget-x64\winget.exe"
     PackageId = 'FreedomScientific.JAWS.2025'
     ProductLanguage = 'enu'
     InstallerUiLanguage = 'enu'
@@ -28,10 +28,10 @@ $taskConfig = [ordered]@{
     InstallVerifyPollSeconds = 5
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
@@ -117,7 +117,7 @@ function Resolve-JawsExe {
 
 function Set-JawsPostLogonStartup {
     param([string]$ExecutablePath)
-    Set-ClagnosJawsPostLogonStartup -UserNames @([string]$taskConfig.ManagerUser,[string]$taskConfig.AssistantUser) -Executable $ExecutablePath
+    Set-ProdicloudJawsPostLogonStartup -UserNames @([string]$taskConfig.ManagerUser,[string]$taskConfig.AssistantUser) -Executable $ExecutablePath
 }
 
 function Get-WingetProcessActivitySnapshot {
@@ -182,8 +182,8 @@ function Invoke-BoundedWingetCommand {
     )
 
     $runId = [Guid]::NewGuid().ToString('N')
-    $stdoutPath = Join-Path $env:TEMP ('clagnos-jaws-winget-' + $runId + '.stdout.log')
-    $stderrPath = Join-Path $env:TEMP ('clagnos-jaws-winget-' + $runId + '.stderr.log')
+    $stdoutPath = Join-Path $env:TEMP ('prodicloud-jaws-winget-' + $runId + '.stdout.log')
+    $stderrPath = Join-Path $env:TEMP ('prodicloud-jaws-winget-' + $runId + '.stderr.log')
     $argumentLine = (@($Arguments | ForEach-Object {
         $argument = [string]$_
         if ($argument -match '[\s"]') { '"' + $argument.Replace('"','\"') + '"' } else { $argument }
@@ -311,7 +311,7 @@ function Wait-JawsInstallVerified {
 function Save-JawsInstallPolicyState {
     param([string]$ExecutablePath,[string]$InstallerArguments)
 
-    $stateDirectory = Join-Path $env:ProgramData 'clagnos\state\packages'
+    $stateDirectory = Join-Path $env:ProgramData 'prodicloud\state\packages'
     if (-not (Test-Path -LiteralPath $stateDirectory -PathType Container)) { New-Item -ItemType Directory -Path $stateDirectory -Force -ErrorAction Stop | Out-Null }
     $statePath = Join-Path $stateDirectory 'jaws-install-policy.json'
     $version = ''
@@ -364,7 +364,7 @@ Refresh-SessionPath
 $existingExe = Resolve-JawsExe
 if (-not [string]::IsNullOrWhiteSpace([string]$existingExe)) {
     Write-Host ("Existing JAWS installation is already healthy. Skipping winget install. exe={0}" -f $existingExe)
-    Install-ClagnosJawsAppStateUpdateFiles
+    Install-ProdicloudJawsAppStateUpdateFiles
     Set-JawsPostLogonStartup -ExecutablePath $existingExe
     Write-Host "install-jaws-application-completed"
     Write-Host "Update task completed: install-jaws-application"
@@ -385,8 +385,8 @@ $installedExe = ""
 $customInstallerArguments = @('/Language',[string]$taskConfig.ProductLanguage,'/InstallerUILanguage',[string]$taskConfig.InstallerUiLanguage)
 if ([bool]$taskConfig.DisableExternalServices) { $customInstallerArguments += '/DisableExternalServices' }
 $customInstallerArgumentString = $customInstallerArguments -join ' '
-$requiredVersion = [string]$env:CLAGNOS_JAWS_REQUIRED_VERSION
-$forceInstall = [string]$env:CLAGNOS_JAWS_FORCE_INSTALL -match '^(?i)(1|true|yes|on)$'
+$requiredVersion = [string]$env:PRODICLOUD_JAWS_REQUIRED_VERSION
+$forceInstall = [string]$env:PRODICLOUD_JAWS_FORCE_INSTALL -match '^(?i)(1|true|yes|on)$'
 if (-not [string]::IsNullOrWhiteSpace($requiredVersion)) {
     Write-Host ("JAWS repair is pinned to installed version {0}." -f $requiredVersion)
 }
@@ -428,7 +428,7 @@ if ([string]::IsNullOrWhiteSpace([string]$installedExe)) {
     throw ("winget install {0} failed with exit code {1}." -f $packageId, $finalInstallExit)
 }
 
-Install-ClagnosJawsAppStateUpdateFiles
+Install-ProdicloudJawsAppStateUpdateFiles
 Set-JawsPostLogonStartup -ExecutablePath $installedExe
 Save-JawsInstallPolicyState -ExecutablePath $installedExe -InstallerArguments $customInstallerArgumentString
 Write-Host "install-jaws-application-completed"

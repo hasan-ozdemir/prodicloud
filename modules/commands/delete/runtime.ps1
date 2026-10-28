@@ -1,6 +1,6 @@
 # Delete command runtime helpers.
 
-function Get-ClagnosDeleteCommandRuntime {
+function Get-ProdicloudDeleteCommandRuntime {
     param(
         [hashtable]$Options
     )

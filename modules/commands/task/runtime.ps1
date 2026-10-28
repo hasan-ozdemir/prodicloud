@@ -1,7 +1,7 @@
 # Task command runtime helpers.
 
-# Handles Get-ClagnosTaskListRows.
-function Get-ClagnosTaskListRows {
+# Handles Get-ProdicloudTaskListRows.
+function Get-ProdicloudTaskListRows {
     param(
         [string]$Stage,
         [object[]]$InventoryTasks,
@@ -45,7 +45,7 @@ function Get-ClagnosTaskListRows {
     return @($rows)
 }
 
-function Select-ClagnosConfiguredTaskBlocks {
+function Select-ProdicloudConfiguredTaskBlocks {
     param(
         [object[]]$ActiveTasks,
         [object[]]$InventoryTasks,
@@ -75,21 +75,21 @@ function Select-ClagnosConfiguredTaskBlocks {
     return @($ActiveTasks | Where-Object { $selectedNames.Contains([string]$_.Name) })
 }
 
-# Handles Get-ClagnosTaskRunHistoryPath.
-function Get-ClagnosTaskRunHistoryPath {
-    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosTaskHistoryPathOverride)) {
-        return [string]$script:ClagnosTaskHistoryPathOverride
+# Handles Get-ProdicloudTaskRunHistoryPath.
+function Get-ProdicloudTaskRunHistoryPath {
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ProdicloudTaskHistoryPathOverride)) {
+        return [string]$script:ProdicloudTaskHistoryPathOverride
     }
 
-    $repoRoot = Get-ClagnosRepoRoot
+    $repoRoot = Get-ProdicloudRepoRoot
     return (Join-Path (Join-Path $repoRoot '.logs') 'task-runs.jsonl')
 }
 
-# Handles Write-ClagnosTaskRunHistoryRecord.
-function Write-ClagnosTaskRunHistoryRecord {
+# Handles Write-ProdicloudTaskRunHistoryRecord.
+function Write-ProdicloudTaskRunHistoryRecord {
     param([psobject]$Record)
 
-    $historyPath = Get-ClagnosTaskRunHistoryPath
+    $historyPath = Get-ProdicloudTaskRunHistoryPath
     $historyDirectory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($historyPath))
     if (-not (Test-Path -LiteralPath $historyDirectory -PathType Container)) {
         New-Item -ItemType Directory -Path $historyDirectory -Force | Out-Null
@@ -99,8 +99,8 @@ function Write-ClagnosTaskRunHistoryRecord {
     [System.IO.File]::AppendAllText($historyPath, ([string]$jsonLine + [Environment]::NewLine), ([System.Text.UTF8Encoding]::new($false)))
 }
 
-# Handles Write-ClagnosTaskStageHistoryRecord.
-function Write-ClagnosTaskStageHistoryRecord {
+# Handles Write-ProdicloudTaskStageHistoryRecord.
+function Write-ProdicloudTaskStageHistoryRecord {
     param(
         [string]$Stage,
         [string]$Platform,
@@ -116,7 +116,7 @@ function Write-ClagnosTaskStageHistoryRecord {
         [double]$DurationSeconds = 0
     )
 
-    if ([bool]$script:ClagnosTaskHistoryDisabled) { return }
+    if ([bool]$script:ProdicloudTaskHistoryDisabled) { return }
     $normalizedFailedTasks = @($FailedTasks | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
     $normalizedWarningTasks = @($WarningTasks | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
     $normalizedDeferredTasks = @($DeferredAppStateTasks | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -Unique)
@@ -148,20 +148,20 @@ function Write-ClagnosTaskStageHistoryRecord {
         FailureSummary = ''
     }
     try {
-        Write-ClagnosTaskRunHistoryRecord -Record $record
+        Write-ProdicloudTaskRunHistoryRecord -Record $record
     }
     catch {
         Write-Warning ("Local task history could not be saved: {0}" -f [string]$_.Exception.Message)
     }
 }
 
-# Handles Get-ClagnosTaskRunHistoryRecords.
-function Get-ClagnosTaskRunHistoryRecords {
+# Handles Get-ProdicloudTaskRunHistoryRecords.
+function Get-ProdicloudTaskRunHistoryRecords {
     param([int]$Limit = 25)
 
     if ($Limit -lt 1) { $Limit = 1 }
     if ($Limit -gt 200) { $Limit = 200 }
-    $historyPath = Get-ClagnosTaskRunHistoryPath
+    $historyPath = Get-ProdicloudTaskRunHistoryPath
     if (-not (Test-Path -LiteralPath $historyPath -PathType Leaf)) {
         return @()
     }
@@ -180,11 +180,11 @@ function Get-ClagnosTaskRunHistoryRecords {
     return @($records.ToArray())
 }
 
-# Handles Show-ClagnosTaskRunHistory.
-function Show-ClagnosTaskRunHistory {
+# Handles Show-ProdicloudTaskRunHistory.
+function Show-ProdicloudTaskRunHistory {
     param([int]$Limit = 25)
 
-    $records = @(Get-ClagnosTaskRunHistoryRecords -Limit $Limit)
+    $records = @(Get-ProdicloudTaskRunHistoryRecords -Limit $Limit)
     Write-Host ("Recent local task runs (last {0}):" -f [Math]::Min([Math]::Max($Limit, 1), 200)) -ForegroundColor Cyan
     if (@($records).Count -eq 0) {
         Write-Host '- No task run history has been recorded on this operator machine.'
@@ -214,8 +214,8 @@ function Show-ClagnosTaskRunHistory {
     return @($records)
 }
 
-# Handles Resolve-ClagnosTaskSelection.
-function Resolve-ClagnosTaskSelection {
+# Handles Resolve-ProdicloudTaskSelection.
+function Resolve-ProdicloudTaskSelection {
     param(
         [object[]]$TaskBlocks,
         [string]$TaskNumberOrName,
@@ -287,24 +287,24 @@ function Resolve-ClagnosTaskSelection {
             -Detail ("Task '{0}' was not found in {1} catalog." -f $selectedToken, $Stage) `
             -Code 60 `
             -Summary "Task selection is invalid." `
-            -Hint ("List valid {0} task numbers with 'clagnos task --list --vm-{0}'." -f $Stage)
+            -Hint ("List valid {0} task numbers with 'prodicloud task --list --vm-{0}'." -f $Stage)
     }
 
     return $selectedTask[0]
 }
 
-function Resolve-ClagnosTaskCommandMode {
+function Resolve-ProdicloudTaskCommandMode {
     param([hashtable]$Options)
 
     $actions = @(
-        @{ Name = 'list'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'list') }
-        @{ Name = 'history'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'history') }
-        @{ Name = 'save-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'save-app-state') }
-        @{ Name = 'restore-app-state'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'restore-app-state') }
-        @{ Name = 'run-vm-init'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-init') }
-        @{ Name = 'run-vm-update'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-update') }
-        @{ Name = 'enable'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'enable') }
-        @{ Name = 'disable'; Present = (Test-ClagnosCliOptionPresent -Options $Options -Name 'disable') }
+        @{ Name = 'list'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'list') }
+        @{ Name = 'history'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'history') }
+        @{ Name = 'save-app-state'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'save-app-state') }
+        @{ Name = 'restore-app-state'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'restore-app-state') }
+        @{ Name = 'run-vm-init'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'run-vm-init') }
+        @{ Name = 'run-vm-update'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'run-vm-update') }
+        @{ Name = 'enable'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'enable') }
+        @{ Name = 'disable'; Present = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'disable') }
     )
 
     $presentActions = @($actions | Where-Object { [bool]$_.Present })
@@ -313,7 +313,7 @@ function Resolve-ClagnosTaskCommandMode {
             -Detail "Task command requires one action path." `
             -Code 2 `
             -Summary "Task command usage is incomplete." `
-            -Hint "Use clagnos task --list/--history, --enable/--disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
+            -Hint "Use prodicloud task --list/--history, --enable/--disable, --run-vm-init, --run-vm-update, --save-app-state, or --restore-app-state."
     }
     if (@($presentActions).Count -gt 1) {
         Throw-FriendlyError `
@@ -326,16 +326,16 @@ function Resolve-ClagnosTaskCommandMode {
     return [string]$presentActions[0].Name
 }
 
-function Resolve-ClagnosTaskStageSelection {
+function Resolve-ProdicloudTaskStageSelection {
     param(
         [hashtable]$Options,
         [switch]$AutoMode
     )
 
-    $hasVmInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init'
-    $hasVmUpdate = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update'
-    $hasInitTask = (Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init-task')
-    $hasUpdateTask = (Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update-task')
+    $hasVmInit = Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-init'
+    $hasVmUpdate = Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-update'
+    $hasInitTask = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-init-task')
+    $hasUpdateTask = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-update-task')
 
     if (($hasVmInit -and $hasVmUpdate) -or ($hasInitTask -and $hasUpdateTask)) {
         Throw-FriendlyError `
@@ -354,11 +354,11 @@ function Resolve-ClagnosTaskStageSelection {
     }
 
     if ($hasInitTask) {
-        $requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-init-task')
+        $requested = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-init-task')
         return [pscustomobject]@{ Stage = 'init'; Requested = $requested }
     }
     if ($hasUpdateTask) {
-        $requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-update-task')
+        $requested = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-update-task')
         return [pscustomobject]@{ Stage = 'update'; Requested = $requested }
     }
 
@@ -369,14 +369,14 @@ function Resolve-ClagnosTaskStageSelection {
         -Hint "Use --vm-init-task=<task-number|task-name> or --vm-update-task=<task-number|task-name>."
 }
 
-function Resolve-ClagnosTaskAppStateSurface {
+function Resolve-ProdicloudTaskAppStateSurface {
     param(
         [string]$Mode,
         [hashtable]$Options
     )
 
     if ([string]::Equals([string]$Mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
-        if (Test-ClagnosCliOptionPresent -Options $Options -Name 'target') {
+        if (Test-ProdicloudCliOptionPresent -Options $Options -Name 'target') {
             Throw-FriendlyError `
                 -Detail "Task save-app-state does not support --target." `
                 -Code 2 `
@@ -384,14 +384,14 @@ function Resolve-ClagnosTaskAppStateSurface {
                 -Hint "Use --source=vm or --source=lm with --save-app-state."
         }
 
-        $surface = [string](Get-ClagnosCliOptionText -Options $Options -Name 'source')
+        $surface = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'source')
         if ([string]::IsNullOrWhiteSpace([string]$surface)) {
             $surface = 'vm'
         }
         $surface = $surface.Trim().ToLowerInvariant()
         if ($surface -notin @('vm', 'lm')) {
             Throw-FriendlyError `
-                -Detail ("Unsupported --source value '{0}'." -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'source')) `
+                -Detail ("Unsupported --source value '{0}'." -f [string](Get-ProdicloudCliOptionText -Options $Options -Name 'source')) `
                 -Code 2 `
                 -Summary "Task save-app-state surface selection is invalid." `
                 -Hint "Use --source=vm or --source=lm."
@@ -403,7 +403,7 @@ function Resolve-ClagnosTaskAppStateSurface {
         }
     }
 
-    if (Test-ClagnosCliOptionPresent -Options $Options -Name 'source') {
+    if (Test-ProdicloudCliOptionPresent -Options $Options -Name 'source') {
         Throw-FriendlyError `
             -Detail "Task restore-app-state does not support --source." `
             -Code 2 `
@@ -411,14 +411,14 @@ function Resolve-ClagnosTaskAppStateSurface {
             -Hint "Use --target=vm or --target=lm with --restore-app-state."
     }
 
-    $surface = [string](Get-ClagnosCliOptionText -Options $Options -Name 'target')
+    $surface = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'target')
     if ([string]::IsNullOrWhiteSpace([string]$surface)) {
         $surface = 'vm'
     }
     $surface = $surface.Trim().ToLowerInvariant()
     if ($surface -notin @('vm', 'lm')) {
         Throw-FriendlyError `
-            -Detail ("Unsupported --target value '{0}'." -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'target')) `
+            -Detail ("Unsupported --target value '{0}'." -f [string](Get-ProdicloudCliOptionText -Options $Options -Name 'target')) `
             -Code 2 `
             -Summary "Task restore-app-state surface selection is invalid." `
             -Hint "Use --target=vm or --target=lm."
@@ -430,19 +430,19 @@ function Resolve-ClagnosTaskAppStateSurface {
     }
 }
 
-function Get-ClagnosTaskAppStateRequestedUsersFromOptions {
+function Get-ProdicloudTaskAppStateRequestedUsersFromOptions {
     param([hashtable]$Options)
 
-    return @(Resolve-ClagnosTaskAppStateRequestedUsers -UserOptionValue ([string](Get-ClagnosCliOptionText -Options $Options -Name 'user')))
+    return @(Resolve-ProdicloudTaskAppStateRequestedUsers -UserOptionValue ([string](Get-ProdicloudCliOptionText -Options $Options -Name 'user')))
 }
 
-function Resolve-ClagnosTaskVmAppStateSelectedProfiles {
+function Resolve-ProdicloudTaskVmAppStateSelectedProfiles {
     param(
         [pscustomobject]$Runtime,
         [string[]]$RequestedUsers = @()
     )
 
-    $tokens = @(Resolve-ClagnosTaskAppStateRequestedUsers -UserOptionValue (@($RequestedUsers) -join ','))
+    $tokens = @(Resolve-ProdicloudTaskAppStateRequestedUsers -UserOptionValue (@($RequestedUsers) -join ','))
     if (@($tokens).Count -eq 1 -and [string]::Equals([string]$tokens[0], '.all.', [System.StringComparison]::OrdinalIgnoreCase)) {
         return [pscustomobject]@{
             IsAll = $true
@@ -504,7 +504,7 @@ function Resolve-ClagnosTaskVmAppStateSelectedProfiles {
     }
 }
 
-function Assert-ClagnosTaskCommandOptionScope {
+function Assert-ProdicloudTaskCommandOptionScope {
     param(
         [string]$Mode,
         [hashtable]$Options
@@ -512,7 +512,7 @@ function Assert-ClagnosTaskCommandOptionScope {
 
     if ([string]::Equals($Mode, 'list', [System.StringComparison]::OrdinalIgnoreCase)) {
         foreach ($optionName in @('group', 'vm-name', 'subscription-id', 'vm-init-task', 'vm-update-task', 'package', 'package-catalog', 'run-vm-init', 'run-vm-update', 'source', 'target', 'user')) {
-            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+            if (Test-ProdicloudCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task list mode does not support --{0}." -f [string]$optionName) `
                     -Code 2 `
@@ -526,12 +526,12 @@ function Assert-ClagnosTaskCommandOptionScope {
 
     if ([string]::Equals($Mode, 'history', [System.StringComparison]::OrdinalIgnoreCase)) {
         foreach ($optionName in @('list', 'disabled', 'vm-init', 'vm-update', 'vm-init-task', 'vm-update-task', 'package', 'package-catalog', 'run-vm-init', 'run-vm-update', 'save-app-state', 'restore-app-state', 'source', 'target', 'user', 'enable', 'disable', 'group', 'vm-name', 'subscription-id')) {
-            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+            if (Test-ProdicloudCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task history mode does not support --{0}." -f [string]$optionName) `
                     -Code 2 `
                     -Summary "Task history received an unsupported option." `
-                    -Hint "Use only clagnos task --history to show recent local task outcomes."
+                    -Hint "Use only prodicloud task --history to show recent local task outcomes."
             }
         }
         return
@@ -540,8 +540,8 @@ function Assert-ClagnosTaskCommandOptionScope {
     if ([string]::Equals($Mode, 'enable', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($Mode, 'disable', [System.StringComparison]::OrdinalIgnoreCase)) {
         $selectors = @(
-            [bool](Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init-task'),
-            [bool](Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update-task')
+            [bool](Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-init-task'),
+            [bool](Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-update-task')
         )
         if (@($selectors | Where-Object { $_ }).Count -ne 1) {
             Throw-FriendlyError `
@@ -551,7 +551,7 @@ function Assert-ClagnosTaskCommandOptionScope {
                 -Hint 'Choose the task number or name and provide exactly one stage-specific task selector.'
         }
         foreach ($optionName in @('list','disabled','vm-init','vm-update','run-vm-init','run-vm-update','save-app-state','restore-app-state','source','target','user','package','package-catalog','group','vm-name','subscription-id')) {
-            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+            if (Test-ProdicloudCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task availability mode does not support --{0}." -f [string]$optionName) `
                     -Code 2 `
@@ -565,7 +565,7 @@ function Assert-ClagnosTaskCommandOptionScope {
     if ([string]::Equals($Mode, 'save-app-state', [System.StringComparison]::OrdinalIgnoreCase) -or
         [string]::Equals($Mode, 'restore-app-state', [System.StringComparison]::OrdinalIgnoreCase)) {
         foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'run-vm-init', 'run-vm-update')) {
-            if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+            if (Test-ProdicloudCliOptionPresent -Options $Options -Name $optionName) {
                 Throw-FriendlyError `
                     -Detail ("Task app-state maintenance does not support --{0}." -f [string]$optionName) `
                     -Code 2 `
@@ -574,8 +574,8 @@ function Assert-ClagnosTaskCommandOptionScope {
             }
         }
 
-        $hasPackage = Test-ClagnosCliOptionPresent -Options $Options -Name 'package'
-        $hasPackageCatalog = Test-ClagnosCliOptionPresent -Options $Options -Name 'package-catalog'
+        $hasPackage = Test-ProdicloudCliOptionPresent -Options $Options -Name 'package'
+        $hasPackageCatalog = Test-ProdicloudCliOptionPresent -Options $Options -Name 'package-catalog'
         if ($hasPackage -ne $hasPackageCatalog) {
             Throw-FriendlyError `
                 -Detail 'Package app-state selectors require both --package and --package-catalog.' `
@@ -583,8 +583,8 @@ function Assert-ClagnosTaskCommandOptionScope {
                 -Summary 'Package app-state selection is incomplete.' `
                 -Hint 'Provide both --package <id> and --package-catalog <builtin|custom>.'
         }
-        $hasInitTask = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-init-task'
-        $hasUpdateTask = Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-update-task'
+        $hasInitTask = Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-init-task'
+        $hasUpdateTask = Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-update-task'
         if (($hasPackage -and ($hasInitTask -or $hasUpdateTask)) -or (-not $hasPackage -and ($hasInitTask -eq $hasUpdateTask))) {
             Throw-FriendlyError `
                 -Detail 'Task app-state selection requires either one task selector or one package plus catalog selector.' `
@@ -597,7 +597,7 @@ function Assert-ClagnosTaskCommandOptionScope {
     }
 
     foreach ($optionName in @('disabled', 'vm-init', 'vm-update', 'vm-init-task', 'vm-update-task', 'package', 'package-catalog', 'save-app-state', 'restore-app-state', 'source', 'target', 'user')) {
-        if (Test-ClagnosCliOptionPresent -Options $Options -Name $optionName) {
+        if (Test-ProdicloudCliOptionPresent -Options $Options -Name $optionName) {
             Throw-FriendlyError `
                 -Detail ("Task run mode does not support --{0}." -f [string]$optionName) `
                 -Code 2 `
@@ -607,7 +607,7 @@ function Assert-ClagnosTaskCommandOptionScope {
     }
 }
 
-function Invoke-ClagnosTaskAvailabilityToggle {
+function Invoke-ProdicloudTaskAvailabilityToggle {
     param(
         [string]$StageRoot,
         [ValidateSet('windows','linux')][string]$Platform,
@@ -616,8 +616,8 @@ function Invoke-ClagnosTaskAvailabilityToggle {
         [ValidateSet('enable','disable')][string]$Action
     )
 
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $StageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
-    $task = Resolve-ClagnosTaskSelection -TaskBlocks @($catalog.InventoryTasks) -TaskNumberOrName $TaskNumberOrName -Stage $Stage
+    $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath $StageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
+    $task = Resolve-ProdicloudTaskSelection -TaskBlocks @($catalog.InventoryTasks) -TaskNumberOrName $TaskNumberOrName -Stage $Stage
     $shouldEnable = [string]::Equals($Action, 'enable', [System.StringComparison]::OrdinalIgnoreCase)
     if ([bool]$task.Enabled -eq $shouldEnable) {
         Write-Host ("Task '{0}' is already {1}." -f [string]$task.Name, $(if ($shouldEnable) { 'enabled' } else { 'disabled' })) -ForegroundColor Yellow
@@ -631,8 +631,8 @@ function Invoke-ClagnosTaskAvailabilityToggle {
         return [pscustomobject]@{ Task = $task; Enabled = [bool]$task.Enabled; Changed = $false }
     }
 
-    $changed = Set-ClagnosTaskCatalogEnabled -Path ([string]$task.CatalogPath) -TaskId ([string]$task.Name) -Enabled $shouldEnable
-    $verifiedCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $StageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
+    $changed = Set-ProdicloudTaskCatalogEnabled -Path ([string]$task.CatalogPath) -TaskId ([string]$task.Name) -Enabled $shouldEnable
+    $verifiedCatalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath $StageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
     $verifiedTask = @($verifiedCatalog.InventoryTasks | Where-Object { [string]::Equals([string]$_.Name, [string]$task.Name, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
     if (@($verifiedTask).Count -ne 1 -or [bool]$verifiedTask[0].Enabled -ne $shouldEnable) {
         throw ("Task availability verification failed after attempting to {0} '{1}'." -f $Action, [string]$task.Name)
@@ -642,18 +642,18 @@ function Invoke-ClagnosTaskAvailabilityToggle {
     Write-Host ("Task '{0}' is now {1} for future {2} runs." -f [string]$task.Name, $statusText, $Platform) -ForegroundColor Green
     return [pscustomobject]@{ Task = $verifiedTask[0]; Enabled = [bool]$shouldEnable; Changed = [bool]$changed }
 }
-function Resolve-ClagnosTaskBlockForMaintenance {
+function Resolve-ProdicloudTaskBlockForMaintenance {
     param(
         [pscustomobject]$Runtime,
         [hashtable]$Options,
         [switch]$AutoMode
     )
 
-    $hasPackage = Test-ClagnosCliOptionPresent -Options $Options -Name 'package'
-    $hasPackageCatalog = Test-ClagnosCliOptionPresent -Options $Options -Name 'package-catalog'
+    $hasPackage = Test-ProdicloudCliOptionPresent -Options $Options -Name 'package'
+    $hasPackageCatalog = Test-ProdicloudCliOptionPresent -Options $Options -Name 'package-catalog'
     if ($hasPackage -or $hasPackageCatalog) {
-        $packageId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'package')
-        $packageCatalog = [string](Get-ClagnosCliOptionText -Options $Options -Name 'package-catalog')
+        $packageId = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'package')
+        $packageCatalog = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'package-catalog')
         if ($packageCatalog -notin @('builtin','custom')) {
             Throw-FriendlyError `
                 -Detail ("Unsupported package catalog '{0}'." -f $packageCatalog) `
@@ -661,7 +661,7 @@ function Resolve-ClagnosTaskBlockForMaintenance {
                 -Summary 'Package catalog selection is invalid.' `
                 -Hint 'Use --package-catalog=builtin or --package-catalog=custom.'
         }
-        $packages = @(Get-ClagnosPackageCatalog -Platform ([string]$Runtime.Platform) -Catalog $packageCatalog)
+        $packages = @(Get-ProdicloudPackageCatalog -Platform ([string]$Runtime.Platform) -Catalog $packageCatalog)
         $selectedPackage = @($packages | Where-Object { [string]::Equals([string]$_.Id,$packageId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
         if ($selectedPackage.Count -ne 1) {
             Throw-FriendlyError `
@@ -670,34 +670,34 @@ function Resolve-ClagnosTaskBlockForMaintenance {
                 -Summary 'Package app-state target is unavailable.' `
                 -Hint 'Choose a package from the selected package catalog.'
         }
-        $resolvedPackageTask = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($selectedPackage[0].PackageTask) -Context $Runtime.Context)[0]
+        $resolvedPackageTask = @(Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($selectedPackage[0].PackageTask) -Context $Runtime.Context)[0]
         return [pscustomobject]@{ Stage = 'package'; TaskBlock = $resolvedPackageTask }
     }
 
-    $selection = Resolve-ClagnosTaskStageSelection -Options $Options -AutoMode:$AutoMode
+    $selection = Resolve-ProdicloudTaskStageSelection -Options $Options -AutoMode:$AutoMode
     $stage = [string]$selection.Stage
     $requested = [string]$selection.Requested
 
     if ($stage -eq 'init') {
-        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
-        $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-        $selectedTask = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'init' -AutoMode:$AutoMode
+        $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
+        $tasks = Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+        $selectedTask = Resolve-ProdicloudTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'init' -AutoMode:$AutoMode
         return [pscustomobject]@{ Stage = 'init'; TaskBlock = $selectedTask }
     }
 
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
-    $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-    $selectedTask = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'update' -AutoMode:$AutoMode
+    $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
+    $tasks = Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+    $selectedTask = Resolve-ProdicloudTaskSelection -TaskBlocks $tasks -TaskNumberOrName $requested -Stage 'update' -AutoMode:$AutoMode
     return [pscustomobject]@{ Stage = 'update'; TaskBlock = $selectedTask }
 }
 
-function Resolve-ClagnosTaskRunSelection {
+function Resolve-ProdicloudTaskRunSelection {
     param(
         [hashtable]$Options
     )
 
-    $hasRunInit = Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-init'
-    $hasRunUpdate = Test-ClagnosCliOptionPresent -Options $Options -Name 'run-vm-update'
+    $hasRunInit = Test-ProdicloudCliOptionPresent -Options $Options -Name 'run-vm-init'
+    $hasRunUpdate = Test-ProdicloudCliOptionPresent -Options $Options -Name 'run-vm-update'
 
     if ($hasRunInit -and $hasRunUpdate) {
         Throw-FriendlyError `
@@ -710,13 +710,13 @@ function Resolve-ClagnosTaskRunSelection {
     if ($hasRunInit) {
         return [pscustomobject]@{
             Stage = 'init'
-            Requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'run-vm-init')
+            Requested = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'run-vm-init')
         }
     }
     if ($hasRunUpdate) {
         return [pscustomobject]@{
             Stage = 'update'
-            Requested = [string](Get-ClagnosCliOptionText -Options $Options -Name 'run-vm-update')
+            Requested = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'run-vm-update')
         }
     }
 
@@ -727,7 +727,7 @@ function Resolve-ClagnosTaskRunSelection {
         -Hint "Use --run-vm-init <task-number|task-name> or --run-vm-update <task-number|task-name>."
 }
 
-function Resolve-ClagnosTaskBlockForStage {
+function Resolve-ProdicloudTaskBlockForStage {
     param(
         [pscustomobject]$Runtime,
         [string]$Stage,
@@ -736,17 +736,17 @@ function Resolve-ClagnosTaskBlockForStage {
     )
 
     if ([string]::Equals([string]$Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
-        $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-        return (Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'init' -AutoMode:$AutoMode)
+        $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmInitTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'init'
+        $tasks = Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+        return (Resolve-ProdicloudTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'init' -AutoMode:$AutoMode)
     }
 
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
-    $tasks = Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
-    return (Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode)
+    $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
+    $tasks = Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context
+    return (Resolve-ProdicloudTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode)
 }
 
-function Resolve-ClagnosTaskExecutionPlanForStage {
+function Resolve-ProdicloudTaskExecutionPlanForStage {
     param(
         [pscustomobject]$Runtime,
         [string]$Stage,
@@ -755,16 +755,16 @@ function Resolve-ClagnosTaskExecutionPlanForStage {
     )
 
     if ([string]::Equals([string]$Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $selectedTaskBlock = Resolve-ClagnosTaskBlockForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
+        $selectedTaskBlock = Resolve-ProdicloudTaskBlockForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
         return [pscustomobject]@{
             SelectedTaskBlock = $selectedTaskBlock
             ExecutionTaskBlocks = @($selectedTaskBlock)
         }
     }
 
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
-    $tasks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context)
-    $selectedTaskBlock = Resolve-ClagnosTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode
+    $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update'
+    $tasks = @(Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($catalog.ActiveTasks) -Context $Runtime.Context)
+    $selectedTaskBlock = Resolve-ProdicloudTaskSelection -TaskBlocks $tasks -TaskNumberOrName $Requested -Stage 'update' -AutoMode:$AutoMode
 
     return [pscustomobject]@{
         SelectedTaskBlock = $selectedTaskBlock
@@ -772,7 +772,7 @@ function Resolve-ClagnosTaskExecutionPlanForStage {
     }
 }
 
-function Invoke-ClagnosWinRmTaskBlocksWithGuestRestart {
+function Invoke-ProdicloudWinRmTaskBlocksWithGuestRestart {
     param(
         [psobject]$Runtime,
         [string]$HostName,
@@ -785,7 +785,7 @@ function Invoke-ClagnosWinRmTaskBlocksWithGuestRestart {
     )
 
     if (@($TaskBlocks).Count -ne 1) { throw 'A WinRM task reboot retry must contain exactly one task.' }
-    $result = Invoke-ClagnosWinRmTaskBlocks -Platform 'windows' -HostName $HostName -Runtime $Runtime -Target $Target -TaskBlocks $TaskBlocks -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory 'task-run'
+    $result = Invoke-ProdicloudWinRmTaskBlocks -Platform 'windows' -HostName $HostName -Runtime $Runtime -Target $Target -TaskBlocks $TaskBlocks -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory 'task-run'
     if (-not [bool]$result.RebootRequired -or [string]$TaskBlocks[0].TaskType -eq 'package') {
         return [pscustomobject]@{ Result=$result; Runtime=$Runtime; Target=$Target; HostName=$HostName }
     }
@@ -795,21 +795,21 @@ function Invoke-ClagnosWinRmTaskBlocksWithGuestRestart {
             group = [string]$Runtime.Context.ResourceGroup
             'vm-name' = [string]$Runtime.Context.VmName
         }
-        $subscription = Get-ClagnosResolvedSubscriptionContext
+        $subscription = Get-ProdicloudResolvedSubscriptionContext
         if ($null -ne $subscription -and -not [string]::IsNullOrWhiteSpace([string]$subscription.SubscriptionId)) { $Options['subscription-id'] = [string]$subscription.SubscriptionId }
     }
     $taskName = [string]$TaskBlocks[0].Name
-    Write-ClagnosActionProgress -Action ("apply the requested one-time VM restart for Windows task '{0}'" -f $taskName)
-    $restart = Restart-ClagnosPackageVmForPendingReboot -Runtime $Runtime -Target $Target -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -ActionLabel ("Windows task '{0}'" -f $taskName) -WaitTransport 'winrm'
+    Write-ProdicloudActionProgress -Action ("apply the requested one-time VM restart for Windows task '{0}'" -f $taskName)
+    $restart = Restart-ProdicloudPackageVmForPendingReboot -Runtime $Runtime -Target $Target -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -ActionLabel ("Windows task '{0}'" -f $taskName) -WaitTransport 'winrm'
     $Runtime = $restart.Runtime
     $Target = $restart.Target
-    $vmDetails = Get-ClagnosVmDetails -Context $Runtime.Context -AllowCachedInventory
+    $vmDetails = Get-ProdicloudVmDetails -Context $Runtime.Context -AllowCachedInventory
     $HostName = [string]$vmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($HostName)) { $HostName = [string]$vmDetails.PublicIP }
     if ([string]::IsNullOrWhiteSpace($HostName)) { throw ("Windows task '{0}' requested a restart, but its WinRM endpoint could not be resolved afterward." -f $taskName) }
 
-    Write-ClagnosActionProgress -Action ("rerun Windows task '{0}' once after restart to verify servicing completion" -f $taskName)
-    $retryResult = Invoke-ClagnosWinRmTaskBlocks -Platform 'windows' -HostName $HostName -Runtime $Runtime -Target $Target -TaskBlocks $TaskBlocks -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory 'task-run'
+    Write-ProdicloudActionProgress -Action ("rerun Windows task '{0}' once after restart to verify servicing completion" -f $taskName)
+    $retryResult = Invoke-ProdicloudWinRmTaskBlocks -Platform 'windows' -HostName $HostName -Runtime $Runtime -Target $Target -TaskBlocks $TaskBlocks -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory 'task-run'
     if ([bool]$retryResult.RebootRequired) {
         throw ("Windows task '{0}' still requests a reboot after its one allowed servicing restart. Rerun the task after reviewing target Windows servicing state." -f $taskName)
     }
@@ -819,7 +819,7 @@ function Invoke-ClagnosWinRmTaskBlocksWithGuestRestart {
     return [pscustomobject]@{ Result=$retryResult; Runtime=$Runtime; Target=$Target; HostName=$HostName }
 }
 
-function Invoke-ClagnosTaskExecutionWithTargetCore {
+function Invoke-ProdicloudTaskExecutionWithTargetCore {
     param(
         [pscustomobject]$Runtime,
         [hashtable]$Options,
@@ -837,14 +837,14 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
         $effectiveTaskOutcomeMode = [string]$TaskOutcomeModeOverride
     }
 
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName $OperationName
+    $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName $OperationName
     $Runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $Runtime.Context.VmName = [string]$target.VmName
     if ($null -ne $PackageTaskBlock) {
         if (-not [string]::Equals([string]$Stage, 'update', [System.StringComparison]::OrdinalIgnoreCase)) {
             throw 'Package installers must use the remote VM update transport.'
         }
-        $resolvedPackageBlocks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($PackageTaskBlock) -Context $Runtime.Context)
+        $resolvedPackageBlocks = @(Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($PackageTaskBlock) -Context $Runtime.Context)
         $packageTaskBlock = $resolvedPackageBlocks[0]
         $executionBlocks = New-Object 'System.Collections.Generic.List[object]'
         $executionBlocks.Add($packageTaskBlock) | Out-Null
@@ -854,8 +854,8 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
             $postInstallTaskNames = @($PackageTaskBlock.PackageSpec.PostInstallTasks | ForEach-Object { [string]$_ })
         }
         if ($postInstallTaskNames.Count -gt 0) {
-            $updateCatalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update' -SuppressSkipMessages
-            $updateTasks = @(Resolve-ClagnosRuntimeTaskBlocks -TemplateTaskBlocks @($updateCatalog.ActiveTasks) -Context $Runtime.Context)
+            $updateCatalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath ([string]$Runtime.Context.VmUpdateTaskDir) -Platform ([string]$Runtime.Platform) -Stage 'update' -SuppressSkipMessages
+            $updateTasks = @(Resolve-ProdicloudRuntimeTaskBlocks -TemplateTaskBlocks @($updateCatalog.ActiveTasks) -Context $Runtime.Context)
             foreach ($postInstallTaskName in $postInstallTaskNames) {
                 $postInstallTask = @($updateTasks | Where-Object { [string]::Equals([string]$_.Name, $postInstallTaskName, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
                 if ($postInstallTask.Count -ne 1) {
@@ -870,19 +870,19 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
         }
     }
     else {
-        $executionPlan = Resolve-ClagnosTaskExecutionPlanForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
+        $executionPlan = Resolve-ProdicloudTaskExecutionPlanForStage -Runtime $Runtime -Stage $Stage -Requested $Requested -AutoMode:$AutoMode
     }
     $taskBlock = $executionPlan.SelectedTaskBlock
     $executionTaskBlocks = @($executionPlan.ExecutionTaskBlocks)
 
     if ([string]::Equals([string]$Stage, 'init', [System.StringComparison]::OrdinalIgnoreCase)) {
         $combinedShell = if ([string]::Equals([string]$Runtime.Platform, 'linux', [System.StringComparison]::OrdinalIgnoreCase)) { 'bash' } else { 'powershell' }
-        $vmRuntimeDetails = Get-ClagnosVmDetails -Context $Runtime.Context
+        $vmRuntimeDetails = Get-ProdicloudVmDetails -Context $Runtime.Context
         $sshHost = [string]$vmRuntimeDetails.VmFqdn
         if ([string]::IsNullOrWhiteSpace([string]$sshHost)) {
             $sshHost = [string]$vmRuntimeDetails.PublicIP
         }
-        $runCommandResult = Invoke-VmRunCommandBlocks -ResourceGroup ([string]$Runtime.Context.ResourceGroup) -VmName ([string]$Runtime.Context.VmName) -CommandId ([string]$Runtime.PlatformDefaults.RunCommandId) -TaskBlocks @($executionTaskBlocks) -CombinedShell $combinedShell -TaskOutcomeMode $effectiveTaskOutcomeMode -PerfTaskCategory "task-run" -Platform ([string]$Runtime.Platform) -RepoRoot (Get-ClagnosRepoRoot) -ManagerUser ([string]$Runtime.Context.VmUser) -AssistantUser ([string]$Runtime.Context.VmAssistantUser) -SshHost $sshHost -SshUser ([string]$Runtime.Context.VmUser) -SshPassword ([string]$Runtime.Context.VmPass) -SshPort ([string]$Runtime.Context.SshPort) -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
+        $runCommandResult = Invoke-VmRunCommandBlocks -ResourceGroup ([string]$Runtime.Context.ResourceGroup) -VmName ([string]$Runtime.Context.VmName) -CommandId ([string]$Runtime.PlatformDefaults.RunCommandId) -TaskBlocks @($executionTaskBlocks) -CombinedShell $combinedShell -TaskOutcomeMode $effectiveTaskOutcomeMode -PerfTaskCategory "task-run" -Platform ([string]$Runtime.Platform) -RepoRoot (Get-ProdicloudRepoRoot) -ManagerUser ([string]$Runtime.Context.VmUser) -AssistantUser ([string]$Runtime.Context.VmAssistantUser) -SshHost $sshHost -SshUser ([string]$Runtime.Context.VmUser) -SshPassword ([string]$Runtime.Context.VmPass) -SshPort ([string]$Runtime.Context.SshPort) -SshConnectTimeoutSeconds ([int]$Runtime.SshConnectTimeoutSeconds) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
         return [pscustomobject]@{
             Stage = 'init'
             Task = $taskBlock
@@ -892,7 +892,7 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
         }
     }
 
-    $vmRuntimeDetails = Get-ClagnosVmDetails -Context $Runtime.Context
+    $vmRuntimeDetails = Get-ProdicloudVmDetails -Context $Runtime.Context
     $sshHost = [string]$vmRuntimeDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($sshHost)) {
         $sshHost = [string]$vmRuntimeDetails.PublicIP
@@ -903,15 +903,15 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
 
     $declaredWinRmTransport = @($executionTaskBlocks | Where-Object { $_.PSObject.Properties.Match('Transport').Count -gt 0 -and [string]$_.Transport -eq 'winrm' }).Count -gt 0
     $packageWinRmTransport = ([string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase) -and
-        (Get-ClagnosPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)) -eq 'winrm')
+        (Get-ProdicloudPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)) -eq 'winrm')
     if ([string]::Equals([string]$Runtime.Platform,'windows',[System.StringComparison]::OrdinalIgnoreCase) -and ($declaredWinRmTransport -or $packageWinRmTransport)) {
-        if ($Runtime.Context.PSObject.Properties.Match('PowerShellPort').Count -eq 0) { $Runtime.Context | Add-Member -NotePropertyName PowerShellPort -NotePropertyValue (Get-ClagnosDefaultPowerShellPortText) }
+        if ($Runtime.Context.PSObject.Properties.Match('PowerShellPort').Count -eq 0) { $Runtime.Context | Add-Member -NotePropertyName PowerShellPort -NotePropertyValue (Get-ProdicloudDefaultPowerShellPortText) }
         if ($declaredWinRmTransport -and -not [string]::Equals([string]$OperationName,'package',[System.StringComparison]::OrdinalIgnoreCase)) {
-            $winrmExecution = Invoke-ClagnosWinRmTaskBlocksWithGuestRestart -Runtime $Runtime -HostName $sshHost -Target $target -TaskBlocks @($executionTaskBlocks) -TaskOutcomeMode $effectiveTaskOutcomeMode -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag
+            $winrmExecution = Invoke-ProdicloudWinRmTaskBlocksWithGuestRestart -Runtime $Runtime -HostName $sshHost -Target $target -TaskBlocks @($executionTaskBlocks) -TaskOutcomeMode $effectiveTaskOutcomeMode -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag
             $winrmTaskResult = $winrmExecution.Result
         }
         else {
-            $winrmTaskResult = Invoke-ClagnosWinRmTaskBlocks `
+            $winrmTaskResult = Invoke-ProdicloudWinRmTaskBlocks `
                 -Platform 'windows' `
                 -HostName $sshHost `
                 -Runtime $Runtime `
@@ -929,9 +929,9 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
         }
     }
 
-    $sshTaskResult = Invoke-ClagnosSshTaskBlocks `
+    $sshTaskResult = Invoke-ProdicloudSshTaskBlocks `
         -Platform ([string]$Runtime.Platform) `
-        -RepoRoot (Get-ClagnosRepoRoot) `
+        -RepoRoot (Get-ProdicloudRepoRoot) `
         -SshHost $sshHost `
         -SshUser ([string]$Runtime.Context.VmUser) `
         -SshPassword ([string]$Runtime.Context.VmPass) `
@@ -956,8 +956,8 @@ function Invoke-ClagnosTaskExecutionWithTargetCore {
     }
 }
 
-# Handles Get-ClagnosTaskRunResultCount.
-function Get-ClagnosTaskRunResultCount {
+# Handles Get-ProdicloudTaskRunResultCount.
+function Get-ProdicloudTaskRunResultCount {
     param(
         [psobject]$Result,
         [string]$PropertyName
@@ -970,8 +970,8 @@ function Get-ClagnosTaskRunResultCount {
     return 0
 }
 
-# Handles New-ClagnosTaskRunHistoryRecord.
-function New-ClagnosTaskRunHistoryRecord {
+# Handles New-ProdicloudTaskRunHistoryRecord.
+function New-ProdicloudTaskRunHistoryRecord {
     param(
         [psobject]$Runtime,
         [hashtable]$Options,
@@ -993,16 +993,16 @@ function New-ClagnosTaskRunHistoryRecord {
         $taskNames = @($RunResult.TaskBlocks | ForEach-Object { [string]$_.Name } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
     }
     $resultPayload = if ($null -ne $RunResult) { $RunResult.Result } else { $null }
-    $failedCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'FailedCount'
-    $warningCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'WarningCount'
-    $errorCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'ErrorCount'
-    $successCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'SuccessCount'
-    $rebootCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'RebootCount'
+    $failedCount = Get-ProdicloudTaskRunResultCount -Result $resultPayload -PropertyName 'FailedCount'
+    $warningCount = Get-ProdicloudTaskRunResultCount -Result $resultPayload -PropertyName 'WarningCount'
+    $errorCount = Get-ProdicloudTaskRunResultCount -Result $resultPayload -PropertyName 'ErrorCount'
+    $successCount = Get-ProdicloudTaskRunResultCount -Result $resultPayload -PropertyName 'SuccessCount'
+    $rebootCount = Get-ProdicloudTaskRunResultCount -Result $resultPayload -PropertyName 'RebootCount'
     $deferredTasks = @()
     if ($null -ne $resultPayload -and $resultPayload.PSObject.Properties.Match('DeferredAppStateTasks').Count -gt 0) {
         $deferredTasks = @($resultPayload.DeferredAppStateTasks | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
     }
-    $deferredCount = Get-ClagnosTaskRunResultCount -Result $resultPayload -PropertyName 'DeferredAppStateCount'
+    $deferredCount = Get-ProdicloudTaskRunResultCount -Result $resultPayload -PropertyName 'DeferredAppStateCount'
     if ($deferredCount -lt 1) { $deferredCount = @($deferredTasks).Count }
     $failedTasks = if ($null -ne $resultPayload -and $resultPayload.PSObject.Properties.Match('FailedTasks').Count -gt 0) { @($resultPayload.FailedTasks | ForEach-Object { [string]$_ }) } else { @() }
     $warningTasks = if ($null -ne $resultPayload -and $resultPayload.PSObject.Properties.Match('WarningTasks').Count -gt 0) { @($resultPayload.WarningTasks | ForEach-Object { [string]$_ }) } else { @() }
@@ -1023,8 +1023,8 @@ function New-ClagnosTaskRunHistoryRecord {
     }
 
     $context = if ($null -ne $Runtime) { $Runtime.Context } else { $null }
-    $resourceGroup = if ($null -ne $context) { [string]$context.ResourceGroup } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'group') }
-    $vmName = if ($null -ne $context) { [string]$context.VmName } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name') }
+    $resourceGroup = if ($null -ne $context) { [string]$context.ResourceGroup } else { [string](Get-ProdicloudCliOptionText -Options $Options -Name 'group') }
+    $vmName = if ($null -ne $context) { [string]$context.VmName } else { [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-name') }
     $platform = if ($null -ne $Runtime) { [string]$Runtime.Platform } else { '' }
 
     return [ordered]@{
@@ -1055,8 +1055,8 @@ function New-ClagnosTaskRunHistoryRecord {
     }
 }
 
-# Handles Invoke-ClagnosTaskExecutionWithTarget.
-function Invoke-ClagnosTaskExecutionWithTarget {
+# Handles Invoke-ProdicloudTaskExecutionWithTarget.
+function Invoke-ProdicloudTaskExecutionWithTarget {
     param(
         [pscustomobject]$Runtime,
         [hashtable]$Options,
@@ -1069,15 +1069,15 @@ function Invoke-ClagnosTaskExecutionWithTarget {
         [string]$TaskOutcomeModeOverride = ''
     )
 
-    if ([bool]$script:ClagnosTaskHistoryDisabled) {
-        return (Invoke-ClagnosTaskExecutionWithTargetCore @PSBoundParameters)
+    if ([bool]$script:ProdicloudTaskHistoryDisabled) {
+        return (Invoke-ProdicloudTaskExecutionWithTargetCore @PSBoundParameters)
     }
 
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $runResult = $null
     $failure = $null
     try {
-        $runResult = Invoke-ClagnosTaskExecutionWithTargetCore @PSBoundParameters
+        $runResult = Invoke-ProdicloudTaskExecutionWithTargetCore @PSBoundParameters
     }
     catch {
         $failure = $_
@@ -1086,7 +1086,7 @@ function Invoke-ClagnosTaskExecutionWithTarget {
         if ($watch.IsRunning) { $watch.Stop() }
     }
 
-    $historyRecord = New-ClagnosTaskRunHistoryRecord `
+    $historyRecord = New-ProdicloudTaskRunHistoryRecord `
         -Runtime $Runtime `
         -Options $Options `
         -OperationName $OperationName `
@@ -1097,7 +1097,7 @@ function Invoke-ClagnosTaskExecutionWithTarget {
         -Failure $failure `
         -DurationSeconds $watch.Elapsed.TotalSeconds
     try {
-        Write-ClagnosTaskRunHistoryRecord -Record $historyRecord
+        Write-ProdicloudTaskRunHistoryRecord -Record $historyRecord
     }
     catch {
         Write-Warning ("Local task history could not be saved: {0}" -f [string]$_.Exception.Message)

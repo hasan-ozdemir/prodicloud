@@ -1,7 +1,43 @@
 # Changelog
 
-All notable changes to `clagnos` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
+All notable changes to `prodicloud` are documented here. The structure follows a Keep a Changelog style, while the content is curated from the repository commit history and the reconstructed Codex development record.
 Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository commit count at the documented release point.
+
+## [2026.10.28.433] - 2026-10-28
+
+### Changed
+- Rebranded the repository, CLI, runtime manifest and product-specific modules as Prodicloud; renamed the root directory, `pd.cmd` launcher, global environment file and main operator guide, and updated runtime/test/documentation references.
+- Renamed the GitHub repository to the Prodicloud GitHub repository and updated the local `origin` URL.
+- Preserved discovery and confirmation-based migration of Azure resource groups tagged `managed-by=az-vm`; the inventory worker and migration UI now recognize that legacy tag.
+- Deallocated and removed the confirmed Prodicloud-managed resource group, then cleared the deleted VM target from the local global active-VM setting.
+- Validated the new entrypoints and contracts with the static quality gate and all 187 fixture-backed TUI scenarios and 204/204 Windows PowerShell 5.1 smoke checks; no live Azure tests were run.
+
+## [2026.10.20.432] - 2026-10-20
+
+### Changed
+- Disk resize now reports Azure provisioned capacity, guest raw capacity, partitioned and unallocated space, non-filesystem partitions, and per-volume filesystem size/used/free measurements before and after resize.
+- Disk shrink remeasures the isolated source clone before file copy, reports measurement drift from the initial guest inventory, and checks actual replacement used/free space against the 10 GiB headroom before cutover. Post-cutover inventory and headroom are checked again.
+- Windows and Linux shrink helpers return structured source and replacement capacity measurements; insufficient capacity fails while the original disk remains attached.
+- Windows OS shrink supports the standard GPT/UEFI layout plus one small, empty leading MSR partition. The empty source partition is omitted from file-copy mapping, and replacement layout is verified from helper measurements and after guest boot; other unrecognized partitions remain blocked.
+- Windows guest expansion validates the selected OS/data volume instead of rejecting the normal FAT32 EFI partition, and can idempotently finish guest expansion after Azure capacity already reached the requested size.
+- Large Windows helper scripts are staged in a temporary file and passed to Azure CLI by `@file`, avoiding the Windows process-argument limit for asynchronous Managed Run Command.
+- Windows shrink starts temporary helper provisioning asynchronously while source/candidate disks are prepared, then waits for VM and Guest Agent readiness before attachment. Completed Run Command children are removed with the helper resource group instead of a separate blocking ARM delete.
+- Supported `StandardSSD_LRS` shrink copies temporarily use a same-capacity Premium SSD P40 source clone and a target-capacity P40 replacement, verify both Azure readbacks, and restore the replacement's original disk SKU before cutover. The target disk capacity and final storage type remain unchanged.
+- The temporary shrink helper now uses `Standard_D8ds_v5` and creates its 128 GiB OS disk directly as `StandardSSD_LRS`, with no OS-disk performance-tier update. It verifies this profile before attachment and overlaps Guest Agent readiness with the two copy-disk attachments. The runtime reports the D8/P40 formula-derived 145 MB/s conservative payload ceiling.
+- Disk resize waits for VM power and provisioning state every five seconds, stabilizes SSH/WinRM with consecutive probes after restart, and polls guest/filesystem capacity before reporting success. Ordinary guest operations use one successful transport probe; restart paths require two.
+- Supported VM lifecycle, disk, snapshot, and OS-disk cutover requests now use Azure CLI `--no-wait` followed by state polling. Shrink verifies helper LUN attachments/detachments, group deletion, detached candidate deletion, and replaced source-disk absence; timed-out purges are reported as pending rather than assumed complete.
+
+### Validation
+- Compatibility smoke passed 204/204, the documentation contract passed, and PowerShell syntax parsing passed for the resize runtime, guest scripts, helper script, and smoke test.
+- The live extend-then-shrink cycle succeeded on an existing managed Windows VM. A repeat 180→130 GiB shrink with asynchronous helper startup, temporary P15 copy disks, and deferred Run Command cleanup completed in 1,714.8 seconds versus 3,127 seconds in the prior shrink run (about 45% shorter); the exact speed contribution of each optimization is not isolated. Final readback confirmed 130 GiB Azure/guest capacity, the original Standard SSD SKU, synchronized VC profile, running VM, hibernation support, WinRE Enabled, old source disk deletion, and temporary helper cleanup.
+- A further live 130→180→130 GiB cycle used the D8ds_v5 helper and temporary P30 source/candidate disks. The helper's copy-and-verification command completed in 1,018 seconds without retry; measured helper CPU stayed at or below 18%, network traffic was zero, and at least 26 GiB RAM remained free. Final readback confirmed a 130 GiB Standard SSD OS disk and C: volume, hibernation support, WinRE Enabled, unchanged VM size/NIC/public IP, synchronized VC profile, old source disk removal, and temporary helper resource-group cleanup. The run verifies P30 operation but does not isolate its speed gain versus P15/P20.
+- The helper-profile and disk-readback updates are code/documentation-only; automated tests and live Azure operations were not run for this update.
+- The first expansion attempt reached the requested Azure capacity but exhausted its short WinRM readiness retries immediately after VM start. An idempotent rerun completed the guest partition expansion; the post-run WinRM readiness bound was extended to 120 seconds for that restart path.
+
+### Additional Validation
+- A subsequent live 130→180→130 GiB cycle used the `Standard_D16ds_v5` helper, a 128 GiB P15 helper OS disk, and temporary P40 source/candidate disks. Expansion completed in 396.6 seconds; shrink copy-and-verification completed in 778 seconds, 23.6% below the earlier 1,018-second D8/P30 copy phase. This is an observational comparison, not a controlled A/B benchmark. Final readback confirmed the VM running at its original size, a 130 GiB `StandardSSD_LRS` OS disk and 129.43 GiB C: volume, 41.31 GiB free, hibernation and WinRE enabled, synchronized VC profile, old source disk absent, temporary helper group purged, and PowerShell remoting healthy.
+- Microsoft-documented alternatives were reviewed. ReFS block cloning is limited to files on the same ReFS volume, while this workflow copies between separate disks; Azure managed disks cannot be shrunk in place. No safe, directly applicable faster clone method was found, so Robocopy remains the compatible copy path.
+- The helper profile is `Standard_D8ds_v5` with a directly provisioned 128 GiB Standard SSD OS disk and P40 temporary copy disks; helper OS tier-upgrade and redundant resource-group readiness calls were removed, and Guest Agent readiness overlaps disk attachment. After Azure write access was restored, the live 130→180→130 GiB cycle completed through `pd.cmd`: expansion took 616.5 seconds, shrink 1,856.4 seconds, and shrink copy/verification 908 seconds. This copy phase was 10.8% shorter than the earlier D8/P30 run (1,018 seconds) and 16.7% longer than the D16/P40 copy phase (778 seconds); comparisons are observational, not controlled. Final readback confirmed the original B2s_v2 and deallocated state, 130 GiB Standard SSD OS disk, 129.43 GiB C: with 41.54 GiB free, hibernation and WinRE enabled, synchronized VC profile, unchanged NIC/public IP, old-source absence, and helper-group purge. The helper VM create request returned in 11 seconds without an OS-disk tier update. PowerShell parsing, help output, and `git diff --check` passed; automated suites were not run.
 
 ## [2026.10.19.432] - 2026-10-19
 
@@ -13,7 +49,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Validation
 - TUI coverage passed 185/185, smoke coverage passed 195/195, and the package lifecycle contract passed for all 36 Windows builtin packages.
-- On an existing Windows VM, `cg.cmd` completed FFmpeg status, uninstall, install-after-uninstall, update, same-version repair, reinstall, and final status. Final status is installed and runnable at version 9.0.2.
+- On an existing Windows VM, `pd.cmd` completed FFmpeg status, uninstall, install-after-uninstall, update, same-version repair, reinstall, and final status. Final status is installed and runnable at version 9.0.2.
 - The same VM’s GitHub CLI status verified its Chocolatey registration and `C:\Program Files\GitHub CLI\gh.exe` at version 2.102.0 using the manifest-declared `--version` flag.
 - The VM remained running. Live checks invoked package guest operations and Azure reads only; no Azure disk, network, size, or resource mutation was run.
 
@@ -25,20 +61,20 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Removed the retired `132-configure-language-settings` smoke alias and replaced the old optional-feature skip contract with full-feature install/readback coverage. The task retains the English UI default and a 900-second guest timeout.
 
 ### Validation
-- The live Clagnos task completed on VC1 in 225 seconds without rebuilding or restarting the VM. Readback shows Basic, TTS, OCR, handwriting, and Pan-European supplemental fonts installed; Speech recognition is not exposed by this Windows edition. The English display-language default stayed selected.
+- The live Prodicloud task completed on VC1 in 225 seconds without rebuilding or restarting the VM. Readback shows Basic, TTS, OCR, handwriting, and Pan-European supplemental fonts installed; Speech recognition is not exposed by this Windows edition. The English display-language default stayed selected.
 - PowerShell 5.1 and PowerShell 7 compatibility, code-quality, documentation, package lifecycle, app-state, TUI, and sensitive-content checks passed after the cutover.
 
 ## [2026.10.18.430] - 2026-10-18
 
 ### Changed
-- Consolidated Clagnos transcripts, task history, and verified guest log collection under the ignored repository-root `.logs/`; logs are retained until manually removed, and remote files are removed only after copied hashes verify.
+- Consolidated Prodicloud transcripts, task history, and verified guest log collection under the ignored repository-root `.logs/`; logs are retained until manually removed, and remote files are removed only after copied hashes verify.
 - Expanded and aligned per-VC environment profiles, populated existing VC profiles with non-empty effective values, and synchronized Azure-observed public-IP DNS settings back to the owning profile.
 - Normalized managed Azure public DNS labels to the VM names themselves and added availability preflight plus update/setup reconciliation.
 - Replaced the Turkish language task's slow Windows Update language scan with bounded DISM installation from Microsoft's matching Windows 11 language ISO. The task installs only the display language and required Basic capability, preserves English defaults, and enforces a 900-second task limit.
 
 ### Validation
-- VC1's existing Turkish display language and `Language.Basic` capability were verified through the Clagnos WinRM task; its English system UI default remained selected. The already-installed state completed idempotently in about 36 seconds, without an ISO download or VM restart.
-- Updated the live DNS labels through Clagnos component menus. VC1 and VC2 resolve to `vc1.eastus.cloudapp.azure.com` and `vc2.germanywestcentral.cloudapp.azure.com`; VM size, disks, NICs, public IP addresses, allocation, and SKU remained unchanged.
+- VC1's existing Turkish display language and `Language.Basic` capability were verified through the Prodicloud WinRM task; its English system UI default remained selected. The already-installed state completed idempotently in about 36 seconds, without an ISO download or VM restart.
+- Updated the live DNS labels through Prodicloud component menus. VC1 and VC2 resolve to `vc1.eastus.cloudapp.azure.com` and `vc2.germanywestcentral.cloudapp.azure.com`; VM size, disks, NICs, public IP addresses, allocation, and SKU remained unchanged.
 - PowerShell 5.1 and PowerShell 7 compatibility passed with 195/195 smoke checks and 180/180 TUI checks on each. Code quality, documentation, lifecycle, app-state, and sensitive-content checks passed.
 
 ## [2026.10.18.429] - 2026-10-18
@@ -78,7 +114,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the remaining smoke-test contract failures across VM-profile fixtures, moved vm-update task paths, CLI help, WinRM mocks, app-state catalog fixtures, and package install expectations.
 - Made package enable/disable and disabled-package preflight resolve catalog state without requiring Azure target resolution or a valid active VC profile.
 - Made explicit `do --group/--vm-name` targets independent of an unrelated active VC profile, and made VM-scoped environment writes seed and validate `SELECTED_VM_NAME` before storing target settings.
-- Isolated the real-`cg.cmd` TUI selection test from local configuration files and verified that selecting a VM persists its active name in the test profile.
+- Isolated the real-`pd.cmd` TUI selection test from local configuration files and verified that selecting a VM persists its active name in the test profile.
 
 ### Validation
 - The PowerShell compatibility matrix passed on Windows PowerShell 5.1 and PowerShell 7: smoke checks 193/193 and TUI checks 180/180 on each target.
@@ -102,7 +138,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.10.16.425] - 2026-10-16
 
 ### Added
-- Added the global `TOP_STATUS_LINES` boolean preference to `clagnos.env`, its example, and the Configure > Advanced editor. The default is `false`.
+- Added the global `TOP_STATUS_LINES` boolean preference to `prodicloud.env`, its example, and the Configure > Advanced editor. The default is `false`.
 
 ### Changed
 - Made the persistent two-row TUI status area optional. `TOP_STATUS_LINES=false` restores the compact header; `true` enables the status rows and screen-reader-aware redraw behavior.
@@ -131,7 +167,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.10.16.422] - 2026-10-16
 
 ### Added
-- Added `clagnos.env.example` for global settings and `vc.env.example` for target-specific VC profiles. The local `clagnos.env` stores the active VC pointer, subscription, operator identity, infrastructure defaults, and runtime settings; each git-ignored `<vm-name>.env` stores its VM identity/group/region, image/size/disk, feature settings, ports, package transport, and credentials.
+- Added `prodicloud.env.example` for global settings and `vc.env.example` for target-specific VC profiles. The local `prodicloud.env` stores the active VC pointer, subscription, operator identity, infrastructure defaults, and runtime settings; each git-ignored `<vm-name>.env` stores its VM identity/group/region, image/size/disk, feature settings, ports, package transport, and credentials.
 - Added profile-aware configuration loading and persistence across create, initialize/update, package/task, connection, resize/move, feature, and TUI paths. New VC creation writes a named profile and prompts securely for credentials; selecting a VC in the TUI updates `ACTIVE_VM_NAME`.
 
 ### Changed
@@ -174,7 +210,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.10.15.419] - 2026-10-15
 
 ### Added
-- Added a reviewed `p: setup all program packages` flow to the selected-VC menu. It inventories enabled packages from both catalogs, installs missing packages and repairs detected Clagnos-managed startup drift in dependency order, skips disabled or unknown states, continues independent operations, and summarizes failures. `m: manage program packages` now owns individual package management.
+- Added a reviewed `p: setup all program packages` flow to the selected-VC menu. It inventories enabled packages from both catalogs, installs missing packages and repairs detected Prodicloud-managed startup drift in dependency order, skips disabled or unknown states, continues independent operations, and summarizes failures. `m: manage program packages` now owns individual package management.
 - Added pinned same-version package repair. `i: install` installs absent packages and repairs installed packages; `r: repair` never takes a vendor upgrade path. For packages with app-state policies, repair captures the current target settings, restores and verifies them after repair, removes the temporary backup on success, and retains one emergency archive on the VC if verification fails.
 - Added a typed-confirmation-only `initialize --reset-managed-user-passwords` operation and selected-VC `k` shortcut. Normal initialization preserves existing manager/assistant passwords.
 
@@ -184,7 +220,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Interactive menus now route Escape and `b` to the parent, `c` to close the active menu flow where available, and keep choices as numbered or lettered input.
 
 ### Validation
-- Compatibility smoke checks passed 193/193. Fixture-backed TUI coverage passed 179/179, including the real `cg.cmd` process; it used an isolated Azure CLI fixture and made zero real Azure calls. Package lifecycle, package app-state, documentation, and release checks passed. Generated JAWS batch-status and repair scripts parsed successfully.
+- Compatibility smoke checks passed 193/193. Fixture-backed TUI coverage passed 179/179, including the real `pd.cmd` process; it used an isolated Azure CLI fixture and made zero real Azure calls. Package lifecycle, package app-state, documentation, and release checks passed. Generated JAWS batch-status and repair scripts parsed successfully.
 - No live VC or Azure resource was created or modified for this change.
 
 ## [2026.10.15.418] - 2026-10-15
@@ -200,7 +236,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Windows app-state replay no longer requires SSH credentials when it is using the active WinRM session.
 
 ### Validation
-- Package lifecycle and app-state contracts passed; repository quality checks passed. Compatibility smoke checks passed 192/192 and fixture-backed TUI checks passed 174/174, including the real `cg.cmd` launcher; the TUI tests made zero native Azure CLI calls.
+- Package lifecycle and app-state contracts passed; repository quality checks passed. Compatibility smoke checks passed 192/192 and fixture-backed TUI checks passed 174/174, including the real `pd.cmd` launcher; the TUI tests made zero native Azure CLI calls.
 - On an authorized live Windows target, the full 36-package status inventory returned installed. Chocolatey uninstall/install/update/status, GitHub Copilot CLI uninstall/install, and JAWS status/install-no-op/update/app-state replay were exercised. JAWS app-state replay verified 4/4 settings with zero mismatches.
 - Five read-only Chocolatey status samples per transport completed successfully: SSH median 39,310 ms (35,251–47,594 ms); WinRM median 18,151 ms (18,118–19,168 ms). The VM remained running; no disk, network, or other Azure resource was changed.
 
@@ -209,17 +245,17 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ### Fixed
 - Nested-virtualization intent, Azure-reported setting, and guest CPU-extension availability are now distinct in create review, `set`, the selected-VC screen, and `show` output. `show` uses the explicit `NestedVirtualizationAvailableToGuest` field and reports validation source, evidence, and probe errors separately.
 - Windows guest availability requires valid VMX, firmware virtualization, and SLAT values; Linux requires a valid extension-probe result. Missing or malformed guest evidence now reports unknown instead of disabled.
-- Updated feature-validation messages to say the request is checked and extensions are available, avoiding a claim that Clagnos toggled Azure hardware exposure or installed Hyper-V in the guest.
+- Updated feature-validation messages to say the request is checked and extensions are available, avoiding a claim that Prodicloud toggled Azure hardware exposure or installed Hyper-V in the guest.
 
 ### Validation
-- Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI checks, including the real `cg.cmd` process with an isolated Azure fixture. Repository quality checks passed. No Azure resource or setting was modified.
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI checks, including the real `pd.cmd` process with an isolated Azure fixture. Repository quality checks passed. No Azure resource or setting was modified.
 
 ## [2026.10.14.416] - 2026-10-14
 
 ### Fixed
 - When Azure omits nested-virtualization capability metadata, create/update uses the documented VM family to reject unsupported Bv1, Bsv2, Basv2, and Bpsv2 SKUs during configuration review, before resource-group or VM deployment.
 - Windows guest validation now requires the CPU virtualization extensions (VMX, firmware virtualization, and SLAT) to be visible before reporting nested virtualization as available. `HyperVisorPresent=true` and `VirtualMachinePlatform=Enabled` alone were a false-positive path for a VM running under Azure's outer hypervisor.
-- A read-only Bsv2 guest cross-check showed all three CPU-extension flags false even though the outer hypervisor was present and `VirtualMachinePlatform` was enabled. Clagnos now reports it as unavailable.
+- A read-only Bsv2 guest cross-check showed all three CPU-extension flags false even though the outer hypervisor was present and `VirtualMachinePlatform` was enabled. Prodicloud now reports it as unavailable.
 
 ### Validation
 - Regression fixtures cover unsupported and unknown families, the live false-positive pattern, and a supported CPU-extension case. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. The live diagnostic was read-only; no VM or related resource was changed.
@@ -227,7 +263,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.10.14.415] - 2026-10-14
 
 ### Fixed
-- When the Azure Compute SKU response omits nested-virtualization capability metadata, Clagnos now treats documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families as known negatives. With nested virtualization enabled, create/update stops during configuration review before resource-group or VM deployment and identifies the SKU/family plus the setting to change.
+- When the Azure Compute SKU response omits nested-virtualization capability metadata, Prodicloud now treats documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families as known negatives. With nested virtualization enabled, create/update stops during configuration review before resource-group or VM deployment and identifies the SKU/family plus the setting to change.
 
 ### Validation
 - Added fixture coverage for `Standard_B2s_v2` with an omitted capability row and the other documented unsupported B families. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 TUI scenarios; repository quality checks passed. No live Azure operation was run.
@@ -240,8 +276,8 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Flattened Azure JSON root arrays explicitly in the worker so Windows PowerShell 5.1 publishes usable group, resource, and VM arrays.
 
 ### Validation
-- Windows PowerShell 5.1 and PowerShell 7+ each passed 190 smoke checks and 173 fixture-backed TUI scenarios, including actual `cg.cmd` output, worker snapshot publication, persisted-refresh recovery, package-cache TTL, and SSH bootstrap reuse.
-- Repository quality checks passed for PowerShell parsing, documentation, sensitive content, package app-state, release packaging, Python syntax/artifact hygiene, and CLI help. Fixture logs showed no native Azure calls, mutations, or real Clagnos dispatches; no live Azure operations were performed.
+- Windows PowerShell 5.1 and PowerShell 7+ each passed 190 smoke checks and 173 fixture-backed TUI scenarios, including actual `pd.cmd` output, worker snapshot publication, persisted-refresh recovery, package-cache TTL, and SSH bootstrap reuse.
+- Repository quality checks passed for PowerShell parsing, documentation, sensitive content, package app-state, release packaging, Python syntax/artifact hygiene, and CLI help. Fixture logs showed no native Azure calls, mutations, or real Prodicloud dispatches; no live Azure operations were performed.
 
 ## [2026.10.14.413] - 2026-10-14
 
@@ -251,7 +287,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Added validated OS disk-size text in `MB`, `GB`, or `TB` and inbound TCP port input with comma-separated ports and ranges such as `3000-3300`. Added numbered task and inventory-group selection, app-state username validation, and additional TUI typed-input checks.
 
 ### Validation
-- Compatibility checks passed under Windows PowerShell 5.1 and PowerShell 7+: 189 smoke checks and 172 fixture-backed TUI scenarios per runtime. TUI coverage includes the real `cg.cmd` process test, cache command-count checks, change detection, wizard navigation, invalid defaults, invalid-entry retries, and canceled report-path input.
+- Compatibility checks passed under Windows PowerShell 5.1 and PowerShell 7+: 189 smoke checks and 172 fixture-backed TUI scenarios per runtime. TUI coverage includes the real `pd.cmd` process test, cache command-count checks, change detection, wizard navigation, invalid defaults, invalid-entry retries, and canceled report-path input.
 - The suite blocked native Azure and the real dispatcher; no Azure resources were created or changed.
 - Repository quality checks passed, including documentation, sensitive-content, package app-state, release-package, and Python artifact audits.
 
@@ -261,7 +297,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed interactive VM inventory and detail screens reporting `Unknown` when Azure CLI returned the documented nested `instanceView.statuses` response. The TUI now reads CLI and direct REST response shapes and normalizes power-state codes when Azure omits `displayStatus`.
 
 ### Validation
-- Opened the real `cg.cmd` without parameters and confirmed the `vc1` inventory row displayed `VM running` using a read-only Azure request.
+- Opened the real `pd.cmd` without parameters and confirmed the `vc1` inventory row displayed `VM running` using a read-only Azure request.
 - The detail screen uses the same corrected power-state resolver; no VM or related resource was mutated.
 
 ## [2026.10.13.411] - 2026-10-13
@@ -272,12 +308,12 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ### Validation
 - TUI coverage passed 160/160, including every lifecycle action and a check that `do` receives no unsupported platform flags.
 - PowerShell compatibility and quality checks passed under Windows PowerShell 5.1 and PowerShell 7+.
-- A no-argument `cg.cmd` interactive journey resized `vc1` to `Standard_B2s_v2`, read back the new size, and confirmed the VM was running through the menu status action. Disk and network resources were unchanged.
+- A no-argument `pd.cmd` interactive journey resized `vc1` to `Standard_B2s_v2`, read back the new size, and confirmed the VM was running through the menu status action. Disk and network resources were unchanged.
 
 ## [2026.10.13.410] - 2026-10-13
 
 ### Fixed
-- Fixed `cg.cmd` command mode losing forwarded arguments when the interactive frontend dot-sourced the shared runtime; added a real-launcher `help resize` regression check.
+- Fixed `pd.cmd` command mode losing forwarded arguments when the interactive frontend dot-sourced the shared runtime; added a real-launcher `help resize` regression check.
 - Extended VM size prechecks to honor active-subscription SKU restrictions before resize or other VM changes can begin.
 
 ### Validation
@@ -297,7 +333,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Validation
 - PowerShell compatibility matrix passed under Windows PowerShell 5.1 and PowerShell 7+: 187 smoke checks and 160 TUI scenarios per runtime.
-- The real `cg.cmd` TUI process used fixture Azure reads only: zero native Azure CLI calls, zero real dispatcher calls, and no resource mutations.
+- The real `pd.cmd` TUI process used fixture Azure reads only: zero native Azure CLI calls, zero real dispatcher calls, and no resource mutations.
 - Quality audit passed, including documentation, package app-state, release package, sensitive-content, syntax, and CLI help checks.
 
 ## [2026.10.13.408] - 2026-10-13
@@ -308,7 +344,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Changed
 - Extended the existing enabled Windows init task `06-configure-powershell-remoting` to grant both manager and assistant accounts access through Remote Management Users. WinRM Basic authentication and unencrypted transport remain disabled.
-- Expanded non-live command and TUI coverage for PowerShell connect selection, command execution, session testing, Linux rejection, and actual `cg.cmd` screen output.
+- Expanded non-live command and TUI coverage for PowerShell connect selection, command execution, session testing, Linux rejection, and actual `pd.cmd` screen output.
 
 ### Validation
 - PowerShell compatibility matrix passed: 179 smoke checks and 158 TUI scenarios under Windows PowerShell 5.1 and PowerShell 7+.
@@ -317,7 +353,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.10.13.407] - 2026-10-13
 
 ### Changed
-- Added a process-level TUI acceptance scenario that launches the actual `cg.cmd` and Clagnos UI/runtime source in a temporary sandbox, scripts stdin choices, and checks captured console output.
+- Added a process-level TUI acceptance scenario that launches the actual `pd.cmd` and Prodicloud UI/runtime source in a temporary sandbox, scripts stdin choices, and checks captured console output.
 - Added a fixture Azure CLI and launcher elevation shim. The fixture returns read-only subscription/VM/resource data and rejects Azure mutation verbs; the process test uses a sanitized temporary `.env` and never reads the operator's credentials.
 
 ### Validation
@@ -359,7 +395,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Changed
 - Audited every builtin package app-state policy and repository snapshot. Replaced whole-profile, browser-session, cloud-auth, cache, history, workspace, and license/activation state with narrow preference-file policies or no app-state policy where the state is identity-bound.
-- Generalized Windows package snapshots for profile paths, host names, IP addresses, system drives, and Visual Studio instance folders; added fail-closed target resolution for `%CLAGNOS_*%` placeholders immediately before replay.
+- Generalized Windows package snapshots for profile paths, host names, IP addresses, system drives, and Visual Studio instance folders; added fail-closed target resolution for `%PRODICLOUD_*%` placeholders immediately before replay.
 - Added capture-time secret-field stripping and Linux SSH capture/replay portability for home directories, UIDs/GIDs, host names, IP addresses, CPU count, and memory size.
 - Added a repeatable builtin package app-state maintenance script and snapshot contract checks for builtin and custom catalogs.
 
@@ -392,36 +428,36 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Clarified that availability changes affect future runs across VMs using the shared repository and do not change an already-running VM.
 
 ### Tests
-- Revalidated the 168-check Clagnos smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
+- Revalidated the 168-check Prodicloud smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
 - Revalidated code quality, documentation contracts, Bash syntax, and sensitive-content checks.
 - Added temporary-catalog coverage for disable, enable, explicit manifest re-enable, metadata preservation, and rejected confirmation.
 
 ## [2026.10.12.400] - 2026-10-12
 
 ### Changed
-- Added the `Cloud subscriptions` menu. It refreshes all Azure CLI subscription rows, marks the Clagnos selection and CLI active default, and numeric selection updates both `az account set` and `.env` `SELECTED_AZURE_SUBSCRIPTION_ID`.
+- Added the `Cloud subscriptions` menu. It refreshes all Azure CLI subscription rows, marks the Prodicloud selection and CLI active default, and numeric selection updates both `az account set` and `.env` `SELECTED_AZURE_SUBSCRIPTION_ID`.
 - Completed interactive access to read-only resource inventory, component details, disabled task inventory, and numeric lifecycle/resize/feature actions; region changes use the shared Azure region picker.
 - Corrected command help so `create`, `initialize`, and `update` accurately describe their separate infrastructure, bootstrap, and maintenance stages.
 
 ### Operational Result
-- Audited accessible enabled subscriptions for legacy `managed-by=az-vm` resource groups. No eligible groups were found, so no Azure resource-group tags were changed.
-- Aligned the Azure CLI active default with the Clagnos-selected subscription. No Azure resource mutations were performed.
+- Audited accessible enabled subscriptions for legacy `managed-by=prodicloud` resource groups. No eligible groups were found, so no Azure resource-group tags were changed.
+- Aligned the Azure CLI active default with the Prodicloud-selected subscription. No Azure resource mutations were performed.
 
 ### Tests
-- Revalidated the 167-check Clagnos smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
+- Revalidated the 167-check Prodicloud smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
 - Revalidated code quality, documentation contracts, Bash syntax, and sensitive-content checks.
 
 ## [2026.10.12.399] - 2026-10-12
 
 ### Changed
-- Renamed the public application, runtime modules, launch surface, repository paths, docs, and tests from az-vm to Clagnos; `cg.cmd` now opens the interactive PowerShell CLI and continues to forward direct commands.
+- Renamed the public application, runtime modules, launch surface, repository paths, docs, and tests from prodicloud to Prodicloud; `pd.cmd` now opens the interactive PowerShell CLI and continues to forward direct commands.
 - Added the numbered and lettered virtual-computer menus for subscription selection, create/list/show, initialization, maintenance, programs, components, VM lifecycle, connections, tasks, app-state, reports, and deletion.
 - Split fresh infrastructure creation, existing-VM initialization, and non-program maintenance into distinct `create`, `initialize`, and `update` flows.
 - Added validated task-catalog program status/install/uninstall operations and Azure component CRUD for resource groups, VMs, disks, VNets, subnets, NICs, public IPs, NSGs, and NSG rules, including dependency-reviewed deletion.
-- Kept existing `managed-by=az-vm` resource groups discoverable and added an explicit first-inventory migration to the new `managed-by=clagnos` tag.
+- Kept existing `managed-by=prodicloud` resource groups discoverable and added an explicit first-inventory migration to the new `managed-by=prodicloud` tag.
 
 ### Tests
-- Revalidated the 167-check Clagnos smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
+- Revalidated the 167-check Prodicloud smoke suite under Windows PowerShell 5.1 and PowerShell 7+.
 - Revalidated the documentation contract, PowerShell parsing and quality checks, Bash syntax checks through Git Bash, and sensitive-content audit.
 - No live Azure operations were run for this change.
 
@@ -439,10 +475,10 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Fixed
 - Fixed the next live acceptance blocker in the shared task restart helper. After the refreshed create loop succeeded, a natural-order `update --auto --windows --perf` rerun reached `136-configure-language-settings`, requested a reboot correctly, and then failed because the Azure CLI `az vm restart` call hit the default 300-second timeout before Azure finished the restart operation.
-- Hardened `Invoke-ClagnosRestartAndWait` so task-triggered Azure restarts now run under an explicit extended Azure CLI timeout budget. The helper keeps the existing post-restart power-state, provisioning, and SSH recovery checks unchanged, but no longer aborts early on slower guest restarts triggered by heavy Windows configuration tasks.
+- Hardened `Invoke-ProdicloudRestartAndWait` so task-triggered Azure restarts now run under an explicit extended Azure CLI timeout budget. The helper keeps the existing post-restart power-state, provisioning, and SSH recovery checks unchanged, but no longer aborts early on slower guest restarts triggered by heavy Windows configuration tasks.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 166, Failed: 0` after adding a shared contract check that task-triggered Azure restarts run through `Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds 900`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 166, Failed: 0` after adding a shared contract check that task-triggered Azure restarts run through `Invoke-ProdicloudWithAzCliTimeoutSeconds -TimeoutSeconds 900`.
 - Revalidated `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the task-restart timeout hardening.
 
 ## [2026.3.22.394] - 2026-03-22
@@ -452,7 +488,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Hardened Public Desktop cleanup with a bounded locked-file retry path and an already-normalized keep path. Managed shortcuts that are briefly locked but already match the current spec are now retained without inflating warnings, while truly stale managed shortcuts still fail deterministically after the retry budget is exhausted.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after extending the Public Desktop shortcut contract to cover locked-shortcut retry/retain behavior.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after extending the Public Desktop shortcut contract to cover locked-shortcut retry/retain behavior.
 - Revalidated `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the Public Desktop cleanup hardening.
 
 ## [2026.3.22.393] - 2026-03-22
@@ -462,7 +498,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Hardened `124-install-openai-codex-tool`, `125-install-github-copilot-tool`, and `126-install-google-gemini-tool` so each task now captures merged npm output with a temporary local `ErrorActionPreference='Continue'` guard, filters only the known benign `npm notice` and `npm warn deprecated` chatter before replay, and still fails strictly from the real npm exit code.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after extending the npm task contract to cover the local merged-output capture/filter path.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after extending the npm task contract to cover the local merged-output capture/filter path.
 - Revalidated `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the npm task warning-suppression hardening.
 
 ## [2026.3.22.392] - 2026-03-22
@@ -472,7 +508,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - This closes the next live zero-warning blocker found immediately after the previous WSL transcript fix: the latest fresh `create --auto --windows --perf` rerun still stopped at `121-install-wsl-feature` because the readiness probe emitted plain `WARNING: The Windows Subsystem for Linux is not installed...` lines before the winget bootstrap.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after extending the WSL task contract to cover the quiet readiness-probe path.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after extending the WSL task contract to cover the quiet readiness-probe path.
 - Revalidated `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the `Test-WslReady` warning-suppression change.
 - Revalidated live in isolation on the active managed Windows VM with `task --run-vm-update 121 --windows --perf`; `121-install-wsl-feature` completed with `success=1`, `warning=0`, `signal-warning=0`, `error=0`, and `reboot=1`.
 
@@ -483,7 +519,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Extended the shared SSH task-output noise filter to suppress the split-line WSL bootstrap transcript shape observed during the latest live create rerun, including the `wsl.exe : ...`, call-site, and `FullyQualifiedErrorId : NativeCommandError` metadata lines that were inflating `vm-update` warnings even though WSL installation was progressing normally.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after adding coverage for the split WSL bootstrap lines and the temporary `ErrorActionPreference` downgrade inside `121-install-wsl-feature`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after adding coverage for the split WSL bootstrap lines and the temporary `ErrorActionPreference` downgrade inside `121-install-wsl-feature`.
 - Revalidated live in isolation on the active managed Windows VM with `task --run-vm-update 121 --windows --perf`; `121-install-wsl-feature` completed with `success=1`, `warning=0`, `signal-warning=0`, `error=0`, and `reboot=1`.
 
 ## [2026.3.22.390] - 2026-03-22
@@ -491,10 +527,10 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ### Fixed
 - Hardened Windows one-shot SSH task execution so task asset copies now run inside the task retry loop instead of outside it. A transient SSH failure during pre-task asset upload no longer aborts the entire `vm-update` stage before the task retry policy can engage.
 - Added one bounded one-shot SSH recovery path before retrying a failed task attempt: the runner now rechecks VM provisioning health, waits for TCP reachability on the SSH port, and reboots the pyssh connection bootstrap before retrying after transient banner or transport drops.
-- This specifically fixes the live `create --auto --windows --perf` failure seen at `114-install-teams-application`, where copying `clagnos-store-install-state.psm1` failed with `paramiko.ssh_exception.SSHException: Error reading SSH protocol banner` and aborted the run even though the VM itself remained healthy.
+- This specifically fixes the live `create --auto --windows --perf` failure seen at `114-install-teams-application`, where copying `prodicloud-store-install-state.psm1` failed with `paramiko.ssh_exception.SSHException: Error reading SSH protocol banner` and aborted the run even though the VM itself remained healthy.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after adding coverage for one-shot SSH asset copy retry-and-recovery behavior.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 165, Failed: 0` after adding coverage for one-shot SSH asset copy retry-and-recovery behavior.
 - Revalidated `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the SSH runner recovery change.
 
 ## [2026.3.22.389] - 2026-03-22
@@ -505,7 +541,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Extended the SSH task-output noise filter so stderr-prefixed relayed lines are normalized before pattern matching and the known benign WSL/npm warning lines are discarded consistently during remote task execution.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0` after adding coverage for stderr-prefixed WSL bootstrap warnings, benign npm warning suppression, the merged-output WSL task path, and the new npm `--loglevel error` contract.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0` after adding coverage for stderr-prefixed WSL bootstrap warnings, benign npm warning suppression, the merged-output WSL task path, and the new npm `--loglevel error` contract.
 - Re-ran isolated live `vm-update` task checks against the active managed VM for `121-install-wsl-feature`, `124-install-openai-codex-tool`, `125-install-github-copilot-tool`, `126-install-google-gemini-tool`, and `10005-copy-user-settings`; each completed with `warning=0`, `signal-warning=0`, and `error=0`.
 
 ## [2026.3.22.388] - 2026-03-22
@@ -514,7 +550,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the last live `10005-copy-user-settings` warning by excluding the non-portable `UsrClass` AppModel repository branch during assistant/default classes-hive mirroring. The task no longer tries to recreate protected `Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\...` keys inside the mounted target hive, so the live run stops surfacing `New-Item` access-denied warnings from that branch.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Revalidated `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the classes-hive exclusion fix.
 
 ## [2026.3.22.387] - 2026-03-22
@@ -523,7 +559,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the remaining assistant-hive regression in `10005-copy-user-settings`: the post-copy cleanup path inside `Invoke-RobocopyBranch` now also uses the dedicated target-prune exclusion set instead of falling back to the broader source exclusion list. This closes the last path that could still delete `C:\Users\assistant\NTUSER.DAT*` and `UsrClass.dat*` during live profile mirroring.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Extended smoke coverage so the copy-user-settings script asserts the `Remove-StaleExcludedTargetPaths` call itself uses `TargetPruneExcludedDirectories` and `TargetPruneExcludedFiles`.
 
 ## [2026.3.22.386] - 2026-03-22
@@ -534,7 +570,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed `10005-copy-user-settings` so the portable-profile mirror no longer prunes target-owned `NTUSER.DAT*` and `UsrClass.dat*` files. Source copy exclusions stay intact, but the assistant and default target hives are now preserved for the later registry-mirror and vm-summary checks.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Extended smoke coverage so the Windows SCP helper exposes a non-throwing host-key resolution path and the copy-user-settings profile mirror asserts a dedicated target-prune exclusion set that preserves target-owned hives.
 
 ## [2026.3.22.385] - 2026-03-22
@@ -546,27 +582,27 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows vm-summary Ollama readback so healthy managed startup shortcuts extend the API wait budget and trigger one more `ollama ls` probe after the API becomes reachable, reducing immediate post-reboot false negatives.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Revalidated `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally after the live-warning fix set.
 - Extended smoke coverage so the SSH relay/readback filters, Windows SCP fallback behavior, assistant profile hive readiness, deferred language verification, and Ollama cold-start readiness/readback contracts are asserted explicitly.
 
 ## [2026.3.22.384] - 2026-03-22
 
 ### Fixed
-- Fixed the Windows Azure Run Command payload wrapper so generated guest-task scripts no longer risk malformed inline Base64 assignment when the task body contains quote-heavy content. The wrapper now writes the decoded task payload to a temporary `.payload.ps1`, passes that path into the nested hidden `powershell.exe`, and relays merged task output through stdout before the explicit `CLAGNOS_NESTED_RESULT:success|error` marker is emitted.
+- Fixed the Windows Azure Run Command payload wrapper so generated guest-task scripts no longer risk malformed inline Base64 assignment when the task body contains quote-heavy content. The wrapper now writes the decoded task payload to a temporary `.payload.ps1`, passes that path into the nested hidden `powershell.exe`, and relays merged task output through stdout before the explicit `PRODICLOUD_NESTED_RESULT:success|error` marker is emitted.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Revalidated `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\bash-syntax-check.ps1`; all passed locally before branch alignment and publish.
-- Extended smoke coverage so the generated Windows run-command wrapper is asserted from `New-ClagnosRunCommandTaskWrapperScript`, including the `.payload.ps1` handoff and the removal of the earlier uninterpolated Base64 assignment fragment.
+- Extended smoke coverage so the generated Windows run-command wrapper is asserted from `New-ProdicloudRunCommandTaskWrapperScript`, including the `.payload.ps1` handoff and the removal of the earlier uninterpolated Base64 assignment fragment.
 
 ## [2026.3.22.383] - 2026-03-22
 
 ### Fixed
-- Fixed the Windows Azure Run Command timeout wrapper follow-up so successful guest tasks are no longer misclassified as `task-result` warnings when the nested hidden `powershell.exe` process finishes cleanly. The nested child script now emits explicit `CLAGNOS_NESTED_RESULT:success|error` markers, and the outer wrapper now classifies success from that structured marker instead of trusting the raw child exit code alone.
+- Fixed the Windows Azure Run Command timeout wrapper follow-up so successful guest tasks are no longer misclassified as `task-result` warnings when the nested hidden `powershell.exe` process finishes cleanly. The nested child script now emits explicit `PRODICLOUD_NESTED_RESULT:success|error` markers, and the outer wrapper now classifies success from that structured marker instead of trusting the raw child exit code alone.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Added smoke coverage that proves the Windows run-command wrapper now carries the explicit nested result markers and the missing-marker failure text used by the live false-negative fix.
 
 ## [2026.3.22.382] - 2026-03-22
@@ -576,17 +612,17 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Reduced the Windows `07-configure-all-users` interactive profile-materialization wait budget from 180 seconds to a task-configured 20 seconds so the task respects its 120-second manifest timeout during fresh-create runs and stops blocking later init tasks behind the Azure Run Command single-flight lock.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
 - Extended smoke coverage so the Windows run-command wrapper contract now proves the nested process timeout enforcement fragments are present and the `configure-all-users` task contract now proves the shorter interactive materialization budget is wired through task config.
 
 ## [2026.3.22.381] - 2026-03-22
 
 ### Fixed
-- Fixed the create/update precheck so known-unsupported VM feature combinations now fail before Azure mutation instead of after `az vm create` has already produced a managed VM. `Assert-ClagnosFeaturePreconditions` now checks the selected region, VM size, security type, `VM_ENABLE_HIBERNATION`, and `VM_ENABLE_NESTED_VIRTUALIZATION` combination during Step 1 and blocks Azure-known unsupported hibernation or nested-virtualization requests up front.
+- Fixed the create/update precheck so known-unsupported VM feature combinations now fail before Azure mutation instead of after `az vm create` has already produced a managed VM. `Assert-ProdicloudFeaturePreconditions` now checks the selected region, VM size, security type, `VM_ENABLE_HIBERNATION`, and `VM_ENABLE_NESTED_VIRTUALIZATION` combination during Step 1 and blocks Azure-known unsupported hibernation or nested-virtualization requests up front.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
-- Added smoke coverage that proves unsupported hibernation now stops precheck before Azure mutation, that Trusted Launch plus nested virtualization fails fast during precheck, and that `Invoke-ClagnosPrecheckStep` now invokes feature compatibility validation after the existing image/SKU/disk/security checks.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 164, Failed: 0`.
+- Added smoke coverage that proves unsupported hibernation now stops precheck before Azure mutation, that Trusted Launch plus nested virtualization fails fast during precheck, and that `Invoke-ProdicloudPrecheckStep` now invokes feature compatibility validation after the existing image/SKU/disk/security checks.
 
 ## [2026.3.22.378] - 2026-03-22
 
@@ -596,11 +632,11 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Changed the Windows vm-summary readback so the Ollama health block performs a quiet bounded `ollama ls` probe plus a short API wait before it reports process, port, and API readiness, which prevents the earlier cold-start false negative that the March 20 logs still showed immediately after reboot.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 161, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 161, Failed: 0`.
 - Revalidated `tests\sensitive-content-check.ps1`, `tests\documentation-contract-check.ps1`, and `tools\scripts\app-state-audit.ps1`; all passed locally after the Ollama install, summary, and app-state contract changes.
 - Revalidated a live clean-uninstall cycle on the active managed Windows target via `exec`; the final cleanup confirmed `wingetExit=0`, `chocoExit=0`, `ollamaExeExists=False`, `processCount=0`, and `port11434=False`.
 - Revalidated live isolated `task --run-vm-update 135 --windows --perf`; `135-install-ollama-tool` completed with `success=1`, `warning=0`, `signal-warning=0`, `error=0`, and reported `ollama-ls-ready`, `ollama-process-ready`, `ollama-port-ready`, and `ollama-api-ready` after the clean Chocolatey install.
-- Revalidated the post-install startup path live with isolated `task --run-vm-update 10002 --windows --perf`, an explicit VM restart, and `update --step vm-summary --windows --perf`; the final transcript `clagnos-log-22mar26-111959.txt` now records `ollama-ls-probe => success=True`, `ollama-process-count => 2`, `ollama-port-11434-open => True`, and `ollama-api-probe => success=True; timed-out=False`.
+- Revalidated the post-install startup path live with isolated `task --run-vm-update 10002 --windows --perf`, an explicit VM restart, and `update --step vm-summary --windows --perf`; the final transcript `prodicloud-log-22mar26-111959.txt` now records `ollama-ls-probe => success=True`, `ollama-process-count => 2`, `ollama-port-11434-open => True`, and `ollama-api-probe => success=True; timed-out=False`.
 
 ## [2026.3.22.377] - 2026-03-22
 
@@ -613,7 +649,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the assistant-side JAWS replay prerequisite on the managed Windows flow: the new init task now seeds `C:\Users\assistant\NTUSER.DAT`, repairs the active `ProfileList` mapping back to `C:\Users\assistant`, and removes the earlier `assistant => no-hive-file` registry replay skip that the March 20 live logs recorded for `133-install-jaws-application`.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 161, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 161, Failed: 0`.
 - Revalidated live isolated `task --run-vm-init 07 --windows --perf` on the active managed Windows target; it completed with `success=1`, `warning=0`, `error=0`, and reported `assistant => C:\Users\assistant` plus `manager => C:\Users\manager`.
 - Revalidated the repaired assistant profile state live over SSH and confirmed the active SID mapping now resolves to `C:\Users\assistant`, `State=0`, `RefCount=0`, `.bak` is absent, and `C:\Users\assistant\NTUSER.DAT` exists.
 - Revalidated live isolated `task --run-vm-update 133 --windows --perf` on the active managed Windows target; `133-install-jaws-application` completed successfully and its app-state replay finished with `profiles=2`, `user-registry=2`, `skipped=0`, and no assistant hive warning.
@@ -627,7 +663,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows `10003-create-public-desktop-shortcuts` verification path so Unicode shortcut labels that normalize to an existing written `.lnk` file are reconciled and accepted instead of raising a false missing-shortcut warning.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 160, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 160, Failed: 0`.
 - Revalidated live isolated `task --run-vm-init 06` on the active managed Windows target; it completed with `warning=0`, `error=0`, and confirmed WinRM listener readiness.
 - Revalidated a full live `update --auto --windows --perf` acceptance run after the fixes and confirmed `VM init stage summary: success=6, failed=0, warning=0, error=0, reboot=0` plus `VM update stage summary: success=45, failed=0, warning=0, signal-warning=0, error=0, reboot=2, final-restart=1`.
 - Revalidated `show`, `do --vm-action=status`, `connect --ssh --test`, `connect --rdp --test`, and a real WinRM `Invoke-Command`; all succeeded against the active managed Windows target after the final acceptance run.
@@ -648,7 +684,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows Docker Desktop, Ollama, and language-maintenance follow-up paths so Docker no longer fails only because the interactive process is not yet visible, Ollama version probes use a more reliable TCP-gated HTTP read path, and the language task accepts queued background install state sooner after a shorter bounded wait.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 160, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 160, Failed: 0`.
 - Revalidated `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, and `tests\documentation-contract-check.ps1`; all passed locally after the replay, WinRM, and UAC contract changes.
 - Revalidated live isolated runs for `vm-init` tasks `05` and `06`, plus `vm-update` tasks `10001`, `10002`, `10003`, `10004`, `104`, `109`, `114`, `119`, `129`, and `133`; each completed with `warning=0`, `signal-warning=0`, and `error=0`.
 - Revalidated a full live `update --auto --windows --perf --step-from=vm-update --step-to=vm-summary` run on the active managed Windows target and confirmed `VM update stage summary: success=45, failed=0, warning=0, signal-warning=0, error=0, reboot=2, final-restart=1`, with WinRM remoting verified afterward through a successful `Invoke-Command`.
@@ -660,7 +696,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows asset-copy cleanup path so fallback executions no longer attempt to delete an empty SCP password-file path after a pyssh-only transfer.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite still passed with `Passed: 157, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite still passed with `Passed: 157, Failed: 0`.
 - Revalidated `tests\code-quality-check.ps1`; the maintained Windows static audit still passed locally.
 - Revalidated a live isolated `task --run-vm-update 01` against the active managed Windows target and confirmed the Windows asset-copy path falls back cleanly to pyssh, after which the task completed successfully.
 
@@ -673,7 +709,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Tests
 - Revalidated `tests\sensitive-content-check.ps1`; the tracked sensitive-content audit now passes again.
-- Revalidated `tests\clagnos-smoke-tests.ps1` in Windows PowerShell 5.1; the maintained smoke suite passed with `Passed: 157, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1` in Windows PowerShell 5.1; the maintained smoke suite passed with `Passed: 157, Failed: 0`.
 - Revalidated `tests\powershell-compatibility-check.ps1`; the compatibility matrix now passes on both Windows PowerShell 5.1 and PowerShell 7+.
 - Revalidated `tests\code-quality-check.ps1`; the full Windows static audit now passes locally.
 
@@ -690,7 +726,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows startup write path so mounted profile hives no longer degrade isolated `10002` runs into false warning exits; assistant-side current-user artifacts are now written through the profile filesystem path when registry-backed persistence is not the right portable surface.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 157, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passed with `Passed: 157, Failed: 0`.
 - Revalidated `task --save-app-state --source=lm --user=.current. --vm-update-task=10002 --windows` and confirmed the generated task-local plugin zip includes the startup-profile payload.
 - Revalidated `task --run-vm-update 10002` live in isolation on the active managed Windows target; the final rerun completed with `warning=0`, `signal-warning=0`, and `error=0`.
 - Revalidated the managed Windows VM after an explicit restart and confirmed the machine startup entries, the `manager` startup artifacts, and the `assistant` startup artifacts all persisted; post-reboot process evidence remained partial for some apps and is reported as informational follow-up rather than task failure.
@@ -708,7 +744,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows `10005-copy-user-settings` flow so ACL-protected, reparse-point, packaged-app, and other non-portable profile artifacts are skipped explicitly instead of degrading the run into long avoidable waits.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1` after the selective manifest, exec, Docker, language, and copy-settings commits; the suite passed with `Passed: 156, Failed: 0`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1` after the selective manifest, exec, Docker, language, and copy-settings commits; the suite passed with `Passed: 156, Failed: 0`.
 - Added smoke coverage for `exec --file`, the current Windows timeout contract, the Docker stale-registration repair path, and the language/copy-settings refinements that were already validated live in isolation.
 
 ## [2026.3.19.364] - 2026-03-19
@@ -722,7 +758,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the `configure` schema drift introduced by the new shortcut override keys by exposing and validating every supported social and business-web URL field in the interactive editor.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1` and confirmed the new `.env` shortcut URL contract, task token materialization, and `10003` shortcut surface pass; the remaining red assertions are the pre-existing unrelated `exec --file` parse contract and the tracked timeout drift for `102-configure-autologon-settings`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1` and confirmed the new `.env` shortcut URL contract, task token materialization, and `10003` shortcut surface pass; the remaining red assertions are the pre-existing unrelated `exec --file` parse contract and the tracked timeout drift for `102-configure-autologon-settings`.
 - Revalidated `tests\documentation-contract-check.ps1`.
 - Revalidated `task --run-vm-update 10003` live in isolation on the active managed Windows target and confirmed `warning=0`, `signal-warning=0`, and `error=0` after the env-backed shortcut URL changes.
 
@@ -740,13 +776,13 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Tests
 - Revalidated `tests\code-quality-check.ps1`.
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the Turkish shortcut changes passed and only the pre-existing unrelated `exec --file` parse assertion plus one tracked timeout-contract drift remained red.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the Turkish shortcut changes passed and only the pre-existing unrelated `exec --file` parse assertion plus one tracked timeout-contract drift remained red.
 - Revalidated `task --run-vm-update 10003` live in isolation and confirmed zero warnings plus corrected `q1EkşiSözlük` and `ÇiçekSepeti` shortcut readback on the managed Windows VM.
 
 ## [2026.3.18.362] - 2026-03-18
 
 ### Changed
-- Changed `Resolve-ClagnosPublicDnsLabel` so an explicitly provided empty managed public IP list is now treated as an explicit test/runtime override instead of falling through to live Azure inventory reads.
+- Changed `Resolve-ProdicloudPublicDnsLabel` so an explicitly provided empty managed public IP list is now treated as an explicit test/runtime override instead of falling through to live Azure inventory reads.
 - Changed the OpenSSH live-validation changelog note to use generic managed-target wording instead of committing a concrete managed VM name.
 
 ### Fixed
@@ -754,7 +790,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the sensitive-content audit regression caused by recording a concrete managed VM name in the top changelog entry.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\code-quality-check.ps1`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\code-quality-check.ps1`.
 
 ## [2026.3.18.361] - 2026-03-18
 
@@ -765,7 +801,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the remaining `quality-gate` contract drift on `main`, where the tracked Windows update manifests still carried shorter timeouts than the validated live task budgets and caused the smoke and compatibility jobs to fail remotely.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, and `tests\documentation-contract-check.ps1`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, and `tests\documentation-contract-check.ps1`.
 
 ## [2026.3.18.360] - 2026-03-18
 
@@ -778,7 +814,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the `03-install-openssh-service` ready-state log so the task now refreshes and reports the live `sshd` service state after starting it.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated the live Windows bootstrap path on the current managed Windows VM with isolated `task --run-vm-init 03`, isolated `task --run-vm-init 04`, and `connect --ssh --test`.
 
 ## [2026.3.18.359] - 2026-03-18
@@ -798,14 +834,14 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Changed
 - Changed partial `create` step windows that start at `vm-init`, `vm-update`, or `vm-summary` so they now lock onto the existing managed VM target instead of generating a fresh `gX` resource group name during step-1 resolution.
-- Changed `Invoke-ClagnosMain` so `create` can keep the create banner and action plan while resolving its step-1 context through existing-target semantics when a partial resume window requires it.
+- Changed `Invoke-ProdicloudMain` so `create` can keep the create banner and action plan while resolving its step-1 context through existing-target semantics when a partial resume window requires it.
 
 ### Fixed
 - Fixed the live publish resume bug where `create --step-from vm-init` could fail with `ResourceGroupNotFound` by generating a new managed resource group name even though the interrupted create had already provisioned `group`, `network`, and `vm-deploy` successfully.
 - Fixed the maintained smoke contract so partial create resume windows now prove they reuse the existing managed resource names and Azure location instead of trying to re-enter fresh-create naming rules.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite now includes a regression test for `create --step-from vm-init` existing-target reuse and passes fully.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite now includes a regression test for `create --step-from vm-init` existing-target reuse and passes fully.
 
 ## [2026.3.18.357] - 2026-03-18
 
@@ -819,7 +855,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the latest failing GitHub Actions `quality-gate` run on `main`, which had been failing in the non-live smoke and compatibility jobs because the committed contracts still lagged behind the intended `106`, `121`, and `135` task behavior.
 
 ### Tests
-- Revalidated `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite passes fully.
+- Revalidated `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite passes fully.
 - Revalidated `tests\powershell-compatibility-check.ps1`; the compatibility matrix now passes on both Windows PowerShell 5.1 and PowerShell 7+.
 
 ## [2026.3.18.356] - 2026-03-18
@@ -833,7 +869,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed a live Azure CLI path drift where `130-install-azure-cli-tool` could succeed through a direct executable fallback while later fresh `cmd` sessions still failed to resolve `az`.
 
 ### Tests
-- Revalidated the no-force Windows update contract with `tests\clagnos-smoke-tests.ps1`; the maintained smoke suite now passes fully.
+- Revalidated the no-force Windows update contract with `tests\prodicloud-smoke-tests.ps1`; the maintained smoke suite now passes fully.
 - Revalidated `130-install-azure-cli-tool` live in isolation on the active managed Windows VM by uninstalling Azure CLI to clean state, rerunning `task --run-vm-update 130`, and confirming a fresh `cmd /c az version` succeeds afterward with the task summary at `warning=0`, `signal-warning=0`, and `error=0`.
 
 ## [2026.3.18.355] - 2026-03-18
@@ -846,7 +882,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the public desktop shortcut smoke contract so the maintained test suite now pins the new `VS2022` and `JAWS` resolver fragments directly instead of trusting only the older hard-coded path assumptions.
 
 ### Tests
-- Revalidated the non-live shortcut contract with `tests\clagnos-smoke-tests.ps1`. The `10003` shortcut coverage assertions passed with the new resolvers, while the suite still reports one unrelated pre-existing failure in `130-install-azure-cli-tool.ps1` about `--force`.
+- Revalidated the non-live shortcut contract with `tests\prodicloud-smoke-tests.ps1`. The `10003` shortcut coverage assertions passed with the new resolvers, while the suite still reports one unrelated pre-existing failure in `130-install-azure-cli-tool.ps1` about `--force`.
 
 ## [2026.3.18.354] - 2026-03-18
 
@@ -864,7 +900,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Tests
 - Revalidated live in isolation on the active managed Windows VM by uninstalling Visual Studio 2022 Community and JAWS, rerunning `task --run-vm-update 132` and `133` clean-state, then rerunning the JAWS follow-up tasks `1001` and `10002`; the final stage summaries reached `warning=0`, `signal-warning=0`, and `error=0`.
-- Revalidated the updated non-live contracts in `tests\clagnos-smoke-tests.ps1`, including the new portable capture-plan rewrite and the no-hive guest app-state replay skip. The suite still reports one unrelated pre-existing failure in `130-install-azure-cli-tool.ps1` about `--force`.
+- Revalidated the updated non-live contracts in `tests\prodicloud-smoke-tests.ps1`, including the new portable capture-plan rewrite and the no-hive guest app-state replay skip. The suite still reports one unrelated pre-existing failure in `130-install-azure-cli-tool.ps1` about `--force`.
 
 ## [2026.3.18.353] - 2026-03-18
 
@@ -876,7 +912,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the last remaining Docker Desktop isolated-task noise by removing the stale tracked task-local app-state plugin zip for `134-install-docker-desktop-application`. The task now relies on its in-script managed profile seeding instead of replaying a lockfile-heavy Desktop payload that produced a non-actionable app-state signal warning on every healthy rerun.
 
 ### Tests
-- Revalidated the Docker Desktop smoke contract in `tests\clagnos-smoke-tests.ps1`; the Docker-specific assertions passed, while the suite still reports one pre-existing unrelated failure in `130-install-azure-cli-tool.ps1` about `--force`.
+- Revalidated the Docker Desktop smoke contract in `tests\prodicloud-smoke-tests.ps1`; the Docker-specific assertions passed, while the suite still reports one pre-existing unrelated failure in `130-install-azure-cli-tool.ps1` about `--force`.
 - Revalidated live in isolation on the active managed Windows VM by checking `docker desktop status`, `docker info`, and `wsl -l -v`, then rerunning `task --run-vm-update 134 --perf` against that target until the stage summary reached `warning=0`, `signal-warning=0`, `error=0`.
 
 ## [2026.3.18.352] - 2026-03-18
@@ -890,7 +926,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the downstream repair path so a provisioning recovery redeploy is no longer cut off at `300` seconds while the VM is still converging.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1` and `tests\code-quality-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1` and `tests\code-quality-check.ps1`.
 - Added smoke coverage that pins both contracts: create waits for provisioning recovery before `vm-init`, and provisioning-repair redeploys use the extended Azure CLI timeout helper.
 
 ## [2026.3.18.351] - 2026-03-18
@@ -904,7 +940,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed first-install OpenSSH recovery on the active Windows image by combining the direct PowerShell Run Command execution path with the raised `03-install-openssh-service` task budget; after that change, a disposable live VM could remove the OpenSSH Server capability, rerun `03`, then rerun `04` and pass `connect --ssh --test` successfully.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated live in isolation on the disposable managed Windows VM by explicitly removing `OpenSSH.Server~~~~0.0.1.0`, rerunning `task --run-vm-init 03`, rerunning `task --run-vm-init 04`, and then passing `connect --ssh --test`.
 
 ## [2026.3.18.350] - 2026-03-18
@@ -917,7 +953,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the follow-on Run Command conflict chain in `vm-init`: by keeping the Azure CLI transport alive through the whole guest task budget, `03-install-openssh-service` can now complete naturally instead of leaving `04-configure-sshd-service` and `05-configure-firewall-settings` to collide with an already-running Run Command extension instance.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Added smoke and compatibility coverage for the temporary Azure CLI timeout override that protects long Windows Run Command init tasks.
 
 ## [2026.3.18.349] - 2026-03-18
@@ -930,7 +966,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed both Windows OpenSSH init tasks so they now recover from inbox-capability installs that provide `sshd.exe` and `ssh-keygen.exe` but not `install-sshd.ps1`: `03-install-openssh-service` can register `sshd` directly from the OpenSSH executable when needed and can mark the task as reboot-required when servicing is still pending, while `04-configure-sshd-service` now uses the same direct-recovery path before editing `sshd_config`.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated live in isolation on the active managed Windows VM through `task --run-vm-init 03`, `task --run-vm-init 04`, and `connect --ssh --test` against the fresh managed target, confirming that the repaired init chain leaves `sshd` registered and reachable on port `444`.
 
 ## [2026.3.18.348] - 2026-03-18
@@ -939,7 +975,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Changed the active Windows `vm-init` and `vm-update` task catalog to use a consistent `[verb]-[entity]-[target-type]` naming contract instead of the older mixed `-system`, `-app`, `-cli`, and ad hoc suffix set. The tracked Windows catalog now exposes names such as `01-install-choco-tool`, `114-install-teams-application`, `124-install-openai-codex-tool`, `134-install-docker-desktop-application`, and `10003-create-public-desktop-shortcuts`.
 - Changed Windows `vm-init` so Chocolatey is no longer a dependency of the OpenSSH bootstrap path. `03-install-openssh-service` now installs the Windows OpenSSH Server capability through capability servicing with an inbox `install-sshd.ps1` fallback, while Chocolatey bootstrap moved to the `vm-update` initial band as `01-install-choco-tool`.
 - Changed the old combined Windows npm bootstrap task into three standalone tracked tasks with separate task-local plugin zips and separate app-state manifests: `124-install-openai-codex-tool`, `125-install-github-copilot-tool`, and `126-install-google-gemini-tool`.
-- Changed the Windows PATH refresh contract so the tracked init/update surface no longer shells through `refreshenv.cmd`. The repo now ships a shared registry-backed session helper at `modules/core/tasks/clagnos-session-environment.psm1`, and the touched Windows task scripts, store-state helper, and summary readback now use that helper instead of the old `refreshenv` path.
+- Changed the Windows PATH refresh contract so the tracked init/update surface no longer shells through `refreshenv.cmd`. The repo now ships a shared registry-backed session helper at `modules/core/tasks/prodicloud-session-environment.psm1`, and the touched Windows task scripts, store-state helper, and summary readback now use that helper instead of the old `refreshenv` path.
 - Changed `121-install-wsl-feature` so it now starts with `wsl --install --no-distribution` before the existing DISM/feature reconciliation, WSL update, and default-version flow.
 - Changed `134-install-docker-desktop-application` so it now requires bounded daemon readiness before success: the task detached-starts Docker Desktop, then waits until both `docker desktop status` and `docker info` return healthy instead of warning and continuing while the engine is still cold.
 - Changed `136-configure-language-settings` so it now always emits a reboot-required marker on success, logs final capability summaries for `en-US` and `tr-TR`, and short-circuits the long-running Turkish scheduled-task worker when the Windows capability state is already satisfied even if the worker never writes its own result file.
@@ -950,14 +986,14 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed isolated live validation of `136-configure-language-settings` on the active managed Windows VM by treating “capability state already satisfied” as a valid completion path for the lingering Turkish install worker instead of surfacing a warning after the SSH transport is closed by the guest.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated live in isolation on the active managed Windows VM through `task --run-vm-init 03`, `task --run-vm-init 04`, `task --run-vm-update 01`, `task --run-vm-update 121`, `task --run-vm-update 124`, `task --run-vm-update 125`, `task --run-vm-update 126`, `task --run-vm-update 134`, and a fixed rerun of `task --run-vm-update 136`.
 - Verified live follow-up state after the language-task fix: the VM returned to SSH cleanly after the reboot-signaled rerun of `136`, the system preferred UI language read back as `en-US`, and the Turkish language capability surface read back as installed.
 
 ## [2026.3.18.347] - 2026-03-18
 
 ### Changed
-- Changed `tools/scripts/clagnos-interactive-session-helper.ps1` so it now exposes a reusable AppX registration repair worker that can run under a selected managed user through the existing scheduled-task automation path and verify `shell:AppsFolder` visibility by AppID pattern instead of only relying on the current SSH session.
+- Changed `tools/scripts/prodicloud-interactive-session-helper.ps1` so it now exposes a reusable AppX registration repair worker that can run under a selected managed user through the existing scheduled-task automation path and verify `shell:AppsFolder` visibility by AppID pattern instead of only relying on the current SSH session.
 - Changed `10003-create-shortcuts-public-desktop` so it now copies the interactive-session helper as a tracked task asset, repairs Store-backed AppsFolder registrations for both managed users before shortcut normalization, and keeps the task budget aligned with that extra work by raising its tracked timeout to `120` seconds.
 - Changed the same Public Desktop task so user-scoped shortcut commands that are meant to follow the current profile now keep `%UserProfile%` or `%LocalAppData%` in the managed shortcut contract instead of collapsing those paths into whichever managed user happened to run the task.
 
@@ -966,7 +1002,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Public Desktop normalization path so rerunning `10003-create-shortcuts-public-desktop` now rewrites stale launcher-backed and console-backed shortcuts such as `k1Codex CLI` and `k2Gemini CLI` back to the intended user-relative contract instead of preserving hard-coded `C:\Users\<name>\...` arguments from older generations.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated live in isolation on the active managed Windows VM through repeated reruns of `task --run-vm-update 10003`, confirming password-logon AppID repair success for both `manager` and `assistant` across Teams, Be My Eyes, Codex, WhatsApp Business, and iCloud with no stage warnings.
 - Rechecked the live Public Desktop shortcut definitions after the repair runs and confirmed that the critical user-scoped shortcuts now keep `%UserProfile%` or `%LocalAppData%` in their raw `.lnk` or managed-launcher contract instead of storing a concrete managed username path.
 
@@ -982,7 +1018,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the active managed Windows VM shortcut surface so isolated reruns of the Store-backed tasks now leave `o2Teams`, `a2CodexApp`, `a3Be My Eyes`, `a4WhatsApp Business`, and `d4ICloud` present on the Public Desktop with `C:\Windows\explorer.exe` launch targets and `shell:AppsFolder\...` arguments.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated live in isolation on the active managed Windows VM through reruns of Windows update tasks `105`, `115`, `116`, `117`, and `122`, confirming that each isolated Store-backed task also ran `10003-create-shortcuts-public-desktop`, finished with `final-restart=0`, and left the expected Store-backed Public Desktop shortcuts readable through remote `exec`.
 
 ## [2026.3.18.345] - 2026-03-18
@@ -998,7 +1034,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the live post-autologon Windows Store path so the same four tasks succeed again after `102-autologon-manager-user` triggers its reboot and the manager desktop comes back, with launch-ready Store state restored for all four apps.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated live on the active managed Windows VM through one explicit no-autologon cycle and one post-autologon cycle: remote cleanup of the four Store apps, a restart into `AutoAdminLogon=0`, isolated reruns of `115`, `116`, `117`, and `122` to confirm the new warning path, an isolated rerun of `102-autologon-manager-user`, and fresh isolated reruns of `115`, `116`, `117`, and `122` to confirm successful reinstall plus final `exec` AppID readback for all four apps.
 
 ## [2026.3.18.344] - 2026-03-18
@@ -1014,7 +1050,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Store-backed shortcut surface on the active managed Windows VM so `a2CodexApp`, `a3Be My Eyes`, `a4WhatsApp Business`, and `d4ICloud` now resolve through `C:\Windows\explorer.exe` plus `shell:AppsFolder\<AUMID>`.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated live through `exec` readback plus isolated reruns of Windows update tasks `115`, `116`, `117`, `122`, and `10003` on the active managed Windows VM, confirming launch-ready Store state for all four apps and warning-free shortcut refresh with `final-restart=0`.
 
 ## [2026.3.17.343] - 2026-03-17
@@ -1029,7 +1065,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the documentation and help contract so README, detailed help, smoke coverage, and documentation-contract checks now describe the workflow-only final Windows `vm-update` restart correctly.
 
 ### Tests
-- Revalidated non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated live only through an isolated rerun of `task --run-vm-update 10003` on the active managed Windows VM, which completed with `warning=0`, `signal-warning=0`, and `final-restart=0`.
 
 ## [2026.3.17.342] - 2026-03-17
@@ -1051,7 +1087,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the successful isolated-task cleanup path so completed tasks such as `126-install-google-drive` no longer fall into the PowerShell debugger during transcript shutdown.
 
 ### Tests
-- Revalidated the full non-live gate with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the full non-live gate with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated the affected Windows update flow live only through isolated task runs on the active managed VM for `101`, `102`, `105`, `115`, `116`, `117`, `122`, `126`, and `10003`; no full end-to-end live `create` run was performed in this change set.
 
 ## [2026.3.17.341] - 2026-03-17
@@ -1076,7 +1112,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the smoke-contract surface so it now resolves the renumbered task folders, checks dependency-safe Windows update ordering without overfitting to one exact timeout-tie order, and validates the new portable-mirror `copy-settings-user` contract.
 
 ### Tests
-- Revalidated the full non-live gate with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the full non-live gate with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.17.340] - 2026-03-17
 
@@ -1090,7 +1126,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the workflow step wrapper contract in `Invoke-Step`; callers now receive the wrapped action result instead of only seeing timing/log output side effects.
 
 ### Tests
-- Revalidated the workflow and task repairs non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the workflow and task repairs non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated the affected Windows update surfaces live in isolation on the active managed VM with `task --run-vm-update 123`, `task --run-vm-update 10003`, and `task --run-vm-update 10006`.
 
 ## [2026.3.17.339] - 2026-03-17
@@ -1104,12 +1140,12 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the stale `SELECTED_RESOURCE_GROUP` Enter path in `configure`; keeping an outdated managed resource group no longer throws `Resource group check failed before configure` and terminates the editor.
 
 ### Tests
-- Revalidated the configure recovery update non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the configure recovery update non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.17.338] - 2026-03-17
 
 ### Added
-- Added a new interactive configure-editor module that turns `clagnos configure` into a sectioned `.env` frontend with picker-backed multi-option fields, staged validation, next-create preview, and one-shot save behavior for the full supported dotenv contract.
+- Added a new interactive configure-editor module that turns `prodicloud configure` into a sectioned `.env` frontend with picker-backed multi-option fields, staged validation, next-create preview, and one-shot save behavior for the full supported dotenv contract.
 - Added `show --vm-name` so `show` can focus one managed VM and render a read-only target-derived configuration section without writing `.env`.
 
 ### Changed
@@ -1118,7 +1154,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Changed dotenv persistence so supported `.env` keys can now be written back in one final save pass while preserving the committed contract order and filtering out unsupported key assignments.
 
 ### Tests
-- Revalidated the configure/frontend contract non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the configure/frontend contract non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.17.337] - 2026-03-17
 
@@ -1131,7 +1167,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows smoke contract so the tracked `101-install-powershell-core` timeout matches the shipped task manifest again.
 
 ### Tests
-- Revalidated the updated PowerShell task and operator-message cleanup non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated the updated PowerShell task and operator-message cleanup non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated `101-install-powershell-core` live in isolation on the partially created managed Windows VM and confirmed that the managed Azure inventory is now clean and ready for the next full end-to-end create attempt.
 
 ## [2026.3.17.336] - 2026-03-17
@@ -1141,7 +1177,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Changed the Windows regional task flow so `10003-configure-ux-windows` now reasserts the intended `en-US` system locale after welcome-screen and new-user propagation, preventing locale drift while preserving Turkish user-format state.
 
 ### Tests
-- Revalidated the updated locale contract non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the updated locale contract non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated the updated Windows regional flow live in isolation on the active managed Windows VM with `task --run-vm-update 10003`, `task --run-vm-update 10006`, and direct `exec -q` readbacks for system preferred UI language, system locale, time zone, UTF-8 code pages, and managed-user input/culture state.
 
 ## [2026.3.17.335] - 2026-03-17
@@ -1161,27 +1197,27 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed `10006-capture-snapshot-health` default-user language readback by switching its temporary hive mount/unmount path to the same quiet checked registry helper model, removing the old `ERROR: The parameter is incorrect.` warning from successful health snapshots.
 
 ### Tests
-- Revalidated the updated Windows task flow non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the updated Windows task flow non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated the affected live tasks in isolation on the active managed Windows VM with `task --run-vm-update 132`, `10003`, `123`, `133`, `134`, and `10006`, plus direct `exec -q` readbacks for system locale, time zone, VLC presence, and Winlogon autologon state.
 
 ## [2026.3.16.333] - 2026-03-16
 
 ### Added
-- Added a commandless global `clagnos --version` fast path that prints only `clagnos version <current-release>` and exits before the normal banner and runtime-dispatch workflow.
+- Added a commandless global `prodicloud --version` fast path that prints only `prodicloud version <current-release>` and exits before the normal banner and runtime-dispatch workflow.
 - Added operator-visible guest output relay for task execution: Windows `vm-update` now streams guest stdout and stderr live over SSH, while `vm-init` now replays the full guest transcript immediately after each Azure Run Command task completes.
 
 ### Changed
 - Changed the Windows `create` and `update` workflow so `vm-update` now begins after one planned restart at the start of Step 6, and any reboot request raised by an update task now triggers one automatic workflow-owned restart before `vm-summary`.
 - Changed top-level step labels and feature-enablement messaging so create/update progress now reads as stable step names and plain action/result messages instead of future-tense or ambiguous nested-virtualization wording.
-- Changed the operator and documentation surface so `README.md` and CLI help now document `--version`, the wrapped `vm-update` restart behavior, guest output relay, and the requirement that the pushed `main` SHA must complete the GitHub Actions quality gate green before a release push is considered done.
+- Changed the operator and documentation surface so `PRODICLOUD.md` and CLI help now document `--version`, the wrapped `vm-update` restart behavior, guest output relay, and the requirement that the pushed `main` SHA must complete the GitHub Actions quality gate green before a release push is considered done.
 
 ### Fixed
-- Fixed the CLI entrypoint so `clagnos.ps1` still loads the full runtime manifest when dot-sourced while also keeping the new `--version` path banner-free and pre-dispatch.
+- Fixed the CLI entrypoint so `prodicloud.ps1` still loads the full runtime manifest when dot-sourced while also keeping the new `--version` path banner-free and pre-dispatch.
 - Fixed Windows-friendly prompt-history UTC heading validation in `tests\documentation-contract-check.ps1` by accepting `CRLF` line endings instead of falsely failing on valid `### YYYY-MM-DD HH:MM UTC` headings.
 - Fixed run-command task failure reporting so guest output is relayed before the task throws, and a clear `Task completed ... - error` line is emitted for the failing task.
 
 ### Tests
-- Revalidated the release non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the release non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.16.332] - 2026-03-16
 
@@ -1193,7 +1229,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the post-install verification path for `132-configure-language-settings` so the task now falls back to Windows capability-state validation when `Get-InstalledLanguage` is still empty before reboot, instead of failing the entire task even though the language installation has already been queued correctly.
 
 ### Tests
-- Revalidated the pending-language capability contract non-live with `tests\clagnos-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the pending-language capability contract non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.16.331] - 2026-03-16
 
@@ -1214,7 +1250,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed `132-configure-language-settings` welcome-screen and new-user normalization by adding the missing registry hive mount/unmount helpers directly into the task, removing the live failure that occurred at `Dismount-RegistryHive` during the final welcome-screen step.
 
 ### Tests
-- Revalidated the parser, quiet exec wrapper, language task contract, and health output non-live with `tests\clagnos-smoke-tests.ps1`.
+- Revalidated the parser, quiet exec wrapper, language task contract, and health output non-live with `tests\prodicloud-smoke-tests.ps1`.
 - Revalidated `exec --quiet` live with direct one-shot `Get-Date` and interactive helper readback commands on the active managed Windows VM.
 - Revalidated `132-configure-language-settings` live step by step with isolated `exec -q` system, manager, assistant, welcome-screen, and new-user readbacks before rerunning `task --run-vm-update 132 --windows --perf`.
 - Revalidated the final live runner path with isolated `task --run-vm-update 132`, `task --run-vm-update 10005`, and `task --run-vm-update 10006`, followed by direct manager, assistant, welcome-screen, and default-profile readbacks that confirmed English UI, Turkish locale/format state, Turkish Q preload `0000041f`, and default input method `041F:0000041F`.
@@ -1228,8 +1264,8 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed launcher-backed Public Desktop shortcut targets so long browser entries such as `q2Spotify` now use the explicit `call` form requested for every over-limit launcher-backed shortcut, while direct-safe entries continue to bypass the launcher path entirely.
 
 ### Tests
-- Revalidated the launcher invocation contract non-live with `tests\clagnos-smoke-tests.ps1` and `tests\powershell-compatibility-check.ps1`.
-- Revalidated the updated invocation shape live in isolation on the active managed Windows VM with `task --run-vm-update 10002 --windows --perf` plus `exec` readbacks that confirmed `q2Spotify` now points to `cmd.exe /c call "C:\ProgramData\clagnos\shortcut-launchers\public-desktop\q2spotify.cmd"` while `z1Google Account Setup` remains a direct `chrome.exe` shortcut.
+- Revalidated the launcher invocation contract non-live with `tests\prodicloud-smoke-tests.ps1` and `tests\powershell-compatibility-check.ps1`.
+- Revalidated the updated invocation shape live in isolation on the active managed Windows VM with `task --run-vm-update 10002 --windows --perf` plus `exec` readbacks that confirmed `q2Spotify` now points to `cmd.exe /c call "C:\ProgramData\prodicloud\shortcut-launchers\public-desktop\q2spotify.cmd"` while `z1Google Account Setup` remains a direct `chrome.exe` shortcut.
 
 ## [2026.3.16.329] - 2026-03-16
 
@@ -1241,7 +1277,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the live Public Desktop regeneration path so rerunning `10002-create-shortcuts-public-desktop` no longer replays an old task-local `app-state.zip` over freshly generated shortcuts, which had been leaving direct-safe entries such as `z1Google Account Setup`, `i1Internet Business`, and `a11MS Edge` stuck on older `cmd.exe`-wrapped shapes.
 
 ### Tests
-- Revalidated the updated Public Desktop task non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the updated Public Desktop task non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Revalidated the live shortcut behavior in isolation on the active managed Windows VM with `task --run-vm-update 10002 --windows --perf` plus `exec` readbacks that confirmed `z1Google Account Setup`, `i1Internet Business`, and `a11MS Edge` now resolve directly to their browser executables while over-limit entries such as `q2Spotify` still use managed launcher `.cmd` files.
 
 ## [2026.3.16.328] - 2026-03-16
@@ -1257,7 +1293,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the shortcut launcher helper export surface so the combined invocation-length helper is now available to smoke coverage and future runtime callers.
 
 ### Tests
-- Revalidated the app-state normalization tool, the local-save canonical-manager path, and the Public Desktop launcher threshold non-live with `tests\clagnos-smoke-tests.ps1`.
+- Revalidated the app-state normalization tool, the local-save canonical-manager path, and the Public Desktop launcher threshold non-live with `tests\prodicloud-smoke-tests.ps1`.
 - Re-audited the live task-local payload set with `tools\scripts\app-state-audit.ps1` after normalization and confirmed that no remaining `app-state.zip` payload reports foreign source users or embedded foreign registry-user literals.
 
 ## [2026.3.16.327] - 2026-03-16
@@ -1272,7 +1308,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the portable payload normalization contract by carrying the `portableProfilePayload` flag through task discovery/runtime materialization and by validating the `manager` canonicalization path with dedicated smoke coverage.
 
 ### Tests
-- Revalidated the portable JAWS payload normalization non-live with `tests\clagnos-smoke-tests.ps1` and `tests\powershell-compatibility-check.ps1`.
+- Revalidated the portable JAWS payload normalization non-live with `tests\prodicloud-smoke-tests.ps1` and `tests\powershell-compatibility-check.ps1`.
 - Regenerated `windows/update/131-install-jaws-screen-reader/app-state/app-state.zip` from the local machine with `task --save-app-state --source=lm --user=.current. --vm-update-task=131 --windows --perf` and verified that the task-local zip now uses `manager` instead of the local source profile token.
 - Revalidated the shipped JAWS replay path live in isolation on the active managed VM with `task --run-vm-update 131 --windows --perf`, `task --run-vm-update 10006 --windows --perf`, and direct `exec` readbacks that confirmed manager/assistant settings plus HKLM/HKCU `Freedom Scientific` presence on the target VM.
 
@@ -1289,7 +1325,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed task-scoped app-state replay for single-file overlays such as the local JAWS `version.dll` payload by preserving the exact destination file path rather than appending duplicate file extensions during capture or replay.
 
 ### Tests
-- Revalidated the transport, diagnostics, timeout, and app-state changes non-live with `tests\clagnos-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated the transport, diagnostics, timeout, and app-state changes non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\code-quality-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 - Revalidated the Python timeout fix live in isolation with `task --run-vm-update 103 --windows --group <resource-group> --vm-name <vm-name> --perf`, then completed one full live Windows publish cycle with the exact command `create --auto --windows --perf`, followed by `show`, `do --vm-action=status`, `connect --ssh --test`, and `connect --rdp --test`.
 
 ## [2026.3.16.325] - 2026-03-16
@@ -1316,7 +1352,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed restore verification visibility so smoke coverage, README guidance, and AGENTS rules now describe the current `backup-app-states`, `restore-journal.json`, and `verify-report.json` contract without colliding with the retired stage-local `app-states/` wording.
 
 ### Tests
-- Revalidated the app-state restore backup, verify, and rollback contract non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
+- Revalidated the app-state restore backup, verify, and rollback contract non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1`.
 
 ## [2026.3.16.323] - 2026-03-16
 
@@ -1328,7 +1364,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Extended the Windows Public Desktop and local app-state export contracts so JAWS now gets a managed `j0Jaws` shortcut with `Ctrl+Shift+J`, duplicate-alias cleanup, health readback, and local app-state export coverage.
 
 ### Tests
-- Revalidated the JAWS task, managed startup exception, Public Desktop shortcut, health snapshot, and app-state capture contract non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the JAWS task, managed startup exception, Public Desktop shortcut, health snapshot, and app-state capture contract non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.16.322] - 2026-03-16
 
@@ -1345,7 +1381,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the remaining runtime and documentation surfaces that still emitted retired stage-root catalog/app-state terminology after the task-folder cutover.
 
 ### Tests
-- Revalidated the portable task-folder loader, task-local app-state paths, local-machine app-state capture/restore, and UTC documentation contract non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
+- Revalidated the portable task-folder loader, task-local app-state paths, local-machine app-state capture/restore, and UTC documentation contract non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1`.
 - Deferred live isolated task reruns because the active managed VM target was deleted during this prompt; this change set was validated non-live only.
 
 ## [2026.3.16.321] - 2026-03-16
@@ -1384,12 +1420,12 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the Windows no-SFTP asset fallback so larger inline uploads no longer hit the remote `The command line is too long.` failure; the fallback now sends smaller bounded chunks and finalizes the remote file successfully.
 
 ### Tests
-- Revalidated the new Windows asset fallback live against the active Azure target by deleting the existing clagnos-managed resource groups, reprovisioning `clagnos create --auto --windows --perf`, syncing the resulting target with `configure`, and confirming `do --vm-action=status`, `connect --ssh --test`, and `connect --rdp --test` against the new managed VM.
+- Revalidated the new Windows asset fallback live against the active Azure target by deleting the existing prodicloud-managed resource groups, reprovisioning `prodicloud create --auto --windows --perf`, syncing the resulting target with `configure`, and confirming `do --vm-action=status`, `connect --ssh --test`, and `connect --rdp --test` against the new managed VM.
 
 ## [2026.3.15.318] - 2026-03-15
 
 ### Added
-- Added an unconditional CLI welcome banner at the `clagnos.ps1` entrypoint so every invocation now starts with `CLAGNOS CLI V<version>` plus a two-line feature summary before parsing or dispatching the command.
+- Added an unconditional CLI welcome banner at the `prodicloud.ps1` entrypoint so every invocation now starts with `PRODICLOUD CLI V<version>` plus a two-line feature summary before parsing or dispatching the command.
 
 ### Changed
 - Reworked the Azure Run Command init task runner so vm-init tasks now execute one-by-one instead of as one combined batch, which lets the runtime apply the same post-task app-state restore contract after each init task when a matching stage-local plugin zip exists.
@@ -1400,7 +1436,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed task-scoped init restore consistency so `task --restore-app-state` for vm-init no longer depends on SSH readiness and instead routes through the shared run-command transport, matching the new vm-init post-task replay behavior.
 
 ### Tests
-- Revalidated the new init restore and banner behavior with `tests\\clagnos-smoke-tests.ps1` and `tests\\documentation-contract-check.ps1` before the full non-live validation sweep.
+- Revalidated the new init restore and banner behavior with `tests\\prodicloud-smoke-tests.ps1` and `tests\\documentation-contract-check.ps1` before the full non-live validation sweep.
 
 ## [2026.3.15.317] - 2026-03-15
 
@@ -1414,7 +1450,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the `do` command so a manual redeploy now waits for provisioning recovery and then restores the original started/stopped lifecycle state when Azure reports it deterministically after `az vm redeploy`.
 
 ### Tests
-- Revalidated the new lifecycle action with isolated smoke coverage in `tests\\clagnos-smoke-tests.ps1`, plus the standard documentation and release-doc contract checks.
+- Revalidated the new lifecycle action with isolated smoke coverage in `tests\\prodicloud-smoke-tests.ps1`, plus the standard documentation and release-doc contract checks.
 
 ## [2026.3.15.316] - 2026-03-15
 
@@ -1434,7 +1470,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Updated the operator guidance so unattended `create --auto` is now documented as a `.env`-driven flow when the selected values and platform defaults are complete.
 
 ### Tests
-- Revalidated the full non-live gate with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the full non-live gate with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.15.315] - 2026-03-15
 
@@ -1452,7 +1488,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the manual app-state audit helper so it stays an on-demand report and no longer emits raw object output unless `-PassThru` is requested explicitly.
 
 ### Tests
-- Revalidated the shared app-state cleanup with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the shared app-state cleanup with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 - Re-ran the manual payload inspection with `tools\\scripts\\app-state-audit.ps1` after the zip cleanup to confirm that the managed payload set no longer contains foreign profile targets.
 
 ## [2026.3.15.314] - 2026-03-15
@@ -1474,7 +1510,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the automated sensitive-content gate flow so local code-quality and commit-message checks stay focused on the current tree and the current commit message, while the full reachable-history audit remains available through a direct `tests\sensitive-content-check.ps1` run.
 
 ### Tests
-- Revalidated the cutover with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the cutover with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.15.313] - 2026-03-15
 
@@ -1496,17 +1532,17 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the current tracked tree so the banned historical literals requested for cleanup stay out of source/docs/tests while leaving local `.env` and ignored binary payloads untouched.
 
 ### Tests
-- Revalidated the command and documentation contract with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, and `tests\\bash-syntax-check.ps1`.
+- Revalidated the command and documentation contract with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, and `tests\\bash-syntax-check.ps1`.
 - Revalidated the new live task app-state save/restore surface on the active managed Windows VM with isolated runs for `115-install-npm-packages-global` save/restore and repeated `02-check-install-chrome` save/restore verification after the Chrome pre-restore close hook was added.
 
 ## [2026.3.14.312] - 2026-03-14
 
 ### Added
-- Added `modules/core/tasks/clagnos-shortcut-launcher.psm1` so Windows public desktop shortcut creation and health readback can share one managed short-launcher contract for overlong shortcut invocations.
-- Added `tools/scripts/retro-log-audit.ps1` as an on-demand maintenance helper that can rescan local `clagnos-log-*.txt` transcripts without being part of the default quality gate.
+- Added `modules/core/tasks/prodicloud-shortcut-launcher.psm1` so Windows public desktop shortcut creation and health readback can share one managed short-launcher contract for overlong shortcut invocations.
+- Added `tools/scripts/retro-log-audit.ps1` as an on-demand maintenance helper that can rescan local `prodicloud-log-*.txt` transcripts without being part of the default quality gate.
 
 ### Changed
-- Reworked `10002-create-shortcuts-public-desktop.ps1` so Chrome- and Edge-style shortcuts that would exceed the 259-character limit now rewrite themselves through managed short launchers under `C:\ProgramData\clagnos\shortcut-launchers\public-desktop` while keeping the same effective target, URL, profile, and argument contract.
+- Reworked `10002-create-shortcuts-public-desktop.ps1` so Chrome- and Edge-style shortcuts that would exceed the 259-character limit now rewrite themselves through managed short launchers under `C:\ProgramData\prodicloud\shortcut-launchers\public-desktop` while keeping the same effective target, URL, profile, and argument contract.
 - Updated `10099-capture-snapshot-health.ps1` so wrapper-backed shortcuts now read back their launcher path plus their effective target and arguments, and `a11MS Edge` keeps its argument contract even when the shortcut is launcher-backed.
 - Consolidated the ignored local screen-reader update flow into one self-contained task, backed by one matching local helper module and one matching per-task app-state plugin path.
 - Removed the automatic retro-log-audit reference from the default non-live gate and retired the old automatic test-path location.
@@ -1514,18 +1550,18 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ### Fixed
 - Fixed long browser-style Public Desktop shortcuts so they no longer fail because of overlong literal shortcut command lines.
 - Fixed the local screen-reader save/restore naming contract so the merged single local task and its export helper now point to the same per-task app-state plugin name.
-- Cleaned the current untracked `clagnos-log-*.txt` transcript set from the repo working tree while keeping the existing `.gitignore` protection in place.
+- Cleaned the current untracked `prodicloud-log-*.txt` transcript set from the repo working tree while keeping the existing `.gitignore` protection in place.
 
 ### Tests
-- Revalidated the non-live gate with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the non-live gate with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 - Revalidated the manual retro-audit helper with `tools\\scripts\\retro-log-audit.ps1` after the working-tree transcript cleanup.
 - Revalidated the touched live Windows tasks in isolation on the active managed Windows VM with `exec --update-task=1001`, `10002`, and `10099`, confirming the merged local screen-reader task, the short-launcher-backed Public Desktop shortcuts, and the refreshed shortcut health report.
 
 ## [2026.3.14.311] - 2026-03-14
 
 ### Added
-- Added `modules/core/tasks/clagnos-store-install-state.psm1` as a shared one-shot Store-install helper module for Windows vm-update tasks, including centralized PATH refresh, portable `winget` resolution, explicit Store install-state persistence, and stale RunOnce cleanup helpers.
-- Added a deterministic retro-log audit helper so the repo can rescan the historical `clagnos-log-*.txt` transcript set for known noisy or degraded patterns during future maintenance passes.
+- Added `modules/core/tasks/prodicloud-store-install-state.psm1` as a shared one-shot Store-install helper module for Windows vm-update tasks, including centralized PATH refresh, portable `winget` resolution, explicit Store install-state persistence, and stale RunOnce cleanup helpers.
+- Added a deterministic retro-log audit helper so the repo can rescan the historical `prodicloud-log-*.txt` transcript set for known noisy or degraded patterns during future maintenance passes.
 
 ### Changed
 - Reworked the Store-backed Windows install tasks (`117`, `121`, `126`, `131`) so they now use one explicit one-shot install-state contract instead of leaving any next-boot or next-sign-in repair work behind.
@@ -1544,7 +1580,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed Windows Store banner normalization so the repeated benign Microsoft Store seizure warning no longer pollutes SSH task transcripts.
 
 ### Tests
-- Revalidated the non-live gate with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the non-live gate with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 - Revalidated the touched live Windows tasks in isolation on the active managed Windows VM with `exec --update-task=103`, `114`, `117`, `118`, `121`, `126`, `131`, `10001`, `10002`, `10005`, `10099`, plus the relevant local-only screen-reader tasks, confirming the one-shot Store-install path, Teams startup, iCloud shortcut recovery, Docker readiness, and screen-reader autostart repair.
 
 ## [2026.3.14.310] - 2026-03-14
@@ -1569,37 +1605,37 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Relaxed guest-side app-state replay so locked or in-use payload files are logged as copy skips instead of breaking the whole replay, which keeps live app-state deployment non-blocking for actively running desktop apps.
 
 ### Tests
-- Revalidated the tracked non-live gate with `tests\\clagnos-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the tracked non-live gate with `tests\\prodicloud-smoke-tests.ps1`, `tests\\documentation-contract-check.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 - Revalidated the full live isolated Windows vm-update task set on the active VM with per-task `exec --update-task=...` runs across builtin and local-only tasks after the shared post-task app-state plugin hook, SSH transport fallback, and provisioning-repair path were wired into the runtime.
 
 ## [2026.3.13.308] - 2026-03-13
 
 ### Changed
-- Reframed the top of `README.md` around the repo's current Windows flagship outcome: a near-zero-touch remote workstation experience with curated apps, startup behavior, desktop shortcuts, UX tuning, advanced settings, and user-preference carryover where the current task catalogs already provide it.
+- Reframed the top of `PRODICLOUD.md` around the repo's current Windows flagship outcome: a near-zero-touch remote workstation experience with curated apps, startup behavior, desktop shortcuts, UX tuning, advanced settings, and user-preference carryover where the current task catalogs already provide it.
 - Strengthened the first four README sections with audience-specific value language for employees, administrative teams, workers, developers, customers, operators, visitors, and sponsors, while keeping Linux positioned honestly as a stable and fully extensible lighter path.
 - Added proof-oriented PoC / PoE narratives and expanded the delivered-outcome matrix so the public README shows concrete end-user and business value rather than only command-surface depth.
 
 ### Tests
-- Revalidated the documentation refresh with `tests\\documentation-contract-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\clagnos-smoke-tests.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
+- Revalidated the documentation refresh with `tests\\documentation-contract-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\prodicloud-smoke-tests.ps1`, `tests\\powershell-compatibility-check.ps1`, `tests\\bash-syntax-check.ps1`, and `tests\\pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.13.307] - 2026-03-13
 
 ### Changed
 - Refined the prompt-history contract so very short approval/follow-up prompts and non-mutating question or analysis turns are no longer auto-recorded, while every other substantive prompt remains a mandatory English-normalized prompt-history entry.
-- Updated `AGENTS.md`, `README.md`, and the documentation contract to require a short opt-in recording hint for excluded prompt types and to keep prompt-history focused on substantive work.
+- Updated `AGENTS.md`, `PRODICLOUD.md`, and the documentation contract to require a short opt-in recording hint for excluded prompt types and to keep prompt-history focused on substantive work.
 
 ### Tests
-- Revalidated the prompt-history contract update with `tests\\documentation-contract-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\clagnos-smoke-tests.ps1`, `tests\\powershell-compatibility-check.ps1`, and `tests\\bash-syntax-check.ps1`.
+- Revalidated the prompt-history contract update with `tests\\documentation-contract-check.ps1`, `tests\\code-quality-check.ps1`, `tests\\prodicloud-smoke-tests.ps1`, `tests\\powershell-compatibility-check.ps1`, and `tests\\bash-syntax-check.ps1`.
 
 ## [2026.3.13.306] - 2026-03-13
 
 ### Changed
 - Added a repo-wide sensitive-content guardrail for future work: local hooks, the non-live quality gate, and the engineering contract now require a dedicated audit that blocks obvious contact-style values, concrete identity leaks, and non-placeholder sensitive config drift before commits and pushes are shared.
 - Added a dedicated `commit-msg` hook plus `tests/sensitive-content-check.ps1` so both repo-authored tracked files and commit messages receive the same high-signal hygiene checks.
-- Documented the new guardrail in `AGENTS.md`, `README.md`, and the documentation contract so the rule stays visible and enforceable as part of normal developer workflow.
+- Documented the new guardrail in `AGENTS.md`, `PRODICLOUD.md`, and the documentation contract so the rule stays visible and enforceable as part of normal developer workflow.
 
 ### Tests
-- Revalidated the updated process guardrails with `tests\sensitive-content-check.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\clagnos-smoke-tests.ps1`, and `tests\bash-syntax-check.ps1`.
+- Revalidated the updated process guardrails with `tests\sensitive-content-check.ps1`, `tests\code-quality-check.ps1`, `tests\documentation-contract-check.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\prodicloud-smoke-tests.ps1`, and `tests\bash-syntax-check.ps1`.
 
 ## [2026.3.13.305] - 2026-03-13
 
@@ -1608,7 +1644,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Reworded the reconstructed prompt ledger entry for the repository-wide cleanup pass so the current tracked documentation stays aligned with the sanitized public surface.
 
 ### Tests
-- Revalidated the maintained tip with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the maintained tip with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.13.304] - 2026-03-13
 
@@ -1622,18 +1658,18 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Standardized rewritten author and committer metadata to the configured maintainer identity while preserving original commit timestamps for the rewritten repository history.
 
 ### Tests
-- Revalidated the rewritten current tip with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the rewritten current tip with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.13.302] - 2026-03-13
 
 ### Changed
-- Reorganized `README.md` into an audience-first flow that now opens with a stronger at-a-glance introduction, a merged `Quick Start Guide`, `Customer Business Value`, `Executive Summary`, `Value By Audience`, and a richer delivered-outcome matrix before the deeper technical sections.
-- Added a new top-level `Operational Command Matrix` to `README.md` so operators, customers, executives, developers, visitors, and sponsors can scan every public command, global option, and practical command variation from tables before diving into the deeper narrative guide.
+- Reorganized `PRODICLOUD.md` into an audience-first flow that now opens with a stronger at-a-glance introduction, a merged `Quick Start Guide`, `Customer Business Value`, `Executive Summary`, `Value By Audience`, and a richer delivered-outcome matrix before the deeper technical sections.
+- Added a new top-level `Operational Command Matrix` to `PRODICLOUD.md` so operators, customers, executives, developers, visitors, and sponsors can scan every public command, global option, and practical command variation from tables before diving into the deeper narrative guide.
 - Polished the README presentation end to end so the same document now works better as an operator manual, stakeholder-facing overview, and public project landing page without reducing the underlying technical depth.
 
 ### Tests
 - Updated `tests/documentation-contract-check.ps1` to enforce the new README heading hierarchy and the merged quick-start plus command-matrix structure.
-- Revalidated the non-live documentation-facing gate with `tests/documentation-contract-check.ps1`, `tests/clagnos-smoke-tests.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live documentation-facing gate with `tests/documentation-contract-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.13.301] - 2026-03-13
 
@@ -1651,7 +1687,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed `10099-capture-snapshot-health.ps1` formatting and command-resolution issues so the Ollama API JSON echo, Docker CLI probes, and general path readback no longer produce false negatives during late-stage health capture.
 
 ### Tests
-- Revalidated the non-live gate with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 - Completed the exact live Windows release-bar acceptance on subscription `<subscription-guid>`: cleaned drifted `rg-examplevm-ate1-g2`, reran fresh `create --auto --windows --vm-name=examplevm --vm-region=austriaeast --vm-size=Standard_D4as_v5`, validated `show`, VM status, SSH, and RDP, applied the required post-create restart barrier, and then completed `update --auto --windows --group=rg-examplevm-ate1-g2 --vm-name=examplevm` with zero failed tasks.
 
 ## [2026.3.13.300] - 2026-03-13
@@ -1667,21 +1703,21 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the smoke contract for subscription-aware commands so `delete` is validated with its required `--target` option while `task` and `help` continue to reject subscription targeting.
 
 ### Tests
-- Revalidated the non-live gate with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.13.299] - 2026-03-13
 
 ### Changed
-- Reworked `configure` into the managed target-selection and `.env` synchronization command: it now selects one clagnos-managed VM target, reads actual Azure state, validates optional platform flags against the real VM OS type, and writes only target-derived values back to `.env`.
-- Added the new read-only `list` command and removed the public `group` command. Managed inventory is now exposed through `clagnos list` with `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule` plus optional exact `--group` filtering.
+- Reworked `configure` into the managed target-selection and `.env` synchronization command: it now selects one prodicloud-managed VM target, reads actual Azure state, validates optional platform flags against the real VM OS type, and writes only target-derived values back to `.env`.
+- Added the new read-only `list` command and removed the public `group` command. Managed inventory is now exposed through `prodicloud list` with `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule` plus optional exact `--group` filtering.
 - Updated interactive `create` so the VM OS choice is prompted first whenever `--windows` or `--linux` is omitted, and the platform-specific size, disk, and image defaults now flow from that explicit selection instead of silently reusing `.env VM_OS_TYPE`.
 
 ### Fixed
-- Fixed the configure command entry so it no longer relies on the retired step-1 precheck/preview path or the removed `Get-ClagnosConfigPersistenceMap` helper.
+- Fixed the configure command entry so it no longer relies on the retired step-1 precheck/preview path or the removed `Get-ProdicloudConfigPersistenceMap` helper.
 - Fixed the command surface cutover by removing the retired `group` command files and shared `select` option module from the runtime manifest after the new `list` command took over the managed inventory role.
 
 ### Tests
-- Revalidated the non-live gate with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.13.298] - 2026-03-13
 
@@ -1699,7 +1735,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Fixed the autologon health contract so Sysinternals Autologon and visible Winlogon password storage are both reported accurately instead of producing false negative health output.
 
 ### Tests
-- Revalidated the non-live gate with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`.
 - Revalidated the hardened live Windows path with isolated task/task-group runs on `rg-examplevm-sec1-g1/examplevm`, including `exec --init-task=108`, `exec --init-task=130`, `exec --update-task=114`, `exec --update-task=116`, `exec --update-task=10001`, `exec --update-task=10002`, `exec --update-task=10005`, and `exec --update-task=10099`, plus non-mutating `create --step=configure` and `update --step=configure` contract probes.
 
 ## [2026.3.13.297] - 2026-03-13
@@ -1715,11 +1751,11 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.3.12.296] - 2026-03-12
 
 ### Fixed
-- Fixed `tests/clagnos-smoke-tests.ps1` so the CI-facing smoke doubles now shadow runtime functions in the active test scope instead of leaking to the real Azure/.env-backed implementations through `global:` declarations.
+- Fixed `tests/prodicloud-smoke-tests.ps1` so the CI-facing smoke doubles now shadow runtime functions in the active test scope instead of leaking to the real Azure/.env-backed implementations through `global:` declarations.
 - Restored the non-live smoke gate to the expected fast path by removing the accidental real Azure CLI calls from the create, update, resize, reapply, and hibernate-stop smoke scenarios that GitHub Actions was waiting on.
 
 ### Tests
-- Revalidated the full non-live gate with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, `tests/bash-syntax-check.ps1`, and `tests/pre-commit-release-doc-check.ps1`.
+- Revalidated the full non-live gate with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, `tests/bash-syntax-check.ps1`, and `tests/pre-commit-release-doc-check.ps1`.
 
 ## [2026.3.12.295] - 2026-03-12
 
@@ -1736,7 +1772,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Hardened `10005-copy-settings-user.ps1` so `AppData\Local\Microsoft\Windows\WebCacheLock.dat` is excluded consistently during profile replication and the robocopy fallback now tolerates the same live lock signature across the observed error return codes.
 
 ### Tests
-- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/bash-syntax-check.ps1`.
 - Revalidated live Windows behavior on `rg-examplevm-sec1-g1/examplevm` with isolated `exec --update-task=104`, `exec --update-task=111`, and `exec --update-task=10005` runs, then a full `update --auto --windows --perf` pass that finished `success=45, failed=0, warning=0, error=0, reboot=0`, followed by `show`, `do --vm-action=status`, `ssh --test`, and `rdp --test`.
 
 ## [2026.3.12.293] - 2026-03-12
@@ -1752,17 +1788,17 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Refreshed README, AGENTS, changelog wording, release notes, and prompt-history normalization so the maintained documentation now reflects the current release surface with stronger business-value, developer-benefit, and publish-readiness guidance.
 
 ### Tests
-- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.12.291] - 2026-03-12
 
 ### Changed
 - Synchronized the publish-facing repository surface with the current release-readiness contract by updating the GitHub issue templates, pull-request template, README guidance, contributing guidance, and support guidance around live Azure acceptance and public release reporting.
 - Extended `.github/workflows/quality-gate.yml` with an explicit `documentation-contract` job so the existing documentation contract check now runs in GitHub Actions alongside the rest of the non-live gate.
-- Hardened `Invoke-ClagnosVmCreateStep` so transient non-zero `az vm create` results now trigger a bounded VM-presence probe before failing, reducing false negatives when Azure finishes the deployment shortly after the CLI returns a temporary error code.
+- Hardened `Invoke-ProdicloudVmCreateStep` so transient non-zero `az vm create` results now trigger a bounded VM-presence probe before failing, reducing false negatives when Azure finishes the deployment shortly after the CLI returns a temporary error code.
 
 ### Tests
-- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/bash-syntax-check.ps1`.
+- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/bash-syntax-check.ps1`.
 
 ## [2026.3.12.290] - 2026-03-12
 
@@ -1778,7 +1814,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Tests
 - Revalidated live Windows task behavior with targeted `exec --update-task=114`, `121`, `10003`, `10001`, and `10099` runs plus a full `update --step=vm-update --auto --windows --perf` pass on `rg-examplevm-sec1-g1/examplevm`.
-- Revalidated the non-live gate with `tests/powershell-compatibility-check.ps1` and `tests/clagnos-smoke-tests.ps1`.
+- Revalidated the non-live gate with `tests/powershell-compatibility-check.ps1` and `tests/prodicloud-smoke-tests.ps1`.
 
 ## [2026.3.12.288] - 2026-03-12
 
@@ -1790,7 +1826,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Updated the `do` parser, interactive action picker, validation rules, CLI help, README examples, and smoke coverage so the old `hibernate` action is rejected with a direct migration hint to `hibernate-deallocate` or `hibernate-stop`.
 
 ### Tests
-- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/clagnos-smoke-tests.ps1`.
+- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/prodicloud-smoke-tests.ps1`.
 
 ## [2026.3.12.287] - 2026-03-12
 
@@ -1801,7 +1837,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Removed every `--force` command-line flag from tracked Windows `vm-update` task scripts and shifted the install tasks to explicit install-if-missing / skip-if-healthy behavior, including the winget bootstrap path which now avoids forceful source reset and uses only one bounded source-update recovery attempt.
 
 ### Tests
-- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/clagnos-smoke-tests.ps1`.
+- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/prodicloud-smoke-tests.ps1`.
 - Revalidated live Windows behavior on `rg-examplevm-sec1-g1/examplevm` with targeted `exec --update-task=114`, `exec --update-task=10005`, `exec --update-task=10002`, `exec --update-task=10099`, and a full `update --step=vm-update --auto --windows` pass. The tuned tasks now complete quickly, and the latest Public Desktop readback leaves only the intentionally unmanaged local-only accessibility shortcuts outside the tracked managed set.
 
 ## [2026.3.12.286] - 2026-03-12
@@ -1814,23 +1850,23 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Renamed the remaining approved quick-access labels to `m1Digital Tax Office`, `q4eGovernment`, `q6AJet Flights`, `q7TCDD Train`, and `q8OBilet Bus`, while keeping `q2Spotify` and `q3Netflix` unchanged.
 - Reworked `10002-create-shortcuts-public-desktop` so Chrome profile routing is metadata-based instead of name-text-based, and both `company_name` and `employee_email_address` local-part values are normalized to lowercase before being written into `--profile-directory`.
 - Hardened Public Desktop normalization so the tracked shortcut task now removes semantic duplicates by name alias, target executable, and browser destination matching for installer-created overlaps such as Google Chrome, Microsoft Edge, AnyDesk, and Visual Studio 2022, while preserving unrelated unmanaged Public Desktop shortcuts.
-- Moved `clagnos-interactive-session-helper.ps1` from `tools/windows/` to `tools/scripts/` and updated runtime asset resolution to use the new helper location without changing the guest-side remote helper path.
+- Moved `prodicloud-interactive-session-helper.ps1` from `tools/windows/` to `tools/scripts/` and updated runtime asset resolution to use the new helper location without changing the guest-side remote helper path.
 - Updated the tracked health snapshot, `.env.example`, README, AGENTS contract, and smoke coverage to enforce the new English shortcut labels, lowercase Chrome profile normalization, restored shortcuts, and semantic duplicate-cleanup model.
 
 ### Tests
-- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/clagnos-smoke-tests.ps1`.
+- Revalidated the non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/prodicloud-smoke-tests.ps1`.
 
 ## [2026.3.12.284] - 2026-03-12
 
 ### Added
-- Added `clagnos do --vm-action=reapply`, which calls `az vm reapply` for the resolved managed VM target and then prints a refreshed lifecycle status snapshot.
+- Added `prodicloud do --vm-action=reapply`, which calls `az vm reapply` for the resolved managed VM target and then prints a refreshed lifecycle status snapshot.
 
 ### Changed
 - Expanded the `do` command contract so parser hints, interactive action selection, CLI help, and README examples all include `reapply` as a first-class lifecycle action.
 - Kept `reapply` available as the Azure repair path even when provisioning is not currently in the succeeded state, while the existing power-action validation rules remain unchanged for `start`, `restart`, `stop`, `deallocate`, and `hibernate`.
 
 ### Tests
-- Revalidated the full non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/clagnos-smoke-tests.ps1`.
+- Revalidated the full non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/prodicloud-smoke-tests.ps1`.
 
 ## [2026.3.12.283] - 2026-03-12
 
@@ -1844,32 +1880,32 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Shifted the tracked startup/profile-copy surface to a generic local-accessibility ownership model by removing vendor-specific behavior from startup mirroring, tracked profile-copy exclusions, tracked startup configuration, and maintained docs; tracked code now only provides generic host autostart discovery and unmanaged-shortcut preservation for one private local-only accessibility flow.
 
 ### Tests
-- Revalidated the full non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/clagnos-smoke-tests.ps1`.
+- Revalidated the full non-live gate with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/prodicloud-smoke-tests.ps1`.
 - Completed live Windows acceptance on `rg-examplevm-sec1-g1/examplevm`: isolated `exec --update-task=1001..1005` reruns for one private local-only accessibility flow, a full `update --step=vm-update --auto --windows` pass with `success=45, failed=0, warning=0, error=0, reboot=0`, `do --vm-action=restart`, SSH/RDP connectivity checks, and post-reboot guest readback confirming the manager startup shortcut, automatic utility service, active console session, and running local accessibility processes.
 
 ## [2026.3.11.282] - 2026-03-11
 
 ### Changed
-- Changed the `Invoke-ClagnosMain` startup banner so `script description:` is rendered on a single line instead of opening a multi-line bullet block.
-- Added an explicit live release-acceptance requirement to `README.md`, `AGENTS.md`, and the documentation contract: release-readiness now requires a real create/update/status/show/connection verification cycle when live confidence is part of the claim.
+- Changed the `Invoke-ProdicloudMain` startup banner so `script description:` is rendered on a single line instead of opening a multi-line bullet block.
+- Added an explicit live release-acceptance requirement to `PRODICLOUD.md`, `AGENTS.md`, and the documentation contract: release-readiness now requires a real create/update/status/show/connection verification cycle when live confidence is part of the claim.
 
 ### Fixed
 - Fixed the post-deploy provisioning readiness check so existing-VM feature verification now reads `az vm get-instance-view` from `instanceView.statuses` and honors the top-level `provisioningState`, removing the false blank retry loop seen during live create/update runs.
 - Fixed `10005-copy-settings-user` so live Windows update runs now classify required profile roots separately, skip deterministic blocker aliases and reparse-point shell paths, tolerate missing HKCU source branches during assistant hive seeding, and ignore access/in-use failures only for best-effort profile artifacts instead of failing the whole stage.
 
 ### Tests
-- Revalidated the runtime and docs with `tests/clagnos-smoke-tests.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/documentation-contract-check.ps1`.
-- Completed a live Windows acceptance rerun with `clagnos update --auto --windows`; the full natural-order `vm-update` stage finished `success=41, failed=0, warning=0, error=0, reboot=0`.
+- Revalidated the runtime and docs with `tests/prodicloud-smoke-tests.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/documentation-contract-check.ps1`.
+- Completed a live Windows acceptance rerun with `prodicloud update --auto --windows`; the full natural-order `vm-update` stage finished `success=41, failed=0, warning=0, error=0, reboot=0`.
 
 ## [2026.3.11.281] - 2026-03-11
 
 ### Changed
-- Removed the transitional root loader layer from `modules/` so `clagnos.ps1` now loads a single ordered `modules/clagnos-runtime-manifest.ps1` and dot-sources the refactored leaf files directly.
+- Removed the transitional root loader layer from `modules/` so `prodicloud.ps1` now loads a single ordered `modules/prodicloud-runtime-manifest.ps1` and dot-sources the refactored leaf files directly.
 - Deleted the old root runtime wrapper files under `modules/core/`, `modules/config/`, `modules/tasks/`, `modules/ui/`, and `modules/commands/`, so the active runtime now executes only the modern modular tree.
 - Refreshed the smoke contract and current architecture documentation so they enforce the manifest-based direct-load model and fail fast if any legacy root loader path reappears.
 
 ### Tests
-- Revalidated the direct-load cutover with `tests/code-quality-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`.
+- Revalidated the direct-load cutover with `tests/code-quality-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`.
 
 ## [2026.3.11.280] - 2026-03-11
 
@@ -1880,16 +1916,16 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Updated the operator and release documentation to describe the new modular runtime layout and the compatibility-loader contract accurately.
 
 ### Tests
-- Revalidated the refactor with `tests/code-quality-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`, and refreshed the smoke assertions so they target the new leaf-file locations instead of the old monolithic root files.
+- Revalidated the refactor with `tests/code-quality-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1`, and refreshed the smoke assertions so they target the new leaf-file locations instead of the old monolithic root files.
 
 ## [2026.3.11.279] - 2026-03-11
 
 ### Added
-- Added non-interactive connection test modes for `clagnos ssh --test` and `clagnos rdp --test`, so the repo can validate SSH authentication and RDP reachability without launching external clients.
+- Added non-interactive connection test modes for `prodicloud ssh --test` and `prodicloud rdp --test`, so the repo can validate SSH authentication and RDP reachability without launching external clients.
 
 ### Changed
 - Changed post-deploy feature handling so `create`, `update`, and `set` now treat `VM_ENABLE_HIBERNATION=true` and `VM_ENABLE_NESTED_VIRTUALIZATION=true` as verified desired outcomes: hibernation is checked through Azure instance state, while nested virtualization is validated from inside the running guest instead of relying on the removed single-VM Azure property path.
-- Changed `clagnos show` so password-bearing config values are redacted in the rendered report and running-VM inventory now includes guest-validated nested-virtualization status plus supporting evidence.
+- Changed `prodicloud show` so password-bearing config values are redacted in the rendered report and running-VM inventory now includes guest-validated nested-virtualization status plus supporting evidence.
 - Refreshed the README and documentation contract to document the natural `vm-init` / `vm-update` order as builtin `initial`, builtin `normal`, local untracked tasks, then builtin `final`, and to describe the new connection-test and feature-validation behavior accurately.
 - Hardened the Windows interactive-session helper and Store-backed tasks so Be My Eyes and iCloud now detect whether an interactive desktop is available, fall back to deferred `RunOnce` registration when needed, and use interactive-token execution when a user desktop is already active.
 - Hardened several Windows update tasks and UX helpers by quieting registry hive load/unload noise, improving shell-sort validation, excluding unstable Ollama WebView cache paths from profile copies, retrying or settling installer descendants where needed, and normalizing non-fatal native exit codes in Docker Desktop and AnyDesk flows.
@@ -1904,20 +1940,20 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.3.11.278] - 2026-03-11
 
 ### Fixed
-- Fixed an avoidable compatibility-matrix slowdown in `tests/clagnos-smoke-tests.ps1`: the two post-deploy feature-enable smoke tests now stub `az vm get-instance-view` as `Provisioning succeeded` immediately, so the compatibility run no longer burns minutes inside artificial provisioning waits after the new feature-verification gate was added.
+- Fixed an avoidable compatibility-matrix slowdown in `tests/prodicloud-smoke-tests.ps1`: the two post-deploy feature-enable smoke tests now stub `az vm get-instance-view` as `Provisioning succeeded` immediately, so the compatibility run no longer burns minutes inside artificial provisioning waits after the new feature-verification gate was added.
 
 ### Tests
-- Revalidated the compatibility path with `tests/clagnos-smoke-tests.ps1` and `tests/powershell-compatibility-check.ps1`; the smoke suite now completes in seconds and the compatibility matrix no longer times out due to the synthetic wait loop.
+- Revalidated the compatibility path with `tests/prodicloud-smoke-tests.ps1` and `tests/powershell-compatibility-check.ps1`; the smoke suite now completes in seconds and the compatibility matrix no longer times out due to the synthetic wait loop.
 
 ## [2026.3.11.277] - 2026-03-11
 
 ### Added
-- Added short-help alias support across the public CLI so `clagnos -h` and `clagnos <command> -h` now work alongside the existing `--help` contract.
+- Added short-help alias support across the public CLI so `prodicloud -h` and `prodicloud <command> -h` now work alongside the existing `--help` contract.
 - Added a publish-facing GitHub community surface with `CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates, and a pull-request template aligned to the repo's contact-first contribution model and custom non-commercial license.
 
 ### Changed
 - Refreshed the public help and README contract so command examples, global options, support paths, and publish-facing workflow guidance now reflect the current runtime and the new `-h` shorthand.
-- Extended `.github/workflows/quality-gate.yml` so GitHub Actions now also runs the non-live `tests/clagnos-smoke-tests.ps1` suite in addition to the existing static and compatibility checks.
+- Extended `.github/workflows/quality-gate.yml` so GitHub Actions now also runs the non-live `tests/prodicloud-smoke-tests.ps1` suite in addition to the existing static and compatibility checks.
 - Redacted publish-inappropriate literals in maintained history docs, replacing environment-specific VM names, profile names, local paths, and similar concrete examples with neutral placeholders while preserving chronology and technical meaning.
 - Normalized tracked Linux `.sh` files to LF and pinned that expectation in `.gitattributes` so the repository's bash-syntax gate passes consistently across environments.
 
@@ -1928,7 +1964,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Changed
 - Changed `10002-create-shortcuts-public-desktop` from a full Public Desktop mirror into a managed-shortcut reconcile pass, so it now removes and recreates only the tracked shortcut names while preserving unmanaged Public Desktop entries such as local-only accessibility shortcuts; the same task still clears the manager, assistant, and default desktop roots.
-- Restored host startup-profile discovery in `clagnos-core-foundation`, replaced the static Windows auto-start snapshot with host-driven method mirroring in `10001-configure-apps-startup`, and added a guest compatibility layer for LocalMachine startup apps so the guest now applies the host-observed startup surfaces and approval state instead of relying on a hard-coded list.
+- Restored host startup-profile discovery in `prodicloud-core-foundation`, replaced the static Windows auto-start snapshot with host-driven method mirroring in `10001-configure-apps-startup`, and added a guest compatibility layer for LocalMachine startup apps so the guest now applies the host-observed startup surfaces and approval state instead of relying on a hard-coded list.
 - Expanded `10099-capture-snapshot-health` so Windows late-stage health snapshots now inventory unmanaged Public Desktop shortcuts and host-driven startup entries instead of treating extra Public Desktop shortcuts as unexpected removable artifacts.
 
 ### Tests
@@ -1988,7 +2024,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Reworked `10005-copy-settings-user` so the assistant/default profile propagation now uses deterministic hive-based registry seeding and stricter file-copy exclusions instead of the slower interactive HKCU path, and raised the late-stage Windows task timeouts to match observed exec runtimes.
 
 ### Documentation
-- Updated `.env.example`, `README.md`, release history, and prompt history to reflect the required `company_name` contract and the new Windows UX/public desktop update behavior.
+- Updated `.env.example`, `PRODICLOUD.md`, release history, and prompt history to reflect the required `company_name` contract and the new Windows UX/public desktop update behavior.
 
 ### Tests
 - Expanded smoke and compatibility coverage for the iCloud task contract, the no-fallback `company_name` requirement, the final shortcut manifest and timeout values, and explicit hidden shell desktop icon propagation checks.
@@ -2008,7 +2044,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Updated runtime help, `exec` task selection, and the regional move health gate so variable-length task numbers now work consistently across direct execution, diagnostics, and move cutover validation.
 
 ### Documentation
-- Updated `AGENTS.md` and `README.md` to document the new 2-5 digit task-number bands, the `task` command, and the revised tracked/local task-priority rules.
+- Updated `AGENTS.md` and `PRODICLOUD.md` to document the new 2-5 digit task-number bands, the `task` command, and the revised tracked/local task-priority rules.
 
 ### Tests
 - Refreshed smoke coverage for variable-length task selection, the new `task` command listing path, the new tracked Windows/Linux task names, and the updated local-task priority precedence.
@@ -2058,7 +2094,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Rewrote the active `main` and `dev` histories to remove the selected private local-only Windows paths and scrub their tracked textual references, while leaving the backup branches untouched.
 
 ### Documentation
-- Updated `AGENTS.md`, `README.md`, `roadmap.md`, `CHANGELOG.md`, `release-notes.md`, and `docs/prompt-history.md` to describe the normalized Windows task naming scheme and the local-only metadata model without carrying the removed tracked identifiers.
+- Updated `AGENTS.md`, `PRODICLOUD.md`, `roadmap.md`, `CHANGELOG.md`, `release-notes.md`, and `docs/prompt-history.md` to describe the normalized Windows task naming scheme and the local-only metadata model without carrying the removed tracked identifiers.
 
 ### Tests
 - Expanded smoke and documentation-contract coverage for normalized Windows task ordering, script-local metadata discovery, generic asset resolution, and the absence of the removed tracked task identifiers from the maintained repo surface.
@@ -2070,7 +2106,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Ensured `set` now persists the resolved `RESOURCE_GROUP`, `VM_NAME`, and any successfully applied `VM_ENABLE_HIBERNATION` / `VM_ENABLE_NESTED_VIRTUALIZATION` changes back into the local `.env` file.
 
 ### Documentation
-- Updated `README.md` and command help text so the `set` command now explicitly documents its direct-target behavior and `.env` synchronization semantics.
+- Updated `PRODICLOUD.md` and command help text so the `set` command now explicitly documents its direct-target behavior and `.env` synchronization semantics.
 
 ### Tests
 - Added smoke coverage that verifies `set` applies both Azure toggle updates, persists the changed values to `.env`, and keeps `.env` aligned even when one later toggle update fails after an earlier success.
@@ -2087,7 +2123,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Extended post-deploy feature enablement so hibernation and nested virtualization can now be skipped cleanly when the shared `.env` feature toggles are set to `false`, while preserving the current Azure enablement path when they are `true`.
 
 ### Documentation
-- Updated `README.md`, `AGENTS.md`, and `.env.example` to document the new shared VM feature toggles, the non-empty pyssh client default, and the `nsg-rule-` naming contract.
+- Updated `PRODICLOUD.md`, `AGENTS.md`, and `.env.example` to document the new shared VM feature toggles, the non-empty pyssh client default, and the `nsg-rule-` naming contract.
 
 ### Tests
 - Expanded smoke and documentation checks to enforce the new pyssh default path, the shared feature-toggle env keys, and the `nsg-rule-` template contract.
@@ -2100,11 +2136,11 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Changed `tools/install-pyssh-tool.ps1` so its optional test-host derivation now depends only on real `.env` values instead of inventing a committed VM/region fallback.
 
 ### Documentation
-- Clarified the configuration split across `AGENTS.md`, `README.md`, and `.env.example`: app-wide identity, secrets, and reusable operator overrides belong in `.env`, while task-only literals belong in a clearly labeled config block at the top of the owning task script.
+- Clarified the configuration split across `AGENTS.md`, `PRODICLOUD.md`, and `.env.example`: app-wide identity, secrets, and reusable operator overrides belong in `.env`, while task-only literals belong in a clearly labeled config block at the top of the owning task script.
 - Updated `.env.example` to require explicit VM identity and credential placeholders, removed the old committed password examples, and documented `company_name` with a neutral example.
 
 ### Refactoring
-- Introduced shared config-validation helpers in `modules/core/clagnos-core-foundation.ps1` so orchestration and UI contexts can reject empty or placeholder-sensitive values consistently.
+- Introduced shared config-validation helpers in `modules/core/prodicloud-core-foundation.ps1` so orchestration and UI contexts can reject empty or placeholder-sensitive values consistently.
 - Refactored key Windows update tasks to move task-specific constants into top-of-file config blocks instead of scattering mutable literals through task bodies, including private local-only accessibility work, Ollama, Docker Desktop, VS Code, Be My Eyes, OneDrive, auto-start apps, and public desktop shortcuts.
 - Moved the repo-managed Windows public web-shortcut bundles into the shortcut task's local config section so company-specific and user-specific web targets are isolated from shared runtime code.
 
@@ -2114,7 +2150,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ## [2026.3.10.260] - 2026-03-10
 
 ### Documentation
-- Rewrote `README.md` into a much broader operator and contributor manual with a hierarchical table of contents, quick-start flow, architecture narrative, command guide, task model, troubleshooting guidance, developer workflow notes, and license/sponsorship coverage.
+- Rewrote `PRODICLOUD.md` into a much broader operator and contributor manual with a hierarchical table of contents, quick-start flow, architecture narrative, command guide, task model, troubleshooting guidance, developer workflow notes, and license/sponsorship coverage.
 - Reworked `roadmap.md` around business value, relaxed delivery horizons, explicit promotion rules, and concrete done criteria.
 - Added a root `LICENSE` file with the repository's custom non-commercial terms, including learning/teaching/evaluation allowance, private non-commercial modification allowance, commercial-use restrictions, and sponsorship/contact language.
 - Updated `AGENTS.md` so maintained docs, help text, comments, and user-facing runtime wording must stay in English, while explicit literal display-label exceptions remain allowed.
@@ -2145,7 +2181,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Tightened the move cutover gate so the post-target `37-capture-snapshot-health` validation now runs through strict task-outcome semantics instead of allowing warning-mode continuation to delete the old source group.
 - Increased the Windows `37-capture-snapshot-health` catalog timeout from `10s` to `30s` after live regional-move validation on `swedencentral` showed that the old bound could produce false timeout warnings during the target health gate.
 - Restored `do --vm-action=hibernate` as the single public hibernation action while keeping the underlying Azure behavior unchanged: hibernation still runs through Azure's deallocation-based hibernate path.
-- Made `ssh` and `rdp` state-aware so they now refuse politely when the target VM is not running and point operators to `clagnos do --vm-action=start`.
+- Made `ssh` and `rdp` state-aware so they now refuse politely when the target VM is not running and point operators to `prodicloud do --vm-action=start`.
 - Updated `resize` to use `--vm-name` instead of legacy `--vm`, added `--windows`/`--linux` support, and kept no-parameter invocation interactive.
 - Split `resize` away from the generic move/resize prompt flow so interactive resize stays in the current region and direct fully specified resize runs without an extra confirmation prompt.
 - Streamlined isolated `exec` task runs so they now accept `--vm-name`, resolve only the selected VM/task context, and skip the broader Step-1 managed-resource inventory path before pyssh execution.
@@ -2167,13 +2203,13 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Reworked `18-install-ollama-system` to short-circuit healthy existing installs, detach `ollama serve` stdout/stderr from the SSH session, clear stale installer locks before `winget`, and bound the `winget` wait so interrupted e2e runs no longer hang indefinitely on `waiting another install to complete`.
 - Hardened `16-install-docker-desktop` so it now clears stale installer processes before `winget install Docker.DockerDesktop` and terminates leftover installer locks when bounded install waits time out.
 - Updated `12-install-vscode-system` so it now short-circuits when a healthy existing Code executable is already present instead of re-entering `winget` during resumed e2e runs.
-- Normalized spinner-prefixed `CLAGNOS_*` protocol markers in the persistent SSH transport so long-running Windows package installs do not hide task-end or session-error markers behind progress spinners.
+- Normalized spinner-prefixed `PRODICLOUD_*` protocol markers in the persistent SSH transport so long-running Windows package installs do not hide task-end or session-error markers behind progress spinners.
 
 ### Documentation
 - Rebuilt `AGENTS.md` as the repository engineering contract for architecture, workflow, logging, testing, and documentation maintenance.
-- Upgraded `README.md` into a fuller operator and contributor guide aligned with the current CLI, step flow, task model, and configuration contract.
+- Upgraded `PRODICLOUD.md` into a fuller operator and contributor guide aligned with the current CLI, step flow, task model, and configuration contract.
 - Documented the new `.env` `company_name` key in the config contract so Windows Chrome-based public desktop shortcuts can share a company-named default profile directory such as `orgprofile`.
-- Added move timing/process guidance to `README.md` and `clagnos help move`, using the observed live `austriaeast -> swedencentral` `Standard_D4as_v5` / `127 GB` OS-disk move as an operator reference for expected duration and cutover phases.
+- Added move timing/process guidance to `PRODICLOUD.md` and `prodicloud help move`, using the observed live `austriaeast -> swedencentral` `Standard_D4as_v5` / `127 GB` OS-disk move as an operator reference for expected duration and cutover phases.
 - Added `CHANGELOG.md`, `release-notes.md`, `roadmap.md`, and `docs/prompt-history.md` to formalize project history, release context, future direction, and dialog traceability.
 - Adopted commit-count version labels across `CHANGELOG.md` and `release-notes.md`.
 - Normalized `CHANGELOG.md` and `release-notes.md` to LF line endings and pinned that expectation in `.gitattributes` so documentation-contract checks behave consistently.
@@ -2182,7 +2218,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Relaxed the prompt-history rule so non-mutating prompts are only recorded on explicit user opt-in, while repo-changing prompts remain mandatory prompt-history entries with a commit.
 
 ### Tests
-- Renamed `tests/powershell-smoke.ps1` to `tests/clagnos-smoke-tests.ps1` because it validates `clagnos` runtime contracts and smoke behavior rather than generic PowerShell behavior.
+- Renamed `tests/powershell-smoke.ps1` to `tests/prodicloud-smoke-tests.ps1` because it validates `prodicloud` runtime contracts and smoke behavior rather than generic PowerShell behavior.
 - Renamed `tests/docs-contract.ps1` to `tests/documentation-contract-check.ps1` for clearer intent and kept it as the documentation-contract gate for current command naming, prompt-history structure, and legacy-token removal.
 - Split static quality responsibilities into `tests/code-quality-check.ps1`, `tests/bash-syntax-check.ps1`, and `tests/powershell-compatibility-check.ps1`.
 - Renamed the `tests/` scripts to clearer dash-separated names and updated all live references across hooks, workflow, and docs.
@@ -2289,7 +2325,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 ### Refactors
 - Enforce region-required flow and platform vm env keys
 - Switch task catalogs to priority-driven execution with on-demand reconciliation
-- Rename CoVm markers to Clagnos and optimize show command performance
+- Rename CoVm markers to Prodicloud and optimize show command performance
 
 ### Documentation
 - Align create description in quick help overview
@@ -2348,7 +2384,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Refactors
 - Split init/update tasks, remove output suppression, and optimize docker/wsl checks
-- Unify linux/windows flow into clagnos.ps1 with task-file catalogs
+- Unify linux/windows flow into prodicloud.ps1 with task-file catalogs
 - Adopt default/update/destructive-rebuild flow and pyssh-first step8
 
 ## [2026.3.3.135] - 2026-03-03
@@ -2386,7 +2422,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 
 ### Documentation
 - Add end-to-end README with quick start, architecture, configuration, and usage guide
-- Add codex evidence index with clagnos related jsonl references
+- Add codex evidence index with prodicloud related jsonl references
 - Add era index for faster navigation of reconstructed history
 - Append final codex evidence checkpoint for reconstructed commit chain
 - Register windows step8 diagnostics timeline and deadlock mitigation context
@@ -2402,7 +2438,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Harden PS5/PS7 compatibility and add non-live matrix smoke tests
 - Add linux and windows environment templates
 - Add elevated root launchers for linux and windows flows
-- Initialize clagnos repository with ignore and reconstruction scaffolding
+- Initialize prodicloud repository with ignore and reconstruction scaffolding
 
 ## [2026.3.1.94] - 2026-03-01
 
@@ -2442,7 +2478,7 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Capture choco global confirmation setup requirement
 - Log duplicate refreshenv cleanup requirement in windows flow
 - Log windows tcp port exposure parity check across nsg and guest firewall
-- Log combine-mode requirement to run generated clagnos-win-update.ps1 file
+- Log combine-mode requirement to run generated prodicloud-win-update.ps1 file
 - Capture critical semantic correction for step vs combined behavior
 - Capture system error 1378 mitigation by pre-check before add
 - Track run-command success-gating before advancing tasks
@@ -2473,12 +2509,12 @@ Documented versions use `YYYY.M.D.N`, where `N` is the cumulative repository com
 - Capture code-only sync request with deferred testing
 - Capture cross-platform identical behavior requirement
 - Capture sh-to-powershell guest update conversion for windows
-- Track rename request from clagnos to linux-specific naming
+- Track rename request from prodicloud to linux-specific naming
 
 ### Documentation
 - Align reconstruction notes with current co-vm lin-vm win-vm layout
 - Finalize comprehensive reconstructed timeline index
-- Capture requirement to mine codex jsonl for clagnos chronology
+- Capture requirement to mine codex jsonl for prodicloud chronology
 - Capture request for real .env.example templates with active variables
 - Log unused-file detection and approval-gated deletion request
 - Log parity-diff check request beyond os-specific behavior

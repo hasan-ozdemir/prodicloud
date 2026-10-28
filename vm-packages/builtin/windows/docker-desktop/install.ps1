@@ -5,7 +5,7 @@ $taskConfig = [ordered]@{
     TaskName = '134-install-docker-desktop-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    PortableWingetPath = 'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
     DockerDesktopPackageId = 'Docker.DockerDesktop'
     DockerDesktopExecutablePath = 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
     DockerServiceName = 'com.docker.service'
@@ -20,10 +20,10 @@ $taskConfig = [ordered]@{
     DockerLocalUsers = @('__VM_ADMIN_USER__', '__ASSISTANT_USER__')
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
@@ -77,7 +77,7 @@ function Get-StaleInstallerProcesses {
         $commandLine = [string]$_.CommandLine
         $matchesKnownInstaller = ($name -match $nameRegex)
         $matchesDockerInstall = ($commandLine -match 'Docker\.DockerDesktop|Docker Desktop Installer|DockerDesktopInstaller')
-        $matchesPortableWinget = ($commandLine -match 'ProgramData\\clagnos\\tools\\winget-x64')
+        $matchesPortableWinget = ($commandLine -match 'ProgramData\\prodicloud\\tools\\winget-x64')
         $matchesInstallState = ($commandLine -match 'WinGet\\defaultState')
         if (-not ($matchesKnownInstaller -or $matchesDockerInstall -or $matchesPortableWinget -or $matchesInstallState)) {
             return $false
@@ -566,20 +566,20 @@ function Remove-DockerDesktopDeferredStart {
         return $false
     }
 
-    $runOnceEntry = Get-ItemProperty -Path $runOncePath -Name 'ClagnosStartDockerDesktop' -ErrorAction SilentlyContinue
+    $runOnceEntry = Get-ItemProperty -Path $runOncePath -Name 'ProdicloudStartDockerDesktop' -ErrorAction SilentlyContinue
     $existingValue = ''
-    if ($null -ne $runOnceEntry -and $runOnceEntry.PSObject.Properties.Match('ClagnosStartDockerDesktop').Count -gt 0) {
-        $existingValue = [string]$runOnceEntry.ClagnosStartDockerDesktop
+    if ($null -ne $runOnceEntry -and $runOnceEntry.PSObject.Properties.Match('ProdicloudStartDockerDesktop').Count -gt 0) {
+        $existingValue = [string]$runOnceEntry.ProdicloudStartDockerDesktop
     }
     if ([string]::IsNullOrWhiteSpace([string]$existingValue)) {
         return $false
     }
 
-    Remove-ItemProperty -Path $runOncePath -Name 'ClagnosStartDockerDesktop' -ErrorAction SilentlyContinue
-    $remainingEntry = Get-ItemProperty -Path $runOncePath -Name 'ClagnosStartDockerDesktop' -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $runOncePath -Name 'ProdicloudStartDockerDesktop' -ErrorAction SilentlyContinue
+    $remainingEntry = Get-ItemProperty -Path $runOncePath -Name 'ProdicloudStartDockerDesktop' -ErrorAction SilentlyContinue
     $remainingValue = ''
-    if ($null -ne $remainingEntry -and $remainingEntry.PSObject.Properties.Match('ClagnosStartDockerDesktop').Count -gt 0) {
-        $remainingValue = [string]$remainingEntry.ClagnosStartDockerDesktop
+    if ($null -ne $remainingEntry -and $remainingEntry.PSObject.Properties.Match('ProdicloudStartDockerDesktop').Count -gt 0) {
+        $remainingValue = [string]$remainingEntry.ProdicloudStartDockerDesktop
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$remainingValue)) {
         throw 'Docker Desktop stale RunOnce entry cleanup failed.'

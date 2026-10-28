@@ -1,14 +1,14 @@
 # Contract for the 'exec' command.
 
-function Get-ClagnosExecOptionSpecifications {
+function Get-ProdicloudExecOptionSpecifications {
     return @(
-        (Get-ClagnosExecPerfOptionSpecification),
-        (Get-ClagnosExecHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosExecGroupOptionSpecification),
-        (Get-ClagnosExecVmNameOptionSpecification),
-        (Get-ClagnosExecFileOptionSpecification),
-        (Get-ClagnosExecCommandContentOptionSpecification),
-        (Get-ClagnosExecQuietOptionSpecification)
+        (Get-ProdicloudExecPerfOptionSpecification),
+        (Get-ProdicloudExecHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudExecGroupOptionSpecification),
+        (Get-ProdicloudExecVmNameOptionSpecification),
+        (Get-ProdicloudExecFileOptionSpecification),
+        (Get-ProdicloudExecCommandContentOptionSpecification),
+        (Get-ProdicloudExecQuietOptionSpecification)
     )
 }

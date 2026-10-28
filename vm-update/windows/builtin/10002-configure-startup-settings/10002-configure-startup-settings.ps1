@@ -12,15 +12,15 @@ $machineRunPath = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'
 $machineRunApprovalPath = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
 $machineRun32Path = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run32'
 $machineRun32ApprovalPath = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32'
-$interactiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+$interactiveHelperPath = 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 if (Test-Path -LiteralPath $interactiveHelperPath) {
     . $interactiveHelperPath
 }
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Invoke-RegQuiet {
@@ -633,7 +633,7 @@ function Initialize-MissingUserProfileHive {
     return (Test-Path -LiteralPath $ntUserPath)
 }
 
-function Wait-ClagnosCondition {
+function Wait-ProdicloudCondition {
     param(
         [scriptblock]$Condition,
         [int]$TimeoutSeconds = 30,
@@ -680,7 +680,7 @@ function Ensure-UserProfileMaterialized {
     }
 
     $materializeTaskName = "{0}-materialize-{1}" -f $taskName, $UserName
-    $paths = Get-ClagnosInteractivePaths -TaskName $materializeTaskName
+    $paths = Get-ProdicloudInteractivePaths -TaskName $materializeTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -690,9 +690,9 @@ $taskName = "__TASK_NAME__"
 . $helperPath
 
 $profilePath = [Environment]::GetFolderPath('UserProfile')
-Ensure-ClagnosDirectory -Path $profilePath
-Ensure-ClagnosDirectory -Path (Join-Path $profilePath 'Desktop')
-Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'User profile materialized.' -Details @($profilePath)
+Ensure-ProdicloudDirectory -Path $profilePath
+Ensure-ProdicloudDirectory -Path (Join-Path $profilePath 'Desktop')
+Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'User profile materialized.' -Details @($profilePath)
 '@
 
     $workerScript = $workerScript.Replace('__HELPER_PATH__', $interactiveHelperPath)
@@ -701,7 +701,7 @@ Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Succ
 
     $materializationIssue = ''
     try {
-        $null = Invoke-ClagnosInteractiveDesktopAutomation `
+        $null = Invoke-ProdicloudInteractiveDesktopAutomation `
             -TaskName $materializeTaskName `
             -RunAsUser $UserName `
             -RunAsPassword $UserPassword `
@@ -712,7 +712,7 @@ Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Succ
         $materializationIssue = [string]$_.Exception.Message
     }
 
-    if (-not (Wait-ClagnosCondition -Condition {
+    if (-not (Wait-ProdicloudCondition -Condition {
         $profilePath = Get-LocalUserProfilePath -UserName $UserName
         if ([string]::IsNullOrWhiteSpace([string]$profilePath)) {
             return $false
@@ -1124,7 +1124,7 @@ function New-StartupShortcut {
     Ensure-RegistryPath -Path $ApprovalPath
 
     $shortcutPath = Join-Path $DirectoryPath ($Name + '.lnk')
-    $tempShortcutPath = Join-Path $DirectoryPath (("clagnos-startup-{0}.lnk" -f [System.Guid]::NewGuid().ToString('N')))
+    $tempShortcutPath = Join-Path $DirectoryPath (("prodicloud-startup-{0}.lnk" -f [System.Guid]::NewGuid().ToString('N')))
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($tempShortcutPath)
     $shortcut.TargetPath = $TargetPath
@@ -1447,7 +1447,7 @@ function Get-ManagerContext {
             $safeUserName = 'User'
         }
 
-        $mountName = ('Clagnos10002{0}' -f $safeUserName)
+        $mountName = ('Prodicloud10002{0}' -f $safeUserName)
         $mainRoot = Mount-RegistryHive -MountName $mountName -HiveFilePath (Join-Path ([string]$profileInfo.ProfilePath) 'NTUSER.DAT')
     }
 
@@ -1621,7 +1621,7 @@ function Get-CompatStartupEntryName {
         return ''
     }
 
-    return ('Clagnos Startup Compat - {0}' -f $Name)
+    return ('Prodicloud Startup Compat - {0}' -f $Name)
 }
 
 function Remove-CompatScheduledTaskIfPresent {

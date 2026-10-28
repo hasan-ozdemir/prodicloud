@@ -1,5 +1,5 @@
 # Shared 'perf' command option specification.
 
-function Get-ClagnosSharedPerfOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'perf')
+function Get-ProdicloudSharedPerfOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'perf')
 }

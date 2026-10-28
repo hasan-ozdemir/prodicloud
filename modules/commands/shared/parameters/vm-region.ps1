@@ -1,5 +1,5 @@
 # Shared 'vm-region' command option specification.
 
-function Get-ClagnosSharedVmRegionOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'vm-region' -TakesValue)
+function Get-ProdicloudSharedVmRegionOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'vm-region' -TakesValue)
 }

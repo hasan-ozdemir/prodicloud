@@ -1,5 +1,5 @@
 # 'nested-virtualization' option binding for 'set'.
 
-function Get-ClagnosSetNestedVirtualizationOptionSpecification {
-    return (Get-ClagnosSharedNestedVirtualizationOptionSpecification)
+function Get-ProdicloudSetNestedVirtualizationOptionSpecification {
+    return (Get-ProdicloudSharedNestedVirtualizationOptionSpecification)
 }

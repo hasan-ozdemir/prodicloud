@@ -1,6 +1,6 @@
 # Configure command runtime helpers.
 
-function Convert-ClagnosConfigBooleanText {
+function Convert-ProdicloudConfigBooleanText {
     param(
         [bool]$Value
     )
@@ -12,7 +12,7 @@ function Convert-ClagnosConfigBooleanText {
     return 'false'
 }
 
-function Get-ClagnosConfigureFlagPlatform {
+function Get-ProdicloudConfigureFlagPlatform {
     param(
         [switch]$WindowsFlag,
         [switch]$LinuxFlag
@@ -36,7 +36,7 @@ function Get-ClagnosConfigureFlagPlatform {
     return ''
 }
 
-function Invoke-ClagnosConfigureAzJson {
+function Invoke-ProdicloudConfigureAzJson {
     param(
         [string[]]$AzArgs,
         [string]$ContextLabel,
@@ -65,7 +65,7 @@ function Invoke-ClagnosConfigureAzJson {
     return $parsed
 }
 
-function Resolve-ClagnosConfigureMarketplaceImage {
+function Resolve-ProdicloudConfigureMarketplaceImage {
     param(
         [object]$VmObject,
         [string]$VmName,
@@ -77,7 +77,7 @@ function Resolve-ClagnosConfigureMarketplaceImage {
             -Detail ("VM '{0}' in resource group '{1}' does not expose a marketplace image reference." -f [string]$VmName, [string]$ResourceGroup) `
             -Code 66 `
             -Summary 'Configure command could not persist VM image.' `
-            -Hint 'Use a VM created from an exact marketplace image, or set the platform image manually in clagnos.env.'
+            -Hint 'Use a VM created from an exact marketplace image, or set the platform image manually in prodicloud.env.'
     }
 
     $imageReference = $VmObject.storageProfile.imageReference
@@ -93,13 +93,13 @@ function Resolve-ClagnosConfigureMarketplaceImage {
             -Detail ("VM '{0}' in resource group '{1}' is not backed by an exact marketplace image reference." -f [string]$VmName, [string]$ResourceGroup) `
             -Code 66 `
             -Summary 'Configure command could not persist VM image.' `
-            -Hint 'Use a VM created from an exact marketplace image, or update the platform image keys manually in clagnos.env.'
+            -Hint 'Use a VM created from an exact marketplace image, or update the platform image keys manually in prodicloud.env.'
     }
 
     return ("{0}:{1}:{2}:{3}" -f $publisher.Trim(), $offer.Trim(), $sku.Trim(), $version.Trim())
 }
 
-function Resolve-ClagnosConfigureNsgRuleDescriptor {
+function Resolve-ProdicloudConfigureNsgRuleDescriptor {
     param(
         [string]$ResourceGroup,
         [string]$NsgName,
@@ -114,7 +114,7 @@ function Resolve-ClagnosConfigureNsgRuleDescriptor {
             -Hint 'Use a managed VM with the expected NSG attached, or repair the network resources before rerunning configure.'
     }
 
-    $ruleRows = Invoke-ClagnosConfigureAzJson `
+    $ruleRows = Invoke-ProdicloudConfigureAzJson `
         -AzArgs @('network', 'nsg', 'rule', 'list', '-g', [string]$ResourceGroup, '--nsg-name', [string]$NsgName, '-o', 'json', '--only-show-errors') `
         -ContextLabel ("NSG rule list for '{0}'" -f [string]$NsgName) `
         -FailureSummary 'Configure command could not read NSG rules.' `
@@ -208,7 +208,7 @@ function Resolve-ClagnosConfigureNsgRuleDescriptor {
             -Hint 'Repair the managed NSG rule so it carries explicit destination ports.'
     }
 
-    $portSpecification = Resolve-ClagnosTcpPortSpecification -Text (@($portTokens) -join ',') -MaximumExpandedPorts 65535
+    $portSpecification = Resolve-ProdicloudTcpPortSpecification -Text (@($portTokens) -join ',') -MaximumExpandedPorts 65535
 
     return [pscustomobject]@{
         Name = [string]$selectedRule.name
@@ -217,7 +217,7 @@ function Resolve-ClagnosConfigureNsgRuleDescriptor {
     }
 }
 
-function Resolve-ClagnosConfigurePortValues {
+function Resolve-ProdicloudConfigurePortValues {
     param(
         [string]$Platform,
         [string[]]$Ports,
@@ -235,7 +235,7 @@ function Resolve-ClagnosConfigurePortValues {
     $configuredRdpPort = [string](Get-ConfigValue -Config $ConfigBefore -Key 'VM_RDP_PORT' -DefaultValue '')
 
     $sshPort = ''
-    foreach ($candidate in @($configuredSshPort, (Get-ClagnosDefaultSshPortText), '22')) {
+    foreach ($candidate in @($configuredSshPort, (Get-ProdicloudDefaultSshPortText), '22')) {
         $candidateText = [string]$candidate
         if ($candidateText -match '^\d+$' -and $portSet.Contains($candidateText)) {
             $sshPort = $candidateText
@@ -253,7 +253,7 @@ function Resolve-ClagnosConfigurePortValues {
     $rdpPort = ''
     $clearRdp = $false
     if ([string]::Equals([string]$Platform, 'windows', [System.StringComparison]::OrdinalIgnoreCase)) {
-        foreach ($candidate in @($configuredRdpPort, (Get-ClagnosDefaultRdpPortText))) {
+        foreach ($candidate in @($configuredRdpPort, (Get-ProdicloudDefaultRdpPortText))) {
             $candidateText = [string]$candidate
             if ($candidateText -match '^\d+$' -and $portSet.Contains($candidateText)) {
                 $rdpPort = $candidateText
@@ -279,7 +279,7 @@ function Resolve-ClagnosConfigurePortValues {
     }
 }
 
-function Get-ClagnosConfigureFeatureSync {
+function Get-ProdicloudConfigureFeatureSync {
     param(
         [object]$VmObject,
         [string]$Platform,
@@ -302,14 +302,14 @@ function Get-ClagnosConfigureFeatureSync {
         if ($securityProfile.PSObject.Properties.Match('uefiSettings').Count -gt 0 -and $null -ne $securityProfile.uefiSettings) {
             $uefiSettings = $securityProfile.uefiSettings
             if ($uefiSettings.PSObject.Properties.Match('secureBootEnabled').Count -gt 0 -and $null -ne $uefiSettings.secureBootEnabled) {
-                $persist['VM_ENABLE_SECURE_BOOT'] = Convert-ClagnosConfigBooleanText -Value ([bool]$uefiSettings.secureBootEnabled)
+                $persist['VM_ENABLE_SECURE_BOOT'] = Convert-ProdicloudConfigBooleanText -Value ([bool]$uefiSettings.secureBootEnabled)
             }
             else {
                 $skipped += 'VM_ENABLE_SECURE_BOOT'
             }
 
             if ($uefiSettings.PSObject.Properties.Match('vTpmEnabled').Count -gt 0 -and $null -ne $uefiSettings.vTpmEnabled) {
-                $persist['VM_ENABLE_VTPM'] = Convert-ClagnosConfigBooleanText -Value ([bool]$uefiSettings.vTpmEnabled)
+                $persist['VM_ENABLE_VTPM'] = Convert-ProdicloudConfigBooleanText -Value ([bool]$uefiSettings.vTpmEnabled)
             }
             else {
                 $skipped += 'VM_ENABLE_VTPM'
@@ -324,14 +324,14 @@ function Get-ClagnosConfigureFeatureSync {
     }
 
     if ($null -ne $VmObject -and $VmObject.PSObject.Properties.Match('additionalCapabilities').Count -gt 0 -and $null -ne $VmObject.additionalCapabilities -and $VmObject.additionalCapabilities.PSObject.Properties.Match('hibernationEnabled').Count -gt 0 -and $null -ne $VmObject.additionalCapabilities.hibernationEnabled) {
-        $persist['VM_ENABLE_HIBERNATION'] = Convert-ClagnosConfigBooleanText -Value ([bool]$VmObject.additionalCapabilities.hibernationEnabled)
+        $persist['VM_ENABLE_HIBERNATION'] = Convert-ProdicloudConfigBooleanText -Value ([bool]$VmObject.additionalCapabilities.hibernationEnabled)
     }
     else {
         $skipped += 'VM_ENABLE_HIBERNATION'
     }
 
     if (-not [string]::IsNullOrWhiteSpace([string]$AzLocation) -and -not [string]::IsNullOrWhiteSpace([string]$VmSize)) {
-        $nestedSupport = Get-ClagnosNestedVirtualizationSupportInfo -Location ([string]$AzLocation) -VmSize ([string]$VmSize)
+        $nestedSupport = Get-ProdicloudNestedVirtualizationSupportInfo -Location ([string]$AzLocation) -VmSize ([string]$VmSize)
         $securityTypeText = ''
         if ($persist.Contains('VM_SECURITY_TYPE')) {
             $securityTypeText = [string]$persist['VM_SECURITY_TYPE']
@@ -341,7 +341,7 @@ function Get-ClagnosConfigureFeatureSync {
             $persist['VM_ENABLE_NESTED_VIRTUALIZATION'] = 'false'
         }
         elseif ([bool]$nestedSupport.Known) {
-            $persist['VM_ENABLE_NESTED_VIRTUALIZATION'] = Convert-ClagnosConfigBooleanText -Value ([bool]$nestedSupport.Supported)
+            $persist['VM_ENABLE_NESTED_VIRTUALIZATION'] = Convert-ProdicloudConfigBooleanText -Value ([bool]$nestedSupport.Supported)
         }
         else {
             $skipped += 'VM_ENABLE_NESTED_VIRTUALIZATION'
@@ -357,19 +357,19 @@ function Get-ClagnosConfigureFeatureSync {
     }
 }
 
-function Get-ClagnosConfigureTargetState {
+function Get-ProdicloudConfigureTargetState {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
         [hashtable]$ConfigBefore
     )
 
-    $vmObject = Invoke-ClagnosConfigureAzJson `
+    $vmObject = Invoke-ProdicloudConfigureAzJson `
         -AzArgs @('vm', 'show', '-g', [string]$ResourceGroup, '-n', [string]$VmName, '-o', 'json', '--only-show-errors') `
         -ContextLabel ("VM '{0}'" -f [string]$VmName) `
         -FailureSummary 'Configure command could not read VM metadata.' `
         -FailureHint 'Verify the selected managed VM and Azure access.'
-    $actualPlatform = Get-ClagnosPlatformNameFromOsType -OsType ([string]$vmObject.storageProfile.osDisk.osType)
+    $actualPlatform = Get-ProdicloudPlatformNameFromOsType -OsType ([string]$vmObject.storageProfile.osDisk.osType)
     if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) {
         Throw-FriendlyError `
             -Detail ("VM '{0}' in resource group '{1}' reported unsupported osType '{2}'." -f [string]$VmName, [string]$ResourceGroup, [string]$vmObject.storageProfile.osDisk.osType) `
@@ -378,16 +378,16 @@ function Get-ClagnosConfigureTargetState {
             -Hint 'Use a Windows or Linux VM managed by this application.'
     }
 
-    $networkDescriptor = Get-ClagnosVmNetworkDescriptor -ResourceGroup $ResourceGroup -VmName $VmName
-    $diskObject = Invoke-ClagnosConfigureAzJson `
+    $networkDescriptor = Get-ProdicloudVmNetworkDescriptor -ResourceGroup $ResourceGroup -VmName $VmName
+    $diskObject = Invoke-ProdicloudConfigureAzJson `
         -AzArgs @('disk', 'show', '-g', [string]$ResourceGroup, '-n', [string]$networkDescriptor.OsDiskName, '-o', 'json', '--only-show-errors') `
         -ContextLabel ("OS disk '{0}'" -f [string]$networkDescriptor.OsDiskName) `
         -FailureSummary 'Configure command could not read OS disk metadata.' `
         -FailureHint 'Verify the selected VM OS disk still exists and Azure access is healthy.'
-    $marketplaceImage = Resolve-ClagnosConfigureMarketplaceImage -VmObject $vmObject -VmName $VmName -ResourceGroup $ResourceGroup
-    $ruleDescriptor = Resolve-ClagnosConfigureNsgRuleDescriptor -ResourceGroup $ResourceGroup -NsgName ([string]$networkDescriptor.NsgName) -ConfigBefore $ConfigBefore
-    $portDescriptor = Resolve-ClagnosConfigurePortValues -Platform $actualPlatform -Ports @($ruleDescriptor.Ports) -ConfigBefore $ConfigBefore
-    $featureSync = Get-ClagnosConfigureFeatureSync -VmObject $vmObject -Platform $actualPlatform -AzLocation ([string]$vmObject.location) -VmSize ([string]$vmObject.hardwareProfile.vmSize)
+    $marketplaceImage = Resolve-ProdicloudConfigureMarketplaceImage -VmObject $vmObject -VmName $VmName -ResourceGroup $ResourceGroup
+    $ruleDescriptor = Resolve-ProdicloudConfigureNsgRuleDescriptor -ResourceGroup $ResourceGroup -NsgName ([string]$networkDescriptor.NsgName) -ConfigBefore $ConfigBefore
+    $portDescriptor = Resolve-ProdicloudConfigurePortValues -Platform $actualPlatform -Ports @($ruleDescriptor.Ports) -ConfigBefore $ConfigBefore
+    $featureSync = Get-ProdicloudConfigureFeatureSync -VmObject $vmObject -Platform $actualPlatform -AzLocation ([string]$vmObject.location) -VmSize ([string]$vmObject.hardwareProfile.vmSize)
 
     $clearReasons = @{}
     if ([string]::IsNullOrWhiteSpace([string]$networkDescriptor.PublicIpName)) {
@@ -399,7 +399,7 @@ function Get-ClagnosConfigureTargetState {
 
     $persistMap = [ordered]@{
         SELECTED_VM_OS = [string]$actualPlatform
-        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-ClagnosResolvedSubscriptionContext).SubscriptionId)
+        SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-ProdicloudResolvedSubscriptionContext).SubscriptionId)
         SELECTED_AZURE_REGION = ([string]$vmObject.location).Trim().ToLowerInvariant()
         SELECTED_RESOURCE_GROUP = [string]$ResourceGroup
         SELECTED_VM_NAME = [string]$VmName
@@ -409,9 +409,9 @@ function Get-ClagnosConfigureTargetState {
         TCP_PORTS = [string]$ruleDescriptor.PortsCsv
     }
 
-    $vmImageConfigKey = Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_IMAGE'
-    $vmSizeConfigKey = Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE'
-    $vmDiskSizeConfigKey = Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB'
+    $vmImageConfigKey = Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_IMAGE'
+    $vmSizeConfigKey = Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE'
+    $vmDiskSizeConfigKey = Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB'
     $persistMap[$vmImageConfigKey] = [string]$marketplaceImage
     $persistMap[$vmSizeConfigKey] = [string]$vmObject.hardwareProfile.vmSize
     $persistMap[$vmDiskSizeConfigKey] = [string]$diskObject.diskSizeGb
@@ -433,9 +433,9 @@ function Get-ClagnosConfigureTargetState {
         }
     }
 
-    $platformVmImageKey = Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_IMAGE'
-    $platformVmSizeKey = Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE'
-    $platformVmDiskSizeKey = Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB'
+    $platformVmImageKey = Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_IMAGE'
+    $platformVmSizeKey = Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE'
+    $platformVmDiskSizeKey = Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB'
 
     return [pscustomobject]@{
         Platform = [string]$actualPlatform
@@ -443,8 +443,8 @@ function Get-ClagnosConfigureTargetState {
         ClearReasonMap = $clearReasons
         SkippedFeatureKeys = @($featureSync.SkippedKeys)
         SummaryMap = [ordered]@{
-            AzureSubscriptionName = [string]$((Get-ClagnosResolvedSubscriptionContext).SubscriptionName)
-            SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-ClagnosResolvedSubscriptionContext).SubscriptionId)
+            AzureSubscriptionName = [string]$((Get-ProdicloudResolvedSubscriptionContext).SubscriptionName)
+            SELECTED_AZURE_SUBSCRIPTION_ID = [string]$((Get-ProdicloudResolvedSubscriptionContext).SubscriptionId)
             SELECTED_VM_OS = [string]$actualPlatform
             SELECTED_RESOURCE_GROUP = [string]$ResourceGroup
             SELECTED_VM_NAME = [string]$VmName
@@ -467,8 +467,8 @@ function Get-ClagnosConfigureTargetState {
     }
 }
 
-# Handles Save-ClagnosConfigToDotEnv.
-function Save-ClagnosConfigToDotEnv {
+# Handles Save-ProdicloudConfigToDotEnv.
+function Save-ProdicloudConfigToDotEnv {
     param(
         [string]$EnvFilePath,
         [hashtable]$ConfigBefore,
@@ -520,8 +520,8 @@ function Save-ClagnosConfigToDotEnv {
         }
     }
 
-    Remove-ClagnosUnsupportedDotEnvKeys -Path $EnvFilePath
-    if (-not [string]::IsNullOrWhiteSpace([string]$vmName)) { Remove-ClagnosUnsupportedDotEnvKeys -Path (Get-ClagnosVmEnvPath -VmName $vmName) }
+    Remove-ProdicloudUnsupportedDotEnvKeys -Path $EnvFilePath
+    if (-not [string]::IsNullOrWhiteSpace([string]$vmName)) { Remove-ProdicloudUnsupportedDotEnvKeys -Path (Get-ProdicloudVmEnvPath -VmName $vmName) }
 
     return @($changes)
 }

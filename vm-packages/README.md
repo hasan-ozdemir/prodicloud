@@ -1,6 +1,6 @@
 # Package Catalogs
 
-Clagnos keeps standard packages and operator-authored packages in separate catalogs:
+Prodicloud keeps standard packages and operator-authored packages in separate catalogs:
 
 - `builtin/<platform>/<package-id>/` contains the maintained standard package set.
 - `custom/<platform>/<package-id>/` contains packages added for this repository.
@@ -21,17 +21,17 @@ Capture generalizes known source profile paths, SIDs, drive roots, host names, I
 
 | Placeholder | Resolved on the target VM |
 | --- | --- |
-| `%CLAGNOS_TARGET_USER%`, `%CLAGNOS_TARGET_PROFILE_PATH%` | The profile selected by the archive entry (`manager` or `assistant`); on Windows `%CLAGNOS_TARGET_PROFILE_PATH%` is its profile directory |
-| `%CLAGNOS_VM_ADMIN_USER%`, `%CLAGNOS_ASSISTANT_USER%`, `%CLAGNOS_VM_ADMIN_PROFILE_PATH%`, `%CLAGNOS_ASSISTANT_PROFILE_PATH%`, `%CLAGNOS_VM_ADMIN_USER_SID%`, `%CLAGNOS_ASSISTANT_USER_SID%` | The target VM's configured operator and assistant accounts |
-| `%CLAGNOS_LOCAL_APP_DATA%`, `%CLAGNOS_ROAMING_APP_DATA%` | The selected target profile's local and roaming application-data roots |
-| `%CLAGNOS_COMPUTER_NAME%`, `%CLAGNOS_PROGRAM_DATA%`, `%CLAGNOS_PROGRAM_FILES%`, `%CLAGNOS_PROGRAM_FILES_X86%`, `%CLAGNOS_PRIMARY_IPV4_ADDRESS%` | The target VM's host name, OS paths, and primary IPv4 address; path values are OS-specific |
-| `%CLAGNOS_SYSTEM_DRIVE%`, `%CLAGNOS_WINDOWS_DIRECTORY%`, `%CLAGNOS_TARGET_USER_SID%`, `%CLAGNOS_VM_ADMIN_USER_SID%`, `%CLAGNOS_ASSISTANT_USER_SID%` | Windows-only drive, Windows directory, and target profile SIDs |
-| `%CLAGNOS_TARGET_CPU_COUNT%`, `%CLAGNOS_TARGET_MEMORY_GB%` | The target VM's detected logical CPU count and physical memory in GiB |
-| `%CLAGNOS_VS_INSTANCE_DIRECTORY%` | The installed Visual Studio 2022 instance directory for that profile |
+| `%PRODICLOUD_TARGET_USER%`, `%PRODICLOUD_TARGET_PROFILE_PATH%` | The profile selected by the archive entry (`manager` or `assistant`); on Windows `%PRODICLOUD_TARGET_PROFILE_PATH%` is its profile directory |
+| `%PRODICLOUD_VM_ADMIN_USER%`, `%PRODICLOUD_ASSISTANT_USER%`, `%PRODICLOUD_VM_ADMIN_PROFILE_PATH%`, `%PRODICLOUD_ASSISTANT_PROFILE_PATH%`, `%PRODICLOUD_VM_ADMIN_USER_SID%`, `%PRODICLOUD_ASSISTANT_USER_SID%` | The target VM's configured operator and assistant accounts |
+| `%PRODICLOUD_LOCAL_APP_DATA%`, `%PRODICLOUD_ROAMING_APP_DATA%` | The selected target profile's local and roaming application-data roots |
+| `%PRODICLOUD_COMPUTER_NAME%`, `%PRODICLOUD_PROGRAM_DATA%`, `%PRODICLOUD_PROGRAM_FILES%`, `%PRODICLOUD_PROGRAM_FILES_X86%`, `%PRODICLOUD_PRIMARY_IPV4_ADDRESS%` | The target VM's host name, OS paths, and primary IPv4 address; path values are OS-specific |
+| `%PRODICLOUD_SYSTEM_DRIVE%`, `%PRODICLOUD_WINDOWS_DIRECTORY%`, `%PRODICLOUD_TARGET_USER_SID%`, `%PRODICLOUD_VM_ADMIN_USER_SID%`, `%PRODICLOUD_ASSISTANT_USER_SID%` | Windows-only drive, Windows directory, and target profile SIDs |
+| `%PRODICLOUD_TARGET_CPU_COUNT%`, `%PRODICLOUD_TARGET_MEMORY_GB%` | The target VM's detected logical CPU count and physical memory in GiB |
+| `%PRODICLOUD_VS_INSTANCE_DIRECTORY%` | The installed Visual Studio 2022 instance directory for that profile |
 
-Custom Linux package app-state also supports `%CLAGNOS_TARGET_HOME%`, `%CLAGNOS_SYSTEM_ROOT%`, `%CLAGNOS_TARGET_UID%`, `%CLAGNOS_TARGET_GID%`, `%CLAGNOS_VM_ADMIN_HOME%`, `%CLAGNOS_ASSISTANT_HOME%`, `%CLAGNOS_VM_ADMIN_UID%`, `%CLAGNOS_ASSISTANT_UID%`, `%CLAGNOS_VM_ADMIN_GID%`, and `%CLAGNOS_ASSISTANT_GID%`. On Linux, `SYSTEM_ROOT` resolves to `/`, `PROGRAM_DATA` to `/var/lib`, `PROGRAM_FILES` to `/usr/local/bin`, and `PROGRAM_FILES_X86` to `/usr/lib`; Windows drive and registry placeholders are not valid on Linux.
+Custom Linux package app-state also supports `%PRODICLOUD_TARGET_HOME%`, `%PRODICLOUD_SYSTEM_ROOT%`, `%PRODICLOUD_TARGET_UID%`, `%PRODICLOUD_TARGET_GID%`, `%PRODICLOUD_VM_ADMIN_HOME%`, `%PRODICLOUD_ASSISTANT_HOME%`, `%PRODICLOUD_VM_ADMIN_UID%`, `%PRODICLOUD_ASSISTANT_UID%`, `%PRODICLOUD_VM_ADMIN_GID%`, and `%PRODICLOUD_ASSISTANT_GID%`. On Linux, `SYSTEM_ROOT` resolves to `/`, `PROGRAM_DATA` to `/var/lib`, `PROGRAM_FILES` to `/usr/local/bin`, and `PROGRAM_FILES_X86` to `/usr/lib`; Windows drive and registry placeholders are not valid on Linux.
 
-Missing values and unsupported `%CLAGNOS_*%` tokens fail before replay. The manager and assistant profiles remain separate during capture and restore. Validate new or changed snapshots with `tests/package-app-state-contract-check.ps1`; review builtin policy changes with `tools/maintain-package-app-state.ps1` and pass `-Apply` only when the reviewed cleanup should be written.
+Missing values and unsupported `%PRODICLOUD_*%` tokens fail before replay. The manager and assistant profiles remain separate during capture and restore. Validate new or changed snapshots with `tests/package-app-state-contract-check.ps1`; review builtin policy changes with `tools/maintain-package-app-state.ps1` and pass `-Apply` only when the reviewed cleanup should be written.
 
 Example:
 

@@ -1,0 +1,282 @@
+# Azure subscription selection helpers.
+
+function Test-ProdicloudSubscriptionIdFormat {
+    param(
+        [string]$SubscriptionId
+    )
+
+    $text = if ($null -eq $SubscriptionId) { '' } else { [string]$SubscriptionId.Trim() }
+    if ([string]::IsNullOrWhiteSpace([string]$text)) {
+        return $false
+    }
+
+    return ($text -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')
+}
+
+function Assert-ProdicloudSubscriptionIdFormat {
+    param(
+        [string]$SubscriptionId,
+        [string]$OptionSource = 'subscription selection'
+    )
+
+    if (Test-ProdicloudSubscriptionIdFormat -SubscriptionId $SubscriptionId) {
+        return ([string]$SubscriptionId).Trim()
+    }
+
+    Throw-FriendlyError `
+        -Detail ("Invalid Azure subscription id '{0}' from {1}." -f [string]$SubscriptionId, [string]$OptionSource) `
+        -Code 2 `
+        -Summary 'Azure subscription id format is invalid.' `
+        -Hint "Use a GUID-form Azure subscription id, for example '--subscription-id=<subscription-guid>'."
+}
+
+function Reset-ProdicloudAccessibleSubscriptionRowsCache {
+    $script:ProdicloudAccessibleSubscriptionRowsCache = $null
+    $script:ProdicloudAccessibleSubscriptionRowsValidatedAtUtc = [DateTime]::MinValue
+}
+
+function Get-ProdicloudAccessibleSubscriptionRows {
+    param([switch]$ForceRefresh)
+
+    if (-not $ForceRefresh -and $null -ne $script:ProdicloudAccessibleSubscriptionRowsCache -and $script:ProdicloudAccessibleSubscriptionRowsValidatedAtUtc -ne [DateTime]::MinValue) {
+        $cacheAge = ([DateTime]::UtcNow - [DateTime]$script:ProdicloudAccessibleSubscriptionRowsValidatedAtUtc).TotalSeconds
+        if ($cacheAge -lt 30) { return @($script:ProdicloudAccessibleSubscriptionRowsCache) }
+    }
+    $raw = Invoke-ProdicloudWithBypassedAzCliSubscription -Action {
+        az account list -o json --only-show-errors 2>$null
+    }
+
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$raw)) {
+        Throw-FriendlyError `
+            -Detail 'Azure subscription list could not be loaded from Azure CLI.' `
+            -Code 64 `
+            -Summary 'Azure CLI sign-in is required.' `
+            -Hint "Run 'az login' first, then retry the prodicloud command."
+    }
+
+    $rows = @(
+        ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject $raw) |
+            Where-Object { $_ -ne $null -and -not [string]::IsNullOrWhiteSpace([string]$_.id) }
+    )
+    if (@($rows).Count -eq 0) {
+        Throw-FriendlyError `
+            -Detail 'Azure CLI returned no accessible subscriptions.' `
+            -Code 64 `
+            -Summary 'Azure CLI sign-in is required.' `
+            -Hint "Run 'az login' and ensure at least one subscription is accessible."
+    }
+
+    $resolvedRows = @(
+        @($rows) |
+            Sort-Object @{ Expression = { if ($_.isDefault) { 0 } else { 1 } } }, @{ Expression = { [string]$_.name } }, @{ Expression = { [string]$_.id } }
+    )
+    $script:ProdicloudAccessibleSubscriptionRowsCache = @($resolvedRows)
+    $script:ProdicloudAccessibleSubscriptionRowsValidatedAtUtc = [DateTime]::UtcNow
+    return @($resolvedRows)
+}
+
+function Find-ProdicloudSubscriptionRowById {
+    param(
+        [object[]]$SubscriptionRows,
+        [string]$SubscriptionId
+    )
+
+    $normalizedId = [string](Assert-ProdicloudSubscriptionIdFormat -SubscriptionId $SubscriptionId -OptionSource 'subscription lookup')
+    $matchedRow = @(
+        @($SubscriptionRows) | Where-Object {
+            [string]::Equals([string]$_.id, $normalizedId, [System.StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1
+    )
+    if (@($matchedRow).Count -eq 0) {
+        return $null
+    }
+
+    return [object]$matchedRow[0]
+}
+
+function Get-ProdicloudDefaultSubscriptionRow {
+    param(
+        [object[]]$SubscriptionRows
+    )
+
+    $defaultRow = @(
+        @($SubscriptionRows) | Where-Object { [bool]$_.isDefault } | Select-Object -First 1
+    )
+    if (@($defaultRow).Count -gt 0) {
+        return [object]$defaultRow[0]
+    }
+
+    $accountRaw = Invoke-ProdicloudWithBypassedAzCliSubscription -Action {
+        az account show -o json --only-show-errors 2>$null
+    }
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$accountRaw)) {
+        $accountObj = ConvertFrom-JsonCompat -InputObject $accountRaw
+        if ($null -ne $accountObj -and -not [string]::IsNullOrWhiteSpace([string]$accountObj.id)) {
+            $matchedRow = Find-ProdicloudSubscriptionRowById -SubscriptionRows $SubscriptionRows -SubscriptionId ([string]$accountObj.id)
+            if (@($matchedRow).Count -gt 0) {
+                return [object]$matchedRow[0]
+            }
+        }
+    }
+
+    return [object](@($SubscriptionRows)[0])
+}
+
+function Get-ProdicloudResolvedSubscriptionContext {
+    if ($null -eq $script:ProdicloudResolvedSubscriptionContext) {
+        return $null
+    }
+
+    return [pscustomobject]$script:ProdicloudResolvedSubscriptionContext
+}
+
+function Set-ProdicloudResolvedSubscriptionContext {
+    param(
+        [string]$SubscriptionId,
+        [string]$SubscriptionName,
+        [string]$TenantId,
+        [string]$ResolutionSource
+    )
+
+    $normalizedId = [string](Assert-ProdicloudSubscriptionIdFormat -SubscriptionId $SubscriptionId -OptionSource 'resolved subscription')
+    $script:ProdicloudActiveSubscriptionId = $normalizedId
+    $script:ProdicloudResolvedSubscriptionContext = [ordered]@{
+        SubscriptionId = $normalizedId
+        SubscriptionName = [string]$SubscriptionName
+        TenantId = [string]$TenantId
+        ResolutionSource = [string]$ResolutionSource
+    }
+}
+
+function Clear-ProdicloudResolvedSubscriptionContext {
+    $script:ProdicloudActiveSubscriptionId = ''
+    $script:ProdicloudResolvedSubscriptionContext = $null
+    if ($script:ConfigOverrides -and $script:ConfigOverrides.ContainsKey('SELECTED_AZURE_SUBSCRIPTION_ID')) {
+        $null = $script:ConfigOverrides.Remove('SELECTED_AZURE_SUBSCRIPTION_ID')
+    }
+}
+
+function Save-ProdicloudSubscriptionIdToDotEnv {
+    param(
+        [string]$EnvFilePath,
+        [string]$SubscriptionId
+    )
+
+    $normalizedId = [string](Assert-ProdicloudSubscriptionIdFormat -SubscriptionId $SubscriptionId -OptionSource 'SELECTED_AZURE_SUBSCRIPTION_ID persistence')
+    Set-DotEnvValue -Path $EnvFilePath -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Value $normalizedId
+    Remove-ProdicloudUnsupportedDotEnvKeys -Path $EnvFilePath
+}
+
+function Test-ProdicloudAzureTouchingCommand {
+    param(
+        [string]$CommandName,
+        [hashtable]$Options = @{}
+    )
+
+    if ([string]$CommandName -eq 'task') {
+        return (
+            (Test-ProdicloudCliOptionPresent -Options $Options -Name 'run-vm-init') -or
+            (Test-ProdicloudCliOptionPresent -Options $Options -Name 'run-vm-update') -or
+            (Test-ProdicloudCliOptionPresent -Options $Options -Name 'save-app-state') -or
+            (Test-ProdicloudCliOptionPresent -Options $Options -Name 'restore-app-state')
+        )
+    }
+
+    return ([string]$CommandName -in @('create','initialize','update','list','show','do','package','component','move','resize','set','exec','connect','delete'))
+}
+
+function Initialize-ProdicloudCommandSubscriptionState {
+    param(
+        [string]$CommandName,
+        [hashtable]$Options
+    )
+
+    Clear-ProdicloudResolvedSubscriptionContext
+    if (-not (Test-ProdicloudAzureTouchingCommand -CommandName $CommandName -Options $Options)) {
+        return $null
+    }
+
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Join-Path $repoRoot 'prodicloud.env'
+    $configMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
+    $accessibleRows = @(Get-ProdicloudAccessibleSubscriptionRows)
+    $cliSubscriptionId = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'subscription-id')
+    $configSubscriptionId = ''
+    if ($configMap) {
+        $configSubscriptionId = [string](Get-ConfigValue -Config $configMap -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -DefaultValue '')
+    }
+
+    $resolutionSource = 'active'
+    $requestedSubscriptionId = ''
+    if (-not [string]::IsNullOrWhiteSpace([string]$cliSubscriptionId)) {
+        $requestedSubscriptionId = [string](Assert-ProdicloudSubscriptionIdFormat -SubscriptionId $cliSubscriptionId -OptionSource 'CLI option --subscription-id')
+        $resolutionSource = 'cli'
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace([string]$configSubscriptionId)) {
+        $requestedSubscriptionId = [string](Assert-ProdicloudSubscriptionIdFormat -SubscriptionId $configSubscriptionId -OptionSource 'prodicloud.env SELECTED_AZURE_SUBSCRIPTION_ID')
+        $resolutionSource = 'env'
+    }
+
+    $selectedRow = $null
+    if (-not [string]::IsNullOrWhiteSpace([string]$requestedSubscriptionId)) {
+        $selectedRow = Find-ProdicloudSubscriptionRowById -SubscriptionRows $accessibleRows -SubscriptionId $requestedSubscriptionId
+        if ($null -eq $selectedRow -or @($selectedRow).Count -eq 0) {
+            $detailText = if ($resolutionSource -eq 'cli') {
+                ("CLI subscription id '{0}' is not accessible through the current Azure CLI login." -f [string]$requestedSubscriptionId)
+            }
+            else {
+                ("prodicloud.env SELECTED_AZURE_SUBSCRIPTION_ID '{0}' is not accessible through the current Azure CLI login." -f [string]$requestedSubscriptionId)
+            }
+            Throw-FriendlyError `
+                -Detail $detailText `
+                -Code 64 `
+                -Summary 'Azure subscription selection could not be resolved.' `
+                -Hint "Run 'az login', fix the subscription id, or pass a reachable '--subscription-id=<subscription-guid>'."
+        }
+    }
+    else {
+        $selectedRow = Get-ProdicloudDefaultSubscriptionRow -SubscriptionRows $accessibleRows
+    }
+
+    Set-ProdicloudResolvedSubscriptionContext `
+        -SubscriptionId ([string]$selectedRow.id) `
+        -SubscriptionName ([string]$selectedRow.name) `
+        -TenantId ([string]$selectedRow.tenantId) `
+        -ResolutionSource $resolutionSource
+
+    if ($resolutionSource -eq 'cli') {
+        Save-ProdicloudSubscriptionIdToDotEnv -EnvFilePath $envFilePath -SubscriptionId ([string]$selectedRow.id)
+    }
+
+    if ($script:ConfigOverrides -eq $null) {
+        $script:ConfigOverrides = @{}
+    }
+    $script:ConfigOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = [string]$selectedRow.id
+    $sourceLabel = switch ([string]$resolutionSource) {
+        'cli' { 'cli value' }
+        'env' { 'prodicloud.env value' }
+        default { 'azure value' }
+    }
+    Set-ProdicloudConfigValueSource -Key 'SELECTED_AZURE_SUBSCRIPTION_ID' -Source $sourceLabel
+    return (Get-ProdicloudResolvedSubscriptionContext)
+}
+
+function Select-ProdicloudSubscriptionInteractive {
+    param(
+        [string]$DefaultSubscriptionId
+    )
+
+    $subscriptionRows = @(Get-ProdicloudAccessibleSubscriptionRows)
+    $options = @(
+        $subscriptionRows | ForEach-Object {
+            $defaultText = if ([bool]$_.isDefault) { 'Azure CLI active default' } else { [string]$_.state }
+            [pscustomobject]@{ Value = [string]$_.id; Label = ('{0} ({1})' -f [string]$_.name, [string]$_.id); Detail = $defaultText }
+        }
+    )
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Available Azure subscriptions' -DefaultValue $DefaultSubscriptionId -PageSize 12
+    if ([string]$selection.Action -eq 'selected') {
+        $match = @($subscriptionRows | Where-Object { [string]::Equals([string]$_.id, [string]$selection.Value, [System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
+        if (@($match).Count -gt 0) { return [object]$match[0] }
+    }
+    Throw-FriendlyError -Detail 'Azure subscription selection was closed before a subscription was selected.' -Code 24 -Summary 'Azure subscription selection was canceled.' -Hint 'Select an enabled subscription by number and retry.'
+}

@@ -1,5 +1,5 @@
 # 'group' option binding for 'do'.
 
-function Get-ClagnosDoGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudDoGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

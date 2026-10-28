@@ -1,5 +1,5 @@
 # Shared 'quiet' command option specification for exec.
 
-function Get-ClagnosExecQuietOptionSpecification {
-    return (Get-ClagnosSharedQuietOptionSpecification)
+function Get-ProdicloudExecQuietOptionSpecification {
+    return (Get-ProdicloudSharedQuietOptionSpecification)
 }

@@ -13,14 +13,14 @@ $script:RemoveRepoRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path
 $script:RemoveVmName = $VmName.Trim().ToLowerInvariant()
 $script:RemoveVmEnvPath = Join-Path $script:RemoveRepoRoot ($script:RemoveVmName + '.env')
 $script:RemoveStatePath = Join-Path $script:RemoveRepoRoot ('.remove-' + $script:RemoveVmName + '.state.json')
-$script:RemoveGlobalEnvPath = Join-Path $script:RemoveRepoRoot 'clagnos.env'
-$script:RemoveCgPath = Join-Path $script:RemoveRepoRoot 'cg.cmd'
+$script:RemoveGlobalEnvPath = Join-Path $script:RemoveRepoRoot 'prodicloud.env'
+$script:RemoveCgPath = Join-Path $script:RemoveRepoRoot 'pd.cmd'
 $script:RemoveSubscriptionId = ''
 $script:RemoveGroups = @()
 $script:RemoveResourceNames = @($script:RemoveVmName)
 $script:RemoveCapturedResources = New-Object 'System.Collections.Generic.List[object]'
 $script:RemoveTranscriptStarted = $false
-$script:RemoveTranscriptPath = Join-Path (Join-Path $script:RemoveRepoRoot '.logs') ('clagnos-remove-' + $script:RemoveVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+$script:RemoveTranscriptPath = Join-Path (Join-Path $script:RemoveRepoRoot '.logs') ('prodicloud-remove-' + $script:RemoveVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 
 function Write-RemoveDoing {
     param([Parameter(Mandatory = $true)][string]$Action)
@@ -173,8 +173,8 @@ function Get-RemoveTargetGroups {
         $exists = Invoke-RemoveAzText -Arguments @('group','exists','--name',$groupName,'--subscription',$script:RemoveSubscriptionId,'--output','tsv','--only-show-errors') -Action ("check whether target group '{0}' still exists" -f $groupName)
         if (-not [string]::Equals($exists,'true',[System.StringComparison]::OrdinalIgnoreCase)) { continue }
         $group = Invoke-RemoveAzJson -Arguments @('group','show','--name',$groupName,'--subscription',$script:RemoveSubscriptionId,'--output','json','--only-show-errors') -Action ("verify ownership of target group '{0}'" -f $groupName)
-        if ([string]$group.tags.'managed-by' -notin @('clagnos','az-vm')) {
-            throw ("Target group '{0}' is not tagged as Clagnos-managed; refusing to delete it." -f $groupName)
+        if ([string]$group.tags.'managed-by' -notin @('prodicloud','prodicloud')) {
+            throw ("Target group '{0}' is not tagged as Prodicloud-managed; refusing to delete it." -f $groupName)
         }
     }
     $script:RemoveGroups = @($groups.ToArray() | Sort-Object -Unique)
@@ -189,7 +189,7 @@ function Invoke-RemoveGroup {
         return
     }
     $resources = Invoke-RemoveAzJson -Arguments @('resource','list','--resource-group',$GroupName,'--subscription',$script:RemoveSubscriptionId,'--output','json','--only-show-errors') -Action ("inventory every resource in '{0}' before purge" -f $GroupName)
-    Write-Host ("Purge target: Clagnos-managed resource group '{0}' ({1} resource(s))." -f $GroupName,@($resources).Count) -ForegroundColor Yellow
+    Write-Host ("Purge target: Prodicloud-managed resource group '{0}' ({1} resource(s))." -f $GroupName,@($resources).Count) -ForegroundColor Yellow
     foreach ($resource in @($resources)) {
         Write-Host ('  - {0}: {1}' -f [string]$resource.type,[string]$resource.name)
         Add-RemoveCapturedResource -Resource $resource
@@ -197,7 +197,7 @@ function Invoke-RemoveGroup {
     Save-RemoveJournal
     Write-RemoveDoing ("delete all resources and the complete managed resource group '{0}'" -f $GroupName)
     & $script:RemoveCgPath 'delete' '--target' 'group' '--group' $GroupName '--yes' '--auto' '--subscription-id' $script:RemoveSubscriptionId
-    if ($LASTEXITCODE -ne 0) { throw ("cg.cmd failed while purging resource group '{0}' (exit {1})." -f $GroupName,$LASTEXITCODE) }
+    if ($LASTEXITCODE -ne 0) { throw ("pd.cmd failed while purging resource group '{0}' (exit {1})." -f $GroupName,$LASTEXITCODE) }
 
     $removed = $false
     for ($attempt = 1; $attempt -le 60; $attempt++) {
@@ -248,10 +248,10 @@ function Assert-RemoveTargetAbsent {
 
 try {
     Assert-RemoveElevatedSession
-    if (-not (Test-Path -LiteralPath $script:RemoveGlobalEnvPath -PathType Leaf)) { throw "Local clagnos.env was not found; cannot resolve the selected Azure subscription." }
-    if (-not (Test-Path -LiteralPath $script:RemoveCgPath -PathType Leaf)) { throw 'cg.cmd was not found at the repository root.' }
+    if (-not (Test-Path -LiteralPath $script:RemoveGlobalEnvPath -PathType Leaf)) { throw "Local prodicloud.env was not found; cannot resolve the selected Azure subscription." }
+    if (-not (Test-Path -LiteralPath $script:RemoveCgPath -PathType Leaf)) { throw 'pd.cmd was not found at the repository root.' }
     $script:RemoveSubscriptionId = Get-RemoveSubscriptionId
-    if ([string]::IsNullOrWhiteSpace($script:RemoveSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in clagnos.env or pass -SubscriptionId.' }
+    if ([string]::IsNullOrWhiteSpace($script:RemoveSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in prodicloud.env or pass -SubscriptionId.' }
     if (-not (Test-Path -LiteralPath (Split-Path -Path $script:RemoveTranscriptPath -Parent) -PathType Container)) { New-Item -ItemType Directory -Path (Split-Path -Path $script:RemoveTranscriptPath -Parent) -Force | Out-Null }
     Start-Transcript -LiteralPath $script:RemoveTranscriptPath -Force | Out-Null
     $script:RemoveTranscriptStarted = $true

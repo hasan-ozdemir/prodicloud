@@ -1,5 +1,5 @@
 # 'test' option binding for 'connect'.
 
-function Get-ClagnosConnectTestOptionSpecification {
-    return (Get-ClagnosSharedTestOptionSpecification)
+function Get-ProdicloudConnectTestOptionSpecification {
+    return (Get-ProdicloudSharedTestOptionSpecification)
 }

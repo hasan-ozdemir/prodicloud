@@ -1,5 +1,5 @@
 # 'step-to' option binding for 'update'.
 
-function Get-ClagnosUpdateStepToOptionSpecification {
-    return (Get-ClagnosSharedStepToOptionSpecification)
+function Get-ProdicloudUpdateStepToOptionSpecification {
+    return (Get-ProdicloudSharedStepToOptionSpecification)
 }

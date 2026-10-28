@@ -12,7 +12,7 @@
   "updateStrategy": "installer",
   "statusCheck": {
     "kind": "command",
-    "value": "C:\\ProgramData\\clagnos\\tools\\winget-x64\\winget.exe"
+    "value": "C:\\ProgramData\\prodicloud\\tools\\winget-x64\\winget.exe"
   },
   "uninstall": {
     "kind": "appx",

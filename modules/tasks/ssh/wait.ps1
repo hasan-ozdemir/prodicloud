@@ -1,7 +1,7 @@
 # SSH task VM wait helpers.
 
-# Handles Wait-ClagnosVmPowerState.
-function Wait-ClagnosVmPowerState {
+# Handles Wait-ProdicloudVmPowerState.
+function Wait-ProdicloudVmPowerState {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -26,16 +26,16 @@ function Wait-ClagnosVmPowerState {
         Assert-LastExitCode "az vm get-instance-view (power state)"
 
         if ([string]::IsNullOrWhiteSpace([string]$powerState)) {
-            Write-ClagnosActionProgress -Action ("VM power state is empty (attempt {0}/{1})" -f $attempt,$MaxAttempts)
+            Write-ProdicloudActionProgress -Action ("VM power state is empty (attempt {0}/{1})" -f $attempt,$MaxAttempts)
         }
         else {
-            Write-ClagnosActionProgress -Action ("VM power state: {0} (attempt {1}/{2})" -f [string]$powerState, $attempt, $MaxAttempts)
+            Write-ProdicloudActionProgress -Action ("VM power state: {0} (attempt {1}/{2})" -f [string]$powerState, $attempt, $MaxAttempts)
             if ([string]::Equals([string]$powerState, [string]$DesiredPowerState, [System.StringComparison]::OrdinalIgnoreCase)) {
                 return $true
             }
         }
 
-        Write-ClagnosActionProgress -Action ("wait {0}s before checking VM power state again" -f $DelaySeconds)
+        Write-ProdicloudActionProgress -Action ("wait {0}s before checking VM power state again" -f $DelaySeconds)
         Start-Sleep -Seconds $DelaySeconds
     }
 

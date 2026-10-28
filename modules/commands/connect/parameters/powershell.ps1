@@ -1,5 +1,5 @@
 # 'powershell' option binding for 'connect'.
 
-function Get-ClagnosConnectPowerShellOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'powershell')
+function Get-ProdicloudConnectPowerShellOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'powershell')
 }

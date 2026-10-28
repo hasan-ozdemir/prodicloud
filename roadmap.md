@@ -1,14 +1,19 @@
 # Roadmap
 
 ## Direction
-Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental model, strong validation before mutation, deterministic guest task execution, and documentation that is detailed enough for both operators and maintainers to work from the repository alone.
+Keep `prodicloud` as a pragmatic Azure VM operator toolkit with one clear mental model, strong validation before mutation, deterministic guest task execution, and documentation that is detailed enough for both operators and maintainers to work from the repository alone.
 
 ## Recently Delivered
+- VC hardware resize now has a paged Intel/AMD and RAM wizard with a RAM exact-match toggle, region/subscription SKU filtering, family metadata, and a review-first apply step.
+- VM disk resize now selects the OS or an attached data disk, expands Azure capacity and supported Windows/Linux guest filesystems, and offers guarded shrink through a temporary same-region `vc-helper` plus a replacement disk and rollback path.
+- Windows disk shrink waits for Azure Guest Agent readiness, uses a temporary higher-throughput helper and parallelized file copy through asynchronous Managed Run Command, polls instance-view state and guest progress, retries one measured Robocopy idle or copy-error attempt, excludes only regenerated AppX alias and Docker runtime-socket directories from the offline OS copy, preserves hibernation by seeding the candidate from the exact hibernation-capable Marketplace image and setting `supportsHibernation`, clears that disposable image-based candidate before reconstructing the verified partition layout, restores and verifies WinRE after cutover, enforces a one-hour guest-step bound, and preserves the original disk until boot and guest verification succeed.
 - Resize operations now print before/after state snapshots and verify the resulting VM SKU or OS disk size before persisting the requested configuration.
+- Disk resize now reports Azure capacity, guest raw capacity, partition/unallocated space, and per-volume filesystem used/free space. Shrink remeasures the isolated source clone and verifies candidate used/free headroom before cutover, then reports a fresh post-resize inventory.
+- Windows shrink normalizes exactly one small, empty leading MSR partition into the standard four-partition replacement layout; helper scripts use temporary `@file` arguments to avoid process-length failures. Windows expansion now repairs a guest volume when Azure capacity already matches the requested target, and checks only the selected volume filesystem.
 - Managed group inventory includes the active marker, Azure location, and provisioning state; `show` can export a redacted JSON report.
 - A versioned source release packager writes a build manifest and SHA256 sidecar, with clean-tree, version, and tracked-secret guards.
 - Local task history records isolated task/package outcomes, workflow stage summaries, and deferred app-state work without recording guest output or credentials.
-- The `cg.cmd` launcher preserves command-line arguments while loading the shared runtime.
+- The `pd.cmd` launcher preserves command-line arguments while loading the shared runtime.
 - VM SKU validation checks the active subscription's offered SKU list before lifecycle changes, so restricted sizes fail before deallocation.
 - The interactive power/status menu now sends only options accepted by the `do` command contract.
 - The TUI now reuses a subscription-scoped managed inventory snapshot, with ETag/content change detection, time-based validation, explicit refresh, and mutation/subscription invalidation.
@@ -16,7 +21,7 @@ Keep `clagnos` as a pragmatic Azure VM operator toolkit with one clear mental mo
 - TUI startup now reads the saved subscription and active VC profile without waiting for inventory warmup. The first two console rows show the live screen, VC, subscription, operation, and cache status; inventory refresh requests are coalesced while the read-only worker remains independent of menu navigation.
 - The optional TUI status strip is controlled by `TOP_STATUS_LINES` (default false); when enabled it avoids redundant writes and keeps `Ready` stable for screen readers.
 - Nested-virtualization precheck now uses documented unsupported B-series family data if Azure omits the feature from the SKU capability response, preventing a guaranteed post-deploy guest-validation failure.
-- Create review, the `set` command, VC details, and `show` now distinguish the Clagnos nested-virtualization request from Azure settings and guest CPU-extension availability. Incomplete guest evidence stays unknown; outer-hypervisor presence and an enabled Windows feature no longer create false positives.
+- Create review, the `set` command, VC details, and `show` now distinguish the Prodicloud nested-virtualization request from Azure settings and guest CPU-extension availability. Incomplete guest evidence stays unknown; outer-hypervisor presence and an enabled Windows feature no longer create false positives.
 - VC creation now uses a numbered, paged wizard with visible defaults and validated OS disk-size and TCP port-range inputs; task selection and inventory group filtering are also numbered and paged.
 - These pragmatic items were implemented and verified with fixture-backed tests only. No VC was provisioned or rebuilt.
 

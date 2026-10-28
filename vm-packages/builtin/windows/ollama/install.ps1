@@ -6,7 +6,7 @@ $taskConfig = [ordered]@{
         'C:\ProgramData\chocolatey\bin\choco.exe'
     )
     WingetExecutableFallbackCandidates = @(
-        'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+        'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
     )
     ChocoPackageId = 'ollama'
     WingetPackageId = 'Ollama.Ollama'
@@ -38,10 +38,10 @@ $taskConfig = [ordered]@{
     LogTailLineCount = 12
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-CommandFromCandidates {
@@ -118,7 +118,7 @@ function Invoke-ProcessWithTimeout {
         [string]$Label = 'process'
     )
 
-    $logRoot = Join-Path $env:TEMP 'clagnos-ollama'
+    $logRoot = Join-Path $env:TEMP 'prodicloud-ollama'
     [void](New-Item -ItemType Directory -Path $logRoot -Force)
     $stamp = Get-Date -Format 'yyyyMMddHHmmss'
     $stdoutLog = Join-Path $logRoot ("{0}-{1}.stdout.log" -f $Label.Replace(' ', '-'), $stamp)

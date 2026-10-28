@@ -1,5 +1,5 @@
 # 'group' option binding for 'set'.
 
-function Get-ClagnosSetGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudSetGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

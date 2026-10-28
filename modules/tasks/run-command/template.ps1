@@ -1,6 +1,6 @@
 # Run-command task block replacement helpers.
 
-function Resolve-ClagnosTaskRepoRootFromPath {
+function Resolve-ProdicloudTaskRepoRootFromPath {
     param([string]$StartPath)
 
     if ([string]::IsNullOrWhiteSpace([string]$StartPath)) {
@@ -13,7 +13,7 @@ function Resolve-ClagnosTaskRepoRootFromPath {
     }
 
     while (-not [string]::IsNullOrWhiteSpace([string]$cursor)) {
-        if (Test-Path -LiteralPath (Join-Path $cursor 'clagnos.ps1')) {
+        if (Test-Path -LiteralPath (Join-Path $cursor 'prodicloud.ps1')) {
             return [string]$cursor
         }
 
@@ -28,8 +28,8 @@ function Resolve-ClagnosTaskRepoRootFromPath {
     return ''
 }
 
-# Handles Apply-ClagnosTaskBlockReplacements.
-function Apply-ClagnosTaskBlockReplacements {
+# Handles Apply-ProdicloudTaskBlockReplacements.
+function Apply-ProdicloudTaskBlockReplacements {
     param(
         [object[]]$TaskBlocks,
         [hashtable]$Replacements,
@@ -66,7 +66,7 @@ function Apply-ClagnosTaskBlockReplacements {
         }
         $timeoutSeconds = 180
         if ($taskBlock.PSObject.Properties.Match('TimeoutSeconds').Count -gt 0) {
-            $timeoutSeconds = Get-ClagnosTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds 180
+            $timeoutSeconds = Get-ProdicloudTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds 180
         }
         $assetSpecs = @()
         if ($taskBlock.PSObject.Properties.Match('AssetSpecs').Count -gt 0 -and $null -ne $taskBlock.AssetSpecs) {
@@ -80,7 +80,7 @@ function Apply-ClagnosTaskBlockReplacements {
             }
         }
 
-        $taskOverrides = Get-ClagnosTaskBlockTokenOverrides -TaskBlock $taskBlock -Context $Context
+        $taskOverrides = Get-ProdicloudTaskBlockTokenOverrides -TaskBlock $taskBlock -Context $Context
         if ($taskOverrides) {
             foreach ($key in $taskOverrides.Keys) {
                 $effectiveReplacements[[string]$key] = [string]$taskOverrides[$key]
@@ -92,7 +92,7 @@ function Apply-ClagnosTaskBlockReplacements {
             $settingConfig = [hashtable]$Context['ConfigMap']
         }
         $settingDescriptors = if ($taskBlock.PSObject.Properties.Match('Settings').Count -gt 0) { $taskBlock.Settings } else { $null }
-        $settingValues = Get-ClagnosManifestSettingValueMap -Settings $settingDescriptors -ConfigMap $settingConfig
+        $settingValues = Get-ProdicloudManifestSettingValueMap -Settings $settingDescriptors -ConfigMap $settingConfig
         foreach ($settingKey in @($settingValues.Keys)) { $effectiveReplacements[[string]$settingKey] = [string]$settingValues[$settingKey] }
 
         if ($effectiveReplacements.Count -gt 0) {
@@ -109,7 +109,7 @@ function Apply-ClagnosTaskBlockReplacements {
                 continue
             }
 
-            $repoRoot = Resolve-ClagnosTaskRepoRootFromPath -StartPath $candidatePath
+            $repoRoot = Resolve-ProdicloudTaskRepoRootFromPath -StartPath $candidatePath
             if (-not [string]::IsNullOrWhiteSpace([string]$repoRoot)) {
                 break
             }
@@ -129,8 +129,8 @@ function Apply-ClagnosTaskBlockReplacements {
 
         if ($isWindowsPowerShellTask -and -not [string]::IsNullOrWhiteSpace([string]$repoRoot)) {
             $assetSpecs += [pscustomobject]@{
-                LocalPath = (Join-Path $repoRoot 'modules\core\tasks\clagnos-session-environment.psm1')
-                RemotePath = 'C:/Windows/Temp/clagnos-session-environment.psm1'
+                LocalPath = (Join-Path $repoRoot 'modules\core\tasks\prodicloud-session-environment.psm1')
+                RemotePath = 'C:/Windows/Temp/prodicloud-session-environment.psm1'
             }
         }
 

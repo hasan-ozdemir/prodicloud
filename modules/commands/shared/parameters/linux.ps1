@@ -1,5 +1,5 @@
 # Shared 'linux' command option specification.
 
-function Get-ClagnosSharedLinuxOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'linux')
+function Get-ProdicloudSharedLinuxOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'linux')
 }

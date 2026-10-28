@@ -1,13 +1,13 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 $AzArguments = @()
-if (-not [string]::IsNullOrWhiteSpace([string]$env:CLAGNOS_TUI_AZ_ARGUMENTS_BASE64)) {
-    $argumentBytes = [Convert]::FromBase64String([string]$env:CLAGNOS_TUI_AZ_ARGUMENTS_BASE64)
+if (-not [string]::IsNullOrWhiteSpace([string]$env:PRODICLOUD_TUI_AZ_ARGUMENTS_BASE64)) {
+    $argumentBytes = [Convert]::FromBase64String([string]$env:PRODICLOUD_TUI_AZ_ARGUMENTS_BASE64)
     $argumentText = [System.Text.Encoding]::UTF8.GetString($argumentBytes)
     $AzArguments = @($argumentText.Split([char]0))
 }
 else {
-    $argumentMatches = [regex]::Matches([string]$env:CLAGNOS_TUI_AZ_ARGUMENT_LINE, '"([^"]*)"|''([^'']*)''|(\S+)')
+    $argumentMatches = [regex]::Matches([string]$env:PRODICLOUD_TUI_AZ_ARGUMENT_LINE, '"([^"]*)"|''([^'']*)''|(\S+)')
     foreach ($argumentMatch in @($argumentMatches)) {
         if ($argumentMatch.Groups[1].Success) { $AzArguments += [string]$argumentMatch.Groups[1].Value }
         elseif ($argumentMatch.Groups[2].Success) { $AzArguments += [string]$argumentMatch.Groups[2].Value }
@@ -18,7 +18,7 @@ $subscriptionId = '00000000-0000-4000-8000-000000000000'
 $resourceGroup = 'rg-tui-fixture-eastus-g1'
 $vmName = 'tui-fixture-vc'
 $argumentsText = (@($AzArguments) -join ' ') -replace '[\r\n]+',' '
-$logPath = [string]$env:CLAGNOS_TUI_AZ_LOG
+$logPath = [string]$env:PRODICLOUD_TUI_AZ_LOG
 if (-not [string]::IsNullOrWhiteSpace($logPath)) {
     Add-Content -LiteralPath $logPath -Value $argumentsText -Encoding UTF8
 }
@@ -78,7 +78,7 @@ $managedGroup = [pscustomobject]@{
     etag = 'fixture-group-etag-1'
     properties = [pscustomobject]@{ provisioningState = 'Succeeded' }
     provisioningState = 'Succeeded'
-    tags = [pscustomobject]@{ 'managed-by' = 'clagnos' }
+    tags = [pscustomobject]@{ 'managed-by' = 'prodicloud' }
 }
 $vm = [pscustomobject]@{
     id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Compute/virtualMachines/{2}" -f $subscriptionId,$resourceGroup,$vmName)
@@ -112,7 +112,7 @@ $vm = [pscustomobject]@{
     diagnosticsProfile = [pscustomobject]@{ bootDiagnostics = [pscustomobject]@{ enabled = $true } }
     identity = [pscustomobject]@{ type = 'SystemAssigned' }
     zones = @('1')
-    tags = [pscustomobject]@{ 'managed-by' = 'clagnos'; 'test-surface' = 'tui-fixture' }
+    tags = [pscustomobject]@{ 'managed-by' = 'prodicloud'; 'test-surface' = 'tui-fixture' }
     networkProfile = [pscustomobject]@{ networkInterfaces = @([pscustomobject]@{ id = ("/subscriptions/{0}/resourceGroups/{1}/providers/Microsoft.Network/networkInterfaces/nic-tui-fixture" -f $subscriptionId,$resourceGroup); resourceGroup = $resourceGroup; primary = $true }) }
 }
 
@@ -196,7 +196,7 @@ switch -Regex ($commandText) {
         }
         break
     }
-    '^disk show$' { $result = [pscustomobject]@{ name = 'disk-tui-fixture-os'; diskSizeGb = 128; sku = [pscustomobject]@{ name = 'StandardSSD_LRS' }; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } }; break }
+    '^disk show$' { $result = [pscustomobject]@{ name = 'disk-tui-fixture-os'; diskSizeGB = 128; sku = [pscustomobject]@{ name = 'StandardSSD_LRS' }; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } }; break }
     '^resource list$' {
         $result = @(
             [pscustomobject]@{ id = $vm.id; etag = 'fixture-vm-etag-1'; type = 'Microsoft.Compute/virtualMachines'; name = $vmName; resourceGroup = $resourceGroup; location = 'eastus'; properties = [pscustomobject]@{ hardwareProfile = $vm.hardwareProfile; storageProfile = $vm.storageProfile; provisioningState = 'Succeeded' } },

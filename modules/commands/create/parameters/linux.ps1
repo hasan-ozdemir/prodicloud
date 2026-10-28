@@ -1,5 +1,5 @@
 # 'linux' option binding for 'create'.
 
-function Get-ClagnosCreateLinuxOptionSpecification {
-    return (Get-ClagnosSharedLinuxOptionSpecification)
+function Get-ProdicloudCreateLinuxOptionSpecification {
+    return (Get-ProdicloudSharedLinuxOptionSpecification)
 }

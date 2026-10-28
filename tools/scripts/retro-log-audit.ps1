@@ -6,9 +6,9 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $logRoot = Join-Path $RepoRoot '.logs'
-$logFiles = @(Get-ChildItem -LiteralPath $logRoot -File -Filter 'clagnos-log-*.txt' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
+$logFiles = @(Get-ChildItem -LiteralPath $logRoot -File -Filter 'prodicloud-log-*.txt' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime)
 if (@($logFiles).Count -lt 1) {
-    Write-Host 'retro-log-audit: no clagnos-log-*.txt files were found.'
+    Write-Host 'retro-log-audit: no prodicloud-log-*.txt files were found.'
     exit 0
 }
 

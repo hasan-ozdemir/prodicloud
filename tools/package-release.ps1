@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Get-ClagnosReleaseVersionFromDocument {
+function Get-ProdicloudReleaseVersionFromDocument {
     param(
         [string]$Path,
         [string]$Pattern,
@@ -25,14 +25,14 @@ function Get-ClagnosReleaseVersionFromDocument {
     return [string]$Matches[1]
 }
 
-function Resolve-ClagnosReleasePackageVersion {
+function Resolve-ProdicloudReleasePackageVersion {
     param([string]$RootPath)
 
-    $changelogVersion = Get-ClagnosReleaseVersionFromDocument `
+    $changelogVersion = Get-ProdicloudReleaseVersionFromDocument `
         -Path (Join-Path $RootPath 'CHANGELOG.md') `
         -Pattern '^## \[(\d{4}\.\d{1,2}\.\d{1,2}\.\d+)\]' `
         -Label 'CHANGELOG.md'
-    $releaseNotesVersion = Get-ClagnosReleaseVersionFromDocument `
+    $releaseNotesVersion = Get-ProdicloudReleaseVersionFromDocument `
         -Path (Join-Path $RootPath 'release-notes.md') `
         -Pattern '^## Release (\d{4}\.\d{1,2}\.\d{1,2}\.\d+)' `
         -Label 'release-notes.md'
@@ -44,7 +44,7 @@ function Resolve-ClagnosReleasePackageVersion {
     return $changelogVersion
 }
 
-function Assert-ClagnosReleaseRepositoryReady {
+function Assert-ProdicloudReleaseRepositoryReady {
     param(
         [string]$RootPath,
         [string]$Version
@@ -88,7 +88,7 @@ function Assert-ClagnosReleaseRepositoryReady {
     }
 }
 
-function Add-ClagnosReleaseManifestToZip {
+function Add-ProdicloudReleaseManifestToZip {
     param(
         [string]$ZipPath,
         [string]$EntryPath,
@@ -121,8 +121,8 @@ function Add-ClagnosReleaseManifestToZip {
 }
 
 $resolvedRepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
-$releaseVersion = Resolve-ClagnosReleasePackageVersion -RootPath $resolvedRepoRoot
-$repoState = Assert-ClagnosReleaseRepositoryReady -RootPath $resolvedRepoRoot -Version $releaseVersion
+$releaseVersion = Resolve-ProdicloudReleasePackageVersion -RootPath $resolvedRepoRoot
+$repoState = Assert-ProdicloudReleaseRepositoryReady -RootPath $resolvedRepoRoot -Version $releaseVersion
 if ([string]::IsNullOrWhiteSpace([string]$OutputDirectory)) {
     $OutputDirectory = Join-Path $resolvedRepoRoot 'dist'
 }
@@ -131,7 +131,7 @@ if (-not (Test-Path -LiteralPath $resolvedOutputDirectory -PathType Container)) 
     New-Item -ItemType Directory -Path $resolvedOutputDirectory -Force | Out-Null
 }
 
-$packageBaseName = "clagnos-$releaseVersion"
+$packageBaseName = "prodicloud-$releaseVersion"
 $zipPath = Join-Path $resolvedOutputDirectory ($packageBaseName + '.zip')
 $hashPath = $zipPath + '.sha256'
 if (-not $Overwrite -and ((Test-Path -LiteralPath $zipPath) -or (Test-Path -LiteralPath $hashPath))) {
@@ -141,21 +141,21 @@ if ($Overwrite) {
     Remove-Item -LiteralPath $zipPath, $hashPath -Force -ErrorAction SilentlyContinue
 }
 
-$archivePrefix = "clagnos-$releaseVersion/"
+$archivePrefix = "prodicloud-$releaseVersion/"
 & git -C $resolvedRepoRoot archive --format=zip ("--prefix={0}" -f $archivePrefix) ("--output={0}" -f $zipPath) $repoState.CommitSha
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $zipPath -PathType Leaf)) {
     throw 'git archive failed to create the release source package.'
 }
 
 $manifest = [pscustomobject]@{
-    Product = 'clagnos'
+    Product = 'prodicloud'
     Version = $releaseVersion
     Commit = [string]$repoState.CommitSha
     CommitCount = [int]$repoState.CommitCount
     GeneratedAtUtc = [DateTime]::UtcNow.ToString('o')
-    ArchiveRoot = "clagnos-$releaseVersion/"
+    ArchiveRoot = "prodicloud-$releaseVersion/"
 }
-Add-ClagnosReleaseManifestToZip -ZipPath $zipPath -EntryPath ($archivePrefix + 'BUILD-MANIFEST.json') -Manifest $manifest
+Add-ProdicloudReleaseManifestToZip -ZipPath $zipPath -EntryPath ($archivePrefix + 'BUILD-MANIFEST.json') -Manifest $manifest
 
 $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $hashLine = "{0}  {1}{2}" -f $hash, [System.IO.Path]::GetFileName($zipPath), [Environment]::NewLine

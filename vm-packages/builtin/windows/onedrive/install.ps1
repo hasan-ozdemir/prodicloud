@@ -4,7 +4,7 @@ Write-Host "Update task started: install-onedrive-application"
 $managerUser = "__VM_ADMIN_USER__"
 $assistantUser = "__ASSISTANT_USER__"
 $taskConfig = [ordered]@{
-    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    PortableWingetPath = 'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
     OneDrivePackageId = 'Microsoft.OneDrive'
     OneDriveExecutableCandidates = @(
         'C:\Program Files\Microsoft OneDrive\OneDrive.exe',
@@ -13,10 +13,10 @@ $taskConfig = [ordered]@{
     )
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {

@@ -1,10 +1,10 @@
-# Contributing to clagnos
+# Contributing to prodicloud
 
-`clagnos` is maintained as a pragmatic, operator-first Azure VM toolkit. Contributions are welcome, but this repository follows a contact-first model so large changes do not drift away from the current runtime, documentation, and release contract.
+`prodicloud` is maintained as a pragmatic, operator-first Azure VM toolkit. Contributions are welcome, but this repository follows a contact-first model so large changes do not drift away from the current runtime, documentation, and release contract.
 
 ## Before You Start
 
-- Read [README.md](README.md), [AGENTS.md](AGENTS.md), and [SUPPORT.md](SUPPORT.md) first.
+- Read [PRODICLOUD.md](PRODICLOUD.md), [AGENTS.md](AGENTS.md), and [SUPPORT.md](SUPPORT.md) first.
 - Review the current command surface, task-catalog model, and configuration contract before proposing a change.
 - Use the GitHub issue templates for reproducible bugs and focused feature requests whenever the discussion can happen publicly.
 - For large features, contract changes, new commands, or workflow shifts, open an issue or contact the maintainer before investing in a large pull request.
@@ -27,7 +27,7 @@
 
 - Update docs and tests in the same change when the contract changes.
 - Update `CHANGELOG.md` and `release-notes.md` in the same final change set for shipped behavior, docs, workflow, or configuration changes.
-- Keep `clagnos.env.example` and `vc.env.example` current when the global or per-VC configuration contract changes.
+- Keep `prodicloud.env.example` and `vc.env.example` current when the global or per-VC configuration contract changes.
 - Keep `docs/prompt-history.md` aligned when the delivered repo change came from a maintainer-directed prompt workflow.
 
 ## Validation
@@ -37,7 +37,7 @@ Run the non-live checks locally before opening a pull request:
 ```powershell
 .\tests\code-quality-check.ps1
 .\tests\documentation-contract-check.ps1
-.\tests\clagnos-smoke-tests.ps1
+.\tests\prodicloud-smoke-tests.ps1
 .\tests\tui\run-tui-tests.ps1
 .\tests\powershell-compatibility-check.ps1
 ```

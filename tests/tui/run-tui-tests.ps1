@@ -5,8 +5,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$env:CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER = '1'
-$script:ClagnosUiTestMode = $true
+$env:PRODICLOUD_TUI_DISABLE_BACKGROUND_CACHE_WORKER = '1'
+$script:ProdicloudUiTestMode = $true
 if ([string]::IsNullOrWhiteSpace([string]$RepoRoot)) { $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
 $script:TuiTestResults = New-Object 'System.Collections.Generic.List[object]'
 $script:TuiRenderedLines = New-Object 'System.Collections.Generic.List[string]'
@@ -82,7 +82,7 @@ function Reset-TuiScenario {
     $script:TuiLinuxVm = New-TuiVmFixture -Platform Linux
     $script:TuiVmDetailRecord = New-TuiVmDetailsFixture
     $script:TuiManagedGroups = @(
-        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1'; etag = 'fixture-group-etag'; name = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' }; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } }
+        [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1'; etag = 'fixture-group-etag'; name = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' }; tags = [pscustomobject]@{ 'managed-by' = 'prodicloud' } }
     )
     $script:TuiManagedGroupsByCall = @()
     $script:TuiVirtualComputers = @($script:TuiWindowsVm)
@@ -103,16 +103,16 @@ function Reset-TuiScenario {
     )
     $script:TuiSelectedContext = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
     $script:TuiActiveSubscriptionId = '00000000-0000-4000-8000-000000000001'
-    $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
-    $script:ClagnosUiSubscriptionError = ''
-    $script:ClagnosUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
-    $script:ClagnosUiSelectedResourceGroup = 'rg-fixture-eastus-g1'
-    $script:ClagnosUiSelectedVmName = 'fixture-vc'
-    $script:ClagnosUiResourceCacheError = ''
-    $script:ClagnosUiAzureReadCache = @{}
-    $script:ClagnosUiInventoryValidationSeconds = 60
-    $script:ClagnosUiReadCacheSeconds = 45
-    $script:ClagnosUiInventoryCache = $null
+    $script:ProdicloudUiSubscription = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled'; TenantId = 'tenant-fixture' }
+    $script:ProdicloudUiSubscriptionError = ''
+    $script:ProdicloudUiSubscriptionValidatedAtUtc = [DateTime]::UtcNow
+    $script:ProdicloudUiSelectedResourceGroup = 'rg-fixture-eastus-g1'
+    $script:ProdicloudUiSelectedVmName = 'fixture-vc'
+    $script:ProdicloudUiResourceCacheError = ''
+    $script:ProdicloudUiAzureReadCache = @{}
+    $script:ProdicloudUiInventoryValidationSeconds = 60
+    $script:ProdicloudUiReadCacheSeconds = 45
+    $script:ProdicloudUiInventoryCache = $null
     $fixtureResources = @(
         [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/virtualMachines/fixture-vc'; etag = 'fixture-vm-etag'; name = 'fixture-vc'; type = 'Microsoft.Compute/virtualMachines'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ provisioningState = 'Succeeded' } },
         [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Compute/disks/disk-fixture-os'; etag = 'fixture-disk-etag'; name = 'disk-fixture-os'; type = 'Microsoft.Compute/disks'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Premium_LRS' }; properties = [pscustomobject]@{ diskSizeGb = 128; encryption = [pscustomobject]@{ type = 'EncryptionAtRestWithPlatformKey' } } },
@@ -121,7 +121,7 @@ function Reset-TuiScenario {
         [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/publicIPAddresses/pip-fixture'; etag = 'fixture-ip-etag'; name = 'pip-fixture'; type = 'Microsoft.Network/publicIPAddresses'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; sku = [pscustomobject]@{ name = 'Standard' }; zones = @('1'); properties = [pscustomobject]@{ ipAddress = '203.0.113.8'; publicIPAllocationMethod = 'Static'; dnsSettings = [pscustomobject]@{ fqdn = 'fixture.eastus.cloudapp.azure.com'; domainNameLabel = 'fixture' } } },
         [pscustomobject]@{ id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkSecurityGroups/nsg-fixture'; etag = 'fixture-nsg-etag'; name = 'nsg-fixture'; type = 'Microsoft.Network/networkSecurityGroups'; resourceGroup = 'rg-fixture-eastus-g1'; location = 'eastus'; properties = [pscustomobject]@{ securityRules = @() } }
     )
-    $script:ClagnosUiInventoryCache = @{
+    $script:ProdicloudUiInventoryCache = @{
         SubscriptionId = '00000000-0000-4000-8000-000000000001'
         Groups = @($script:TuiManagedGroups)
         Resources = @($fixtureResources)
@@ -161,8 +161,8 @@ function New-TuiVmFixture {
         etag = 'fixture-vm-etag'
         name = 'fixture-vc'
         location = 'eastus'
-        ClagnosResourceGroup = 'rg-fixture-eastus-g1'
-        ClagnosSubscriptionId = '00000000-0000-4000-8000-000000000001'
+        ProdicloudResourceGroup = 'rg-fixture-eastus-g1'
+        ProdicloudSubscriptionId = '00000000-0000-4000-8000-000000000001'
         storageProfile = [pscustomobject]@{
             osDisk = [pscustomobject]@{ osType = $Platform }
             dataDisks = @()
@@ -231,7 +231,7 @@ function New-TuiVmDetailsFixture {
         diagnosticsProfile = [pscustomobject]@{ bootDiagnostics = [pscustomobject]@{ enabled = $true } }
         identity = [pscustomobject]@{ type = 'SystemAssigned' }
         zones = @('1')
-        tags = [pscustomobject]@{ 'managed-by' = 'clagnos'; purpose = 'tui-fixture' }
+        tags = [pscustomobject]@{ 'managed-by' = 'prodicloud'; purpose = 'tui-fixture' }
         networkProfile = [pscustomobject]@{
             networkInterfaces = @([pscustomobject]@{
                 id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-fixture-eastus-g1/providers/Microsoft.Network/networkInterfaces/nic-fixture'
@@ -243,7 +243,7 @@ function New-TuiVmDetailsFixture {
 }
 
 function Initialize-TuiProductFunctions {
-    $uiPath = Join-Path $RepoRoot 'scripts\clagnos-cli.ps1'
+    $uiPath = Join-Path $RepoRoot 'scripts\prodicloud-cli.ps1'
     $tokens = $null
     $parseErrors = $null
     $uiAst = [System.Management.Automation.Language.Parser]::ParseFile($uiPath, [ref]$tokens, [ref]$parseErrors)
@@ -266,40 +266,41 @@ function Initialize-TuiProductFunctions {
     return @($functionDefinitions)
 }
 
-$null = . (Join-Path $RepoRoot 'clagnos.ps1')
-$script:ClagnosUiRepoRoot = $RepoRoot
-$script:ClagnosUiBackendPath = Join-Path $RepoRoot 'clagnos.ps1'
-$script:ClagnosUiSubscription = $null
-$script:ClagnosUiSubscriptionError = ''
+$null = . (Join-Path $RepoRoot 'prodicloud.ps1')
+$script:ProdicloudUiRepoRoot = $RepoRoot
+$script:ProdicloudUiBackendPath = Join-Path $RepoRoot 'prodicloud.ps1'
+$script:ProdicloudUiSubscription = $null
+$script:ProdicloudUiSubscriptionError = ''
 $script:TuiWindowsVm = New-TuiVmFixture -Platform Windows
 $script:TuiLinuxVm = New-TuiVmFixture -Platform Linux
 $script:TuiVmDetailRecord = New-TuiVmDetailsFixture
 foreach ($tuiFunctionDefinition in @(Initialize-TuiProductFunctions)) {
     . ([scriptblock]::Create([string]$tuiFunctionDefinition))
 }
-$script:TuiOriginalVmDiscovery = (Get-Command Get-ClagnosUiVirtualComputers).ScriptBlock
-$script:TuiOriginalInventorySync = (Get-Command Sync-ClagnosUiResourceCache).ScriptBlock
-$script:TuiOriginalCreateWizard = (Get-Command Show-ClagnosUiCreateWizard).ScriptBlock
-$script:TuiOriginalVmDetails = (Get-Command Show-ClagnosUiVmDetails).ScriptBlock
-$script:TuiOriginalHeader = (Get-Command Write-ClagnosUiHeader).ScriptBlock
-$script:TuiOriginalSetupAll = (Get-Command Show-ClagnosUiSetupAllPackages).ScriptBlock
-$script:TuiOriginalPackageMenu = (Get-Command Show-ClagnosUiPackageMenu).ScriptBlock
-$script:TuiOriginalPackageCatalogMenu = (Get-Command Show-ClagnosUiPackageCatalogMenu).ScriptBlock
-$script:TuiOriginalPackageAppStateMenu = (Get-Command Show-ClagnosUiPackageAppStateMenu).ScriptBlock
-$script:TuiOriginalComponentMenu = (Get-Command Show-ClagnosUiComponentMenu).ScriptBlock
-$script:TuiOriginalTaskAvailabilityMenu = (Get-Command Show-ClagnosUiTaskAvailabilityMenu).ScriptBlock
-$script:TuiOriginalTaskMenu = (Get-Command Show-ClagnosUiTaskMenu).ScriptBlock
-$script:TuiOriginalOperationsMenu = (Get-Command Show-ClagnosUiOperationsMenu).ScriptBlock
+$script:TuiOriginalVmDiscovery = (Get-Command Get-ProdicloudUiVirtualComputers).ScriptBlock
+$script:TuiOriginalInventorySync = (Get-Command Sync-ProdicloudUiResourceCache).ScriptBlock
+$script:TuiOriginalCreateWizard = (Get-Command Show-ProdicloudUiCreateWizard).ScriptBlock
+$script:TuiOriginalVmDetails = (Get-Command Show-ProdicloudUiVmDetails).ScriptBlock
+$script:TuiOriginalHeader = (Get-Command Write-ProdicloudUiHeader).ScriptBlock
+$script:TuiOriginalSetupAll = (Get-Command Show-ProdicloudUiSetupAllPackages).ScriptBlock
+$script:TuiOriginalPackageMenu = (Get-Command Show-ProdicloudUiPackageMenu).ScriptBlock
+$script:TuiOriginalPackageCatalogMenu = (Get-Command Show-ProdicloudUiPackageCatalogMenu).ScriptBlock
+$script:TuiOriginalPackageAppStateMenu = (Get-Command Show-ProdicloudUiPackageAppStateMenu).ScriptBlock
+$script:TuiOriginalComponentMenu = (Get-Command Show-ProdicloudUiComponentMenu).ScriptBlock
+$script:TuiOriginalTaskAvailabilityMenu = (Get-Command Show-ProdicloudUiTaskAvailabilityMenu).ScriptBlock
+$script:TuiOriginalTaskMenu = (Get-Command Show-ProdicloudUiTaskMenu).ScriptBlock
+$script:TuiOriginalOperationsMenu = (Get-Command Show-ProdicloudUiOperationsMenu).ScriptBlock
+$script:TuiOriginalUiCommand = (Get-Command Invoke-ProdicloudUiCommand).ScriptBlock
 
 # The command dispatcher and Azure CLI are deliberately blocked for every test.
 function az { $script:TuiNativeAzureCalls++; $script:TuiTotalNativeAzureCalls++; throw 'Native Azure CLI is blocked in TUI tests.' }
-function Invoke-ClagnosCommandDispatcher {
+function Invoke-ProdicloudCommandDispatcher {
     param([string]$CommandName, [hashtable]$Options, [string]$HelpTopic = '', [hashtable]$FrontendContext = @{})
     $script:TuiRealDispatcherCalls++
     $script:TuiTotalRealDispatcherCalls++
     throw 'The real command dispatcher is blocked in TUI tests.'
 }
-function Get-ClagnosNestedVirtualizationGuestValidation {
+function Get-ProdicloudNestedVirtualizationGuestValidation {
     param([string]$ResourceGroup,[string]$VmName,[string]$OsType,[int]$MaxAttempts,[int]$RetryDelaySeconds,[switch]$SuppressError)
     $script:TuiNestedVirtualizationGuestCalls++
     return $script:TuiNestedVirtualizationGuestResult
@@ -320,7 +321,7 @@ function Write-Host {
     }
 }
 
-function Read-ClagnosUiChoice {
+function Read-ProdicloudUiChoice {
     param([string]$Prompt = 'Select an option')
     $script:TuiReadCount++
     $script:TuiChoicePrompts.Add([string]$Prompt)
@@ -328,26 +329,26 @@ function Read-ClagnosUiChoice {
     return [string]$script:TuiChoiceQueue.Dequeue()
 }
 
-function Write-ClagnosUiHeader {
-    param([string]$Title = 'Clagnos')
+function Write-ProdicloudUiHeader {
+    param([string]$Title = 'Prodicloud')
     $script:TuiScreenTitles.Add([string]$Title)
     $script:TuiRenderedLines.Add(('[SCREEN] {0}' -f $Title))
 }
 
 function Clear-Host { }
 
-function Wait-ClagnosUiContinue { $script:TuiWaitCount++ }
-function Write-ClagnosUiError { param([object]$ErrorRecord) $script:TuiRenderedLines.Add(('[ERROR] {0}' -f [string]$ErrorRecord.Exception.Message)) }
-function Update-ClagnosUiSubscription { $script:TuiSubscriptionRefreshCount++ }
+function Wait-ProdicloudUiContinue { $script:TuiWaitCount++ }
+function Write-ProdicloudUiError { param([object]$ErrorRecord) $script:TuiRenderedLines.Add(('[ERROR] {0}' -f [string]$ErrorRecord.Exception.Message)) }
+function Update-ProdicloudUiSubscription { $script:TuiSubscriptionRefreshCount++ }
 
-function Invoke-ClagnosUiCommand {
+function Invoke-ProdicloudUiCommand {
     param([string]$CommandName, [hashtable]$Options = @{}, [hashtable]$FrontendContext = @{})
     $copy = @{}
     foreach ($key in @($Options.Keys)) { $copy[[string]$key] = $Options[$key] }
     $script:TuiCommandInvocations.Add([pscustomobject]@{ CommandName = $CommandName; Options = $copy; FrontendContext = $FrontendContext })
 }
 
-function Invoke-ClagnosUiAzJson {
+function Invoke-ProdicloudUiAzJson {
     param([string[]]$Arguments, [switch]$ForceRefresh, [int]$CacheTtlSeconds = 45)
     if ($null -ne $script:TuiAzOverride) { return (& $script:TuiAzOverride -Arguments $Arguments) }
     $query = @($Arguments) -join ' '
@@ -391,7 +392,7 @@ function Invoke-ClagnosUiAzJson {
 function Read-DotEnvFile {
     param([string]$Path,[switch]$GlobalOnly)
     $fileName = [System.IO.Path]::GetFileName([string]$Path)
-    if ([string]::Equals($fileName,'clagnos.env',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($fileName,'clagnos.env.example',[System.StringComparison]::OrdinalIgnoreCase)) {
+    if ([string]::Equals($fileName,'prodicloud.env',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::Equals($fileName,'prodicloud.env.example',[System.StringComparison]::OrdinalIgnoreCase)) {
         $globalConfig = @{
             ACTIVE_VM_NAME = 'fixture-vc'
             SELECTED_AZURE_SUBSCRIPTION_ID = '00000000-0000-4000-8000-000000000001'
@@ -432,7 +433,7 @@ function Read-DotEnvFile {
     return $config
 }
 
-function Get-ClagnosUiVmSizeFacts { param([string]$Location, [string]$Size) return [pscustomobject]@{ Cores = '2'; MemoryMb = '8192' } }
+function Get-ProdicloudUiVmSizeFacts { param([string]$Location, [string]$Size) return [pscustomobject]@{ Cores = '2'; MemoryMb = '8192' } }
 function Get-AzLocationCatalog {
     return @(
         [pscustomobject]@{ Name = 'eastus'; DisplayName = 'East US' }
@@ -465,46 +466,55 @@ function Get-SkuAvailabilityMap {
     foreach ($sku in @($SkuNames)) { $result[[string]$sku] = 'yes' }
     return $result
 }
-function Get-ClagnosUiPowerState { param([string]$ResourceGroup, [string]$VmName) return 'VM running' }
-function Show-ClagnosUiVmDetails {
+function Get-SkuPriceMap { param([string]$Location,[string[]]$SkuNames) return @{} }
+function Get-PriceHoursFromConfig { param([hashtable]$Config,[int]$DefaultHours = 730) return $DefaultHours }
+function Get-ProdicloudUiCachedVm { param([psobject]$Vm) return $script:TuiVmDetailRecord }
+function Merge-ProdicloudVmEnvironmentConfig {
+    param([hashtable]$GlobalConfigMap,[string]$VmName,[string]$VmEnvRoot,[switch]$RequireProfile,[switch]$IgnoreActiveSelection)
+    $repo = if (-not [string]::IsNullOrWhiteSpace([string]$VmEnvRoot)) { [string]$VmEnvRoot } else { [string]$script:ProdicloudUiRepoRoot }
+    if ($IgnoreActiveSelection -or [string]::IsNullOrWhiteSpace([string]$VmName)) { return (Read-DotEnvFile -Path (Join-Path $repo 'prodicloud.env') -GlobalOnly) }
+    return (Read-DotEnvFile -Path (Join-Path $repo ($VmName + '.env')) -GlobalOnly)
+}
+function Get-ProdicloudUiPowerState { param([string]$ResourceGroup, [string]$VmName) return 'VM running' }
+function Show-ProdicloudUiVmDetails {
     param([psobject]$Vm)
     $script:TuiVmDetailsCount++
     if ($script:TuiDetailsShouldThrow) { throw 'fixture VC detail read error' }
 }
-function Show-ClagnosUiCreateWizard { $script:TuiCreateWizardCount++ }
-function Show-ClagnosUiSetupAllPackages { param([psobject]$Vm) $script:TuiSetupAllMenuCount++ }
-function Show-ClagnosUiPackageMenu { param([psobject]$Vm) $script:TuiPackageMenuCount++ }
-function Show-ClagnosUiComponentMenu { param([psobject]$Vm) $script:TuiComponentMenuCount++ }
-function Show-ClagnosUiOperationsMenu { param([psobject]$Vm) $script:TuiOperationsMenuCount++ }
-function Show-ClagnosUiTaskMenu { param([psobject]$Vm) $script:TuiTaskMenuCount++ }
-function Get-ClagnosUiVirtualComputers {
+function Show-ProdicloudUiCreateWizard { $script:TuiCreateWizardCount++ }
+function Show-ProdicloudUiSetupAllPackages { param([psobject]$Vm) $script:TuiSetupAllMenuCount++ }
+function Show-ProdicloudUiPackageMenu { param([psobject]$Vm) $script:TuiPackageMenuCount++ }
+function Show-ProdicloudUiComponentMenu { param([psobject]$Vm) $script:TuiComponentMenuCount++ }
+function Show-ProdicloudUiOperationsMenu { param([psobject]$Vm) $script:TuiOperationsMenuCount++ }
+function Show-ProdicloudUiTaskMenu { param([psobject]$Vm) $script:TuiTaskMenuCount++ }
+function Get-ProdicloudUiVirtualComputers {
     if ($script:TuiVmDiscoveryShouldThrow) { throw 'fixture VM inventory error' }
     if ($script:TuiDiscoveryMode) { return @(& $script:TuiOriginalVmDiscovery) }
     return @($script:TuiVirtualComputers)
 }
-function Get-ClagnosUiManagedGroups {
+function Get-ProdicloudUiManagedGroups {
     param([switch]$IncludeLegacy)
     $script:TuiManagedGroupCallCount++
     $sequenceIndex = $script:TuiManagedGroupCallCount - 1
     if ($sequenceIndex -lt $script:TuiManagedGroupsByCall.Count) { return @($script:TuiManagedGroupsByCall[$sequenceIndex]) }
     return @($script:TuiManagedGroups)
 }
-function Invoke-ClagnosUiLegacyTagMigration { param([object[]]$LegacyGroups) $script:TuiLegacyMigrationCount++ }
-function Get-ClagnosUiCloudSubscriptionRows { if ($script:TuiCloudRowsShouldThrow) { throw 'fixture subscription inventory error' }; return @($script:TuiCloudRows) }
-function Get-ClagnosUiAzureCliActiveSubscriptionId { return [string]$script:TuiActiveSubscriptionId }
-function Get-ClagnosResolvedSubscriptionContext { return $script:TuiSelectedContext }
-function Set-ClagnosUiActiveSubscription {
+function Invoke-ProdicloudUiLegacyTagMigration { param([object[]]$LegacyGroups) $script:TuiLegacyMigrationCount++ }
+function Get-ProdicloudUiCloudSubscriptionRows { if ($script:TuiCloudRowsShouldThrow) { throw 'fixture subscription inventory error' }; return @($script:TuiCloudRows) }
+function Get-ProdicloudUiAzureCliActiveSubscriptionId { return [string]$script:TuiActiveSubscriptionId }
+function Get-ProdicloudResolvedSubscriptionContext { return $script:TuiSelectedContext }
+function Set-ProdicloudUiActiveSubscription {
     param([psobject]$Subscription)
     $script:TuiSubscriptionSelections.Add([string]$Subscription.id)
     $script:TuiSelectedContext = [pscustomobject]@{ SubscriptionId = [string]$Subscription.id; SubscriptionName = [string]$Subscription.name; TenantId = [string]$Subscription.tenantId }
-    $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = [string]$Subscription.id; SubscriptionName = [string]$Subscription.name; TenantId = [string]$Subscription.tenantId }
+    $script:ProdicloudUiSubscription = [pscustomobject]@{ SubscriptionId = [string]$Subscription.id; SubscriptionName = [string]$Subscription.name; TenantId = [string]$Subscription.tenantId }
 }
-function Get-ClagnosPackageCatalog { param([string]$Platform, [ValidateSet('builtin','custom')][string]$Catalog) return @($script:TuiPackagesByCatalog[$Catalog]) }
-function Get-ClagnosPackageStatusSnapshot { param([object[]]$Packages, [hashtable]$Options, [string]$Platform) if ($script:TuiPackageStatusShouldThrow) { throw 'fixture package status unavailable' }; return $script:TuiPackageStatuses }
-function New-ClagnosPackageSetupPlan { param([object[]]$Packages,[hashtable]$Options,[string]$Platform,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag) $script:TuiSetupPlanPackages=@($Packages); return $script:TuiPackageSetupPlan }
-function Invoke-ClagnosPackageSetupPlan { param([psobject]$Plan) $script:TuiSetupApplyCount++; return [pscustomobject]@{ Installed = 1; Failed = 0; Skipped = 0 } }
-function Initialize-ClagnosTaskCommandRuntimeContext { param([switch]$AutoMode, [switch]$WindowsFlag, [switch]$LinuxFlag) return [pscustomobject]@{ VmInitTaskDir = 'fixture\init'; VmUpdateTaskDir = 'fixture\update' } }
-function Get-ClagnosTaskBlocksFromDirectory {
+function Get-ProdicloudPackageCatalog { param([string]$Platform, [ValidateSet('builtin','custom')][string]$Catalog) return @($script:TuiPackagesByCatalog[$Catalog]) }
+function Get-ProdicloudPackageStatusSnapshot { param([object[]]$Packages, [hashtable]$Options, [string]$Platform) if ($script:TuiPackageStatusShouldThrow) { throw 'fixture package status unavailable' }; return $script:TuiPackageStatuses }
+function New-ProdicloudPackageSetupPlan { param([object[]]$Packages,[hashtable]$Options,[string]$Platform,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag) $script:TuiSetupPlanPackages=@($Packages); return $script:TuiPackageSetupPlan }
+function Invoke-ProdicloudPackageSetupPlan { param([psobject]$Plan) $script:TuiSetupApplyCount++; return [pscustomobject]@{ Installed = 1; Failed = 0; Skipped = 0 } }
+function Initialize-ProdicloudTaskCommandRuntimeContext { param([switch]$AutoMode, [switch]$WindowsFlag, [switch]$LinuxFlag) return [pscustomobject]@{ VmInitTaskDir = 'fixture\init'; VmUpdateTaskDir = 'fixture\update' } }
+function Get-ProdicloudTaskBlocksFromDirectory {
     param([string]$DirectoryPath, [ValidateSet('windows','linux')][string]$Platform, [ValidateSet('init','update')][string]$Stage, [switch]$SuppressSkipMessages)
     return [pscustomobject]@{ InventoryTasks = @($script:TuiTaskCatalogByStage[$Stage]) }
 }
@@ -531,13 +541,13 @@ function Assert-TuiNoRealCloudCalls {
 
 Reset-TuiScenario
 
-Invoke-TuiTest -Name 'Launcher points cg.cmd to the interactive Clagnos CLI' -Action {
-    $launcher = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'cg.cmd') -Raw)
-    Assert-Tui -Condition ($launcher -match '(?i)scripts[\\/]clagnos-cli\.ps1') -Message 'cg.cmd must launch scripts/clagnos-cli.ps1.'
-    Assert-Tui -Condition ($launcher -match '(?i)%\*|\$args|CliTokens') -Message 'cg.cmd must forward command-line arguments to the launcher target.'
+Invoke-TuiTest -Name 'Launcher points pd.cmd to the interactive Prodicloud CLI' -Action {
+    $launcher = [string](Get-Content -LiteralPath (Join-Path $RepoRoot 'pd.cmd') -Raw)
+    Assert-Tui -Condition ($launcher -match '(?i)scripts[\\/]prodicloud-cli\.ps1') -Message 'pd.cmd must launch scripts/prodicloud-cli.ps1.'
+    Assert-Tui -Condition ($launcher -match '(?i)%\*|\$args|CliTokens') -Message 'pd.cmd must forward command-line arguments to the launcher target.'
 }
 
-Invoke-TuiTest -Name 'TUI header shows the Clagnos tagline and selected subscription details' -Action {
+Invoke-TuiTest -Name 'TUI header shows the Prodicloud tagline and selected subscription details' -Action {
     & $script:TuiOriginalHeader -Title 'Header fixture screen'
     Assert-TuiOutputContains -Text 'one tool for all common cloud operations' -Message 'The shared TUI header must render the product tagline.'
     Assert-TuiOutputContains -Text 'Azure subscription: Fixture Enabled (00000000-0000-4000-8000-000000000001)' -Message 'The header must identify the selected subscription.'
@@ -545,14 +555,14 @@ Invoke-TuiTest -Name 'TUI header shows the Clagnos tagline and selected subscrip
 }
 
 Invoke-TuiTest -Name 'TUI header shows sign-in guidance when no subscription is available' -Action {
-    $script:ClagnosUiSubscription = $null
+    $script:ProdicloudUiSubscription = $null
     & $script:TuiOriginalHeader -Title 'Offline fixture screen'
     Assert-TuiOutputContains -Text 'Azure subscription: not signed in' -Message 'An offline TUI must identify the missing subscription context.'
 }
 
 Invoke-TuiTest -Name 'Main menu routes every visible item and exits on q' -Action {
     Set-TuiChoices -Choices @('1','b','2','b','3','b','c','h','q')
-    Show-ClagnosUiHome
+    Show-ProdicloudUiHome
     Assert-TuiOutputContains -Text 'Main menu' -Message 'Main menu heading must render.'
     Assert-TuiOutputContains -Text '1. Virtual computers' -Message 'Main menu must show virtual computers.'
     Assert-TuiOutputContains -Text '2. Managed resource inventory' -Message 'Main menu must show resource inventory.'
@@ -565,7 +575,7 @@ Invoke-TuiTest -Name 'Main menu routes every visible item and exits on q' -Actio
 Invoke-TuiTest -Name 'Paged numbered picker supports every page key and keeps selection on the visible page' -Action {
     $options = @(1..25 | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = ('option-{0}' -f $_) } })
     Set-TuiChoices -Choices @('p','n','g','3','f','t','p','13')
-    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Fixture choices' -DefaultValue '13' -PageSize 12
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Fixture choices' -DefaultValue '13' -PageSize 12
     Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'The picker must return the selected option after navigating with p/n/g/f/t.'
     Assert-TuiOutputContains -Text 'Page 2/3' -Message 'The default option must open on its page and show the current page.'
     Assert-TuiOutputContains -Text 'p: previous page | n: next page | g: go to page | f: first page | t: last page' -Message 'Multi-page pickers must show all page controls.'
@@ -573,30 +583,30 @@ Invoke-TuiTest -Name 'Paged numbered picker supports every page key and keeps se
     Reset-TuiScenario
     $options = @(1..25 | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = ('option-{0}' -f $_) } })
     Set-TuiChoices -Choices @('p','','n','')
-    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Visible default choices' -DefaultValue '13' -PageSize 12
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Visible default choices' -DefaultValue '13' -PageSize 12
     Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'A default must only be selected when its marked row is visible on the current page.'
     Assert-TuiOutputContains -Text 'The default is on page 2' -Message 'A blank input away from the default page must guide the operator to it.'
 
     Reset-TuiScenario
     $options = @(1..14 | ForEach-Object { [pscustomobject]@{ Value = [string]$_; Label = ('option-{0}' -f $_) } })
     Set-TuiChoices -Choices @('13','n','13')
-    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Visible page choices' -PageSize 12
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Visible page choices' -PageSize 12
     Assert-Tui -Condition ([string]$selection.Value -eq '13') -Message 'An option on another page must become selectable after navigating to its page.'
     Assert-TuiOutputContains -Text 'Choose a number shown on the current page' -Message 'The picker must reject numbers that are not visible on the current page.'
 
     Reset-TuiScenario
     Set-TuiChoices -Choices @('escape')
-    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Escape back' -PageSize 12
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Escape back' -PageSize 12
     Assert-Tui -Condition ([string]$selection.Action -eq 'back' -and [string]$selection.Input -eq 'b') -Message 'Escape input must return one level to the parent screen.'
 
     Reset-TuiScenario
     Set-TuiChoices -Choices @('c')
-    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Close picker' -PageSize 12
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Close picker' -PageSize 12
     Assert-Tui -Condition ([string]$selection.Action -eq 'close') -Message 'c must close the current selection flow.'
 
     Reset-TuiScenario
     Set-TuiChoices -Choices @('escape')
-    $selection = Select-ClagnosNumberedOptionPage -Options $options -Prompt 'Close wizard page' -DefaultValue '1' -WizardControls
+    $selection = Select-ProdicloudNumberedOptionPage -Options $options -Prompt 'Close wizard page' -DefaultValue '1' -WizardControls
     Assert-Tui -Condition ([string]$selection.Action -eq 'close') -Message 'Escape must close the active wizard step without dispatching create.'
 }
 
@@ -606,7 +616,7 @@ Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state
         id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-cache-fixture'
         name = 'rg-cache-fixture'; etag = 'group-etag-1'; location = 'eastus'
         properties = [pscustomobject]@{ provisioningState = 'Succeeded' }
-        tags = [pscustomobject]@{ 'managed-by' = 'clagnos' }
+        tags = [pscustomobject]@{ 'managed-by' = 'prodicloud' }
     }
     $script:TuiCacheResource = [pscustomobject]@{
         id = '/subscriptions/00000000-0000-4000-8000-000000000001/resourceGroups/rg-cache-fixture/providers/Microsoft.Compute/disks/disk-cache'
@@ -628,13 +638,13 @@ Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state
         if ($query -eq 'vm list --show-details') { return @($script:TuiCacheVm) }
         throw ('Unexpected cache fixture query: {0}' -f $query)
     }
-    $script:ClagnosUiInventoryCache = $null
+    $script:ProdicloudUiInventoryCache = $null
     $first = & $script:TuiOriginalInventorySync -Force
     Assert-Tui -Condition ($script:TuiCacheFixtureCalls -eq 3) -Message 'Initial sync must query groups, resources for the managed group, and VM detail rows once each.'
     Assert-Tui -Condition (@($first.Groups).Count -eq 1 -and @($first.Resources).Count -eq 1 -and @($first.VirtualMachines).Count -eq 1) -Message 'The initial snapshot must retain every managed inventory layer.'
 
     $before = $script:TuiCacheFixtureCalls
-    Ensure-ClagnosUiResourceCache | Out-Null
+    Ensure-ProdicloudUiResourceCache | Out-Null
     Assert-Tui -Condition ($script:TuiCacheFixtureCalls -eq $before) -Message 'A fresh cache must serve screens without repeat Azure reads.'
     $same = & $script:TuiOriginalInventorySync -Force
     Assert-Tui -Condition ([object]::ReferenceEquals($first, $same)) -Message 'An unchanged forced validation must preserve the existing snapshot object.'
@@ -644,50 +654,50 @@ Invoke-TuiTest -Name 'Managed inventory cache syncs once, reuses unchanged state
     $changed = & $script:TuiOriginalInventorySync -Force
     Assert-Tui -Condition ([bool]$changed.Changed -and $changed.Signature -ne $first.Signature) -Message 'An Azure resource ETag change must invalidate the snapshot signature.'
     $before = $script:TuiCacheFixtureCalls
-    Invalidate-ClagnosUiResourceCache -Reason 'fixture mutation' -ResourceGroup 'rg-cache-fixture'
-    Ensure-ClagnosUiResourceCache | Out-Null
+    Invalidate-ProdicloudUiResourceCache -Reason 'fixture mutation' -ResourceGroup 'rg-cache-fixture'
+    Ensure-ProdicloudUiResourceCache | Out-Null
     Assert-Tui -Condition ($script:TuiCacheFixtureCalls -eq ($before + 3)) -Message 'A mutation must trigger exactly one full reconciliation before the next cache read.'
-    Assert-Tui -Condition (-not [bool]$script:ClagnosUiInventoryCache.IsDirty) -Message 'A successful reconciliation must clear the dirty marker.'
+    Assert-Tui -Condition (-not [bool]$script:ProdicloudUiInventoryCache.IsDirty) -Message 'A successful reconciliation must clear the dirty marker.'
 }
 
 Invoke-TuiTest -Name 'Persisted inventory refresh requests remain dirty until a newer cache snapshot is published' -Action {
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-persisted-inventory-' + [guid]::NewGuid().ToString('N'))
-    $previousCacheRoot = [string]$env:CLAGNOS_TUI_CACHE_ROOT
-    $previousSnapshot = $script:ClagnosUiInventoryCache
-    $previousCachePath = [string]$script:ClagnosUiInventoryCacheFilePath
-    $previousCacheWriteUtc = if ($null -ne $script:ClagnosUiInventoryCacheFileLastWriteUtc) { [DateTime]$script:ClagnosUiInventoryCacheFileLastWriteUtc } else { [DateTime]::MinValue }
-    $previousMaximumStaleSeconds = if ($null -ne $script:ClagnosUiInventoryMaximumStaleSeconds) { [int]$script:ClagnosUiInventoryMaximumStaleSeconds } else { 300 }
-    $previousSubscription = $script:ClagnosUiSubscription
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-persisted-inventory-' + [guid]::NewGuid().ToString('N'))
+    $previousCacheRoot = [string]$env:PRODICLOUD_TUI_CACHE_ROOT
+    $previousSnapshot = $script:ProdicloudUiInventoryCache
+    $previousCachePath = [string]$script:ProdicloudUiInventoryCacheFilePath
+    $previousCacheWriteUtc = if ($null -ne $script:ProdicloudUiInventoryCacheFileLastWriteUtc) { [DateTime]$script:ProdicloudUiInventoryCacheFileLastWriteUtc } else { [DateTime]::MinValue }
+    $previousMaximumStaleSeconds = if ($null -ne $script:ProdicloudUiInventoryMaximumStaleSeconds) { [int]$script:ProdicloudUiInventoryMaximumStaleSeconds } else { 300 }
+    $previousSubscription = $script:ProdicloudUiSubscription
     try {
-        $env:CLAGNOS_TUI_CACHE_ROOT = $tempRoot
-        $script:ClagnosUiInventoryMaximumStaleSeconds = 300
-        $script:ClagnosUiSubscription = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled' }
-        $script:ClagnosUiInventoryCache = $null
-        $script:ClagnosUiInventoryCacheFilePath = ''
-        $paths = Get-ClagnosUiInventoryCachePaths -SubscriptionId '00000000-0000-4000-8000-000000000001'
+        $env:PRODICLOUD_TUI_CACHE_ROOT = $tempRoot
+        $script:ProdicloudUiInventoryMaximumStaleSeconds = 300
+        $script:ProdicloudUiSubscription = [pscustomobject]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; SubscriptionName = 'Fixture Enabled' }
+        $script:ProdicloudUiInventoryCache = $null
+        $script:ProdicloudUiInventoryCacheFilePath = ''
+        $paths = Get-ProdicloudUiInventoryCachePaths -SubscriptionId '00000000-0000-4000-8000-000000000001'
         New-Item -ItemType Directory -Path $paths.Root -Force | Out-Null
         $validatedAt = [DateTime]::UtcNow.AddSeconds(-5)
         $snapshot = [ordered]@{ SubscriptionId = '00000000-0000-4000-8000-000000000001'; Groups = @(); Resources = @(); VirtualMachines = @(); Signature = 'fixture-signature'; LastValidatedAtUtc = $validatedAt.ToString('o'); IsDirty = $false; DirtyReason = ''; DirtyResourceGroup = ''; Changed = $false }
         Set-Content -LiteralPath $paths.Cache -Value (ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress) -Encoding UTF8
         Set-Content -LiteralPath $paths.Request -Value ([DateTime]::UtcNow.ToString('o')) -Encoding ASCII
 
-        $pending = Import-ClagnosUiInventoryCacheFromDisk -Force
+        $pending = Import-ProdicloudUiInventoryCacheFromDisk -Force
         $diagnosticSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $paths.Cache -Raw))
-        Assert-Tui -Condition ($null -ne $pending -and [bool]$pending.IsDirty -and [string]$pending.DirtyReason -eq 'a persisted inventory refresh is pending') -Message ('A cache written before a persisted refresh request must not be trusted as current after a CLI restart. Null={0}; ImportedSubscription={1}; ConfiguredSubscription={2}; Validated={3}; Request={4}; FileExists={5}; Error={6}' -f ($null -eq $pending),[string]$diagnosticSnapshot.SubscriptionId,[string]$script:ClagnosUiSubscription.SubscriptionId,[string]$diagnosticSnapshot.LastValidatedAtUtc,[string](Get-Content -LiteralPath $paths.Request -Raw),(Test-Path -LiteralPath $paths.Cache),[string]$script:ClagnosUiResourceCacheError)
+        Assert-Tui -Condition ($null -ne $pending -and [bool]$pending.IsDirty -and [string]$pending.DirtyReason -eq 'a persisted inventory refresh is pending') -Message ('A cache written before a persisted refresh request must not be trusted as current after a CLI restart. Null={0}; ImportedSubscription={1}; ConfiguredSubscription={2}; Validated={3}; Request={4}; FileExists={5}; Error={6}' -f ($null -eq $pending),[string]$diagnosticSnapshot.SubscriptionId,[string]$script:ProdicloudUiSubscription.SubscriptionId,[string]$diagnosticSnapshot.LastValidatedAtUtc,[string](Get-Content -LiteralPath $paths.Request -Raw),(Test-Path -LiteralPath $paths.Cache),[string]$script:ProdicloudUiResourceCacheError)
 
         $snapshot.LastValidatedAtUtc = [DateTime]::UtcNow.AddSeconds(2).ToString('o')
         Set-Content -LiteralPath $paths.Cache -Value (ConvertTo-Json -InputObject $snapshot -Depth 8 -Compress) -Encoding UTF8
-        $revalidated = Import-ClagnosUiInventoryCacheFromDisk -Force
+        $revalidated = Import-ProdicloudUiInventoryCacheFromDisk -Force
         Assert-Tui -Condition ($null -ne $revalidated -and -not [bool]$revalidated.IsDirty) -Message 'A worker snapshot newer than the persisted refresh request must clear the dirty marker.'
     }
     finally {
-        $script:ClagnosUiInventoryCache = $previousSnapshot
-        $script:ClagnosUiInventoryCacheFilePath = $previousCachePath
-        $script:ClagnosUiInventoryCacheFileLastWriteUtc = $previousCacheWriteUtc
-        $script:ClagnosUiInventoryMaximumStaleSeconds = $previousMaximumStaleSeconds
-        $script:ClagnosUiSubscription = $previousSubscription
-        if ([string]::IsNullOrWhiteSpace($previousCacheRoot)) { Remove-Item Env:\CLAGNOS_TUI_CACHE_ROOT -ErrorAction SilentlyContinue }
-        else { $env:CLAGNOS_TUI_CACHE_ROOT = $previousCacheRoot }
+        $script:ProdicloudUiInventoryCache = $previousSnapshot
+        $script:ProdicloudUiInventoryCacheFilePath = $previousCachePath
+        $script:ProdicloudUiInventoryCacheFileLastWriteUtc = $previousCacheWriteUtc
+        $script:ProdicloudUiInventoryMaximumStaleSeconds = $previousMaximumStaleSeconds
+        $script:ProdicloudUiSubscription = $previousSubscription
+        if ([string]::IsNullOrWhiteSpace($previousCacheRoot)) { Remove-Item Env:\PRODICLOUD_TUI_CACHE_ROOT -ErrorAction SilentlyContinue }
+        else { $env:PRODICLOUD_TUI_CACHE_ROOT = $previousCacheRoot }
         $resolvedTemp = [System.IO.Path]::GetFullPath($tempRoot)
         $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([char[]]@('\','/')) + [System.IO.Path]::DirectorySeparatorChar
         if ($resolvedTemp.StartsWith($tempPrefix,[System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTemp)) { Remove-Item -LiteralPath $resolvedTemp -Recurse -Force }
@@ -760,38 +770,38 @@ Invoke-TuiTest -Name 'Create wizard recovers from invalid configured security an
 
 Invoke-TuiTest -Name 'Wizard text fields warn and reprompt after invalid numeric input' -Action {
     Set-TuiChoices -Choices @('70000','22222')
-    $value = Read-ClagnosUiWizardTextStep -Title 'Fixture SSH port' -DefaultValue '22' -Required -Validator {
+    $value = Read-ProdicloudUiWizardTextStep -Title 'Fixture SSH port' -DefaultValue '22' -Required -Validator {
         param($candidate)
-        return (Resolve-ClagnosTcpPortNumber -Value ([string]$candidate) -Label 'SSH port')
+        return (Resolve-ProdicloudTcpPortNumber -Value ([string]$candidate) -Label 'SSH port')
     }
     Assert-Tui -Condition ([string]$value.Value -eq '22222') -Message 'The text step must return only a valid normalized value.'
     Assert-TuiOutputContains -Text 'must be a whole number from 1 through 65535' -Message 'The text step must explain a rejected value before prompting again.'
 }
 
 Invoke-TuiTest -Name 'Disk and TCP text validators accept documented units and ranges and reject unsafe bounds' -Action {
-    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '1MB') -eq '1') -Message 'A 1MB disk request must round up to the minimum whole GiB.'
-    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '1GB') -eq '1') -Message 'A 1GB disk request must normalize to one GiB.'
-    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '1TB') -eq '1024') -Message 'A 1TB disk request must normalize to GiB.'
-    Assert-Tui -Condition ((ConvertTo-ClagnosOsDiskSizeGb -Value '4095GB') -eq '4095') -Message 'The maximum OS disk size must be accepted.'
+    Assert-Tui -Condition ((ConvertTo-ProdicloudOsDiskSizeGb -Value '1MB') -eq '1') -Message 'A 1MB disk request must round up to the minimum whole GiB.'
+    Assert-Tui -Condition ((ConvertTo-ProdicloudOsDiskSizeGb -Value '1GB') -eq '1') -Message 'A 1GB disk request must normalize to one GiB.'
+    Assert-Tui -Condition ((ConvertTo-ProdicloudOsDiskSizeGb -Value '1TB') -eq '1024') -Message 'A 1TB disk request must normalize to GiB.'
+    Assert-Tui -Condition ((ConvertTo-ProdicloudOsDiskSizeGb -Value '4095GB') -eq '4095') -Message 'The maximum OS disk size must be accepted.'
     foreach ($badSize in @('0MB','4096GB','1PB','1,5GB')) {
         $threw = $false
-        try { ConvertTo-ClagnosOsDiskSizeGb -Value $badSize | Out-Null } catch { $threw = $true }
+        try { ConvertTo-ProdicloudOsDiskSizeGb -Value $badSize | Out-Null } catch { $threw = $true }
         Assert-Tui -Condition $threw -Message ("Invalid OS disk input '{0}' must be rejected." -f $badSize)
     }
-    $ports = Resolve-ClagnosTcpPortSpecification -Text '80,3000-3300,3300-3310' -RequiredPorts @('22')
+    $ports = Resolve-ProdicloudTcpPortSpecification -Text '80,3000-3300,3300-3310' -RequiredPorts @('22')
     Assert-Tui -Condition ($ports.CanonicalText -eq '22,80,3000-3310') -Message 'TCP ranges must merge, sort, and include required connection ports.'
     foreach ($badPorts in @('0','65536','500-300','1-65535','80,abc')) {
         $threw = $false
-        try { Resolve-ClagnosTcpPortSpecification -Text $badPorts | Out-Null } catch { $threw = $true }
+        try { Resolve-ProdicloudTcpPortSpecification -Text $badPorts | Out-Null } catch { $threw = $true }
         Assert-Tui -Condition $threw -Message ("Invalid TCP port input '{0}' must be rejected." -f $badPorts)
     }
 }
 
 Invoke-TuiTest -Name 'Cloud subscriptions show selected and active state and select an enabled row' -Action {
     Set-TuiChoices -Choices @('1','b')
-    Show-ClagnosUiCloudSubscriptions
+    Show-ProdicloudUiCloudSubscriptions
     Assert-TuiOutputContains -Text 'Cloud subscriptions' -Message 'Cloud subscriptions screen heading must render.'
-    Assert-TuiOutputContains -Text 'Clagnos selected: Fixture Enabled' -Message 'Screen must show the configured Clagnos selection.'
+    Assert-TuiOutputContains -Text 'Prodicloud selected: Fixture Enabled' -Message 'Screen must show the configured Prodicloud selection.'
     Assert-TuiOutputContains -Text 'Azure CLI active: Fixture Enabled' -Message 'Screen must show the Azure CLI active selection.'
     Assert-TuiOutputContains -Text 'Fixture Disabled' -Message 'Screen must list disabled subscriptions.'
     Assert-Tui -Condition ($script:TuiSubscriptionSelections.Count -eq 1 -and $script:TuiSubscriptionSelections[0] -eq '00000000-0000-4000-8000-000000000001') -Message 'Selecting an enabled subscription must update the selected subscription through the UI adapter.'
@@ -799,7 +809,7 @@ Invoke-TuiTest -Name 'Cloud subscriptions show selected and active state and sel
 
 Invoke-TuiTest -Name 'Cloud subscriptions reject disabled rows without activating them' -Action {
     Set-TuiChoices -Choices @('2','b')
-    Show-ClagnosUiCloudSubscriptions
+    Show-ProdicloudUiCloudSubscriptions
     Assert-TuiOutputContains -Text '[unavailable]' -Message 'Disabled subscriptions must be visible as unavailable options.'
     Assert-TuiOutputContains -Text 'not available for the active subscription' -Message 'Selecting a disabled subscription must explain why it cannot be activated.'
     Assert-Tui -Condition ($script:TuiSubscriptionSelections.Count -eq 0) -Message 'A disabled subscription must not be selected.'
@@ -808,21 +818,21 @@ Invoke-TuiTest -Name 'Cloud subscriptions reject disabled rows without activatin
 
 Invoke-TuiTest -Name 'Cloud subscriptions ignore invalid numeric selections' -Action {
     Set-TuiChoices -Choices @('99','b')
-    Show-ClagnosUiCloudSubscriptions
+    Show-ProdicloudUiCloudSubscriptions
     Assert-Tui -Condition ($script:TuiSubscriptionSelections.Count -eq 0) -Message 'An out-of-range subscription number must not activate a row.'
 }
 
 Invoke-TuiTest -Name 'Cloud subscriptions recover from an unavailable inventory' -Action {
     $script:TuiCloudRowsShouldThrow = $true
     Set-TuiChoices -Choices @()
-    Show-ClagnosUiCloudSubscriptions
+    Show-ProdicloudUiCloudSubscriptions
     Assert-TuiOutputContains -Text '[ERROR] fixture subscription inventory error' -Message 'Cloud inventory errors must render through the UI error surface.'
     Assert-Tui -Condition ($script:TuiWaitCount -eq 1) -Message 'Cloud inventory errors must pause before returning.'
 }
 
 Invoke-TuiTest -Name 'Cloud subscriptions return on q' -Action {
     Set-TuiChoices -Choices @('q')
-    Show-ClagnosUiCloudSubscriptions
+    Show-ProdicloudUiCloudSubscriptions
     Assert-TuiNoRealCloudCalls
 }
 
@@ -833,7 +843,7 @@ Invoke-TuiTest -Name 'Managed inventory routes all ten numbered resource filters
         $script:TuiCommandInvocations.Clear()
         $selection = [string]$number
         Set-TuiChoices -Choices @($selection, '2', 'b')
-        Show-ClagnosUiInventoryMenu
+        Show-ProdicloudUiInventoryMenu
         Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Cached inventory navigation must not dispatch another Azure inventory command.'
         if ($number -eq 1) { Assert-TuiOutputContains -Text 'DISK:' -Message 'All-types inventory must render cached resource categories.' }
         else { Assert-TuiOutputContains -Text ($types[$number - 1].ToUpperInvariant() + ':') -Message 'The selected inventory type must be rendered from the cache.' }
@@ -843,20 +853,20 @@ Invoke-TuiTest -Name 'Managed inventory routes all ten numbered resource filters
 
 Invoke-TuiTest -Name 'Managed inventory renders its type menu and returns on b' -Action {
     Set-TuiChoices -Choices @('b')
-    Show-ClagnosUiInventoryMenu
+    Show-ProdicloudUiInventoryMenu
     Assert-TuiOutputContains -Text 'Managed resource inventory' -Message 'Inventory screen heading must render.'
     Assert-TuiOutputContains -Text '10. Network security rules' -Message 'Inventory screen must include the final numbered resource type.'
 }
 
 Invoke-TuiTest -Name 'Managed inventory returns on q' -Action {
     Set-TuiChoices -Choices @('q')
-    Show-ClagnosUiInventoryMenu
+    Show-ProdicloudUiInventoryMenu
     Assert-TuiNoRealCloudCalls
 }
 
 Invoke-TuiTest -Name 'Managed inventory ignores invalid input and supports an unfiltered inventory' -Action {
     Set-TuiChoices -Choices @('invalid','1','1','b')
-    Show-ClagnosUiInventoryMenu
+    Show-ProdicloudUiInventoryMenu
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Invalid menu input and the all-groups filter must remain read-only cache operations.'
     Assert-TuiOutputContains -Text 'All managed resource groups' -Message 'The group filter must offer an explicit all-groups choice.'
     Assert-TuiOutputContains -Text '>1. All managed resource groups' -Message 'The inventory filter must mark all groups as the default selection.'
@@ -864,19 +874,21 @@ Invoke-TuiTest -Name 'Managed inventory ignores invalid input and supports an un
 
 Invoke-TuiTest -Name 'Virtual computer discovery enriches rows with managed group and subscription' -Action {
     $script:TuiDiscoveryMode = $true
-    $script:TuiManagedGroups = @([pscustomobject]@{ name = 'rg-fixture-eastus-g1'; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } })
+    $script:TuiManagedGroups = @([pscustomobject]@{ name = 'rg-fixture-eastus-g1'; tags = [pscustomobject]@{ 'managed-by' = 'prodicloud' } })
     $script:TuiDiscoveryVmRows = @($script:TuiWindowsVm)
     $rows = @(& $script:TuiOriginalVmDiscovery)
     Assert-Tui -Condition ($rows.Count -eq 1) -Message 'Discovery must return the fixture VM.'
-    Assert-Tui -Condition ([string]$rows[0].ClagnosResourceGroup -eq 'rg-fixture-eastus-g1') -Message 'Discovery must attach its managed resource group.'
-    Assert-Tui -Condition ([string]$rows[0].ClagnosSubscriptionId -eq '00000000-0000-4000-8000-000000000001') -Message 'Discovery must attach the selected subscription id.'
+    Assert-Tui -Condition ([string]$rows[0].ProdicloudResourceGroup -eq 'rg-fixture-eastus-g1') -Message 'Discovery must attach its managed resource group.'
+    Assert-Tui -Condition ([string]$rows[0].ProdicloudSubscriptionId -eq '00000000-0000-4000-8000-000000000001') -Message 'Discovery must attach the selected subscription id.'
     Assert-Tui -Condition ($script:TuiAzureReadQueries.Count -eq 0) -Message 'VM discovery must read the startup inventory snapshot without issuing screen-specific Azure reads.'
 }
 
 Invoke-TuiTest -Name 'Legacy managed-group discovery routes tag migration only through its mock' -Action {
     $script:TuiDiscoveryMode = $true
+    $script:TuiLegacyMigrationCount = 0
+    $script:TuiManagedGroupCallCount = 0
     $legacyGroup = [pscustomobject]@{ name = 'rg-legacy-fixture'; tags = [pscustomobject]@{ 'managed-by' = 'az-vm' } }
-    $currentGroup = [pscustomobject]@{ name = 'rg-legacy-fixture'; tags = [pscustomobject]@{ 'managed-by' = 'clagnos' } }
+    $currentGroup = [pscustomobject]@{ name = 'rg-legacy-fixture'; tags = [pscustomobject]@{ 'managed-by' = 'prodicloud' } }
     $script:TuiManagedGroupsByCall = @($legacyGroup, $currentGroup)
     $script:TuiDiscoveryVmRows = @($script:TuiWindowsVm)
     $rows = @(& $script:TuiOriginalVmDiscovery)
@@ -888,7 +900,7 @@ Invoke-TuiTest -Name 'Legacy managed-group discovery routes tag migration only t
 Invoke-TuiTest -Name 'Virtual computers render the empty state and all list actions' -Action {
     $script:TuiVirtualComputers = @()
     Set-TuiChoices -Choices @('b')
-    Show-ClagnosUiVirtualComputers
+    Show-ProdicloudUiVirtualComputers
     Assert-TuiOutputContains -Text 'No managed virtual computers were found.' -Message 'Empty VC inventory must be explicit.'
     Assert-TuiOutputContains -Text 'c: create virtual computer' -Message 'VC list must show create.'
     Assert-TuiOutputContains -Text 'r: check or refresh managed resource cache' -Message 'VC list must show an explicit cache refresh action.'
@@ -897,7 +909,7 @@ Invoke-TuiTest -Name 'Virtual computers render the empty state and all list acti
 Invoke-TuiTest -Name 'Virtual computers show a readable error if inventory cannot load' -Action {
     $script:TuiVmDiscoveryShouldThrow = $true
     Set-TuiChoices -Choices @('b')
-    Show-ClagnosUiVirtualComputers
+    Show-ProdicloudUiVirtualComputers
     Assert-TuiOutputContains -Text '[ERROR] fixture VM inventory error' -Message 'VC inventory failures must render through the error surface.'
     Assert-TuiOutputContains -Text 'No managed virtual computers were found.' -Message 'VC inventory must recover to its empty state after an error.'
 }
@@ -907,23 +919,23 @@ Invoke-TuiTest -Name 'Virtual computers create, refresh, and return to the previ
         param([string[]]$Arguments)
         $query = @($Arguments) -join ' '
         if ($query -eq 'group list') { return @($script:TuiManagedGroups) }
-        if ($query -like 'resource list --resource-group *') { return @($script:ClagnosUiInventoryCache.Resources) }
+        if ($query -like 'resource list --resource-group *') { return @($script:ProdicloudUiInventoryCache.Resources) }
         if ($query -eq 'vm list --show-details') { return @($script:TuiVirtualComputers) }
         throw ('Unexpected refresh fixture query: {0}' -f $query)
     }
     Set-TuiChoices -Choices @('c','r','b')
-    Show-ClagnosUiVirtualComputers
+    Show-ProdicloudUiVirtualComputers
     Assert-Tui -Condition ($script:TuiCreateWizardCount -eq 1) -Message 'Create must open the interactive create wizard.'
     Assert-Tui -Condition ($script:TuiSubscriptionRefreshCount -eq 1) -Message 'Manual cache refresh must revalidate the subscription context.'
 }
 
 Invoke-TuiTest -Name 'Virtual computer numeric selection opens that VC' -Action {
-    $previousUiRepoRoot = [string]$script:ClagnosUiRepoRoot
+    $previousUiRepoRoot = [string]$script:ProdicloudUiRepoRoot
     $originalSetDotEnvValue = (Get-Command Set-DotEnvValue -CommandType Function -ErrorAction Stop).ScriptBlock
-    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-vc-selection-fixture-' + [guid]::NewGuid().ToString('N'))
+    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-vc-selection-fixture-' + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $profileRoot -Force
-    $script:ClagnosUiRepoRoot = $profileRoot
-    Set-Content -LiteralPath (Join-Path $profileRoot 'clagnos.env') -Value @('ACTIVE_VM_NAME=fixture-vc','SELECTED_AZURE_SUBSCRIPTION_ID=00000000-0000-4000-8000-000000000001') -Encoding ASCII
+    $script:ProdicloudUiRepoRoot = $profileRoot
+    Set-Content -LiteralPath (Join-Path $profileRoot 'prodicloud.env') -Value @('ACTIVE_VM_NAME=fixture-vc','SELECTED_AZURE_SUBSCRIPTION_ID=00000000-0000-4000-8000-000000000001') -Encoding ASCII
     Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-vc.env') -Value @('SELECTED_VM_NAME=fixture-vc') -Encoding ASCII
     Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-linux.env') -Value @('SELECTED_VM_NAME=fixture-linux','SELECTED_VM_OS=linux') -Encoding ASCII
     $script:TuiPersistedVmSelection = $null
@@ -935,40 +947,40 @@ Invoke-TuiTest -Name 'Virtual computer numeric selection opens that VC' -Action 
         $script:TuiVirtualComputers = @($script:TuiWindowsVm, (New-TuiVmFixture -Platform Linux))
         $script:TuiVirtualComputers[1].name = 'fixture-linux'
         Set-TuiChoices -Choices @('2','b','b')
-        Show-ClagnosUiVirtualComputers
+        Show-ProdicloudUiVirtualComputers
         Assert-Tui -Condition ($script:TuiVmDetailsCount -eq 1) -Message 'Selecting a VM number must enter its detail screen.'
         Assert-TuiOutputContains -Text '2. fixture-linux | Linux' -Message 'VC rows must identify the selected item and its platform.'
-        Assert-Tui -Condition ([string]$script:ClagnosUiSelectedVmName -eq 'fixture-linux') -Message 'Numeric selection must retain the selected VC name.'
-        Assert-Tui -Condition ($null -ne $script:TuiPersistedVmSelection -and [string]$script:TuiPersistedVmSelection.Path -eq (Join-Path $profileRoot 'clagnos.env') -and [string]$script:TuiPersistedVmSelection.Key -eq 'SELECTED_VM_NAME' -and [string]$script:TuiPersistedVmSelection.Value -eq 'fixture-linux') -Message 'Selecting a VC must persist its active name through the environment writer.'
+        Assert-Tui -Condition ([string]$script:ProdicloudUiSelectedVmName -eq 'fixture-linux') -Message 'Numeric selection must retain the selected VC name.'
+        Assert-Tui -Condition ($null -ne $script:TuiPersistedVmSelection -and [string]$script:TuiPersistedVmSelection.Path -eq (Join-Path $profileRoot 'prodicloud.env') -and [string]$script:TuiPersistedVmSelection.Key -eq 'SELECTED_VM_NAME' -and [string]$script:TuiPersistedVmSelection.Value -eq 'fixture-linux') -Message 'Selecting a VC must persist its active name through the environment writer.'
     }
     finally {
         Set-Item -Path Function:Set-DotEnvValue -Value $originalSetDotEnvValue
-        $script:ClagnosUiRepoRoot = $previousUiRepoRoot
+        $script:ProdicloudUiRepoRoot = $previousUiRepoRoot
         Remove-Variable -Name TuiPersistedVmSelection -Scope Script -ErrorAction SilentlyContinue
         $resolvedProfileRoot = [System.IO.Path]::GetFullPath($profileRoot)
         $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'clagnos-vc-selection-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI selection fixture: {0}" -f $resolvedProfileRoot) }
+        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'prodicloud-vc-selection-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI selection fixture: {0}" -f $resolvedProfileRoot) }
         if (Test-Path -LiteralPath $resolvedProfileRoot) { Remove-Item -LiteralPath $resolvedProfileRoot -Recurse -Force }
     }
 }
 
 Invoke-TuiTest -Name 'Virtual computer list exits on q without invoking cloud actions' -Action {
     Set-TuiChoices -Choices @('q')
-    Show-ClagnosUiVirtualComputers
+    Show-ProdicloudUiVirtualComputers
     Assert-TuiNoRealCloudCalls
 }
 
 Invoke-TuiTest -Name 'Virtual computer list ignores invalid selection input' -Action {
     Set-TuiChoices -Choices @('99','b')
-    Show-ClagnosUiVirtualComputers
+    Show-ProdicloudUiVirtualComputers
     Assert-Tui -Condition ($script:TuiVmDetailsCount -eq 0) -Message 'An invalid VC number must not enter a detail screen.'
 }
 
 Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, VM features, and both login roles' -Action {
-    $previousUiRepoRoot = [string]$script:ClagnosUiRepoRoot
-    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-vc-profile-fixture-' + [guid]::NewGuid().ToString('N'))
+    $previousUiRepoRoot = [string]$script:ProdicloudUiRepoRoot
+    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-vc-profile-fixture-' + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $profileRoot -Force
-    $script:ClagnosUiRepoRoot = $profileRoot
+    $script:ProdicloudUiRepoRoot = $profileRoot
     Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-vc.env') -Value @('SELECTED_VM_NAME=fixture-vc') -Encoding ASCII
     try {
     $script:TuiWindowsVm | Add-Member -NotePropertyName 'powerState' -NotePropertyValue 'VM running' -Force
@@ -1003,19 +1015,19 @@ Invoke-TuiTest -Name 'Selected VC detail screen renders addresses, DNS, disks, V
     Assert-TuiNoRealCloudCalls
     }
     finally {
-        $script:ClagnosUiRepoRoot = $previousUiRepoRoot
+        $script:ProdicloudUiRepoRoot = $previousUiRepoRoot
         $resolvedProfileRoot = [System.IO.Path]::GetFullPath($profileRoot)
         $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'clagnos-vc-profile-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI profile fixture: {0}" -f $resolvedProfileRoot) }
+        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'prodicloud-vc-profile-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI profile fixture: {0}" -f $resolvedProfileRoot) }
         if (Test-Path -LiteralPath $resolvedProfileRoot) { Remove-Item -LiteralPath $resolvedProfileRoot -Recurse -Force }
     }
 }
 
 Invoke-TuiTest -Name 'Linux VC detail screen omits RDP and reports missing public endpoints' -Action {
-    $previousUiRepoRoot = [string]$script:ClagnosUiRepoRoot
-    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-vc-profile-fixture-' + [guid]::NewGuid().ToString('N'))
+    $previousUiRepoRoot = [string]$script:ProdicloudUiRepoRoot
+    $profileRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-vc-profile-fixture-' + [guid]::NewGuid().ToString('N'))
     $null = New-Item -ItemType Directory -Path $profileRoot -Force
-    $script:ClagnosUiRepoRoot = $profileRoot
+    $script:ProdicloudUiRepoRoot = $profileRoot
     Set-Content -LiteralPath (Join-Path $profileRoot 'fixture-vc.env') -Value @('SELECTED_VM_NAME=fixture-vc') -Encoding ASCII
     try {
     $script:TuiVmDetailRecord.storageProfile.osDisk.osType = 'Linux'
@@ -1039,17 +1051,17 @@ Invoke-TuiTest -Name 'Linux VC detail screen omits RDP and reports missing publi
     Assert-TuiNoRealCloudCalls
     }
     finally {
-        $script:ClagnosUiRepoRoot = $previousUiRepoRoot
+        $script:ProdicloudUiRepoRoot = $previousUiRepoRoot
         $resolvedProfileRoot = [System.IO.Path]::GetFullPath($profileRoot)
         $tempPrefix = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'clagnos-vc-profile-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI profile fixture: {0}" -f $resolvedProfileRoot) }
+        if (-not $resolvedProfileRoot.StartsWith(($tempPrefix + 'prodicloud-vc-profile-fixture-'),[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Refusing to remove unexpected TUI profile fixture: {0}" -f $resolvedProfileRoot) }
         if (Test-Path -LiteralPath $resolvedProfileRoot) { Remove-Item -LiteralPath $resolvedProfileRoot -Recurse -Force }
     }
 }
 
 Invoke-TuiTest -Name 'Selected VC screen routes all visible shortcuts and confirms complete group deletion' -Action {
     Set-TuiChoices -Choices @('p','i','u','m','x','o','r','d','no','d','DELETE ALL')
-    Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
+    Show-ProdicloudUiVmMenu -Vm $script:TuiWindowsVm
     Assert-Tui -Condition ($script:TuiSetupAllMenuCount -eq 1) -Message 'p must open Setup All Program Packages.'
     Assert-Tui -Condition ($script:TuiPackageMenuCount -eq 1) -Message 'm must open Manage Program Packages.'
     Assert-Tui -Condition ($script:TuiComponentMenuCount -eq 1) -Message 'x must open VC components.'
@@ -1067,13 +1079,13 @@ Invoke-TuiTest -Name 'Selected VC screen routes all visible shortcuts and confir
 
 Invoke-TuiTest -Name 'Selected VC screen returns on q after rendering details' -Action {
     Set-TuiChoices -Choices @('q')
-    Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
+    Show-ProdicloudUiVmMenu -Vm $script:TuiWindowsVm
     Assert-Tui -Condition ($script:TuiVmDetailsCount -eq 1) -Message 'VC details must render before the screen accepts q.'
 }
 
 Invoke-TuiTest -Name 'Selected VC screen routes password reset through the explicit initialize option' -Action {
     Set-TuiChoices -Choices @('k','q')
-    Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
+    Show-ProdicloudUiVmMenu -Vm $script:TuiWindowsVm
     $initialize = Assert-TuiCommand -CommandName 'initialize'
     Assert-TuiOption -Call $initialize -Name 'reset-managed-user-passwords' -Expected 'True'
 }
@@ -1081,7 +1093,7 @@ Invoke-TuiTest -Name 'Selected VC screen routes password reset through the expli
 Invoke-TuiTest -Name 'Selected VC screen keeps rendering after a detail-read error' -Action {
     $script:TuiDetailsShouldThrow = $true
     Set-TuiChoices -Choices @('b')
-    Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
+    Show-ProdicloudUiVmMenu -Vm $script:TuiWindowsVm
     Assert-TuiOutputContains -Text '[ERROR] fixture VC detail read error' -Message 'VC detail errors must be caught and rendered.'
     Assert-TuiOutputContains -Text 'p: setup all program packages' -Message 'A detail-read error must not remove the VC actions.'
 }
@@ -1109,13 +1121,13 @@ Invoke-TuiTest -Name 'Setup all package screen closes without applying' -Action 
 }
 
 Invoke-TuiTest -Name 'Escape and escape text map to one-level back' -Action {
-    Assert-Tui -Condition ((Resolve-ClagnosUiMenuChoice -Value 'escape') -eq 'b') -Message 'The escape word must map to back in redirected input mode.'
-    Assert-Tui -Condition ((Resolve-ClagnosUiMenuChoice -Value '' -EscapePressed) -eq 'b') -Message 'Physical Escape must map to back.'
+    Assert-Tui -Condition ((Resolve-ProdicloudUiMenuChoice -Value 'escape') -eq 'b') -Message 'The escape word must map to back in redirected input mode.'
+    Assert-Tui -Condition ((Resolve-ProdicloudUiMenuChoice -Value '' -EscapePressed) -eq 'b') -Message 'Physical Escape must map to back.'
 }
 
 Invoke-TuiTest -Name 'Selected VC deletion cancellation never dispatches delete' -Action {
     Set-TuiChoices -Choices @('d','CANCEL','b')
-    Show-ClagnosUiVmMenu -Vm $script:TuiWindowsVm
+    Show-ProdicloudUiVmMenu -Vm $script:TuiWindowsVm
     Assert-Tui -Condition (@($script:TuiCommandInvocations | Where-Object { $_.CommandName -eq 'delete' }).Count -eq 0) -Message 'Deletion must require the exact DELETE ALL confirmation.'
     Assert-TuiNoRealCloudCalls
 }
@@ -1171,7 +1183,7 @@ Invoke-TuiTest -Name 'Builtin package uninstall passes confirmation to its comma
 }
 
 Invoke-TuiTest -Name 'Background package status shows the refreshed result and pauses before returning' -Action {
-    $functionNames = @('Test-ClagnosUiBackgroundCacheWorkerDisabled','Request-ClagnosUiPackageStatusRefresh','Get-ClagnosPackageStatusCacheEntry')
+    $functionNames = @('Test-ProdicloudUiBackgroundCacheWorkerDisabled','Request-ProdicloudUiPackageStatusRefresh','Get-ProdicloudPackageStatusCacheEntry')
     $originalFunctions = @{}
     foreach ($functionName in $functionNames) {
         $command = Get-Command $functionName -ErrorAction Stop
@@ -1180,8 +1192,8 @@ Invoke-TuiTest -Name 'Background package status shows the refreshed result and p
     $script:TuiPackageStatusRequestCount = 0
     $script:TuiStatusCacheEntry = $null
 
-    function Test-ClagnosUiBackgroundCacheWorkerDisabled { return $false }
-    function Request-ClagnosUiPackageStatusRefresh {
+    function Test-ProdicloudUiBackgroundCacheWorkerDisabled { return $false }
+    function Request-ProdicloudUiPackageStatusRefresh {
         param([psobject]$Vm,[string[]]$Catalogs = @('builtin'),[switch]$Force)
         $script:TuiPackageStatusRequestCount++
         $statuses = @{ 'builtin-fixture' = 'not-installed'; 'disabled-fixture' = 'not-installed' }
@@ -1193,7 +1205,7 @@ Invoke-TuiTest -Name 'Background package status shows the refreshed result and p
         }
         return $true
     }
-    function Get-ClagnosPackageStatusCacheEntry {
+    function Get-ProdicloudPackageStatusCacheEntry {
         param([object[]]$Packages,[hashtable]$Options,[string]$Platform)
         if ($null -eq $script:TuiStatusCacheEntry) { return $null }
         return [pscustomobject]@{ Entry = $script:TuiStatusCacheEntry; IsFresh = $true; AgeSeconds = 0 }
@@ -1241,7 +1253,7 @@ Invoke-TuiTest -Name 'Custom package install uses the custom catalog identity' -
 Invoke-TuiTest -Name 'Package app-state save maps the VC source and selected user' -Action {
     $package = $script:TuiPackagesByCatalog['builtin'][0]
     Set-TuiChoices -Choices @('1','v','.all.')
-    Show-ClagnosUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog builtin -Platform windows
+    Show-ProdicloudUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog builtin -Platform windows
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'save-app-state' -Expected 'True'
     Assert-TuiOption -Call $call -Name 'source' -Expected 'vm'
@@ -1252,7 +1264,7 @@ Invoke-TuiTest -Name 'Package app-state save maps the VC source and selected use
 Invoke-TuiTest -Name 'Package app-state restore maps a local Windows target' -Action {
     $package = $script:TuiPackagesByCatalog['custom'][0]
     Set-TuiChoices -Choices @('2','l','assistant')
-    Show-ClagnosUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog custom -Platform windows
+    Show-ProdicloudUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog custom -Platform windows
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'restore-app-state' -Expected 'True'
     Assert-TuiOption -Call $call -Name 'target' -Expected 'lm'
@@ -1263,7 +1275,7 @@ Invoke-TuiTest -Name 'Package app-state restore maps a local Windows target' -Ac
 Invoke-TuiTest -Name 'Package app-state save maps a local Windows source' -Action {
     $package = $script:TuiPackagesByCatalog['builtin'][0]
     Set-TuiChoices -Choices @('1','l','assistant')
-    Show-ClagnosUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog builtin -Platform windows
+    Show-ProdicloudUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog builtin -Platform windows
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'save-app-state' -Expected 'True'
     Assert-TuiOption -Call $call -Name 'source' -Expected 'lm'
@@ -1273,7 +1285,7 @@ Invoke-TuiTest -Name 'Package app-state save maps a local Windows source' -Actio
 Invoke-TuiTest -Name 'Package app-state restore maps a VC target' -Action {
     $package = $script:TuiPackagesByCatalog['custom'][0]
     Set-TuiChoices -Choices @('2','v','.current.')
-    Show-ClagnosUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog custom -Platform windows
+    Show-ProdicloudUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog custom -Platform windows
     $call = Assert-TuiCommand -CommandName 'task'
     Assert-TuiOption -Call $call -Name 'restore-app-state' -Expected 'True'
     Assert-TuiOption -Call $call -Name 'target' -Expected 'vm'
@@ -1283,7 +1295,7 @@ Invoke-TuiTest -Name 'Package app-state restore maps a VC target' -Action {
 Invoke-TuiTest -Name 'Linux package app-state refuses local-machine actions' -Action {
     $package = $script:TuiPackagesByCatalog['builtin'][0]
     Set-TuiChoices -Choices @('2','l')
-    Show-ClagnosUiPackageAppStateMenu -Vm $script:TuiLinuxVm -Package $package -Catalog builtin -Platform linux
+    Show-ProdicloudUiPackageAppStateMenu -Vm $script:TuiLinuxVm -Package $package -Catalog builtin -Platform linux
     Assert-TuiOutputContains -Text 'Local-machine package app-state is available only on a Windows host.' -Message 'Linux local package app-state restriction must be shown.'
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'Linux local app-state actions must not dispatch.'
 }
@@ -1317,7 +1329,7 @@ Invoke-TuiTest -Name 'Package detail ignores invalid action and returns to the p
 Invoke-TuiTest -Name 'Package app-state screen returns on b' -Action {
     $package = $script:TuiPackagesByCatalog['builtin'][0]
     Set-TuiChoices -Choices @('b')
-    Show-ClagnosUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog builtin -Platform windows
+    Show-ProdicloudUiPackageAppStateMenu -Vm $script:TuiWindowsVm -Package $package -Catalog builtin -Platform windows
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'The package app-state back option must not dispatch an operation.'
 }
 
@@ -1612,28 +1624,45 @@ Invoke-TuiTest -Name 'Linux VC Operations does not offer Windows guest hibernate
     Assert-Tui -Condition (-not ((@($script:TuiRenderedLines) -join "`n") -match 'hibernate guest \(Windows')) -Message 'Windows shutdown.exe guest hibernate must not be offered for a Linux VM.'
 }
 
-Invoke-TuiTest -Name 'Operations resize menu routes compute resize' -Action {
-    Set-TuiChoices -Choices @('2','1','b')
+Invoke-TuiTest -Name 'Hardware resize wizard filters Intel SKUs, pages RAM, reviews, and applies' -Action {
+    Set-TuiChoices -Choices @('2','1','1','4','','a','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'resize'
     Assert-TuiOption -Call $call -Name 'vm-name' -Expected 'fixture-vc'
+    Assert-TuiOption -Call $call -Name 'vm-size' -Expected 'Standard_B2s_v2'
     Assert-Tui -Condition (-not $call.Options.ContainsKey('disk-size')) -Message 'Compute resize must open the VM SKU path without disk arguments.'
+    Assert-TuiOutputContains -Text 'Processor type' -Message 'Hardware wizard must ask the CPU vendor.'
+    Assert-TuiOutputContains -Text 'RAM capacity' -Message 'Hardware wizard must ask for RAM capacity.'
+    Assert-TuiOutputContains -Text 'Resize VM hardware — review' -Message 'Hardware wizard must show a review before apply.'
 }
 
-Invoke-TuiTest -Name 'Operations resize menu routes OS disk expansion' -Action {
-    Set-TuiChoices -Choices @('2','2','196gb','b')
+Invoke-TuiTest -Name 'Hardware resize RAM exact-match toggle filters AMD and selects the B2as default' -Action {
+    Set-TuiChoices -Choices @('2','1','2','x','4','','a','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'resize'
-    Assert-TuiOption -Call $call -Name 'disk-size' -Expected '196gb'
+    Assert-TuiOption -Call $call -Name 'vm-size' -Expected 'Standard_B2as_v2'
+    Assert-TuiOutputContains -Text 'Exact RAM match: on' -Message 'RAM exact-match toggle must be visible after activation.'
+    Assert-Tui -Condition (-not (@($script:TuiRenderedLines) -join "`n" -match 'Standard_B2s_v2 \(B\)')) -Message 'An Intel SKU must not appear in an AMD-filtered list.'
+}
+
+Invoke-TuiTest -Name 'Disk resize wizard expands an attached data disk and reviews before apply' -Action {
+    Set-TuiChoices -Choices @('2','2','2','128GB','a','b')
+    & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
+    $call = Assert-TuiCommand -CommandName 'resize'
+    Assert-TuiOption -Call $call -Name 'disk-name' -Expected 'disk-fixture-data'
+    Assert-TuiOption -Call $call -Name 'disk-size' -Expected '128GB'
     Assert-TuiOption -Call $call -Name 'expand' -Expected 'True'
+    Assert-TuiOutputContains -Text 'Resize VM disk — review' -Message 'Disk wizard must review the selected disk and target size before apply.'
 }
 
-Invoke-TuiTest -Name 'Operations resize menu routes safe shrink guidance' -Action {
-    Set-TuiChoices -Choices @('2','3','64gb','b')
+Invoke-TuiTest -Name 'Disk resize wizard requires a typed shrink confirmation and selects the OS disk' -Action {
+    Set-TuiChoices -Choices @('2','2','','64GB','a','SHRINK','b')
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'resize'
-    Assert-TuiOption -Call $call -Name 'disk-size' -Expected '64gb'
+    Assert-TuiOption -Call $call -Name 'disk-name' -Expected 'disk-fixture-os'
+    Assert-TuiOption -Call $call -Name 'disk-size' -Expected '64GB'
     Assert-TuiOption -Call $call -Name 'shrink' -Expected 'True'
+    Assert-TuiOption -Call $call -Name 'yes' -Expected 'True'
 }
 
 Invoke-TuiTest -Name 'Operations menu maps region move to the move command' -Action {
@@ -1675,6 +1704,7 @@ foreach ($connectionCase in @(
         & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
         $call = Assert-TuiCommand -CommandName 'connect'
         Assert-TuiOption -Call $call -Name ([string]$connectionCase.Transport) -Expected 'True'
+        Assert-Tui -Condition (-not $call.Options.ContainsKey('windows') -and -not $call.Options.ContainsKey('linux')) -Message 'The TUI must not pass frontend OS flags to the connect command.'
         if ($connectionCase.Test) { Assert-TuiOption -Call $call -Name 'test' -Expected 'True' }
         if ($connectionCase.ContainsKey('Command')) { Assert-TuiOption -Call $call -Name 'command' -Expected ([string]$connectionCase.Command) }
     }
@@ -1704,6 +1734,14 @@ Invoke-TuiTest -Name 'Operations command menu sends a one-shot remote command' -
     & $script:TuiOriginalOperationsMenu -Vm $script:TuiWindowsVm
     $call = Assert-TuiCommand -CommandName 'exec'
     Assert-TuiOption -Call $call -Name 'command' -Expected 'Get-Date'
+}
+
+Invoke-TuiTest -Name 'TUI displays PowerShell command results before the Enter pause' -Action {
+    function Invoke-ProdicloudCommandDispatcher { param([string]$CommandName,[hashtable]$Options,[string]$HelpTopic,[hashtable]$FrontendContext) return [pscustomobject]@{ GuestValue = 'guest-read-result' } }
+    function Set-ProdicloudUiStatusAction { param([string]$Action) }
+    & $script:TuiOriginalUiCommand -CommandName 'connect' -Options @{ powershell = $true; command = 'Get-Date'; 'vm-name' = 'fixture-vc' }
+    Assert-TuiOutputContains -Text 'guest-read-result' -Message 'Remote PowerShell output must remain visible in the TUI.'
+    Assert-Tui -Condition ($script:TuiWaitCount -eq 1) -Message 'PowerShell command results must pause for operator review.'
 }
 
 Invoke-TuiTest -Name 'Operations menu routes Tasks and app-state, Components, and full report' -Action {
@@ -1760,9 +1798,9 @@ Invoke-TuiTest -Name 'Operations connection menu ignores invalid transport choic
     Assert-Tui -Condition ($script:TuiCommandInvocations.Count -eq 0) -Message 'An unknown SSH/RDP transport letter must not dispatch.'
 }
 
-Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azure reads only' -Action {
+Invoke-TuiTest -Name 'Real pd.cmd renders real console screens with fixture Azure reads only' -Action {
     $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-    $sandboxRoot = Join-Path $tempBase ('clagnos-tui-e2e-' + [guid]::NewGuid().ToString('N'))
+    $sandboxRoot = Join-Path $tempBase ('prodicloud-tui-e2e-' + [guid]::NewGuid().ToString('N'))
     $fixtureBin = Join-Path $sandboxRoot 'fixture-bin'
     New-Item -ItemType Directory -Path $sandboxRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $fixtureBin -Force | Out-Null
@@ -1770,13 +1808,13 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
     $helpProcess = $null
 
     try {
-        foreach ($relativePath in @('cg.cmd','clagnos.ps1','release-notes.md')) {
+        foreach ($relativePath in @('pd.cmd','prodicloud.ps1','release-notes.md')) {
             Copy-Item -LiteralPath (Join-Path $RepoRoot $relativePath) -Destination (Join-Path $sandboxRoot $relativePath) -Force
         }
         Copy-Item -LiteralPath (Join-Path $RepoRoot 'modules') -Destination (Join-Path $sandboxRoot 'modules') -Recurse -Force
         New-Item -ItemType Directory -Path (Join-Path $sandboxRoot 'scripts') -Force | Out-Null
-        Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cli.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cli.ps1') -Force
-        Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\clagnos-cache-worker.ps1') -Destination (Join-Path $sandboxRoot 'scripts\clagnos-cache-worker.ps1') -Force
+        Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\prodicloud-cli.ps1') -Destination (Join-Path $sandboxRoot 'scripts\prodicloud-cli.ps1') -Force
+        Copy-Item -LiteralPath (Join-Path $RepoRoot 'scripts\prodicloud-cache-worker.ps1') -Destination (Join-Path $sandboxRoot 'scripts\prodicloud-cache-worker.ps1') -Force
         foreach ($catalogRoot in @('vm-packages\builtin\windows','vm-packages\custom\windows','vm-packages\builtin\linux','vm-packages\custom\linux')) {
             $catalogPath = Join-Path $sandboxRoot $catalogRoot
             New-Item -ItemType Directory -Path $catalogPath -Force | Out-Null
@@ -1826,7 +1864,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'DEFAULT_VM_RDP_PORT=3390',
             'DEFAULT_TCP_PORTS=80,443,5985'
         )
-        Set-Content -LiteralPath (Join-Path $sandboxRoot 'clagnos.env') -Value $envLines -Encoding ASCII
+        Set-Content -LiteralPath (Join-Path $sandboxRoot 'prodicloud.env') -Value $envLines -Encoding ASCII
         $vcEnvLines = @(
             'SELECTED_VM_NAME=tui-fixture-vc',
             'SELECTED_RESOURCE_GROUP=rg-fixture-eastus-g1',
@@ -1850,7 +1888,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $pathParts = @($fixtureBin, (Join-Path $systemRoot 'System32'), $powershellRoot, $systemRoot)
         $processInfo = New-Object System.Diagnostics.ProcessStartInfo
         $processInfo.FileName = Join-Path $systemRoot 'System32\cmd.exe'
-        $processInfo.Arguments = ('/d /s /c ""{0}""' -f (Join-Path $sandboxRoot 'cg.cmd'))
+        $processInfo.Arguments = ('/d /s /c ""{0}""' -f (Join-Path $sandboxRoot 'pd.cmd'))
         $processInfo.WorkingDirectory = $sandboxRoot
         $processInfo.UseShellExecute = $false
         $processInfo.CreateNoWindow = $true
@@ -1859,17 +1897,17 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $processInfo.RedirectStandardError = $true
         $processInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
         $processInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
-        $processInfo.EnvironmentVariables['CLAGNOS_TUI_CACHE_ROOT'] = Join-Path $sandboxRoot '.clagnos-cache'
-        $processInfo.EnvironmentVariables['CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER'] = '0'
-        $processInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $azLogPath
-        $processInfo.EnvironmentVariables['CLAGNOS_TUI_NET_LOG'] = $netLogPath
+        $processInfo.EnvironmentVariables['PRODICLOUD_TUI_CACHE_ROOT'] = Join-Path $sandboxRoot '.prodicloud-cache'
+        $processInfo.EnvironmentVariables['PRODICLOUD_TUI_DISABLE_BACKGROUND_CACHE_WORKER'] = '0'
+        $processInfo.EnvironmentVariables['PRODICLOUD_TUI_AZ_LOG'] = $azLogPath
+        $processInfo.EnvironmentVariables['PRODICLOUD_TUI_NET_LOG'] = $netLogPath
         $process = New-Object System.Diagnostics.Process
         $process.StartInfo = $processInfo
         [void]$process.Start()
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
 
-        $workerCacheDirectory = Join-Path (Join-Path $sandboxRoot '.clagnos-cache') 'Clagnos\cache'
+        $workerCacheDirectory = Join-Path (Join-Path $sandboxRoot '.prodicloud-cache') 'Prodicloud\cache'
         $cacheDeadline = [DateTime]::UtcNow.AddSeconds(30)
         $workerCacheFiles = @()
         while ([DateTime]::UtcNow -lt $cacheDeadline -and $workerCacheFiles.Count -eq 0 -and -not $process.HasExited) {
@@ -1887,18 +1925,18 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             [void]$process.WaitForExit(10000)
             $stdoutTask.Wait()
             $stderrTask.Wait()
-            throw ("The interactive cg.cmd background worker must publish a subscription-scoped inventory cache without blocking the welcome screen. Status={0}; az={1}; stdout={2}; stderr={3}" -f $workerStartupStatus,$workerStartupLog,[string]$stdoutTask.Result,[string]$stderrTask.Result)
+            throw ("The interactive pd.cmd background worker must publish a subscription-scoped inventory cache without blocking the welcome screen. Status={0}; az={1}; stdout={2}; stderr={3}" -f $workerStartupStatus,$workerStartupLog,[string]$stdoutTask.Result,[string]$stderrTask.Result)
         }
         $uiWorkerSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerCacheFiles[0].FullName -Raw -ErrorAction Stop))
-        Assert-Tui -Condition ([string]$uiWorkerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$uiWorkerSnapshot.VirtualMachines[0].ClagnosResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message ("The live TUI must import complete worker VM identity data. Snapshot={0}" -f (ConvertTo-Json -InputObject $uiWorkerSnapshot.VirtualMachines[0] -Depth 6 -Compress))
+        Assert-Tui -Condition ([string]$uiWorkerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$uiWorkerSnapshot.VirtualMachines[0].ProdicloudResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message ("The live TUI must import complete worker VM identity data. Snapshot={0}" -f (ConvertTo-Json -InputObject $uiWorkerSnapshot.VirtualMachines[0] -Depth 6 -Compress))
 
-        foreach ($choice in @('1','1','m','1','1','b','b','x','3','b','b','o','1','1','','5','x','b','b','2','b','3','b','q')) {
+        foreach ($choice in @('1','1','m','1','1','b','b','x','3','b','b','o','1','1','','5','x','2','1','c','2','2','c','b','b','2','b','3','b','q')) {
             $process.StandardInput.WriteLine([string]$choice)
         }
         $process.StandardInput.Close()
         if (-not $process.WaitForExit(90000)) {
             $process.Kill()
-            throw 'The real cg.cmd console session exceeded its 90-second timeout.'
+            throw 'The real pd.cmd console session exceeded its 90-second timeout.'
         }
         $process.WaitForExit()
         $stdoutTask.Wait()
@@ -1908,7 +1946,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $plainOutput = [regex]::Replace($stdout, '\x1B\[[0-9;?]*[ -/]*[@-~]', '')
         $netTrace = if (Test-Path -LiteralPath $netLogPath) { @(Get-Content -LiteralPath $netLogPath) -join '; ' } else { '(net shim was not called)' }
         $azTrace = if (Test-Path -LiteralPath $azLogPath) { @(Get-Content -LiteralPath $azLogPath) -join '; ' } else { '(az fixture was not called)' }
-        Assert-Tui -Condition ($process.ExitCode -eq 0) -Message ("cg.cmd returned {0}. Output: {1}; stderr: {2}; net: {3}; az: {4}" -f $process.ExitCode, $plainOutput, $stderr, $netTrace, $azTrace)
+        Assert-Tui -Condition ($process.ExitCode -eq 0) -Message ("pd.cmd returned {0}. Output: {1}; stderr: {2}; net: {3}; az: {4}" -f $process.ExitCode, $plainOutput, $stderr, $netTrace, $azTrace)
 
         foreach ($expectedText in @(
             'one tool for all common cloud operations',
@@ -1928,6 +1966,10 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Components of tui-fixture-vc',
             'VC Operations for tui-fixture-vc',
             '1. Power, status, and repair',
+            '1. Resize VM hardware',
+            '2. Resize VM disk',
+            'Processor type',
+            'Select a managed disk',
             'VM lifecycle status for ''tui-fixture-vc'' in group ''rg-tui-fixture-eastus-g1'':',
             'Press Enter to continue:',
             'p: PowerShell session',
@@ -1935,7 +1977,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
             'Cloud subscriptions',
             'TUI Fixture Subscription'
         )) {
-            Assert-Tui -Condition ($plainOutput.Contains($expectedText)) -Message ("Real cg.cmd output did not contain expected screen text: {0}. Process exit={1}; stdout={2}; stderr={3}; net={4}; az={5}" -f $expectedText,$process.ExitCode,$plainOutput,$stderr,$netTrace,$azTrace)
+            Assert-Tui -Condition ($plainOutput.Contains($expectedText)) -Message ("Real pd.cmd output did not contain expected screen text: {0}. Process exit={1}; stdout={2}; stderr={3}; net={4}; az={5}" -f $expectedText,$process.ExitCode,$plainOutput,$stderr,$netTrace,$azTrace)
         }
 
         $azLines = @(Get-Content -LiteralPath $azLogPath -ErrorAction Stop)
@@ -1943,15 +1985,15 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $groupInventoryReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)group\s+list(\s|$)' })
         $resourceInventoryReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)resource\s+list\s+--resource-group(\s|$)' })
         $vmInventoryReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)vm\s+list\s+--show-details(\s|$)' })
-        Assert-Tui -Condition ($groupInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must load the resource-group cache once at startup.'
-        Assert-Tui -Condition ($resourceInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must load each managed resource group once at startup.'
-        Assert-Tui -Condition ($vmInventoryReads.Count -eq 1) -Message 'The real cg.cmd process must cache VM detail and power state once for repeated screens.'
+        Assert-Tui -Condition ($groupInventoryReads.Count -eq 1) -Message 'The real pd.cmd process must load the resource-group cache once at startup.'
+        Assert-Tui -Condition ($resourceInventoryReads.Count -eq 1) -Message 'The real pd.cmd process must load each managed resource group once at startup.'
+        Assert-Tui -Condition ($vmInventoryReads.Count -eq 1) -Message 'The real pd.cmd process must cache VM detail and power state once for repeated screens.'
         $script:TuiTotalFixtureAzureReads += $azLines.Count
         $mutationPattern = '(?i)(^|\s)(create|update|delete|set|start|stop|restart|deallocate|resize|reapply|redeploy|attach|detach|power-off|run-command)(\s|$)'
         $guestValidationReads = @($azLines | Where-Object { $_ -match '(?i)(^|\s)vm\s+run-command\s+invoke(\s|$)' })
         Assert-Tui -Condition ($guestValidationReads.Count -eq 1 -and $guestValidationReads[0] -match 'Get-CimInstance' -and $guestValidationReads[0] -match 'SecondLevelAddressTranslationExtensions') -Message 'The real detail screen must run one fixture-only, read-only nested-virtualization guest check.'
         $mutatingFixtureCalls = @($azLines | Where-Object { $_ -match $mutationPattern -and $_ -notmatch '(?i)(^|\s)vm\s+run-command\s+invoke(\s|$)' })
-        Assert-Tui -Condition ($mutatingFixtureCalls.Count -eq 0) -Message ('The actual cg.cmd scenario attempted a blocked Azure mutation: {0}' -f ($mutatingFixtureCalls -join '; '))
+        Assert-Tui -Condition ($mutatingFixtureCalls.Count -eq 0) -Message ('The actual pd.cmd scenario attempted a blocked Azure mutation: {0}' -f ($mutatingFixtureCalls -join '; '))
         Assert-Tui -Condition ($stderr -notmatch 'Blocked Azure mutation attempted') -Message 'The Azure fixture must not report any attempted mutating command.'
 
         $workerCacheRoot = Join-Path $sandboxRoot 'worker-cache'
@@ -1971,14 +2013,14 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $workerInfo.RedirectStandardError = $true
         $workerInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
         $workerInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
-        $workerInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $workerAzLogPath
+        $workerInfo.EnvironmentVariables['PRODICLOUD_TUI_AZ_LOG'] = $workerAzLogPath
         $workerArguments = @(
-            '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $RepoRoot 'scripts\clagnos-cache-worker.ps1'),
+            '-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $RepoRoot 'scripts\prodicloud-cache-worker.ps1'),
             '-SubscriptionId','00000000-0000-4000-8000-000000000000','-CachePath',$workerCachePath,'-StatusPath',$workerStatusPath,
             '-RequestPath',$workerRequestPath,'-PackageRequestPath',$workerPackageRequestPath,'-StopPath',$workerStopPath,
             '-OwnerProcessId',[string]$PID,'-RepositoryRoot',$RepoRoot,'-Once'
         )
-        $workerInfo.Arguments = (@($workerArguments | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
+        $workerInfo.Arguments = (@($workerArguments | ForEach-Object { Convert-ProdicloudProcessArgument -Value ([string]$_) }) -join ' ')
         $workerProcess = New-Object System.Diagnostics.Process
         $workerProcess.StartInfo = $workerInfo
         [void]$workerProcess.Start()
@@ -1995,7 +2037,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         Assert-Tui -Condition ($workerProcess.ExitCode -eq 0) -Message ("The background cache worker returned {0}. stdout={1}; stderr={2}" -f $workerProcess.ExitCode,[string]$workerStdoutTask.Result,[string]$workerStderrTask.Result)
         $workerSnapshot = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerCachePath -Raw -ErrorAction Stop))
         Assert-Tui -Condition (@($workerSnapshot.Groups).Count -eq 1 -and @($workerSnapshot.VirtualMachines).Count -eq 1 -and @($workerSnapshot.Resources).Count -ge 5) -Message ("The background worker must atomically publish the managed inventory snapshot. Groups={0}; VMs={1}; Resources={2}; Snapshot={3}" -f @($workerSnapshot.Groups).Count,@($workerSnapshot.VirtualMachines).Count,@($workerSnapshot.Resources).Count,(ConvertTo-Json -InputObject $workerSnapshot -Depth 4 -Compress))
-        Assert-Tui -Condition ([string]$workerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$workerSnapshot.VirtualMachines[0].ClagnosResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message 'The background worker snapshot must preserve usable VM identity fields.'
+        Assert-Tui -Condition ([string]$workerSnapshot.VirtualMachines[0].name -eq 'tui-fixture-vc' -and [string]$workerSnapshot.VirtualMachines[0].ProdicloudResourceGroup -eq 'rg-tui-fixture-eastus-g1') -Message 'The background worker snapshot must preserve usable VM identity fields.'
         $workerStatus = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $workerStatusPath -Raw -ErrorAction Stop))
         Assert-Tui -Condition ([string]$workerStatus.State -eq 'ready') -Message 'The background worker must publish its completion state.'
         $workerAzLines = @(Get-Content -LiteralPath $workerAzLogPath -ErrorAction Stop)
@@ -2009,7 +2051,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
 
         $helpProcessInfo = New-Object System.Diagnostics.ProcessStartInfo
         $helpProcessInfo.FileName = Join-Path $systemRoot 'System32\cmd.exe'
-        $helpProcessInfo.Arguments = ('/d /s /c ""{0}" help resize"' -f (Join-Path $sandboxRoot 'cg.cmd'))
+        $helpProcessInfo.Arguments = ('/d /s /c ""{0}" help resize"' -f (Join-Path $sandboxRoot 'pd.cmd'))
         $helpProcessInfo.WorkingDirectory = $sandboxRoot
         $helpProcessInfo.UseShellExecute = $false
         $helpProcessInfo.CreateNoWindow = $true
@@ -2018,9 +2060,9 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $helpProcessInfo.RedirectStandardError = $true
         $helpProcessInfo.EnvironmentVariables['PATH'] = $pathParts -join ';'
         $helpProcessInfo.EnvironmentVariables['AZURE_CONFIG_DIR'] = Join-Path $sandboxRoot '.azure-fixture'
-        $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_DISABLE_BACKGROUND_CACHE_WORKER'] = '1'
-        $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_AZ_LOG'] = $azLogPath
-        $helpProcessInfo.EnvironmentVariables['CLAGNOS_TUI_NET_LOG'] = $netLogPath
+        $helpProcessInfo.EnvironmentVariables['PRODICLOUD_TUI_DISABLE_BACKGROUND_CACHE_WORKER'] = '1'
+        $helpProcessInfo.EnvironmentVariables['PRODICLOUD_TUI_AZ_LOG'] = $azLogPath
+        $helpProcessInfo.EnvironmentVariables['PRODICLOUD_TUI_NET_LOG'] = $netLogPath
         $helpProcess = New-Object System.Diagnostics.Process
         $helpProcess.StartInfo = $helpProcessInfo
         [void]$helpProcess.Start()
@@ -2029,15 +2071,15 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         $helpProcess.StandardInput.Close()
         if (-not $helpProcess.WaitForExit(30000)) {
             $helpProcess.Kill()
-            throw 'The cg.cmd resize-help argument passthrough exceeded its 30-second timeout.'
+            throw 'The pd.cmd resize-help argument passthrough exceeded its 30-second timeout.'
         }
         $helpProcess.WaitForExit()
         $helpStdoutTask.Wait()
         $helpStderrTask.Wait()
         $helpOutput = [string]$helpStdoutTask.Result
         $helpErrorOutput = [string]$helpStderrTask.Result
-        Assert-Tui -Condition ($helpProcess.ExitCode -eq 0 -and $helpOutput.Contains('Command: resize') -and $helpOutput.Contains('Usage:')) -Message ("cg.cmd did not preserve command-line help arguments. Exit={0}; output={1}; stderr={2}" -f $helpProcess.ExitCode,$helpOutput,$helpErrorOutput)
-        Assert-Tui -Condition ($helpErrorOutput -notmatch 'null-valued expression') -Message 'cg.cmd command mode must not fall through to the interactive TUI when arguments are supplied.'
+        Assert-Tui -Condition ($helpProcess.ExitCode -eq 0 -and $helpOutput.Contains('Command: resize') -and $helpOutput.Contains('Usage:')) -Message ("pd.cmd did not preserve command-line help arguments. Exit={0}; output={1}; stderr={2}" -f $helpProcess.ExitCode,$helpOutput,$helpErrorOutput)
+        Assert-Tui -Condition ($helpErrorOutput -notmatch 'null-valued expression') -Message 'pd.cmd command mode must not fall through to the interactive TUI when arguments are supplied.'
     }
     finally {
         if ($null -ne $process) {
@@ -2050,7 +2092,7 @@ Invoke-TuiTest -Name 'Real cg.cmd renders real console screens with fixture Azur
         if ($null -ne $helpProcess) { $helpProcess.Dispose() }
         $resolvedSandbox = [System.IO.Path]::GetFullPath($sandboxRoot)
         $resolvedTempBase = [System.IO.Path]::GetFullPath($tempBase).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
-        $expectedPrefix = $resolvedTempBase + 'clagnos-tui-e2e-'
+        $expectedPrefix = $resolvedTempBase + 'prodicloud-tui-e2e-'
         if (-not $resolvedSandbox.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
             throw ('Refusing to remove an unexpected TUI fixture path: {0}' -f $resolvedSandbox)
         }

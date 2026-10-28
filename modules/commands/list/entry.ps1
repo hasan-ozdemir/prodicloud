@@ -1,20 +1,20 @@
 # List command entry.
 
-function Invoke-ClagnosListCommand {
+function Invoke-ProdicloudListCommand {
     param(
         [hashtable]$Options
     )
 
-    $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot 'clagnos.env'
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Join-Path $repoRoot 'prodicloud.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $requestedTypes = @(Resolve-ClagnosListRequestedTypes -Options $Options)
+    $requestedTypes = @(Resolve-ProdicloudListRequestedTypes -Options $Options)
     $managedGroupRows = @()
     $groupRowsReference = if ($requestedTypes -contains 'group') { [ref]$managedGroupRows } else { $null }
-    $resourceGroups = @(Get-ClagnosListTargetResourceGroups -Options $Options -ConfigMap $configMap -ManagedGroupRows $groupRowsReference)
-    $subscriptionContext = Get-ClagnosResolvedSubscriptionContext
+    $resourceGroups = @(Get-ProdicloudListTargetResourceGroups -Options $Options -ConfigMap $configMap -ManagedGroupRows $groupRowsReference)
+    $subscriptionContext = Get-ProdicloudResolvedSubscriptionContext
 
-    Write-Host "Managed clagnos inventory:" -ForegroundColor Cyan
+    Write-Host "Managed prodicloud inventory:" -ForegroundColor Cyan
     if ($null -ne $subscriptionContext -and -not [string]::IsNullOrWhiteSpace([string]$subscriptionContext.SubscriptionId)) {
         $subscriptionDisplay = if ([string]::IsNullOrWhiteSpace([string]$subscriptionContext.SubscriptionName)) {
             [string]$subscriptionContext.SubscriptionId
@@ -30,7 +30,7 @@ function Invoke-ClagnosListCommand {
     }
 
     foreach ($typeName in @($requestedTypes)) {
-        $rows = @(Get-ClagnosListSectionRows -TypeName ([string]$typeName) -ResourceGroups @($resourceGroups) -ConfigMap $configMap -ManagedGroupRows @($managedGroupRows))
+        $rows = @(Get-ProdicloudListSectionRows -TypeName ([string]$typeName) -ResourceGroups @($resourceGroups) -ConfigMap $configMap -ManagedGroupRows @($managedGroupRows))
         Write-Host ""
         Write-Host ("{0}:" -f ([string]$typeName).ToUpperInvariant()) -ForegroundColor Cyan
         if (@($rows).Count -eq 0) {

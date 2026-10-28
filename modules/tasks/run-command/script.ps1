@@ -1,7 +1,7 @@
 # Run-command script preparation helpers.
 
-# Handles Resolve-ClagnosRunCommandScriptText.
-function Resolve-ClagnosRunCommandScriptText {
+# Handles Resolve-ProdicloudRunCommandScriptText.
+function Resolve-ProdicloudRunCommandScriptText {
     param(
         [string]$ScriptText
     )
@@ -21,8 +21,8 @@ function Resolve-ClagnosRunCommandScriptText {
     return $ScriptText
 }
 
-# Handles Get-ClagnosRunCommandScriptArgs.
-function Get-ClagnosRunCommandScriptArgs {
+# Handles Get-ProdicloudRunCommandScriptArgs.
+function Get-ProdicloudRunCommandScriptArgs {
     param(
         [string]$ScriptText,
         [string]$CommandId
@@ -36,7 +36,7 @@ function Get-ClagnosRunCommandScriptArgs {
         return @($ScriptText)
     }
 
-    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'clagnos-run-command'
+    $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'prodicloud-run-command'
     if (-not (Test-Path -LiteralPath $tempRoot)) {
         [void](New-Item -ItemType Directory -Path $tempRoot -Force)
     }

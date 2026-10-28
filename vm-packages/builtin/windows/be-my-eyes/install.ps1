@@ -5,12 +5,12 @@ $taskConfig = [ordered]@{
     TaskName = '118-install-be-my-eyes-application-application'
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    HelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
-    StoreHelperPath = 'C:\Windows\Temp\clagnos-store-install-state.psm1'
-    PortableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    HelperPath = 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
+    StoreHelperPath = 'C:\Windows\Temp\prodicloud-store-install-state.psm1'
+    PortableWingetPath = 'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
     StoreProductId = '9MSW46LTDWGF'
     InteractiveTaskSuffix = 'interactive-install'
-    LegacyRunOnceName = 'ClagnosInstallBeMyEyes'
+    LegacyRunOnceName = 'ProdicloudInstallBeMyEyes'
     WaitTimeoutSeconds = 240
 }
 
@@ -96,29 +96,29 @@ function Get-BeMyEyesInstallState {
     }
 }
 
-Invoke-ClagnosRefreshSessionPath
+Invoke-ProdicloudRefreshSessionPath
 $existingState = Get-BeMyEyesInstallState
 if ([bool]$existingState.Healthy) {
-    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    Remove-ProdicloudRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+    $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     Write-Host 'install-be-my-eyes-application-completed'
     Write-Host 'Update task completed: install-be-my-eyes-application'
     return
 }
 
-$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
+$wingetExe = Resolve-ProdicloudWingetExe -PortableCandidate ([string]$taskConfig.PortableWingetPath)
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
 
-if (Test-ClagnosRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
-    Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+if (Test-ProdicloudRunOnceEntryPresent -Name ([string]$taskConfig.LegacyRunOnceName)) {
+    Remove-ProdicloudRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
     Write-Host 'store-install-cleanup => task=118-install-be-my-eyes-application-application; removed-stale-run-once=True'
 }
 
 $workerTaskName = "{0}-{1}" -f $taskName, ([string]$taskConfig.InteractiveTaskSuffix)
-$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
+$paths = Get-ProdicloudInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -161,10 +161,10 @@ function Test-BeMyEyesInstalled {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-BeMyEyesAppId)))
 }
 
-Invoke-ClagnosRefreshSessionPath
-$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ProdicloudRefreshSessionPath
+$wingetExe = Resolve-ProdicloudWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -173,17 +173,17 @@ if (-not (Test-BeMyEyesInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-BeMyEyesInstalled)) {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Be My Eyes install could not be verified after unattended WinGet install.'
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Be My Eyes install could not be verified after unattended WinGet install.'
     exit 1
 }
 
-Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Be My Eyes is installed.'
+Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Be My Eyes is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
@@ -194,7 +194,7 @@ $workerScript = $workerScript.Replace('__STORE_PRODUCT_ID__', $storeProductId)
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', [string]$taskConfig.PortableWingetPath)
 
 try {
-    $null = Invoke-ClagnosInteractiveDesktopAutomation `
+    $null = Invoke-ProdicloudInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -203,34 +203,34 @@ try {
         -RunAsMode 'password'
 }
 catch {
-    Invoke-ClagnosRefreshSessionPath
+    Invoke-ProdicloudRefreshSessionPath
     $catchState = Get-BeMyEyesInstallState
     if ([bool]$catchState.Healthy) {
-        Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ProdicloudRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+        $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         Write-Host 'install-be-my-eyes-application-completed'
         Write-Host 'Update task completed: install-be-my-eyes-application'
         return
     }
 
     $installError = [string]$_.Exception.Message
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended Be My Eyes install failed: {0}' -f $installError) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended Be My Eyes install failed: {0}' -f $installError) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }
 
-Invoke-ClagnosRefreshSessionPath
+Invoke-ProdicloudRefreshSessionPath
 $finalState = Get-BeMyEyesInstallState
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes is present but not yet launch-ready via a stable AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State degraded -Summary ('Be My Eyes is present but not yet launch-ready via a stable AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw 'Be My Eyes install could not be verified.'
 }
 
-Remove-ClagnosRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
-$stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+Remove-ProdicloudRunOnceEntry -Name ([string]$taskConfig.LegacyRunOnceName)
+$stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State installed -Summary ('Be My Eyes is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $storeProductId -RunOnceName ([string]$taskConfig.LegacyRunOnceName) -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
 Write-Host 'install-be-my-eyes-application-completed'
 Write-Host 'Update task completed: install-be-my-eyes-application'
 

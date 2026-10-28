@@ -12,10 +12,10 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $script:SetupRepoRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path
-$script:SetupGlobalEnvPath = Join-Path $script:SetupRepoRoot 'clagnos.env'
+$script:SetupGlobalEnvPath = Join-Path $script:SetupRepoRoot 'prodicloud.env'
 $script:SetupVmName = $VmName.Trim().ToLowerInvariant()
 $script:SetupVmEnvPath = Join-Path $script:SetupRepoRoot ($script:SetupVmName + '.env')
-$script:SetupLauncherPath = Join-Path $script:SetupRepoRoot 'cg.cmd'
+$script:SetupLauncherPath = Join-Path $script:SetupRepoRoot 'pd.cmd'
 $script:SetupVmRegion = ''
 $script:SetupVmSize = ''
 $script:SetupVmDiskSizeGb = 0
@@ -34,7 +34,7 @@ $script:SetupResourceGroup = ''
 $script:SetupDidPushLocation = $false
 $script:SetupFailed = $false
 $script:SetupPackageWarnings = @()
-$script:SetupTranscriptPath = Join-Path (Join-Path $script:SetupRepoRoot '.logs') ('clagnos-setup-' + $script:SetupVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
+$script:SetupTranscriptPath = Join-Path (Join-Path $script:SetupRepoRoot '.logs') ('prodicloud-setup-' + $script:SetupVmName + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 $script:SetupTranscriptStarted = $false
 
 function Write-SetupDoing {
@@ -237,7 +237,7 @@ function Assert-SetupDnsLabelAvailable {
     if (-not [bool]$availability.available) {
         $reason = [string]$availability.reason
         if ([string]::IsNullOrWhiteSpace($reason)) { $reason = 'label already in use' }
-        throw ("Azure DNS label '{0}.{1}.cloudapp.azure.com' is unavailable ({2}). Choose a different VM name; Clagnos will not add a numeric DNS suffix." -f $Label,$Location,$reason)
+        throw ("Azure DNS label '{0}.{1}.cloudapp.azure.com' is unavailable ({2}). Choose a different VM name; Prodicloud will not add a numeric DNS suffix." -f $Label,$Location,$reason)
     }
 }
 
@@ -255,7 +255,7 @@ function Invoke-SetupCg {
     Write-SetupDoing $Action
     & $script:SetupLauncherPath @Arguments
     $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) { throw ("cg.cmd failed while attempting to {0} (exit {1})." -f $Action,$exitCode) }
+    if ($exitCode -ne 0) { throw ("pd.cmd failed while attempting to {0} (exit {1})." -f $Action,$exitCode) }
 }
 
 function Invoke-SetupCgRedacted {
@@ -266,7 +266,7 @@ function Invoke-SetupCgRedacted {
         Write-Host $safeLine
     }
     $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) { throw ("cg.cmd failed while attempting to {0} (exit {1})." -f $Action,$exitCode) }
+    if ($exitCode -ne 0) { throw ("pd.cmd failed while attempting to {0} (exit {1})." -f $Action,$exitCode) }
 }
 
 function Invoke-SetupCgCaptured {
@@ -293,7 +293,7 @@ function Get-SetupPackageStatus {
         $safeLine = [regex]::Replace([string]$line,'(?i)(password|credential|secret|token|pass)(\s*[:=]\s*)\S+','$1$2[redacted]')
         Write-Host $safeLine
     }
-    if ($exitCode -ne 0) { throw ("cg.cmd failed while checking {0} status (exit {1})." -f $DisplayName,$exitCode) }
+    if ($exitCode -ne 0) { throw ("pd.cmd failed while checking {0} status (exit {1})." -f $DisplayName,$exitCode) }
     $statusLine = @($output | Where-Object { [string]$_ -match ('(?i)^\s*' + [regex]::Escape($DisplayName) + ':') } | Select-Object -Last 1)
     if ($statusLine.Count -ne 1) { throw ("Package status output did not include '{0}'." -f $DisplayName) }
     if ([string]$statusLine[0] -match '(?i)\bnot[- ]installed\b') { return 'not-installed' }
@@ -333,7 +333,7 @@ function Get-SetupSha256Hash {
 }
 
 function Stage-SetupAnyDeskInstaller {
-    $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-' + $script:SetupVmName + '-anydesk')
+    $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-' + $script:SetupVmName + '-anydesk')
     if (-not (Test-Path -LiteralPath $stagingRoot -PathType Container)) { New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null }
     $localInstaller = Join-Path $stagingRoot 'AnyDesk.exe'
     if (-not (Test-Path -LiteralPath $localInstaller -PathType Leaf)) {
@@ -347,8 +347,8 @@ function Stage-SetupAnyDeskInstaller {
         throw 'The downloaded AnyDesk installer did not pass the expected valid Authenticode publisher and product checks.'
     }
 
-    if (-not (Get-Command New-ClagnosPowerShellRemotingSession -ErrorAction SilentlyContinue)) {
-        $backendPath = Join-Path $script:SetupRepoRoot 'clagnos.ps1'
+    if (-not (Get-Command New-ProdicloudPowerShellRemotingSession -ErrorAction SilentlyContinue)) {
+        $backendPath = Join-Path $script:SetupRepoRoot 'prodicloud.ps1'
         $null = . $backendPath
     }
     $vmEndpoint = Invoke-SetupAzJson -Arguments @('vm','show','--resource-group',$script:SetupResourceGroup,'--name',$script:SetupVmName,'--subscription',$script:SetupSubscriptionId,'-d','--output','json','--only-show-errors') -Action ("resolve FQDN for WinRM staging to VM '{0}'" -f $script:SetupVmName)
@@ -358,17 +358,17 @@ function Stage-SetupAnyDeskInstaller {
     $managerUser = (Get-SetupEnvValue -Key 'VM_ADMIN_USER').Trim()
     $managerPassword = Get-SetupEnvValue -Key 'VM_ADMIN_PASS'
     if ([string]::IsNullOrWhiteSpace($managerUser) -or [string]::IsNullOrWhiteSpace($managerPassword)) { throw ("WinRM staging requires the manager credential in local '{0}'." -f [System.IO.Path]::GetFileName($script:SetupVmEnvPath)) }
-    if (Get-Command Add-ClagnosPackageTrustedHost -ErrorAction SilentlyContinue) { Add-ClagnosPackageTrustedHost -HostName $connectionHost }
+    if (Get-Command Add-ProdicloudPackageTrustedHost -ErrorAction SilentlyContinue) { Add-ProdicloudPackageTrustedHost -HostName $connectionHost }
     $connectionRuntime = [pscustomobject]@{
         ConnectionHost = $connectionHost
-        VmPowerShellPort = [string](Get-ClagnosDefaultPowerShellPortText)
+        VmPowerShellPort = [string](Get-ProdicloudDefaultPowerShellPortText)
         SelectedUserName = $managerUser
         SelectedPassword = $managerPassword
     }
     $session = $null
-    $remoteInstaller = 'C:/Windows/Temp/clagnos-anydesk-verified.exe'
+    $remoteInstaller = 'C:/Windows/Temp/prodicloud-anydesk-verified.exe'
     try {
-        $session = New-ClagnosPowerShellRemotingSession -Runtime $connectionRuntime
+        $session = New-ProdicloudPowerShellRemotingSession -Runtime $connectionRuntime
         Write-SetupDoing ("copy the signature-verified AnyDesk installer to VM '{0}' through the authenticated WinRM session" -f $script:SetupVmName)
         Copy-Item -LiteralPath $localInstaller -Destination $remoteInstaller -ToSession $session -Force -ErrorAction Stop
         Write-SetupDoing ("verify the staged AnyDesk file SHA256 and publisher metadata on VM '{0}'" -f $script:SetupVmName)
@@ -405,8 +405,8 @@ function Get-SetupManagedVm {
         $vm = $matches[0]
         $groupName = [string]$vm.resourceGroup
         if ([string]::IsNullOrWhiteSpace($groupName)) { throw ("Azure did not report a resource group for VM '{0}'." -f $script:SetupVmName) }
-        $group = Invoke-SetupAzJson -Arguments @('group','show','--name',$groupName,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("verify resource group '{0}' is Clagnos-managed" -f $groupName)
-        if ([string]$group.tags.'managed-by' -notin @('clagnos','az-vm')) { throw ("VM '{0}' is in resource group '{1}', which is not marked as Clagnos-managed; refusing to operate on it." -f $script:SetupVmName,$groupName) }
+        $group = Invoke-SetupAzJson -Arguments @('group','show','--name',$groupName,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("verify resource group '{0}' is Prodicloud-managed" -f $groupName)
+        if ([string]$group.tags.'managed-by' -notin @('prodicloud','prodicloud')) { throw ("VM '{0}' is in resource group '{1}', which is not marked as Prodicloud-managed; refusing to operate on it." -f $script:SetupVmName,$groupName) }
         $script:SetupResourceGroup = $groupName
         if (-not [string]::Equals((Get-SetupEnvValue -Key 'SELECTED_RESOURCE_GROUP'),$groupName,[System.StringComparison]::OrdinalIgnoreCase)) { Set-SetupEnvValue -Key 'SELECTED_RESOURCE_GROUP' -Value $groupName }
         return [pscustomobject]@{ Vm = $vm; Group = $group; IsPartial = $false }
@@ -416,8 +416,8 @@ function Get-SetupManagedVm {
     if ([string]::IsNullOrWhiteSpace($configuredGroup)) { return $null }
     $exists = Invoke-SetupAzText -Arguments @('group','exists','--name',$configuredGroup,'--subscription',$script:SetupSubscriptionId,'--output','tsv','--only-show-errors') -Action ("check configured group '{0}' for an interrupted setup" -f $configuredGroup)
     if (-not [string]::Equals($exists,'true',[System.StringComparison]::OrdinalIgnoreCase)) { return $null }
-    $group = Invoke-SetupAzJson -Arguments @('group','show','--name',$configuredGroup,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("verify partial resource group '{0}' is Clagnos-managed" -f $configuredGroup)
-    if ([string]$group.tags.'managed-by' -notin @('clagnos','az-vm')) { throw ("Configured group '{0}' is not marked as Clagnos-managed; refusing to reuse or remove it." -f $configuredGroup) }
+    $group = Invoke-SetupAzJson -Arguments @('group','show','--name',$configuredGroup,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("verify partial resource group '{0}' is Prodicloud-managed" -f $configuredGroup)
+    if ([string]$group.tags.'managed-by' -notin @('prodicloud','prodicloud')) { throw ("Configured group '{0}' is not marked as Prodicloud-managed; refusing to reuse or remove it." -f $configuredGroup) }
     $resources = Invoke-SetupAzJson -Arguments @('resource','list','--resource-group',$configuredGroup,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("inspect partial resources in '{0}'" -f $configuredGroup)
     $script:SetupResourceGroup = $configuredGroup
     return [pscustomobject]@{ Vm = $null; Group = $group; Resources = @($resources); IsPartial = $true }
@@ -489,7 +489,7 @@ function Get-SetupNetworkState {
     $profileUpdates = [ordered]@{}
     $nicReferences = @($Vm.networkProfile.networkInterfaces)
     if ($nicReferences.Count -ne 1) {
-        [void]$reasons.Add(("VM network interface count is {0}; exactly one Clagnos-managed NIC is expected" -f $nicReferences.Count))
+        [void]$reasons.Add(("VM network interface count is {0}; exactly one Prodicloud-managed NIC is expected" -f $nicReferences.Count))
         return [pscustomobject]@{ DriftReasons = @($reasons.ToArray()); ProfileUpdates = $profileUpdates }
     }
 
@@ -567,7 +567,7 @@ function Get-SetupNetworkState {
     if (-not [string]::IsNullOrWhiteSpace($publicIpName)) {
         $publicIp = Invoke-SetupAzJson -Arguments @('network','public-ip','show','--resource-group',$script:SetupResourceGroup,'--name',$publicIpName,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("verify public IP '{0}' SKU, allocation, and DNS" -f $publicIpName)
         if (-not [string]::Equals([string]$publicIp.sku.name,'Standard',[System.StringComparison]::OrdinalIgnoreCase) -or -not [string]::Equals([string]$publicIp.publicIPAllocationMethod,'Static',[System.StringComparison]::OrdinalIgnoreCase) -or [string]::IsNullOrWhiteSpace([string]$publicIp.dnsSettings.domainNameLabel)) {
-            [void]$reasons.Add('public IP must remain Standard, static, and have its Clagnos DNS label')
+            [void]$reasons.Add('public IP must remain Standard, static, and have its Prodicloud DNS label')
         }
         else {
             $networkState | Add-Member -NotePropertyName PublicIp -NotePropertyValue $publicIp -Force
@@ -721,7 +721,7 @@ function Invoke-SetupRemoveTarget {
 
 try {
     Assert-SetupElevatedSession
-    if (-not (Test-Path -LiteralPath $script:SetupGlobalEnvPath -PathType Leaf)) { throw "Local clagnos.env was not found. Run cg.cmd configure and select an Azure subscription before setup." }
+    if (-not (Test-Path -LiteralPath $script:SetupGlobalEnvPath -PathType Leaf)) { throw "Local prodicloud.env was not found. Run pd.cmd configure and select an Azure subscription before setup." }
     if (-not (Test-Path -LiteralPath $script:SetupVmEnvPath -PathType Leaf)) {
         $vmTemplate = Join-Path $script:SetupRepoRoot 'vc.env.example'
         if (-not (Test-Path -LiteralPath $vmTemplate -PathType Leaf)) { throw 'vc.env.example was not found.' }
@@ -729,7 +729,7 @@ try {
         Set-SetupEnvValue -Key 'SELECTED_VM_NAME' -Value $script:SetupVmName
     }
     Sync-SetupVmProfileSchema
-    if (-not (Test-Path -LiteralPath $script:SetupLauncherPath -PathType Leaf)) { throw "cg.cmd was not found at the repository root." }
+    if (-not (Test-Path -LiteralPath $script:SetupLauncherPath -PathType Leaf)) { throw "pd.cmd was not found at the repository root." }
     Initialize-SetupDesiredConfiguration
     Push-Location $script:SetupRepoRoot
     $script:SetupDidPushLocation = $true
@@ -739,7 +739,7 @@ try {
     Write-Host ("Setup transcript: {0}" -f $script:SetupTranscriptPath) -ForegroundColor DarkGray
 
     $script:SetupSubscriptionId = if (-not [string]::IsNullOrWhiteSpace($SubscriptionId)) { $SubscriptionId.Trim() } else { (Get-SetupEnvValue -Key 'SELECTED_AZURE_SUBSCRIPTION_ID').Trim() }
-    if ([string]::IsNullOrWhiteSpace($script:SetupSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in clagnos.env or pass -SubscriptionId.' }
+    if ([string]::IsNullOrWhiteSpace($script:SetupSubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in prodicloud.env or pass -SubscriptionId.' }
     $account = Invoke-SetupAzJson -Arguments @('account','show','--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action 'verify Azure CLI authentication and selected subscription'
     if (-not [string]::Equals([string]$account.id,$script:SetupSubscriptionId,[System.StringComparison]::OrdinalIgnoreCase)) {
         throw 'Azure CLI returned a subscription id that does not match the requested setup subscription.'
@@ -863,7 +863,7 @@ try {
 
     Invoke-SetupConnectionChecks
     Invoke-SetupCg -Arguments @('do','--vm-action=status','--group',$script:SetupResourceGroup,'--vm-name',$script:SetupVmName,'--subscription-id',$script:SetupSubscriptionId) -Action ("verify final Azure status for VM '{0}'" -f $script:SetupVmName)
-    Invoke-SetupCgRedacted -Arguments @('show','--group',$script:SetupResourceGroup,'--vm-name',$script:SetupVmName,'--subscription-id',$script:SetupSubscriptionId) -Action ("review final Clagnos summary for VM '{0}'" -f $script:SetupVmName)
+    Invoke-SetupCgRedacted -Arguments @('show','--group',$script:SetupResourceGroup,'--vm-name',$script:SetupVmName,'--subscription-id',$script:SetupSubscriptionId) -Action ("review final Prodicloud summary for VM '{0}'" -f $script:SetupVmName)
 
     $finalVm = Invoke-SetupAzJson -Arguments @('vm','show','--resource-group',$script:SetupResourceGroup,'--name',$script:SetupVmName,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("read final VM properties for '{0}'" -f $script:SetupVmName)
     $finalDisk = Invoke-SetupAzJson -Arguments @('disk','show','--resource-group',$script:SetupResourceGroup,'--name',[string]$finalVm.storageProfile.osDisk.name,'--subscription',$script:SetupSubscriptionId,'--output','json','--only-show-errors') -Action ("read final OS disk properties for '{0}'" -f $script:SetupVmName)

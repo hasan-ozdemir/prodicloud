@@ -1,10 +1,10 @@
 $ErrorActionPreference = 'Stop'
 Write-Output 'Doing: install GitHub CLI through its Chocolatey package'
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
@@ -25,7 +25,7 @@ foreach ($root in @(
     $relativePath = if ([string]::Equals([string]$root,[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData),[System.StringComparison]::OrdinalIgnoreCase)) { 'Programs\GitHub CLI\gh.exe' } else { 'GitHub CLI\gh.exe' }
     $ghExecutablePaths += Join-Path ([string]$root) $relativePath
 }
-$ghRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId 'gh' -ExecutableName 'gh.exe' -VersionArgument '--version' -AdditionalPaths $ghExecutablePaths
+$ghRecord = Get-ProdicloudChocolateyPackageExecutableRecord -PackageId 'gh' -ExecutableName 'gh.exe' -VersionArgument '--version' -AdditionalPaths $ghExecutablePaths
 if ([string]$ghRecord.Status -ne 'installed') {
     throw ("GitHub CLI installation did not produce a runnable gh.exe. {0}" -f [string]$ghRecord.Detail)
 }

@@ -1,5 +1,5 @@
 # 'perf' option binding for 'resize'.
 
-function Get-ClagnosResizePerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudResizePerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

@@ -1,5 +1,5 @@
 # 'perf' option binding for 'create'.
 
-function Get-ClagnosCreatePerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudCreatePerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

@@ -1,5 +1,5 @@
 # Shared 'list' command option specification.
 
-function Get-ClagnosSharedListOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'list')
+function Get-ProdicloudSharedListOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'list')
 }

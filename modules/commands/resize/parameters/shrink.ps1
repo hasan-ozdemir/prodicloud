@@ -1,5 +1,5 @@
 # 'shrink' option binding for 'resize'.
 
-function Get-ClagnosResizeShrinkOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'shrink')
+function Get-ProdicloudResizeShrinkOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'shrink')
 }

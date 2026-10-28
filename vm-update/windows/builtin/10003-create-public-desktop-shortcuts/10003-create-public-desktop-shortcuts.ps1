@@ -42,9 +42,9 @@ $unresolvedCompanyWebAddressToken = ('__' + 'SELECTED_COMPANY_WEB_ADDRESS' + '__
 $unresolvedCompanyEmailAddressToken = ('__' + 'SELECTED_COMPANY_EMAIL_ADDRESS' + '__')
 $unresolvedEmployeeEmailAddressToken = ('__' + 'SELECTED_EMPLOYEE_EMAIL_ADDRESS' + '__')
 $unresolvedEmployeeFullNameToken = ('__' + 'SELECTED_EMPLOYEE_FULL_NAME' + '__')
-$storeHelperPath = 'C:\Windows\Temp\clagnos-store-install-state.psm1'
-$launcherHelperPath = 'C:\Windows\Temp\clagnos-shortcut-launcher.psm1'
-$interactiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+$storeHelperPath = 'C:\Windows\Temp\prodicloud-store-install-state.psm1'
+$launcherHelperPath = 'C:\Windows\Temp\prodicloud-shortcut-launcher.psm1'
+$interactiveHelperPath = 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
 # Use the direct .lnk target+arguments form until the combined invocation exceeds
 # the practical shortcut-length ceiling; only then emit a managed launcher script.
 $managedShortcutInvocationThreshold = 259
@@ -226,13 +226,13 @@ function Resolve-OptionalShortcutUrl {
 }
 
 if (Test-InvalidCompanyName -Value $companyName) {
-    throw "SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow. Set SELECTED_COMPANY_NAME in clagnos.env before running 10002-create-public-desktop-shortcuts."
+    throw "SELECTED_COMPANY_NAME is required for the Windows business public desktop shortcut flow. Set SELECTED_COMPANY_NAME in prodicloud.env before running 10002-create-public-desktop-shortcuts."
 }
 if (Test-InvalidEmployeeEmailAddress -Value $employeeEmailAddress) {
-    throw "SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_EMAIL_ADDRESS in clagnos.env before running 10002-create-public-desktop-shortcuts."
+    throw "SELECTED_EMPLOYEE_EMAIL_ADDRESS is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_EMAIL_ADDRESS in prodicloud.env before running 10002-create-public-desktop-shortcuts."
 }
 if (Test-InvalidEmployeeFullName -Value $employeeFullName) {
-    throw "SELECTED_EMPLOYEE_FULL_NAME is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_FULL_NAME in clagnos.env before running 10002-create-public-desktop-shortcuts."
+    throw "SELECTED_EMPLOYEE_FULL_NAME is required for the Windows public desktop shortcut flow. Set SELECTED_EMPLOYEE_FULL_NAME in prodicloud.env before running 10002-create-public-desktop-shortcuts."
 }
 
 $companyName = $companyName.Trim()
@@ -301,10 +301,10 @@ function Get-EdgeArgsPrefix {
     return ('--new-window --start-maximized --user-data-dir="{0}" --profile-directory="{1}"' -f $publicEdgeUserDataDir, $profileDirectory)
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-CommandPath {
@@ -837,7 +837,7 @@ function Ensure-ManagedUserStoreAppRegistration {
         [string[]]$PackageNameHints = @()
     )
 
-    if (-not (Get-Command Invoke-ClagnosUserAppxRegistrationRepair -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command Invoke-ProdicloudUserAppxRegistrationRepair -ErrorAction SilentlyContinue)) {
         return
     }
 
@@ -883,7 +883,7 @@ function Ensure-ManagedUserStoreAppRegistration {
                 [pscustomobject]@{ WaitTimeoutSeconds = 90; HeartbeatSeconds = 15 }
             )) {
                 try {
-                    $result = Invoke-ClagnosUserAppxRegistrationRepair `
+                    $result = Invoke-ProdicloudUserAppxRegistrationRepair `
                         -TaskName $registrationTaskName `
                         -RunAsUser ([string]$registrationTarget.UserName) `
                         -RunAsPassword ([string]$registrationTarget.Password) `
@@ -1287,7 +1287,7 @@ function ConvertTo-ManagedShortcutLauncherSpec {
         return $null
     }
 
-    if (-not (Get-Command Test-ClagnosShortcutNeedsManagedLauncher -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command Test-ProdicloudShortcutNeedsManagedLauncher -ErrorAction SilentlyContinue)) {
         return $Spec
     }
 
@@ -1295,15 +1295,15 @@ function ConvertTo-ManagedShortcutLauncherSpec {
     $effectiveArguments = Get-ShortcutEffectiveArguments -Spec $Spec
     $effectiveWorkingDirectory = Get-ShortcutEffectiveWorkingDirectory -Spec $Spec
 
-    if (-not (Test-ClagnosShortcutNeedsManagedLauncher -TargetPath $effectiveTargetPath -Arguments $effectiveArguments -Threshold $managedShortcutInvocationThreshold)) {
+    if (-not (Test-ProdicloudShortcutNeedsManagedLauncher -TargetPath $effectiveTargetPath -Arguments $effectiveArguments -Threshold $managedShortcutInvocationThreshold)) {
         return $Spec
     }
 
-    $launcherPath = Get-ClagnosShortcutLauncherFilePath -ShortcutName ([string]$Spec.Name) -Subdirectory 'public-desktop'
+    $launcherPath = Get-ProdicloudShortcutLauncherFilePath -ShortcutName ([string]$Spec.Name) -Subdirectory 'public-desktop'
     $wrappedSpec = [pscustomobject]@{
         Name = [string]$Spec.Name
         TargetPath = [string]$cmdExe
-        Arguments = (Get-ClagnosShortcutLauncherInvocationArguments -LauncherPath $launcherPath)
+        Arguments = (Get-ProdicloudShortcutLauncherInvocationArguments -LauncherPath $launcherPath)
         WorkingDirectory = [string](Split-Path -Path $launcherPath -Parent)
         EffectiveTargetPath = [string]$effectiveTargetPath
         EffectiveArguments = [string]$effectiveArguments
@@ -1355,7 +1355,7 @@ function New-ShortcutFromSpec {
             throw ("Managed launcher path is empty for '{0}'." -f $name)
         }
 
-        Write-ClagnosShortcutLauncherFile `
+        Write-ProdicloudShortcutLauncherFile `
             -LauncherPath $launcherPath `
             -TargetPath (Get-ShortcutEffectiveTargetPath -Spec $Spec) `
             -Arguments (Get-ShortcutEffectiveArguments -Spec $Spec) `
@@ -1583,11 +1583,11 @@ function New-StoreAppShortcutSpec {
 function Read-StoreTaskStateRecord {
     param([string]$TaskName)
 
-    if ([string]::IsNullOrWhiteSpace([string]$TaskName) -or -not (Get-Command Read-ClagnosStoreInstallState -ErrorAction SilentlyContinue)) {
+    if ([string]::IsNullOrWhiteSpace([string]$TaskName) -or -not (Get-Command Read-ProdicloudStoreInstallState -ErrorAction SilentlyContinue)) {
         return $null
     }
 
-    return (Read-ClagnosStoreInstallState -TaskName $TaskName)
+    return (Read-ProdicloudStoreInstallState -TaskName $TaskName)
 }
 
 function Add-StoreManagedShortcutSpec {
@@ -1657,8 +1657,8 @@ function Get-NormalizedShortcutNameKey {
         return ""
     }
 
-    if (Get-Command Get-ClagnosShortcutNormalizedKey -ErrorAction SilentlyContinue) {
-        return (Get-ClagnosShortcutNormalizedKey -Value $Value)
+    if (Get-Command Get-ProdicloudShortcutNormalizedKey -ErrorAction SilentlyContinue) {
+        return (Get-ProdicloudShortcutNormalizedKey -Value $Value)
     }
 
     return ([regex]::Replace($Value.Trim().ToLowerInvariant(), '[^a-z0-9]+', ''))
@@ -1711,8 +1711,8 @@ function Test-ShortcutDetailsMatchManagedSpec {
     }
 
     $existingNameKey = Get-NormalizedShortcutNameKey -Value $ShortcutBaseName
-    $actualInvocation = if (Get-Command Get-ClagnosShortcutResolvedInvocation -ErrorAction SilentlyContinue) {
-        Get-ClagnosShortcutResolvedInvocation -TargetPath ([string]$Details.TargetPath) -Arguments ([string]$Details.Arguments) -WorkingDirectory ([string]$Details.WorkingDirectory)
+    $actualInvocation = if (Get-Command Get-ProdicloudShortcutResolvedInvocation -ErrorAction SilentlyContinue) {
+        Get-ProdicloudShortcutResolvedInvocation -TargetPath ([string]$Details.TargetPath) -Arguments ([string]$Details.Arguments) -WorkingDirectory ([string]$Details.WorkingDirectory)
     }
     else {
         [pscustomobject]@{
@@ -2474,7 +2474,7 @@ $managedUserDesktopRoots = @(
     "C:\Users\Default\Desktop"
 )
 $stagingRoot = ''
-$publicDesktopLauncherRoot = if (Get-Command Get-ClagnosShortcutLauncherRoot -ErrorAction SilentlyContinue) { Get-ClagnosShortcutLauncherRoot -Subdirectory 'public-desktop' } else { '' }
+$publicDesktopLauncherRoot = if (Get-Command Get-ProdicloudShortcutLauncherRoot -ErrorAction SilentlyContinue) { Get-ProdicloudShortcutLauncherRoot -Subdirectory 'public-desktop' } else { '' }
 $publicDesktopAlreadyNormalized = Test-PublicDesktopAlreadyNormalized -PublicDesktopPath $publicDesktop -Specs $shortcutSpecs -OwnedShortcutNames $ownedManagedShortcutNames
 
 try {
@@ -2482,7 +2482,7 @@ try {
         Write-Host "public-desktop-normalized: no changes required"
     }
     else {
-        $stagingRoot = Join-Path $env:TEMP ("clagnos-public-desktop-" + [guid]::NewGuid().ToString("N"))
+        $stagingRoot = Join-Path $env:TEMP ("prodicloud-public-desktop-" + [guid]::NewGuid().ToString("N"))
         Ensure-Directory -Path $stagingRoot
         if (-not [string]::IsNullOrWhiteSpace([string]$publicDesktopLauncherRoot) -and (Test-Path -LiteralPath $publicDesktopLauncherRoot)) {
             Remove-Item -LiteralPath $publicDesktopLauncherRoot -Recurse -Force -ErrorAction SilentlyContinue

@@ -1,5 +1,5 @@
 # 'help' option binding for 'configure'.
 
-function Get-ClagnosConfigureHelpOptionSpecification {
-    return (Get-ClagnosSharedHelpOptionSpecification)
+function Get-ProdicloudConfigureHelpOptionSpecification {
+    return (Get-ProdicloudSharedHelpOptionSpecification)
 }

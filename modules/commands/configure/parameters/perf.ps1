@@ -1,5 +1,5 @@
 # 'perf' option binding for 'configure'.
 
-function Get-ClagnosConfigurePerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudConfigurePerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

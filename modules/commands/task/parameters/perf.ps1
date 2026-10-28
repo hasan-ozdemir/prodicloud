@@ -1,5 +1,5 @@
 # 'perf' option binding for 'task'.
 
-function Get-ClagnosTaskPerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudTaskPerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

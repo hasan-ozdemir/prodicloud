@@ -8,14 +8,14 @@ $taskConfig = [ordered]@{
     LogTailLineCount = 20
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
-    $portableCandidate = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
+    $portableCandidate = "C:\ProgramData\prodicloud\tools\winget-x64\winget.exe"
     if (Test-Path -LiteralPath $portableCandidate) {
         return [string]$portableCandidate
     }
@@ -74,7 +74,7 @@ function Invoke-ProcessWithTimeout {
         [string]$Label = 'process'
     )
 
-    $logRoot = Join-Path $env:TEMP 'clagnos-vlc'
+    $logRoot = Join-Path $env:TEMP 'prodicloud-vlc'
     [void](New-Item -ItemType Directory -Path $logRoot -Force)
     $stamp = Get-Date -Format 'yyyyMMddHHmmss'
     $stdoutLog = Join-Path $logRoot ("{0}-{1}.stdout.log" -f $Label.Replace(' ', '-'), $stamp)

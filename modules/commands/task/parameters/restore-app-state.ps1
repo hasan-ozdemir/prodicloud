@@ -1,5 +1,5 @@
 # 'restore-app-state' option binding for 'task'.
 
-function Get-ClagnosTaskRestoreAppStateOptionSpecification {
-    return (Get-ClagnosSharedRestoreAppStateOptionSpecification)
+function Get-ProdicloudTaskRestoreAppStateOptionSpecification {
+    return (Get-ProdicloudSharedRestoreAppStateOptionSpecification)
 }

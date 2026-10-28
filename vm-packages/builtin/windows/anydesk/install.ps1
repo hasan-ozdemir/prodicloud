@@ -7,14 +7,14 @@ $taskConfig = [ordered]@{
     LogTailLineCount = 20
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Resolve-WingetExe {
-    $portableCandidate = "C:\ProgramData\clagnos\tools\winget-x64\winget.exe"
+    $portableCandidate = "C:\ProgramData\prodicloud\tools\winget-x64\winget.exe"
     if (Test-Path -LiteralPath $portableCandidate) {
         return [string]$portableCandidate
     }
@@ -74,11 +74,11 @@ function Install-AnyDeskFromVerifiedOfficialDownload {
     param([switch]$UpdateExisting)
 
     $downloadRoot = ''
-    $installerPath = 'C:\Windows\Temp\clagnos-anydesk-verified.exe'
+    $installerPath = 'C:\Windows\Temp\prodicloud-anydesk-verified.exe'
     $installerWasStaged = Test-Path -LiteralPath $installerPath -PathType Leaf
     try {
         if (-not $installerWasStaged) {
-            $downloadRoot = Join-Path $env:TEMP ('clagnos-anydesk-official-' + [guid]::NewGuid().ToString('N'))
+            $downloadRoot = Join-Path $env:TEMP ('prodicloud-anydesk-official-' + [guid]::NewGuid().ToString('N'))
             [void](New-Item -ItemType Directory -Path $downloadRoot -Force)
             $installerPath = Join-Path $downloadRoot 'AnyDesk.exe'
             Write-Host 'Doing: download the official AnyDesk installer after WinGet rejected a stale catalog hash'
@@ -174,7 +174,7 @@ function Invoke-ProcessWithTimeout {
         [string]$Label = 'process'
     )
 
-    $logRoot = Join-Path $env:TEMP 'clagnos-anydesk'
+    $logRoot = Join-Path $env:TEMP 'prodicloud-anydesk'
     [void](New-Item -ItemType Directory -Path $logRoot -Force)
     $stamp = Get-Date -Format 'yyyyMMddHHmmss'
     $stdoutLog = Join-Path $logRoot ("{0}-{1}.stdout.log" -f $Label.Replace(' ', '-'), $stamp)
@@ -214,7 +214,7 @@ if ([bool]$existingAnyDesk.Installed) {
         throw 'The existing AnyDesk executable failed its Authenticode publisher or product health check.'
     }
     Write-Host ("Existing AnyDesk executable passed Authenticode verification at version {0}." -f [string]$existingSignature.ProductVersion)
-    if ([string]$env:CLAGNOS_PACKAGE_OPERATION_ACTION -eq 'update') {
+    if ([string]$env:PRODICLOUD_PACKAGE_OPERATION_ACTION -eq 'update') {
         $updateMessage = Install-AnyDeskFromVerifiedOfficialDownload -UpdateExisting
         Write-Host $updateMessage
         $global:LASTEXITCODE = 0

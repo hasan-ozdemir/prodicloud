@@ -1,11 +1,11 @@
 # Contract for the 'list' command.
 
-function Get-ClagnosListOptionSpecifications {
+function Get-ProdicloudListOptionSpecifications {
     return @(
-        (Get-ClagnosListPerfOptionSpecification),
-        (Get-ClagnosListHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosListGroupOptionSpecification),
-        (Get-ClagnosListTypeOptionSpecification)
+        (Get-ProdicloudListPerfOptionSpecification),
+        (Get-ProdicloudListHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudListGroupOptionSpecification),
+        (Get-ProdicloudListTypeOptionSpecification)
     )
 }

@@ -1,13 +1,13 @@
 # Contract for the 'set' command.
 
-function Get-ClagnosSetOptionSpecifications {
+function Get-ProdicloudSetOptionSpecifications {
     return @(
-        (Get-ClagnosSetPerfOptionSpecification),
-        (Get-ClagnosSetHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosSetGroupOptionSpecification),
-        (Get-ClagnosSetVmNameOptionSpecification),
-        (Get-ClagnosSetHibernationOptionSpecification),
-        (Get-ClagnosSetNestedVirtualizationOptionSpecification)
+        (Get-ProdicloudSetPerfOptionSpecification),
+        (Get-ProdicloudSetHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudSetGroupOptionSpecification),
+        (Get-ProdicloudSetVmNameOptionSpecification),
+        (Get-ProdicloudSetHibernationOptionSpecification),
+        (Get-ProdicloudSetNestedVirtualizationOptionSpecification)
     )
 }

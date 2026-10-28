@@ -1,16 +1,16 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-7zip-tool"
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 Refresh-SessionPath
 
 function Resolve-WingetExe {
-    $portableCandidate = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    $portableCandidate = 'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
     if (Test-Path -LiteralPath $portableCandidate -PathType Leaf) { return $portableCandidate }
     $command = Get-Command winget.exe -ErrorAction SilentlyContinue
     if (-not $command) { $command = Get-Command winget -ErrorAction SilentlyContinue }

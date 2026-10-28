@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$testScript = Join-Path $PSScriptRoot "clagnos-smoke-tests.ps1"
+$testScript = Join-Path $PSScriptRoot "prodicloud-smoke-tests.ps1"
 if (-not (Test-Path -LiteralPath $testScript)) {
     throw "Compatibility smoke script was not found: $testScript"
 }

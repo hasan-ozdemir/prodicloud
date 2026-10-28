@@ -1,9 +1,9 @@
 # Help command entry.
 
-function Invoke-ClagnosHelpEntry {
+function Invoke-ProdicloudHelpEntry {
     param(
         [string]$HelpTopic = ''
     )
 
-    Invoke-ClagnosHelpCommand -HelpTopic $HelpTopic
+    Invoke-ProdicloudHelpCommand -HelpTopic $HelpTopic
 }

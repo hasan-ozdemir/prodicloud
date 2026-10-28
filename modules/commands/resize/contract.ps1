@@ -1,17 +1,19 @@
 # Contract for the 'resize' command.
 
-function Get-ClagnosResizeOptionSpecifications {
+function Get-ProdicloudResizeOptionSpecifications {
     return @(
-        (Get-ClagnosResizePerfOptionSpecification),
-        (Get-ClagnosResizeHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosResizeGroupOptionSpecification),
-        (Get-ClagnosResizeVmNameOptionSpecification),
-        (Get-ClagnosResizeVmSizeOptionSpecification),
-        (Get-ClagnosResizeDiskSizeOptionSpecification),
-        (Get-ClagnosResizeExpandOptionSpecification),
-        (Get-ClagnosResizeShrinkOptionSpecification),
-        (Get-ClagnosResizeWindowsOptionSpecification),
-        (Get-ClagnosResizeLinuxOptionSpecification)
+        (Get-ProdicloudResizePerfOptionSpecification),
+        (Get-ProdicloudResizeHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudResizeGroupOptionSpecification),
+        (Get-ProdicloudResizeVmNameOptionSpecification),
+        (Get-ProdicloudResizeVmSizeOptionSpecification),
+        (Get-ProdicloudResizeDiskNameOptionSpecification),
+        (Get-ProdicloudResizeDiskSizeOptionSpecification),
+        (Get-ProdicloudResizeExpandOptionSpecification),
+        (Get-ProdicloudResizeShrinkOptionSpecification),
+        (Get-ProdicloudSharedYesOptionSpecification),
+        (Get-ProdicloudResizeWindowsOptionSpecification),
+        (Get-ProdicloudResizeLinuxOptionSpecification)
     )
 }

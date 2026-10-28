@@ -1,7 +1,7 @@
 # Contract for the 'help' command.
 
-function Get-ClagnosHelpOptionSpecifications {
+function Get-ProdicloudHelpOptionSpecifications {
     return @(
-        (Get-ClagnosHelpHelpOptionSpecification)
+        (Get-ProdicloudHelpHelpOptionSpecification)
     )
 }

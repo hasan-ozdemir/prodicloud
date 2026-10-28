@@ -1,5 +1,5 @@
 # Shared 'step' command option specification.
 
-function Get-ClagnosSharedStepOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'step' -TakesValue)
+function Get-ProdicloudSharedStepOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'step' -TakesValue)
 }

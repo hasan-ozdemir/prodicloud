@@ -1,4 +1,4 @@
-# AGENTS.md - clagnos Engineering Contract
+# AGENTS.md - prodicloud Engineering Contract
 
 ## Purpose
 This repository manages Azure VM provisioning and lifecycle operations for Windows and Linux through one PowerShell orchestration entrypoint plus an interactive menu frontend. The project optimizes for parity, deterministic behavior, strong validation before mutation, and operator-visible outcomes.
@@ -7,15 +7,15 @@ This repository manages Azure VM provisioning and lifecycle operations for Windo
 Use these sources in this order when maintaining the repo:
 1. Current code and task-folder manifests for runtime behavior.
 2. Current CLI/help output for command-surface truth.
-3. Current `clagnos.env.example` and `vc.env.example` for committed global and per-VC configuration contracts.
-4. Current local `clagnos.env` and explicitly selected `<vm-name>.env` only when the user names them as temporary alignment sources.
+3. Current `prodicloud.env.example` and `vc.env.example` for committed global and per-VC configuration contracts.
+4. Current local `prodicloud.env` and explicitly selected `<vm-name>.env` only when the user names them as temporary alignment sources.
 5. Git history for project evolution.
 6. Relevant `.codex` session JSONL files for workflow, decision, and prompt-history reconstruction.
 
 ## Repository Context Assimilation Rule
 - For every user prompt implementation, scan the current repo context before coding:
   - codebase structure (`modules/`, task directories, tools, tests)
-  - active documentation contract (`AGENTS.md`, `README.md`, `CHANGELOG.md`, `release-notes.md`, `docs/prompt-history.md`)
+  - active documentation contract (`AGENTS.md`, `PRODICLOUD.md`, `CHANGELOG.md`, `release-notes.md`, `docs/prompt-history.md`)
   - test and quality entrypoints
 - Treat this scan as mandatory pre-work, not optional discovery.
 - Implement changes so they align with:
@@ -28,10 +28,10 @@ Use these sources in this order when maintaining the repo:
 - Respect repository continuity: keep behavior and terminology coherent with prior development unless the user explicitly requests a contract-breaking change.
 
 ## Repository Map
-- `cg.cmd`: elevated interactive launcher for Windows operators.
-- `scripts/clagnos-cli.ps1`: numbered and lettered Clagnos menu frontend.
-- `scripts/clagnos-cache-worker.ps1`: read-only background refresher for subscription-scoped Azure inventory and requested package-status snapshots.
-- `clagnos.ps1`: unified orchestration and direct-command entrypoint used by the menu.
+- `pd.cmd`: elevated interactive launcher for Windows operators.
+- `scripts/prodicloud-cli.ps1`: numbered and lettered Prodicloud menu frontend.
+- `scripts/prodicloud-cache-worker.ps1`: read-only background refresher for subscription-scoped Azure inventory and requested package-status snapshots.
+- `prodicloud.ps1`: unified orchestration and direct-command entrypoint used by the menu.
 - `modules/`: runtime modules grouped by domain.
 - `vm-init/<platform>/{builtin,custom}/` and `vm-update/<platform>/{builtin,custom}/`: portable task catalogs; each catalog owns a `tasks.toml` and task folders with `task.json` metadata.
 - `vm-packages/{builtin,custom}/<platform>/`: isolated standard and operator-authored package catalogs; each owns a `tasks.toml` and package folders with `package.json` manifests and installers.
@@ -40,7 +40,7 @@ Use these sources in this order when maintaining the repo:
 - `docs/prompt-history.md`: human-readable prompt ledger for this repo.
 
 ## Architecture Invariants
-- Keep one Azure orchestration entrypoint: `clagnos.ps1`; `scripts/clagnos-cli.ps1` is a frontend and must dispatch through the shared command/resource handlers.
+- Keep one Azure orchestration entrypoint: `prodicloud.ps1`; `scripts/prodicloud-cli.ps1` is a frontend and must dispatch through the shared command/resource handlers.
 - Keep Linux and Windows flow and wording as identical as possible.
 - Allow differences only where platform requirements genuinely differ:
   - image selection and guest OS behavior
@@ -69,37 +69,38 @@ Use these sources in this order when maintaining the repo:
 - `initialize` runs enabled `vm-init` tasks for one existing managed VM and does not create infrastructure.
 - `update` is existing-managed-target only: it requires one existing managed resource group plus one existing VM and must not fall through to implicit fresh-create behavior. Before enabled `vm-update` maintenance tasks, it reconciles the managed Public IP DNS label to the VM name and persists the verified label in that VC profile; packages are isolated under `package` catalogs and never discovered as stage tasks.
 - `package` owns status, install/repair/update/reinstall, uninstall, and availability for validated packages in the isolated `builtin` and `custom` catalogs. Every operation names exactly one catalog.
-- `component` owns CRUD for Clagnos-managed resource groups, VMs, managed disks, VNets, subnets, NICs, public IPs, NSGs, and NSG rules. It must not expose generic CRUD for unrelated subscription resources.
-- `configure` is the interactive global `clagnos.env` frontend: it edits only supported global settings/defaults and must not sync configuration from a live Azure target. VM-targeted settings belong in the selected `<vm-name>.env` profile.
+- `component` owns CRUD for Prodicloud-managed resource groups, VMs, managed disks, VNets, subnets, NICs, public IPs, NSGs, and NSG rules. It must not expose generic CRUD for unrelated subscription resources.
+- `configure` is the interactive global `prodicloud.env` frontend: it edits only supported global settings/defaults and must not sync configuration from a live Azure target. VM-targeted settings belong in the selected `<vm-name>.env` profile.
 - `configure` edits global settings and create defaults only. Blank-permitted global defaults may stay empty so the VC creation wizard can ask for them; save validation must not require an existing VC name, group, region, or credentials.
-- Azure-touching commands support `--subscription-id` plus `-s`; resolution precedence is CLI override -> `clagnos.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
+- Azure-touching commands support `--subscription-id` plus `-s`; resolution precedence is CLI override -> `prodicloud.env` `SELECTED_AZURE_SUBSCRIPTION_ID` -> active Azure CLI subscription.
 - Azure-touching commands require an authenticated Azure CLI session; help, README, and runtime errors must say `az login` is required. `configure` is the exception: it may open without `az login`, but Azure-backed configure fields must stay read-only until Azure validation is available.
 - Interactive `create` and `update` must prompt for Azure subscription selection when `--subscription-id` is omitted.
 - Interactive `initialize` must also prompt for Azure subscription selection when `--subscription-id` is omitted.
-- The TUI `Cloud subscriptions` menu must list every accessible Azure subscription, mark both the Clagnos-selected subscription and Azure CLI active default, and allow numeric selection. A selection must update `az account set` and persist `SELECTED_AZURE_SUBSCRIPTION_ID` so all later TUI operations use the selected subscription.
+- The TUI `Cloud subscriptions` menu must list every accessible Azure subscription, mark both the Prodicloud-selected subscription and Azure CLI active default, and allow numeric selection. A selection must update `az account set` and persist `SELECTED_AZURE_SUBSCRIPTION_ID` so all later TUI operations use the selected subscription.
 - `list` is the managed inventory command: it must stay Azure-read-only, must not mutate Azure resources, and must expose managed resource listings through `--type` plus optional exact `--group` filtering.
-- Managed inventory and target validation recognize both `managed-by=clagnos` and the legacy `managed-by=az-vm` tag until the interactive first-inventory migration is accepted and completed. New groups use `managed-by=clagnos`.
+- Managed inventory and target validation recognize both `managed-by=prodicloud` and the legacy `managed-by=az-vm` tag until the interactive first-inventory migration is accepted and completed. New groups use `managed-by=prodicloud`.
 - Component deletion must show every resource in the dependency chain before mutation, delete dependents before dependencies, verify Azure resource absence, and attempt provider-specific purge only where supported. Never claim universal immediate name reuse when Azure retention or provider rules prevent it.
-- Auto-mode strictness is part of the public contract: `create --auto` must resolve platform, VM name, Azure region, and platform VM size from CLI plus `DEFAULT_*` values in `clagnos.env`; `update --auto` must resolve one managed target from CLI or `ACTIVE_VM_NAME` and its required `<vm-name>.env` profile.
-- `resize --disk-size` requires exactly one intent flag, `--expand` or `--shrink`; shrink remains a non-mutating guidance path when Azure cannot perform the requested change safely.
+- Auto-mode strictness is part of the public contract: `create --auto` must resolve platform, VM name, Azure region, and platform VM size from CLI plus `DEFAULT_*` values in `prodicloud.env`; `update --auto` must resolve one managed target from CLI or `ACTIVE_VM_NAME` and its required `<vm-name>.env` profile.
+- `resize --disk-size` requires exactly one intent flag, `--expand` or `--shrink`; shrink requires read-only guest headroom/layout checks, then a verified same-region clone through temporary `vc-helper` only for supported configurations, and fails before disk mutation when safe cloning is unavailable. Before and after resize, report Azure provisioned capacity, guest raw capacity, partitioned and unallocated bytes, non-filesystem partitions, and per-volume used/free space. Shrink remeasures the isolated source clone before copy and validates actual candidate used/free capacity plus the 10 GiB minimum headroom before cutover; post-cutover inventory is checked again. Windows OS shrink accepts the standard four-partition GPT/UEFI layout or exactly one small, unformatted, non-system leading MSR; the source MSR is excluded from file-copy mapping, and the replacement layout is verified from candidate measurements and again after boot (a platform-created empty leading MSR may remain). Windows shrink starts temporary helper provisioning asynchronously and overlaps it with snapshot/candidate disk preparation, then waits for VM provisioning, verifies the directly provisioned Standard SSD OS disk, attaches both copy disks, and confirms Azure Guest Agent readiness before copy. The copy uses asynchronous Managed Run Command with instance-view status and guest phase/progress markers; the helper resource group removes completed Run Command children so no separate blocking ARM delete is needed. For supported shrink copies from StandardSSD_LRS, temporarily use Premium_LRS P40 source/candidate tiers without changing source or requested target capacity, then restore the candidate's original SKU before cutover. The helper uses Standard_D8ds_v5 (12,800 uncached IOPS/290 MB/s) with a 128 GiB StandardSSD_LRS OS disk created directly without a tier update. It verifies that profile before attaching copy disks; Guest Agent readiness is checked after attachments. The conservative two-P40 copy payload ceiling is min(250, 250, 290/2) = 145 MB/s before file-copy limits. Robocopy reports CPU, disk, and log activity; one measured 60-second idle stall or copy-error attempt is retried idempotently, a second failure returns sanitized Win32/log details, and each guest step has a one-hour ceiling. The offline OS copy preserves symbolic links and excludes only dynamically discovered per-user/system-profile `WindowsApps` execution-alias and Docker runtime-socket directories; installed AppX payloads and persistent Docker profile data remain in the OS copy. For a hibernation-enabled VM, validate the exact Marketplace image's `IsHibernateSupported` feature and create the candidate OS disk from that same image version with `supportsHibernation=true`; clear only that disposable image-based candidate's guest partitions before rebuilding the verified clone layout. Reconcile and verify the Recovery partition's existing hidden GPT type without using unsupported `Set-Partition -IsHidden` mutations, then restore and verify WinRE Enabled after cutover before deleting the original disk. Azure Monitor polls are bounded and combine with fresh guest progress before declaring a stall; the target VM hardware and network stay unchanged.
+- When an Azure disk already has the requested Windows expansion capacity, retry guest partition expansion without another Azure disk update or VM deallocation. Pass oversized Windows Managed Run Command scripts through temporary `@file` arguments so the process command line stays below the Windows limit.
 
 ## Configuration Rules
-- Runtime precedence is: CLI override > selected VC `<vm-name>.env` value > global `clagnos.env` default > hard-coded default. New VC passwords are prompted for during interactive create and stored only in that VC's profile.
-- `clagnos.env` is local-only and must remain untracked.
-- `clagnos.env.example` is the committed configuration contract and must stay current.
+- Runtime precedence is: CLI override > selected VC `<vm-name>.env` value > global `prodicloud.env` default > hard-coded default. New VC passwords are prompted for during interactive create and stored only in that VC's profile.
+- `prodicloud.env` is local-only and must remain untracked.
+- `prodicloud.env.example` is the committed configuration contract and must stay current.
 - `<vm-name>.env` files are the local-only source of truth for VM name/group/OS/region, generated resource names, VM features, credentials, ports, transport, image, SKU, and disk size. Create persists the resolved group and component names before the first Azure mutation. Every managed VC must have an identity-matching profile before target operations run.
 - Populate existing root-level VC profiles with `tools/populate-vc-env-profiles.ps1`; it preserves non-empty values, uses read-only Azure readbacks and global/manifest defaults, and fills unresolvable optional inheritance with `@global`. An unknown password is marked `@secret-required`; it must block use until an operator replaces it, and must never be guessed or copied between VCs.
 - `vc.env.example` is the committed per-VC profile template. Git-ignore all `*.env` runtime files.
-- Keep app-wide customization, Azure subscription selection, operator identity, naming templates, Azure/SSH timeouts, task paths, and non-secret `DEFAULT_*` create defaults in `clagnos.env`. Never store VM passwords in the global file.
-- `ACTIVE_VM_NAME` in `clagnos.env` selects the default VC profile when a command has no explicit target. Selecting a VC in the TUI updates this pointer.
+- Keep app-wide customization, Azure subscription selection, operator identity, naming templates, Azure/SSH timeouts, task paths, and non-secret `DEFAULT_*` create defaults in `prodicloud.env`. Never store VM passwords in the global file.
+- `ACTIVE_VM_NAME` in `prodicloud.env` selects the default VC profile when a command has no explicit target. Selecting a VC in the TUI updates this pointer.
 - Keep task-only customization in a clearly labeled config block at the top of the owning `vm-init` or `vm-update` script.
 - Do not hard-code personal, company-specific, or secret fallback values in runtime code or shared orchestration paths.
 - Use generic env keys whenever possible.
 - Keep `ACTIVE_VM_NAME` as the global VC pointer; persist `SELECTED_VM_NAME`, `SELECTED_RESOURCE_GROUP`, `SELECTED_VM_OS`, and `SELECTED_AZURE_REGION` only in the owning VC profile.
-- Use `SELECTED_AZURE_SUBSCRIPTION_ID` in `clagnos.env` as the shared default Azure subscription selector for Azure-touching commands.
+- Use `SELECTED_AZURE_SUBSCRIPTION_ID` in `prodicloud.env` as the shared default Azure subscription selector for Azure-touching commands.
 - Use `SELECTED_COMPANY_NAME` for repo-managed Windows business web shortcuts and `SELECTED_EMPLOYEE_EMAIL_ADDRESS` local-part for repo-managed Windows personal web shortcuts.
 - Normalize repo-managed Windows Chrome `--profile-directory` values to lowercase even when global identity casing differs.
-- Keep `SELECTED_EMPLOYEE_FULL_NAME` in `clagnos.env` as required operator identity metadata for the Windows public desktop shortcut contract.
+- Keep `SELECTED_EMPLOYEE_FULL_NAME` in `prodicloud.env` as required operator identity metadata for the Windows public desktop shortcut contract.
 - Use shared keys such as `VM_ENABLE_HIBERNATION` and `VM_ENABLE_NESTED_VIRTUALIZATION` for cross-platform VM feature intent instead of inventing platform-specific duplicates.
 - Use `WIN_` or `LIN_` keys only for true platform-specific settings.
 - Remove deprecated env keys instead of keeping compatibility fallbacks.
@@ -140,9 +141,9 @@ Use these sources in this order when maintaining the repo:
 - `package.json` owns package identity, display name, category, bounded per-operation timeouts, validated status/uninstall/repair actions, Windows builtin lifecycle-script paths and update/repair strategy, package assets, optional allow-listed `settings`, optional app-state policy, and optional post-install tasks. Windows Chocolatey status checks may declare an executable filename, a simple version argument, and additional absolute executable paths rooted only at `%ProgramFiles%`, `%ProgramFiles(x86)%`, or `%LOCALAPPDATA%`; those values must be validated before use. Setting values must be typed and validated before safe token substitution. It must not contain `enabled`. Explicit package enable/disable updates only the selected `tasks.toml` boolean after typed confirmation and verifies the result.
 - Package app-state identity may use `appStateKey` to preserve previously captured package snapshots when a package folder or public id is migrated.
 - Package app-state archives must contain only portable preferences selected by `package.json`; do not capture credentials, authenticated browser profiles, tokens, caches, histories, workspace databases, or licensing/activation registry state.
-- Generalize source-user and machine paths in captured package app-state with the supported `%CLAGNOS_*%` tokens. Capture normalizes known profile paths, SIDs, drive roots, Visual Studio instance ids, host names, and source addresses; restore resolves tokens against the target VM and selected `manager`/`assistant` profile immediately before replay. Unknown or unavailable tokens must fail before replay.
-- Supported package app-state placeholders include `%CLAGNOS_COMPUTER_NAME%`, `%CLAGNOS_SYSTEM_DRIVE%`, `%CLAGNOS_SYSTEM_ROOT%`, `%CLAGNOS_WINDOWS_DIRECTORY%`, `%CLAGNOS_PROGRAM_DATA%`, `%CLAGNOS_PROGRAM_FILES%`, `%CLAGNOS_PROGRAM_FILES_X86%`, `%CLAGNOS_PRIMARY_IPV4_ADDRESS%`, `%CLAGNOS_TARGET_CPU_COUNT%`, `%CLAGNOS_TARGET_MEMORY_GB%`, `%CLAGNOS_VM_ADMIN_USER%`, `%CLAGNOS_ASSISTANT_USER%`, `%CLAGNOS_TARGET_USER%`, `%CLAGNOS_TARGET_PROFILE_PATH%`, `%CLAGNOS_TARGET_HOME%`, `%CLAGNOS_TARGET_UID%`, `%CLAGNOS_TARGET_GID%`, `%CLAGNOS_TARGET_USER_SID%`, `%CLAGNOS_VM_ADMIN_PROFILE_PATH%`, `%CLAGNOS_ASSISTANT_PROFILE_PATH%`, `%CLAGNOS_VM_ADMIN_HOME%`, `%CLAGNOS_ASSISTANT_HOME%`, `%CLAGNOS_VM_ADMIN_UID%`, `%CLAGNOS_ASSISTANT_UID%`, `%CLAGNOS_VM_ADMIN_GID%`, `%CLAGNOS_ASSISTANT_GID%`, `%CLAGNOS_VM_ADMIN_USER_SID%`, `%CLAGNOS_ASSISTANT_USER_SID%`, `%CLAGNOS_LOCAL_APP_DATA%`, `%CLAGNOS_ROAMING_APP_DATA%`, and `%CLAGNOS_VS_INSTANCE_DIRECTORY%`.
-- `%CLAGNOS_SYSTEM_DRIVE%`, `%CLAGNOS_WINDOWS_DIRECTORY%`, `%CLAGNOS_TARGET_USER_SID%`, `%CLAGNOS_VM_ADMIN_USER_SID%`, `%CLAGNOS_ASSISTANT_USER_SID%`, and `%CLAGNOS_VS_INSTANCE_DIRECTORY%` are Windows-only. `%CLAGNOS_SYSTEM_ROOT%`, `%CLAGNOS_TARGET_HOME%`, `%CLAGNOS_TARGET_UID%`, `%CLAGNOS_TARGET_GID%`, `%CLAGNOS_VM_ADMIN_HOME%`, `%CLAGNOS_ASSISTANT_HOME%`, `%CLAGNOS_VM_ADMIN_UID%`, `%CLAGNOS_ASSISTANT_UID%`, `%CLAGNOS_VM_ADMIN_GID%`, and `%CLAGNOS_ASSISTANT_GID%` are Linux-only. The shared capture and replay code must reject a token that has no value on the selected guest OS.
+- Generalize source-user and machine paths in captured package app-state with the supported `%PRODICLOUD_*%` tokens. Capture normalizes known profile paths, SIDs, drive roots, Visual Studio instance ids, host names, and source addresses; restore resolves tokens against the target VM and selected `manager`/`assistant` profile immediately before replay. Unknown or unavailable tokens must fail before replay.
+- Supported package app-state placeholders include `%PRODICLOUD_COMPUTER_NAME%`, `%PRODICLOUD_SYSTEM_DRIVE%`, `%PRODICLOUD_SYSTEM_ROOT%`, `%PRODICLOUD_WINDOWS_DIRECTORY%`, `%PRODICLOUD_PROGRAM_DATA%`, `%PRODICLOUD_PROGRAM_FILES%`, `%PRODICLOUD_PROGRAM_FILES_X86%`, `%PRODICLOUD_PRIMARY_IPV4_ADDRESS%`, `%PRODICLOUD_TARGET_CPU_COUNT%`, `%PRODICLOUD_TARGET_MEMORY_GB%`, `%PRODICLOUD_VM_ADMIN_USER%`, `%PRODICLOUD_ASSISTANT_USER%`, `%PRODICLOUD_TARGET_USER%`, `%PRODICLOUD_TARGET_PROFILE_PATH%`, `%PRODICLOUD_TARGET_HOME%`, `%PRODICLOUD_TARGET_UID%`, `%PRODICLOUD_TARGET_GID%`, `%PRODICLOUD_TARGET_USER_SID%`, `%PRODICLOUD_VM_ADMIN_PROFILE_PATH%`, `%PRODICLOUD_ASSISTANT_PROFILE_PATH%`, `%PRODICLOUD_VM_ADMIN_HOME%`, `%PRODICLOUD_ASSISTANT_HOME%`, `%PRODICLOUD_VM_ADMIN_UID%`, `%PRODICLOUD_ASSISTANT_UID%`, `%PRODICLOUD_VM_ADMIN_GID%`, `%PRODICLOUD_ASSISTANT_GID%`, `%PRODICLOUD_VM_ADMIN_USER_SID%`, `%PRODICLOUD_ASSISTANT_USER_SID%`, `%PRODICLOUD_LOCAL_APP_DATA%`, `%PRODICLOUD_ROAMING_APP_DATA%`, and `%PRODICLOUD_VS_INSTANCE_DIRECTORY%`.
+- `%PRODICLOUD_SYSTEM_DRIVE%`, `%PRODICLOUD_WINDOWS_DIRECTORY%`, `%PRODICLOUD_TARGET_USER_SID%`, `%PRODICLOUD_VM_ADMIN_USER_SID%`, `%PRODICLOUD_ASSISTANT_USER_SID%`, and `%PRODICLOUD_VS_INSTANCE_DIRECTORY%` are Windows-only. `%PRODICLOUD_SYSTEM_ROOT%`, `%PRODICLOUD_TARGET_HOME%`, `%PRODICLOUD_TARGET_UID%`, `%PRODICLOUD_TARGET_GID%`, `%PRODICLOUD_VM_ADMIN_HOME%`, `%PRODICLOUD_ASSISTANT_HOME%`, `%PRODICLOUD_VM_ADMIN_UID%`, `%PRODICLOUD_ASSISTANT_UID%`, `%PRODICLOUD_VM_ADMIN_GID%`, and `%PRODICLOUD_ASSISTANT_GID%` are Linux-only. The shared capture and replay code must reject a token that has no value on the selected guest OS.
 - `tools/maintain-package-app-state.ps1` reports its planned package app-state policy by default and rewrites builtin package snapshot policies and payloads only with `-Apply`. Keep its allow-list aligned with `tests/package-app-state-contract-check.ps1`.
 - Task priority precedence is: `task.json priority` -> filename task number -> deterministic fallback within the current task-number band.
 - Runtime discovery and execution must not auto-write, auto-sync, or auto-reconcile task or package catalogs. Explicit task and package enable/disable operations may change only the selected boolean in `tasks.toml` after typed confirmation and must verify the resulting catalog state. They never move task or package folders.
@@ -156,18 +157,20 @@ Use these sources in this order when maintaining the repo:
 - Package `install` installs only an absent package and returns no-op when it is already installed. The separate `repair` action must pin the observed installed version and fail before mutation when that version or a safe provider strategy is unavailable. `update` remains the vendor-version upgrade path and never downgrades. `reinstall` performs an explicitly confirmed uninstall followed by a fresh install. WinRM package operations use finite per-operation budgets, stream output, monitor guest activity, and retry once after a measured idle stall.
 - Re-running init/update must preserve existing managed-user passwords and user-owned profile data. It must not force a service or VM restart when no relevant configuration changed and no task requested a reboot.
 - Managed-user password reset is an explicit interactive `initialize --reset-managed-user-passwords` operation with typed confirmation; default `initialize` never changes existing passwords.
-- Windows builtin package status, update, and uninstall scripts emit one `CLAGNOS_PACKAGE_RESULT:` JSON record. Uninstall uses only its validated manifest action and verifies absence. Update is a separate operation and verifies the resulting installed state.
+- Windows builtin package status, update, and uninstall scripts emit one `PRODICLOUD_PACKAGE_RESULT:` JSON record. Uninstall uses only its validated manifest action and verifies absence. Update is a separate operation and verifies the resulting installed state.
 - Windows package operations honor the selected VC profile's `PACKAGE_TRANSPORT=ssh|winrm`, falling back to global `DEFAULT_PACKAGE_TRANSPORT`, without silent fallback. WinRM may add only the exact managed VM endpoint to the local WSMan TrustedHosts list, preserving existing entries; credentials must never appear in progress or result logs.
 - Windows package lifecycle operations must be unattended and must not require an open RDP connection or logged-on desktop. When a vendor installer needs a user profile, use a bounded password-logon scheduled task and verify its structured result; do not require an interactive-token session.
 - Init and update task inventories may diverge by platform, but the orchestration model should remain parallel in concept.
 
 ## Reliability and Error-Handling Rules
 - Validate before mutating Azure resources.
-- Keep component create/update/delete forms scoped to validated fields and the active Clagnos-managed resource group.
+- Keep component create/update/delete forms scoped to validated fields and the active Prodicloud-managed resource group.
 - If Azure cannot purge a resource or release its name immediately, report the provider's result and do not claim the name is reusable.
 - Prefer fast, filtered Azure checks over broad slow listings.
 - If Azure does not support a requested operation safely, fail before mutation with the explicit platform reason and list the supported alternatives.
 - When lifecycle or connection flows find a VM stuck in provisioning state `Updating`, use one explicit bounded `az vm redeploy` repair attempt before failing the operation.
+- VM disk resize treats VM power/provisioning, guest transport, Azure disk/snapshot provisioning, VM-disk attachment, guest filesystem capacity, and cleanup as observable states. Use `--no-wait` for supported Azure long-running operations, poll VM/guest/resource readiness every five seconds and resource-group/disk purge every ten seconds, and bound each loop. A fixed delay must never substitute for a health or readback check.
+- Disk-shrink cleanup must verify helper resource-group absence and managed-disk deletion before reporting purge success. If Azure retains a resource after bounded delete/readback retries, name it and report cleanup as pending; do not claim hard purge.
 - Fail gracefully with:
   - a short reason
   - a precise corrective hint
@@ -181,7 +184,7 @@ Use these sources in this order when maintaining the repo:
 - The only allowed language exception is for literal user-defined display labels or product/site names that are intentionally preserved as-is, such as specific desktop shortcut titles.
 - Keep Linux and Windows wording aligned for equivalent behavior.
 - Keep logs contextual, singular, and readable.
-- Store all local Clagnos transcripts, task history, and verified completed guest-worker logs under the git-ignored repo-root `.logs/` directory. Collect Clagnos-owned guest `.log` files over WinRM, verify copied hashes before deleting the matching remote file, and retain local logs until manual cleanup.
+- Store all local Prodicloud transcripts, task history, and verified completed guest-worker logs under the git-ignored repo-root `.logs/` directory. Collect Prodicloud-owned guest `.log` files over WinRM, verify copied hashes before deleting the matching remote file, and retain local logs until manual cleanup.
 - Interactive menus use numbered or lettered choices with Enter and no arrow-key selection. Escape and `b` move one level up, `c` closes the current menu flow where no product action already owns that key, and `q` exits.
 - Before every Azure CLI request, VM lifecycle operation, remote guest command, task, package install/status/uninstall, and long wait, print an English `Doing: <action>` progress message; never leave the operator waiting without a current action label.
 - For blocking Azure CLI or Azure REST waits, emit a bounded progress heartbeat at least every 30 seconds. Do not include passwords, tokens, or other secret argument values in progress labels.
@@ -219,7 +222,7 @@ Use these sources in this order when maintaining the repo:
 
 ## Documentation Responsibilities
 - `AGENTS.md`: engineering contract and collaboration rules.
-- `README.md`: operator and contributor guide.
+- `PRODICLOUD.md`: operator and contributor guide.
 - `LICENSE`: repository licensing terms.
 - `CONTRIBUTING.md`: contributor workflow, expectations, and review hygiene.
 - `SUPPORT.md`: operator/support routing and escalation guidance.

@@ -1,6 +1,6 @@
 # Initialize command entry.
 
-function Invoke-ClagnosInitializeCommand {
+function Invoke-ProdicloudInitializeCommand {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -8,11 +8,11 @@ function Invoke-ClagnosInitializeCommand {
         [switch]$AutoMode
     )
 
-    $resetManagedUserPasswords = Get-ClagnosCliOptionBool -Options $Options -Name 'reset-managed-user-passwords' -DefaultValue $false
+    $resetManagedUserPasswords = Get-ProdicloudCliOptionBool -Options $Options -Name 'reset-managed-user-passwords' -DefaultValue $false
     if ($resetManagedUserPasswords -and $AutoMode) {
         throw '--reset-managed-user-passwords is available only in interactive initialize mode so the operator can confirm the credential change.'
     }
-    $runtime = New-ClagnosUpdateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode
+    $runtime = New-ProdicloudUpdateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode
     if ($resetManagedUserPasswords) {
         $profileName = [string]$runtime.InitialConfigOverrides['SELECTED_VM_NAME']
         if ([string]::IsNullOrWhiteSpace([string]$profileName)) { $profileName = 'the selected VC' }
@@ -29,9 +29,9 @@ function Invoke-ClagnosInitializeCommand {
     }
     $script:UpdateMode = $true
     $script:ExecutionMode = 'update'
-    $script:ClagnosResetManagedUserPasswords = [bool]$resetManagedUserPasswords
+    $script:ProdicloudResetManagedUserPasswords = [bool]$resetManagedUserPasswords
     try {
-        Invoke-ClagnosMain `
+        Invoke-ProdicloudMain `
             -WindowsFlag:$WindowsFlag `
             -LinuxFlag:$LinuxFlag `
             -CommandName 'initialize' `
@@ -39,5 +39,5 @@ function Invoke-ClagnosInitializeCommand {
             -InitialConfigOverrides $runtime.InitialConfigOverrides `
             -ActionPlan $initActionPlan
     }
-    finally { $script:ClagnosResetManagedUserPasswords = $false }
+    finally { $script:ProdicloudResetManagedUserPasswords = $false }
 }

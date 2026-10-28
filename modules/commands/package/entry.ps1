@@ -1,6 +1,6 @@
 # Package management command entry.
 
-function Invoke-ClagnosPackageCommand {
+function Invoke-ProdicloudPackageCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -8,9 +8,9 @@ function Invoke-ClagnosPackageCommand {
         [switch]$LinuxFlag
     )
 
-    $action = [string](Get-ClagnosCliOptionText -Options $Options -Name 'action')
-    $packageId = [string](Get-ClagnosCliOptionText -Options $Options -Name 'package')
-    $catalog = [string](Get-ClagnosCliOptionText -Options $Options -Name 'catalog')
+    $action = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'action')
+    $packageId = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'package')
+    $catalog = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'catalog')
     if ([string]::IsNullOrWhiteSpace($action)) {
         Throw-FriendlyError -Detail "Package command requires an action." -Code 2 -Summary "Package operation is incomplete." -Hint "Use --action=list|status|install|update|uninstall|enable|disable --catalog=builtin|custom."
     }
@@ -26,8 +26,8 @@ function Invoke-ClagnosPackageCommand {
         if (-not [string]::IsNullOrWhiteSpace($packageId)) {
             Throw-FriendlyError -Detail "Package setup-all does not take an individual package id." -Code 2 -Summary "Package selection is invalid." -Hint "Omit --package when using --action=setup-all."
         }
-        Invoke-ClagnosPackageSetupAll -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+        Invoke-ProdicloudPackageSetupAll -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
         return
     }
-    Invoke-ClagnosPackageOperation -Action $normalizedAction -PackageId $packageId -Catalog $normalizedCatalog -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    Invoke-ProdicloudPackageOperation -Action $normalizedAction -PackageId $packageId -Catalog $normalizedCatalog -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
 }

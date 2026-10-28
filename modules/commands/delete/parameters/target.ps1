@@ -1,9 +1,9 @@
 # 'target' option binding for 'delete'.
 
-function Get-ClagnosDeleteTargetOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'target' -TakesValue -Validate {
+function Get-ProdicloudDeleteTargetOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'target' -TakesValue -Validate {
         param([hashtable]$Options)
-        $targetText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'target')
+        $targetText = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'target')
         $target = $targetText.Trim().ToLowerInvariant()
         if ([string]::IsNullOrWhiteSpace($target)) {
             Throw-FriendlyError -Detail "Option '--target' is required for delete command." -Code 2 -Summary "Delete target is missing." -Hint "Use --target=group|network|vm|disk."

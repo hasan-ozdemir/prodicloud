@@ -1,5 +1,5 @@
 # 'help' option binding for 'update'.
 
-function Get-ClagnosUpdateHelpOptionSpecification {
-    return (Get-ClagnosSharedHelpOptionSpecification)
+function Get-ProdicloudUpdateHelpOptionSpecification {
+    return (Get-ProdicloudSharedHelpOptionSpecification)
 }

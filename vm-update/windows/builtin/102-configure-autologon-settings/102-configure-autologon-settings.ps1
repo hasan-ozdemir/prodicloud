@@ -14,10 +14,10 @@ $taskConfig = [ordered]@{
     )
 }
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Test-PlaceholderValue {
@@ -66,12 +66,12 @@ function Resolve-AutologonExe {
     return ''
 }
 
-if (-not ([System.Management.Automation.PSTypeName]'ClagnosWin32LogonNative').Type) {
+if (-not ([System.Management.Automation.PSTypeName]'ProdicloudWin32LogonNative').Type) {
     Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
-public static class ClagnosWin32LogonNative {
+public static class ProdicloudWin32LogonNative {
     [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern bool LogonUser(
         string lpszUsername,
@@ -95,9 +95,9 @@ function Assert-LocalCredentialValid {
     )
 
     $tokenHandle = [IntPtr]::Zero
-    $logonOk = [ClagnosWin32LogonNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)
+    $logonOk = [ProdicloudWin32LogonNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)
     if ($tokenHandle -ne [IntPtr]::Zero) {
-        [void][ClagnosWin32LogonNative]::CloseHandle($tokenHandle)
+        [void][ProdicloudWin32LogonNative]::CloseHandle($tokenHandle)
     }
 
     if (-not $logonOk) {

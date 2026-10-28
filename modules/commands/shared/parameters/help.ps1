@@ -1,5 +1,5 @@
 # Shared 'help' command option specification.
 
-function Get-ClagnosSharedHelpOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'help' -ShortNames @('h'))
+function Get-ProdicloudSharedHelpOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'help' -ShortNames @('h'))
 }

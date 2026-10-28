@@ -1,7 +1,7 @@
 # Set command runtime helpers.
 
-# Handles Resolve-ClagnosToggleValue.
-function Resolve-ClagnosToggleValue {
+# Handles Resolve-ProdicloudToggleValue.
+function Resolve-ProdicloudToggleValue {
     param(
         [string]$Name,
         [string]$RawValue
@@ -27,14 +27,14 @@ function Resolve-ClagnosToggleValue {
         -Hint ("Use --{0}=on|off." -f $Name)
 }
 
-# Handles Read-ClagnosToggleInteractive.
-function Read-ClagnosToggleInteractive {
+# Handles Read-ProdicloudToggleInteractive.
+function Read-ProdicloudToggleInteractive {
     param(
         [string]$PromptText,
         [string]$DefaultValue = 'off'
     )
 
-    $defaultNormalized = Resolve-ClagnosToggleValue -Name 'toggle' -RawValue $DefaultValue
+    $defaultNormalized = Resolve-ProdicloudToggleValue -Name 'toggle' -RawValue $DefaultValue
     if ([string]::IsNullOrWhiteSpace([string]$defaultNormalized)) {
         $defaultNormalized = 'off'
     }
@@ -44,15 +44,15 @@ function Read-ClagnosToggleInteractive {
         if ([string]::IsNullOrWhiteSpace([string]$raw)) {
             return $defaultNormalized
         }
-        $candidate = Resolve-ClagnosToggleValue -Name 'toggle' -RawValue $raw
+        $candidate = Resolve-ProdicloudToggleValue -Name 'toggle' -RawValue $raw
         if (-not [string]::IsNullOrWhiteSpace([string]$candidate)) {
             return $candidate
         }
     }
 }
 
-# Handles Copy-ClagnosOptionsMap.
-function Copy-ClagnosOptionsMap {
+# Handles Copy-ProdicloudOptionsMap.
+function Copy-ProdicloudOptionsMap {
     param(
         [hashtable]$Source
     )

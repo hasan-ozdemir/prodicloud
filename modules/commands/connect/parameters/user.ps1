@@ -1,5 +1,5 @@
 # 'user' option binding for 'connect'.
 
-function Get-ClagnosConnectUserOptionSpecification {
-    return (Get-ClagnosSharedUserOptionSpecification)
+function Get-ProdicloudConnectUserOptionSpecification {
+    return (Get-ProdicloudSharedUserOptionSpecification)
 }

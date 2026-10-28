@@ -1,7 +1,7 @@
 # Show command entry.
 
-# Handles Invoke-ClagnosShowCommand.
-function Invoke-ClagnosShowCommand {
+# Handles Invoke-ProdicloudShowCommand.
+function Invoke-ProdicloudShowCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -9,8 +9,8 @@ function Invoke-ClagnosShowCommand {
         [switch]$LinuxFlag
     )
 
-    $exportRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'export-json'
-    $overwriteRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'overwrite'
+    $exportRequested = Test-ProdicloudCliOptionPresent -Options $Options -Name 'export-json'
+    $overwriteRequested = Test-ProdicloudCliOptionPresent -Options $Options -Name 'overwrite'
     if ($overwriteRequested -and -not $exportRequested) {
         Throw-FriendlyError `
             -Detail "Option '--overwrite' requires '--export-json'." `
@@ -20,7 +20,7 @@ function Invoke-ClagnosShowCommand {
     }
     $exportPath = ''
     if ($exportRequested) {
-        $rawExportPath = [string](Get-ClagnosCliOptionText -Options $Options -Name 'export-json')
+        $rawExportPath = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'export-json')
         if ([string]::IsNullOrWhiteSpace([string]$rawExportPath)) {
             Throw-FriendlyError `
                 -Detail "Option '--export-json' requires an output file path." `
@@ -46,17 +46,17 @@ function Invoke-ClagnosShowCommand {
         }
     }
 
-    $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot 'clagnos.env'
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Join-Path $repoRoot 'prodicloud.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $accountSnapshot = Get-ClagnosAzAccountSnapshot
+    $accountSnapshot = Get-ProdicloudAzAccountSnapshot
 
-    $targetGroupValue = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
+    $targetGroupValue = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'group')
     $targetGroup = ''
     if (-not [string]::IsNullOrWhiteSpace([string]$targetGroupValue)) {
         $targetGroup = $targetGroupValue.Trim()
     }
-    $targetVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+    $targetVmName = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-name')
     if ([string]::IsNullOrWhiteSpace([string]$targetVmName)) {
         $targetVmName = ''
     }
@@ -66,7 +66,7 @@ function Invoke-ClagnosShowCommand {
 
     $allGroupRows = @()
     try {
-        $allGroupRows = @(Get-ClagnosManagedResourceGroupRows)
+        $allGroupRows = @(Get-ProdicloudManagedResourceGroupRows)
     }
     catch {
         Throw-FriendlyError `
@@ -84,7 +84,7 @@ function Invoke-ClagnosShowCommand {
 
     $selectedGroups = @()
     if (-not [string]::IsNullOrWhiteSpace([string]$targetGroup)) {
-        Assert-ClagnosManagedResourceGroup -ResourceGroup $targetGroup -OperationName 'show'
+        Assert-ProdicloudManagedResourceGroup -ResourceGroup $targetGroup -OperationName 'show'
         $selectedGroups = @($targetGroup)
     }
     else {
@@ -109,13 +109,13 @@ function Invoke-ClagnosShowCommand {
 
     $groupDumps = @()
     foreach ($resourceGroup in @($selectedGroups)) {
-        $groupDumps += (Get-ClagnosResourceGroupInventoryDump -ResourceGroup ([string]$resourceGroup))
+        $groupDumps += (Get-ProdicloudResourceGroupInventoryDump -ResourceGroup ([string]$resourceGroup))
     }
 
-    $focusedTarget = Resolve-ClagnosShowFocusedTarget -Options $Options -ConfigMap $configMap -SelectedGroupDumps $groupDumps
+    $focusedTarget = Resolve-ProdicloudShowFocusedTarget -Options $Options -ConfigMap $configMap -SelectedGroupDumps $groupDumps
     $targetDerivedConfiguration = $null
     if ($null -ne $focusedTarget) {
-        $targetDerivedConfiguration = Get-ClagnosShowTargetDerivedConfiguration -ResourceGroup ([string]$focusedTarget.ResourceGroup) -VmName ([string]$focusedTarget.VmName) -ConfigMap $configMap
+        $targetDerivedConfiguration = Get-ProdicloudShowTargetDerivedConfiguration -ResourceGroup ([string]$focusedTarget.ResourceGroup) -VmName ([string]$focusedTarget.VmName) -ConfigMap $configMap
     }
 
     $totalVmCount = 0
@@ -167,7 +167,7 @@ function Invoke-ClagnosShowCommand {
     }
 
     if ($exportRequested) {
-        Export-ClagnosShowReportJson -Dump $dump -OutputPath $exportPath -Overwrite:$overwriteRequested | Out-Null
+        Export-ProdicloudShowReportJson -Dump $dump -OutputPath $exportPath -Overwrite:$overwriteRequested | Out-Null
     }
-    Write-ClagnosShowReport -Dump $dump
+    Write-ProdicloudShowReport -Dump $dump
 }

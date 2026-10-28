@@ -2,13 +2,13 @@ $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Write-Output 'Doing: prepare Chocolatey bootstrap'
 
-function Merge-ClagnosPreservedChocolateyFiles {
+function Merge-ProdicloudPreservedChocolateyFiles {
     param([string]$SourcePath,[string]$DestinationPath)
 
     if (-not (Test-Path -LiteralPath $DestinationPath)) { Move-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force; return }
     if ((Get-Item -LiteralPath $SourcePath).PSIsContainer -and (Get-Item -LiteralPath $DestinationPath).PSIsContainer) {
         foreach ($child in @(Get-ChildItem -LiteralPath $SourcePath -Force)) {
-            Merge-ClagnosPreservedChocolateyFiles -SourcePath $child.FullName -DestinationPath (Join-Path $DestinationPath $child.Name)
+            Merge-ProdicloudPreservedChocolateyFiles -SourcePath $child.FullName -DestinationPath (Join-Path $DestinationPath $child.Name)
         }
     }
 }
@@ -27,7 +27,7 @@ if (-not (Test-Path -LiteralPath $chocoExe)) {
         if (Test-Path -LiteralPath $chocolateyRoot -PathType Container) {
             $existingItems = @(Get-ChildItem -LiteralPath $chocolateyRoot -Force)
             if ($existingItems.Count -gt 0) {
-                $backupRoot = Join-Path (Join-Path $env:ProgramData 'clagnos\backup') ('chocolatey-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+                $backupRoot = Join-Path (Join-Path $env:ProgramData 'prodicloud\backup') ('chocolatey-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
                 $null = New-Item -ItemType Directory -Path (Split-Path -Parent $backupRoot) -Force
                 Write-Output ("Doing: preserve existing Chocolatey package files at '{0}' for the bootstrap" -f $backupRoot)
                 Move-Item -LiteralPath $chocolateyRoot -Destination $backupRoot -ErrorAction Stop
@@ -42,7 +42,7 @@ if (-not (Test-Path -LiteralPath $chocoExe)) {
         if (-not (Test-Path -LiteralPath $chocoExe -PathType Leaf)) { throw ("The official bootstrap did not create '{0}'." -f $chocoExe) }
         if (-not [string]::IsNullOrWhiteSpace($preservedRoot)) {
             foreach ($child in @(Get-ChildItem -LiteralPath $preservedRoot -Force)) {
-                Merge-ClagnosPreservedChocolateyFiles -SourcePath $child.FullName -DestinationPath (Join-Path $chocolateyRoot $child.Name)
+                Merge-ProdicloudPreservedChocolateyFiles -SourcePath $child.FullName -DestinationPath (Join-Path $chocolateyRoot $child.Name)
             }
             Write-Output 'Preserved existing Chocolatey package files; new Chocolatey core files took precedence only on path conflicts.'
         }

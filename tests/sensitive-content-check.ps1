@@ -59,7 +59,7 @@ function Get-TrackedAuditPaths {
         '.ps1', '.psm1', '.psd1', '.cmd', '.sh', '.py', '.md', '.yml', '.yaml', '.json', '.toml', '.txt'
     )
     $explicitFileNames = @(
-        'clagnos.env.example', 'vc.env.example', '.gitignore', '.gitattributes'
+        'prodicloud.env.example', 'vc.env.example', '.gitignore', '.gitattributes'
     )
 
     $trackedPaths = @(& git -C $RepositoryRoot ls-files)
@@ -142,9 +142,9 @@ function Assert-EnvExampleSensitivePlaceholders {
         [string]$RepositoryRoot
     )
 
-    $envExamplePath = Join-Path $RepositoryRoot 'clagnos.env.example'
+    $envExamplePath = Join-Path $RepositoryRoot 'prodicloud.env.example'
     if (-not (Test-Path -LiteralPath $envExamplePath)) {
-        throw "clagnos.env.example was not found."
+        throw "prodicloud.env.example was not found."
     }
 
     $vmEnvExamplePath = Join-Path $RepositoryRoot 'vc.env.example'
@@ -176,19 +176,19 @@ function Assert-EnvExampleSensitivePlaceholders {
         throw "vc.env.example must keep VM_ASSISTANT_PASS as the committed placeholder."
     }
     if ([string]$globalEnvMap['SELECTED_COMPANY_WEB_ADDRESS'] -ne '<https-url>') {
-        throw "clagnos.env.example must keep SELECTED_COMPANY_WEB_ADDRESS as the committed placeholder."
+        throw "prodicloud.env.example must keep SELECTED_COMPANY_WEB_ADDRESS as the committed placeholder."
     }
     if ([string]$globalEnvMap['SELECTED_COMPANY_EMAIL_ADDRESS'] -ne '<email>') {
-        throw "clagnos.env.example must keep SELECTED_COMPANY_EMAIL_ADDRESS as the committed placeholder."
+        throw "prodicloud.env.example must keep SELECTED_COMPANY_EMAIL_ADDRESS as the committed placeholder."
     }
     if ([string]$globalEnvMap['SELECTED_EMPLOYEE_EMAIL_ADDRESS'] -ne '<email>') {
-        throw "clagnos.env.example must keep SELECTED_EMPLOYEE_EMAIL_ADDRESS as the committed placeholder."
+        throw "prodicloud.env.example must keep SELECTED_EMPLOYEE_EMAIL_ADDRESS as the committed placeholder."
     }
     if ([string]$globalEnvMap['SELECTED_EMPLOYEE_FULL_NAME'] -ne '<person-name>') {
-        throw "clagnos.env.example must keep SELECTED_EMPLOYEE_FULL_NAME as the committed placeholder."
+        throw "prodicloud.env.example must keep SELECTED_EMPLOYEE_FULL_NAME as the committed placeholder."
     }
     if (-not [string]::IsNullOrWhiteSpace([string]$globalEnvMap['SELECTED_AZURE_SUBSCRIPTION_ID'])) {
-        throw "clagnos.env.example must not commit a concrete SELECTED_AZURE_SUBSCRIPTION_ID value."
+        throw "prodicloud.env.example must not commit a concrete SELECTED_AZURE_SUBSCRIPTION_ID value."
     }
 }
 

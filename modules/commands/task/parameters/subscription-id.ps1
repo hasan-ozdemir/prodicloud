@@ -1,5 +1,5 @@
 # 'subscription-id' option binding for 'task'.
 
-function Get-ClagnosTaskSubscriptionIdOptionSpecification {
-    return (Get-ClagnosSharedSubscriptionIdOptionSpecification)
+function Get-ProdicloudTaskSubscriptionIdOptionSpecification {
+    return (Get-ProdicloudSharedSubscriptionIdOptionSpecification)
 }

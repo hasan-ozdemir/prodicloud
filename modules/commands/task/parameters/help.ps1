@@ -1,5 +1,5 @@
 # 'help' option binding for 'task'.
 
-function Get-ClagnosTaskHelpOptionSpecification {
-    return (Get-ClagnosSharedHelpOptionSpecification)
+function Get-ProdicloudTaskHelpOptionSpecification {
+    return (Get-ProdicloudSharedHelpOptionSpecification)
 }

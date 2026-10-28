@@ -1,5 +1,5 @@
 # 'group' option binding for 'task'.
 
-function Get-ClagnosTaskGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudTaskGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

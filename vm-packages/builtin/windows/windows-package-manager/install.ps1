@@ -2,10 +2,10 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 Write-Host "Update task started: install-winget-tool"
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Add-MachinePathEntry {
@@ -66,7 +66,7 @@ function Test-WingetExecutable {
 }
 
 function Get-WingetPortableRoot {
-    return 'C:\ProgramData\clagnos\tools\winget-x64'
+    return 'C:\ProgramData\prodicloud\tools\winget-x64'
 }
 
 function Expand-WingetPortableBundle {
@@ -89,7 +89,7 @@ function Expand-WingetPortableBundle {
     }
     New-Item -Path $portableRoot -ItemType Directory -Force | Out-Null
 
-    $tempRoot = Join-Path $env:TEMP 'clagnos-winget-bootstrap'
+    $tempRoot = Join-Path $env:TEMP 'prodicloud-winget-bootstrap'
     if (Test-Path -LiteralPath $tempRoot) {
         Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -152,7 +152,7 @@ function Get-AppInstallerWingetExecutablePath {
 }
 
 function Ensure-WingetBundleDownloaded {
-    $cacheRoot = 'C:\ProgramData\clagnos\cache\winget'
+    $cacheRoot = 'C:\ProgramData\prodicloud\cache\winget'
     $bundlePath = Join-Path $cacheRoot 'Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
     if ((Test-Path -LiteralPath $bundlePath) -and ((Get-Item -LiteralPath $bundlePath -ErrorAction SilentlyContinue).Length -gt 0)) {
         return [string]$bundlePath
@@ -198,7 +198,7 @@ function Resolve-WingetExe {
     }
 
     foreach ($bundlePath in @(
-        'C:\ProgramData\clagnos\cache\winget\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle',
+        'C:\ProgramData\prodicloud\cache\winget\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle',
         'C:\ProgramData\chocolatey\lib\winget-cli\tools\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle'
     )) {
         if (-not (Test-Path -LiteralPath $bundlePath)) {

@@ -1,16 +1,16 @@
 # List command runtime helpers.
 
-function Get-ClagnosListSupportedTypes {
+function Get-ProdicloudListSupportedTypes {
     return @('group', 'vm', 'disk', 'vnet', 'subnet', 'nic', 'ip', 'nsg', 'nsg-rule')
 }
 
-function Resolve-ClagnosListRequestedTypes {
+function Resolve-ProdicloudListRequestedTypes {
     param(
         [hashtable]$Options
     )
 
-    $supportedTypes = @(Get-ClagnosListSupportedTypes)
-    $rawText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'type')
+    $supportedTypes = @(Get-ProdicloudListSupportedTypes)
+    $rawText = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'type')
     if ([string]::IsNullOrWhiteSpace([string]$rawText)) {
         return @($supportedTypes)
     }
@@ -43,17 +43,17 @@ function Resolve-ClagnosListRequestedTypes {
     return @($supportedTypes | Where-Object { $values -contains [string]$_ })
 }
 
-function Get-ClagnosListTargetResourceGroups {
+function Get-ProdicloudListTargetResourceGroups {
     param(
         [hashtable]$Options,
         [hashtable]$ConfigMap,
         [System.Management.Automation.PSReference]$ManagedGroupRows = $null
     )
 
-    $requestedGroup = [string](Get-ClagnosCliOptionText -Options $Options -Name 'group')
+    $requestedGroup = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'group')
     if (-not [string]::IsNullOrWhiteSpace([string]$requestedGroup)) {
         $resourceGroup = $requestedGroup.Trim()
-        Assert-ClagnosManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'list'
+        Assert-ProdicloudManagedResourceGroup -ResourceGroup $resourceGroup -OperationName 'list'
         if ($null -ne $ManagedGroupRows) {
             $groupJson = az group show -n $resourceGroup -o json --only-show-errors
             Assert-LastExitCode 'az group show (list group metadata)'
@@ -63,7 +63,7 @@ function Get-ClagnosListTargetResourceGroups {
         return @([string]$resourceGroup)
     }
 
-    $rows = @(Get-ClagnosManagedResourceGroupRows)
+    $rows = @(Get-ProdicloudManagedResourceGroupRows)
     if ($null -ne $ManagedGroupRows) {
         $ManagedGroupRows.Value = @($rows)
     }
@@ -75,7 +75,7 @@ function Get-ClagnosListTargetResourceGroups {
     )
 }
 
-function Invoke-ClagnosListAzJson {
+function Invoke-ProdicloudListAzJson {
     param(
         [string[]]$AzArgs,
         [string]$OperationLabel
@@ -90,7 +90,7 @@ function Invoke-ClagnosListAzJson {
     return (ConvertFrom-JsonCompat -InputObject $json)
 }
 
-function Get-ClagnosListSectionRows {
+function Get-ProdicloudListSectionRows {
     param(
         [string]$TypeName,
         [string[]]$ResourceGroups,
@@ -117,7 +117,7 @@ function Get-ClagnosListSectionRows {
         }
         'vm' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $vmRows = @(Invoke-ClagnosListAzJson -AzArgs @('vm', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az vm list ({0})" -f [string]$resourceGroup))
+                $vmRows = @(Invoke-ProdicloudListAzJson -AzArgs @('vm', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az vm list ({0})" -f [string]$resourceGroup))
                 foreach ($vm in @(ConvertTo-ObjectArrayCompat -InputObject $vmRows)) {
                     $name = [string]$vm.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -129,7 +129,7 @@ function Get-ClagnosListSectionRows {
         }
         'disk' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Compute/disks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list disks ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ProdicloudListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Compute/disks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list disks ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -141,7 +141,7 @@ function Get-ClagnosListSectionRows {
         }
         'vnet' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/virtualNetworks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list vnet ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ProdicloudListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/virtualNetworks', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list vnet ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -153,7 +153,7 @@ function Get-ClagnosListSectionRows {
         }
         'subnet' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $vnetRows = @(Invoke-ClagnosListAzJson -AzArgs @('network', 'vnet', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az network vnet list ({0})" -f [string]$resourceGroup))
+                $vnetRows = @(Invoke-ProdicloudListAzJson -AzArgs @('network', 'vnet', 'list', '-g', [string]$resourceGroup, '-o', 'json', '--only-show-errors') -OperationLabel ("az network vnet list ({0})" -f [string]$resourceGroup))
                 foreach ($vnet in @(ConvertTo-ObjectArrayCompat -InputObject $vnetRows)) {
                     $vnetName = [string]$vnet.name
                     foreach ($subnet in @(ConvertTo-ObjectArrayCompat -InputObject $vnet.subnets)) {
@@ -168,7 +168,7 @@ function Get-ClagnosListSectionRows {
         }
         'nic' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkInterfaces', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nic ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ProdicloudListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkInterfaces', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nic ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -180,7 +180,7 @@ function Get-ClagnosListSectionRows {
         }
         'ip' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/publicIPAddresses', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list public ip ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ProdicloudListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/publicIPAddresses', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list public ip ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -192,7 +192,7 @@ function Get-ClagnosListSectionRows {
         }
         'nsg' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $resourceRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg ({0})" -f [string]$resourceGroup))
+                $resourceRows = @(Invoke-ProdicloudListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg ({0})" -f [string]$resourceGroup))
                 foreach ($resource in @(ConvertTo-ObjectArrayCompat -InputObject $resourceRows)) {
                     $name = [string]$resource.name
                     if (-not [string]::IsNullOrWhiteSpace([string]$name)) {
@@ -204,14 +204,14 @@ function Get-ClagnosListSectionRows {
         }
         'nsg-rule' {
             foreach ($resourceGroup in @($ResourceGroups)) {
-                $nsgRows = @(Invoke-ClagnosListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg for rules ({0})" -f [string]$resourceGroup))
+                $nsgRows = @(Invoke-ProdicloudListAzJson -AzArgs @('resource', 'list', '-g', [string]$resourceGroup, '--resource-type', 'Microsoft.Network/networkSecurityGroups', '-o', 'json', '--only-show-errors') -OperationLabel ("az resource list nsg for rules ({0})" -f [string]$resourceGroup))
                 foreach ($nsg in @(ConvertTo-ObjectArrayCompat -InputObject $nsgRows)) {
                     $nsgName = [string]$nsg.name
                     if ([string]::IsNullOrWhiteSpace([string]$nsgName)) {
                         continue
                     }
 
-                    $ruleRows = @(Invoke-ClagnosListAzJson -AzArgs @('network', 'nsg', 'rule', 'list', '-g', [string]$resourceGroup, '--nsg-name', [string]$nsgName, '-o', 'json', '--only-show-errors') -OperationLabel ("az network nsg rule list ({0}/{1})" -f [string]$resourceGroup, $nsgName))
+                    $ruleRows = @(Invoke-ProdicloudListAzJson -AzArgs @('network', 'nsg', 'rule', 'list', '-g', [string]$resourceGroup, '--nsg-name', [string]$nsgName, '-o', 'json', '--only-show-errors') -OperationLabel ("az network nsg rule list ({0}/{1})" -f [string]$resourceGroup, $nsgName))
                     foreach ($rule in @(ConvertTo-ObjectArrayCompat -InputObject $ruleRows)) {
                         $ruleName = [string]$rule.name
                         if (-not [string]::IsNullOrWhiteSpace([string]$ruleName)) {

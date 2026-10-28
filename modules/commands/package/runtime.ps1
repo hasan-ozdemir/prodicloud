@@ -1,13 +1,13 @@
 # Package catalog, status, and managed guest install/uninstall operations.
 
-function Get-ClagnosPackageCatalog {
+function Get-ProdicloudPackageCatalog {
     param(
         [ValidateSet('windows','linux')][string]$Platform,
         [ValidateSet('builtin','custom')][string]$Catalog,
         [string]$CatalogRoot = ''
     )
 
-    $repoRoot = Get-ClagnosRepoRoot
+    $repoRoot = Get-ProdicloudRepoRoot
     $root = if ([string]::IsNullOrWhiteSpace([string]$CatalogRoot)) {
         Join-Path $repoRoot (Join-Path 'vm-packages' (Join-Path $Catalog $Platform))
     }
@@ -16,7 +16,7 @@ function Get-ClagnosPackageCatalog {
     }
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { return @() }
     $catalogPath = Join-Path $root 'tasks.toml'
-    $catalogState = Read-ClagnosTaskCatalogState -Path $catalogPath
+    $catalogState = Read-ProdicloudTaskCatalogState -Path $catalogPath
     $expectedExtension = if ($Platform -eq 'windows') { '.ps1' } else { '.sh' }
     $packageFolders = @(Get-ChildItem -LiteralPath $root -Directory -Force | Where-Object { -not $_.Name.StartsWith('.') -and $_.Name -ne 'backup-app-states' } | Sort-Object Name)
     $packageFolderNames = @($packageFolders | ForEach-Object { [string]$_.Name })
@@ -59,7 +59,7 @@ function Get-ClagnosPackageCatalog {
         $packageSettings = $null
         if ($null -ne $manifest.settings) {
             $packageSettings = ConvertFrom-JsonCompat -InputObject (ConvertTo-JsonCompat -InputObject $manifest.settings -Depth 12)
-            [void](Get-ClagnosManifestSettingValueMap -Settings $packageSettings -ConfigMap @{})
+            [void](Get-ProdicloudManifestSettingValueMap -Settings $packageSettings -ConfigMap @{})
         }
         if ($category -notin @('application','tool','package','feature')) { throw ("Package '{0}' has unsupported category '{1}'." -f $id, $category) }
 
@@ -221,13 +221,13 @@ function Get-ClagnosPackageCatalog {
             if ($updateStrategy -eq 'windscribe' -and ($Platform -ne 'windows' -or $Catalog -ne 'builtin' -or [string]$id -ne 'windscribe')) {
                 throw 'The windscribe update strategy is valid only for the builtin Windows windscribe package.'
             }
-            $operationsModulePath = Join-Path $repoRoot 'modules/commands/package/clagnos-package-operations.psm1'
+            $operationsModulePath = Join-Path $repoRoot 'modules/commands/package/prodicloud-package-operations.psm1'
             if (-not (Test-Path -LiteralPath $operationsModulePath -PathType Leaf)) { throw "The package lifecycle helper module is missing." }
         }
         else { $updateStrategy = '' }
 
         $enabled = [bool]$catalogState.Entries[[string]$folder.Name]
-        $bootstrapTimeoutSeconds = Convert-ClagnosTaskCatalogTimeout -Value $manifest.timeout -DefaultValue (Get-ClagnosTaskDefaultTimeoutSeconds)
+        $bootstrapTimeoutSeconds = Convert-ProdicloudTaskCatalogTimeout -Value $manifest.timeout -DefaultValue (Get-ProdicloudTaskDefaultTimeoutSeconds)
         $operationTimeoutSeconds = @{}
         foreach ($timeoutAction in @('status','install','repair','update','uninstall','reinstall')) {
             $configuredTimeout = $null
@@ -235,26 +235,26 @@ function Get-ClagnosPackageCatalog {
                 $configuredTimeout = $manifest.operationTimeoutSeconds.$timeoutAction
             }
             if ($timeoutAction -eq 'reinstall' -and $null -eq $configuredTimeout) { continue }
-            $operationTimeoutSeconds[$timeoutAction] = Convert-ClagnosTaskCatalogTimeout -Value $configuredTimeout -DefaultValue $bootstrapTimeoutSeconds
+            $operationTimeoutSeconds[$timeoutAction] = Convert-ProdicloudTaskCatalogTimeout -Value $configuredTimeout -DefaultValue $bootstrapTimeoutSeconds
         }
         if (-not $operationTimeoutSeconds.ContainsKey('reinstall')) { $operationTimeoutSeconds['reinstall'] = [Math]::Min(7200,([int]$operationTimeoutSeconds['uninstall'] + [int]$operationTimeoutSeconds['install'])) }
         $timeoutSeconds = [int]$operationTimeoutSeconds['install']
         $sortOrder = 0
         if ($null -ne $manifest.sortOrder -and [string]$manifest.sortOrder -match '^\d+$') { $sortOrder = [int]$manifest.sortOrder }
         $assetSpecs = @()
-        if ($null -ne $manifest.assets) { $assetSpecs = @(ConvertTo-ClagnosTaskFolderAssetSpecs -Assets $manifest.assets -TaskLabel $id) }
+        if ($null -ne $manifest.assets) { $assetSpecs = @(ConvertTo-ProdicloudTaskFolderAssetSpecs -Assets $manifest.assets -TaskLabel $id) }
         if (-not [string]::IsNullOrWhiteSpace($operationsModulePath)) {
-            $assetSpecs += [pscustomobject]@{ LocalPath = [string]$operationsModulePath; RemotePath = 'C:/Windows/Temp/clagnos-package-operations.psm1' }
+            $assetSpecs += [pscustomobject]@{ LocalPath = [string]$operationsModulePath; RemotePath = 'C:/Windows/Temp/prodicloud-package-operations.psm1' }
         }
         $appStateKey = [string]$manifest.appStateKey
         if ([string]::IsNullOrWhiteSpace($appStateKey)) { $appStateKey = $id }
         if ($appStateKey -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw ("Package '{0}' has an invalid appStateKey." -f $id) }
         $appStateSpec = $null
-        if ($null -ne $manifest.appState) { $appStateSpec = ConvertTo-ClagnosTaskFolderAppStateSpec -AppState $manifest.appState -TaskName $appStateKey -TaskLabel $id }
+        if ($null -ne $manifest.appState) { $appStateSpec = ConvertTo-ProdicloudTaskFolderAppStateSpec -AppState $manifest.appState -TaskName $appStateKey -TaskLabel $id }
         if ($null -ne $appStateSpec -and $Platform -eq 'windows') {
-            $appStateGuestHelperPath = Get-ClagnosAppStateGuestHelperPath
+            $appStateGuestHelperPath = Get-ProdicloudAppStateGuestHelperPath
             if (Test-Path -LiteralPath $appStateGuestHelperPath -PathType Leaf) {
-                $assetSpecs += [pscustomobject]@{ LocalPath = [string]$appStateGuestHelperPath; RemotePath = 'C:/Windows/Temp/clagnos-app-state-guest.psm1' }
+                $assetSpecs += [pscustomobject]@{ LocalPath = [string]$appStateGuestHelperPath; RemotePath = 'C:/Windows/Temp/prodicloud-app-state-guest.psm1' }
             }
         }
         $postInstallTasks = @()
@@ -352,26 +352,26 @@ function Get-ClagnosPackageCatalog {
     return @($packages | Sort-Object @{ Expression = { [int]$_.SortOrder } }, { [string]$_.DisplayName })
 }
 
-function Get-ClagnosPackageStatusCacheKey {
+function Get-ProdicloudPackageStatusCacheKey {
     param([object[]]$Packages, [hashtable]$Options, [string]$Platform)
     $transport = 'ssh'
     try {
-        $configPath = Get-ClagnosGlobalEnvPath
+        $configPath = Get-ProdicloudGlobalEnvPath
         $globalConfig = if (Test-Path -LiteralPath $configPath -PathType Leaf) { Read-DotEnvFile -Path $configPath -GlobalOnly } else { @{} }
-        $targetVmName = [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name')
+        $targetVmName = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-name')
         if ([string]::IsNullOrWhiteSpace([string]$targetVmName)) { $targetVmName = [string]$globalConfig['ACTIVE_VM_NAME'] }
-        $targetConfig = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfig -VmName $targetVmName
-        $transport = Get-ClagnosPackageTransport -ConfigMap $targetConfig
+        $targetConfig = Merge-ProdicloudVmEnvironmentConfig -GlobalConfigMap $globalConfig -VmName $targetVmName
+        $transport = Get-ProdicloudPackageTransport -ConfigMap $targetConfig
     }
     catch { $transport = 'invalid' }
     $catalogIdentity = @($Packages | ForEach-Object {
         $statusCheck = ConvertTo-Json -InputObject $_.StatusCheck -Depth 20 -Compress
         '{0}:{1}:{2}:{3}' -f [string]$_.Catalog,[string]$_.Id,[string]$statusCheck,[bool]$_.Enabled
     } | Sort-Object) -join ','
-    return ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'group'), [string](Get-ClagnosCliOptionText -Options $Options -Name 'vm-name'), [string]$Platform, $transport, $catalogIdentity).ToLowerInvariant()
+    return ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string](Get-ProdicloudCliOptionText -Options $Options -Name 'subscription-id'), [string](Get-ProdicloudCliOptionText -Options $Options -Name 'group'), [string](Get-ProdicloudCliOptionText -Options $Options -Name 'vm-name'), [string]$Platform, $transport, $catalogIdentity).ToLowerInvariant()
 }
 
-function Get-ClagnosPackageTimeoutSeconds {
+function Get-ProdicloudPackageTimeoutSeconds {
     param([Parameter(Mandatory = $true)][object]$Package,[Parameter(Mandatory = $true)][ValidateSet('status','install','repair','update','uninstall','reinstall')][string]$Action)
 
     $timeouts = $Package.OperationTimeoutSeconds
@@ -382,7 +382,7 @@ function Get-ClagnosPackageTimeoutSeconds {
     return [int]$Package.PackageTask.TimeoutSeconds
 }
 
-function Get-ClagnosPackageStatusDiskCachePath {
+function Get-ProdicloudPackageStatusDiskCachePath {
     param([string]$Key)
 
     $root = [string]$env:LOCALAPPDATA
@@ -391,21 +391,21 @@ function Get-ClagnosPackageStatusDiskCachePath {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $digest = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','').ToLowerInvariant() }
     finally { $sha.Dispose() }
-    return (Join-Path (Join-Path $root 'Clagnos\cache\package-status') ($digest + '.json'))
+    return (Join-Path (Join-Path $root 'Prodicloud\cache\package-status') ($digest + '.json'))
 }
 
-function ConvertTo-ClagnosPackageStatusUtcDateTime {
+function ConvertTo-ProdicloudPackageStatusUtcDateTime {
     param([Parameter(Mandatory = $true)][object]$Value)
 
     if ($Value -is [DateTime]) { return ([DateTime]$Value).ToUniversalTime() }
     return [DateTime]::Parse([string]$Value,[System.Globalization.CultureInfo]::InvariantCulture,[System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
 }
 
-function Save-ClagnosPackageStatusCacheEntry {
+function Save-ProdicloudPackageStatusCacheEntry {
     param([string]$Key, [hashtable]$Entry)
 
-    if ([string]$env:CLAGNOS_PACKAGE_STATUS_CACHE_NO_DISK_WRITE -match '^(?i)(1|true|yes|on)$') { return }
-    $path = Get-ClagnosPackageStatusDiskCachePath -Key $Key
+    if ([string]$env:PRODICLOUD_PACKAGE_STATUS_CACHE_NO_DISK_WRITE -match '^(?i)(1|true|yes|on)$') { return }
+    $path = Get-ProdicloudPackageStatusDiskCachePath -Key $Key
     $directory = Split-Path -Parent $path
     if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     $temporaryPath = '{0}.{1}.{2}.tmp' -f $path,$PID,[Guid]::NewGuid().ToString('N')
@@ -421,34 +421,34 @@ function Save-ClagnosPackageStatusCacheEntry {
     finally { if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue } }
 }
 
-function Get-ClagnosPackageStatusCacheEntry {
+function Get-ProdicloudPackageStatusCacheEntry {
     param([object[]]$Packages, [hashtable]$Options, [string]$Platform)
 
-    $key = Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
-    if ($null -eq $script:ClagnosPackageStatusCache) { $script:ClagnosPackageStatusCache = @{} }
-    $entry = if ($script:ClagnosPackageStatusCache.ContainsKey($key)) { $script:ClagnosPackageStatusCache[$key] } else { $null }
-    $path = Get-ClagnosPackageStatusDiskCachePath -Key $key
+    $key = Get-ProdicloudPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
+    if ($null -eq $script:ProdicloudPackageStatusCache) { $script:ProdicloudPackageStatusCache = @{} }
+    $entry = if ($script:ProdicloudPackageStatusCache.ContainsKey($key)) { $script:ProdicloudPackageStatusCache[$key] } else { $null }
+    $path = Get-ProdicloudPackageStatusDiskCachePath -Key $key
     if (Test-Path -LiteralPath $path -PathType Leaf) {
         try {
             $diskEntry = ConvertFrom-JsonCompat -InputObject ([string](Get-Content -LiteralPath $path -Raw -ErrorAction Stop))
             if ([string]::Equals([string]$diskEntry.CacheKey,$key,[System.StringComparison]::Ordinal)) {
-                $diskCreatedAt = ConvertTo-ClagnosPackageStatusUtcDateTime -Value $diskEntry.CreatedAtUtc
+                $diskCreatedAt = ConvertTo-ProdicloudPackageStatusUtcDateTime -Value $diskEntry.CreatedAtUtc
                 if ($null -eq $entry -or $diskCreatedAt -gt [DateTime]$entry.CreatedAtUtc) {
                     $entry = @{ CreatedAtUtc = $diskCreatedAt; Complete = [bool]$diskEntry.Complete; StatusByPackage = @{} }
                     foreach ($property in @($diskEntry.StatusByPackage.PSObject.Properties)) { $entry.StatusByPackage[[string]$property.Name] = [string]$property.Value }
-                    $script:ClagnosPackageStatusCache[$key] = $entry
+                    $script:ProdicloudPackageStatusCache[$key] = $entry
                 }
             }
         }
         catch { if ($null -eq $entry) { $entry = $null } }
     }
     if ($null -eq $entry) { return $null }
-    $ttlSeconds = if ([int]$script:ClagnosPackageStatusCacheTtlSeconds -gt 0) { [int]$script:ClagnosPackageStatusCacheTtlSeconds } else { 45 }
+    $ttlSeconds = if ([int]$script:ProdicloudPackageStatusCacheTtlSeconds -gt 0) { [int]$script:ProdicloudPackageStatusCacheTtlSeconds } else { 45 }
     $age = ([DateTime]::UtcNow - [DateTime]$entry.CreatedAtUtc).TotalSeconds
     return [pscustomobject]@{ Key = $key; Entry = $entry; IsFresh = ($age -lt $ttlSeconds -and [bool]$entry.Complete); AgeSeconds = [double]$age }
 }
 
-function Get-ClagnosPackageLifecycleSpecBase64 {
+function Get-ProdicloudPackageLifecycleSpecBase64 {
     param([object]$Package,[object]$Context = $null)
     $spec = [ordered]@{
         id = [string]$Package.Id
@@ -474,39 +474,39 @@ function Get-ClagnosPackageLifecycleSpecBase64 {
     return [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$json))
 }
 
-function New-ClagnosPackageRepairWithAppStateBackupScript {
+function New-ProdicloudPackageRepairWithAppStateBackupScript {
     param([string]$InnerScript,[object]$Package,[object]$Context)
 
     if ([string]::IsNullOrWhiteSpace([string]$InnerScript) -or $null -eq $Package.PackageTask.AppStateSpec) { return [string]$InnerScript }
-    $capturePlan = Get-ClagnosTaskAppStateCapturePlan -TaskBlock $Package.PackageTask
-    $planJson = ConvertTo-ClagnosTaskAppStateCapturePlanJson -CapturePlan $capturePlan
+    $capturePlan = Get-ProdicloudTaskAppStateCapturePlan -TaskBlock $Package.PackageTask
+    $planJson = ConvertTo-ProdicloudTaskAppStateCapturePlanJson -CapturePlan $capturePlan
     if ([string]::IsNullOrWhiteSpace([string]$planJson)) { return [string]$InnerScript }
     $planBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$planJson))
     $innerBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes([string]$InnerScript))
-    $taskName = Get-ClagnosTaskAppStateIdentity -TaskBlock $Package.PackageTask
+    $taskName = Get-ProdicloudTaskAppStateIdentity -TaskBlock $Package.PackageTask
     $managerUser = if ($null -ne $Context) { ([string]$Context.VmUser).Replace("'","''") } else { '' }
     $assistantUser = if ($null -ne $Context) { ([string]$Context.VmAssistantUser).Replace("'","''") } else { '' }
     $wrapper = @'
 $ErrorActionPreference = 'Stop'
-$taskName = '__CLAGNOS_REPAIR_TASK_NAME__'
-$managerUser = '__CLAGNOS_REPAIR_MANAGER_USER__'
-$assistantUser = '__CLAGNOS_REPAIR_ASSISTANT_USER__'
-$planBase64 = '__CLAGNOS_REPAIR_PLAN_B64__'
-$innerBase64 = '__CLAGNOS_REPAIR_INNER_B64__'
-$helperPath = 'C:\Windows\Temp\clagnos-app-state-guest.psm1'
+$taskName = '__PRODICLOUD_REPAIR_TASK_NAME__'
+$managerUser = '__PRODICLOUD_REPAIR_MANAGER_USER__'
+$assistantUser = '__PRODICLOUD_REPAIR_ASSISTANT_USER__'
+$planBase64 = '__PRODICLOUD_REPAIR_PLAN_B64__'
+$innerBase64 = '__PRODICLOUD_REPAIR_INNER_B64__'
+$helperPath = 'C:\Windows\Temp\prodicloud-app-state-guest.psm1'
 if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) { throw ('Package repair state helper was not staged: ' + $helperPath) }
 Import-Module $helperPath -Force -DisableNameChecking
-$scratchRoot = Join-Path ([IO.Path]::GetTempPath()) ('clagnos-package-repair-' + [guid]::NewGuid().ToString('N'))
+$scratchRoot = Join-Path ([IO.Path]::GetTempPath()) ('prodicloud-package-repair-' + [guid]::NewGuid().ToString('N'))
 $planPath = Join-Path $scratchRoot 'capture-plan.json'
 $backupZip = Join-Path $scratchRoot 'current-app-state.zip'
-$emergencyRoot = Join-Path (Join-Path $env:ProgramData 'clagnos\state') 'package-repair-backups'
+$emergencyRoot = Join-Path (Join-Path $env:ProgramData 'prodicloud\state') 'package-repair-backups'
 $safeTaskName = [regex]::Replace($taskName,'[^A-Za-z0-9._-]','_')
 $emergencyZip = Join-Path $emergencyRoot ($safeTaskName + '.zip')
 New-Item -ItemType Directory -Path $scratchRoot -Force | Out-Null
 try {
 $planJson = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($planBase64))
 [IO.File]::WriteAllText($planPath,$planJson,(New-Object System.Text.UTF8Encoding($false)))
-$capture = Invoke-ClagnosTaskAppStateCapture -TaskName $taskName -PlanPath $planPath -OutputZipPath $backupZip -ManagerUser $managerUser -AssistantUser $assistantUser
+$capture = Invoke-ProdicloudTaskAppStateCapture -TaskName $taskName -PlanPath $planPath -OutputZipPath $backupZip -ManagerUser $managerUser -AssistantUser $assistantUser
 if (-not [bool]$capture.CreatedZip -or -not (Test-Path -LiteralPath $backupZip -PathType Leaf)) {
     Write-Output ('No app-state files were present to preserve for ' + $taskName + '; continuing same-version repair.')
     $innerScript = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($innerBase64))
@@ -519,7 +519,7 @@ Copy-Item -LiteralPath $backupZip -Destination $emergencyZip -Force -ErrorAction
 try {
     $innerScript = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($innerBase64))
     & ([scriptblock]::Create($innerScript))
-    $restore = Invoke-ClagnosTaskAppStateReplay -ZipPath $backupZip -TaskName $taskName -ManagerUser $managerUser -AssistantUser $assistantUser
+    $restore = Invoke-ProdicloudTaskAppStateReplay -ZipPath $backupZip -TaskName $taskName -ManagerUser $managerUser -AssistantUser $assistantUser
     if (-not [bool]$restore.Verified -or [int]$restore.VerifyMismatchCount -gt 0) { throw 'The captured package settings did not verify after repair.' }
     if (Test-Path -LiteralPath $emergencyZip -PathType Leaf) { Remove-Item -LiteralPath $emergencyZip -Force -ErrorAction Stop }
     if (Test-Path -LiteralPath $emergencyZip -PathType Leaf) { throw 'The verified package repair backup could not be cleaned up.' }
@@ -533,15 +533,15 @@ finally {
     Remove-Item -LiteralPath $scratchRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 '@
-    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_TASK_NAME__',$taskName)
-    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_MANAGER_USER__',$managerUser)
-    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_ASSISTANT_USER__',$assistantUser)
-    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_PLAN_B64__',$planBase64)
-    $wrapper = $wrapper.Replace('__CLAGNOS_REPAIR_INNER_B64__',$innerBase64)
+    $wrapper = $wrapper.Replace('__PRODICLOUD_REPAIR_TASK_NAME__',$taskName)
+    $wrapper = $wrapper.Replace('__PRODICLOUD_REPAIR_MANAGER_USER__',$managerUser)
+    $wrapper = $wrapper.Replace('__PRODICLOUD_REPAIR_ASSISTANT_USER__',$assistantUser)
+    $wrapper = $wrapper.Replace('__PRODICLOUD_REPAIR_PLAN_B64__',$planBase64)
+    $wrapper = $wrapper.Replace('__PRODICLOUD_REPAIR_INNER_B64__',$innerBase64)
     return [string]$wrapper
 }
 
-function New-ClagnosPackageLifecycleScript {
+function New-ProdicloudPackageLifecycleScript {
     param(
         [ValidateSet('status','install','repair','update','uninstall')][string]$Action,
         [object]$Package,
@@ -558,18 +558,18 @@ function New-ClagnosPackageLifecycleScript {
         if ($Action -eq 'install') {
             $template = @'
 $ErrorActionPreference = 'Stop'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action install -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
+Invoke-ProdicloudPackageLifecycle -Action install -PackageSpecBase64 '__PRODICLOUD_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__PRODICLOUD_INSTALL_SCRIPT_B64__'
 '@
         }
         else {
             $scriptAction = $Action
             $template = @'
 $ErrorActionPreference = 'Stop'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action __CLAGNOS_ACTION__ -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
+Invoke-ProdicloudPackageLifecycle -Action __PRODICLOUD_ACTION__ -PackageSpecBase64 '__PRODICLOUD_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__PRODICLOUD_INSTALL_SCRIPT_B64__'
 '@
-            $template = $template.Replace('__CLAGNOS_ACTION__',[string]$scriptAction)
+            $template = $template.Replace('__PRODICLOUD_ACTION__',[string]$scriptAction)
         }
     }
     if ([string]::IsNullOrWhiteSpace($template)) { return '' }
@@ -582,36 +582,36 @@ Invoke-ClagnosPackageLifecycle -Action __CLAGNOS_ACTION__ -PackageSpecBase64 '__
         $template = $template.Replace('__VM_ADMIN_USER__',$managerUserToken)
         $template = $template.Replace('__VM_ADMIN_PASS__',$managerPasswordToken)
     }
-    $template = $template.Replace('__CLAGNOS_PACKAGE_SPEC_B64__',(Get-ClagnosPackageLifecycleSpecBase64 -Package $Package -Context $Context))
+    $template = $template.Replace('__PRODICLOUD_PACKAGE_SPEC_B64__',(Get-ProdicloudPackageLifecycleSpecBase64 -Package $Package -Context $Context))
     if ($Action -in @('install','repair','update')) {
         $installSource = [string]$Package.PackageTask.Script
         if ($null -ne $Context) {
-            $resolved = @(Apply-ClagnosTaskBlockReplacements -TaskBlocks @($Package.PackageTask) -Replacements (Get-ClagnosTaskTokenReplacements -Context $Context) -Context $Context)
+            $resolved = @(Apply-ProdicloudTaskBlockReplacements -TaskBlocks @($Package.PackageTask) -Replacements (Get-ProdicloudTaskTokenReplacements -Context $Context) -Context $Context)
             if ($resolved.Count -gt 0) { $installSource = [string]$resolved[0].Script }
         }
         $installBase64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($installSource))
-        $template = $template.Replace('__CLAGNOS_INSTALL_SCRIPT_B64__',$installBase64)
+        $template = $template.Replace('__PRODICLOUD_INSTALL_SCRIPT_B64__',$installBase64)
     }
-    if ($Action -eq 'repair') { $template = New-ClagnosPackageRepairWithAppStateBackupScript -InnerScript $template -Package $Package -Context $Context }
+    if ($Action -eq 'repair') { $template = New-ProdicloudPackageRepairWithAppStateBackupScript -InnerScript $template -Package $Package -Context $Context }
     if ($null -ne $Context -and $null -ne $Package.PackageTask -and $Package.PackageTask.PSObject.Properties.Match('Settings').Count -gt 0) {
         $settingsConfig = @{}
         if ($Context -is [System.Collections.IDictionary] -and $Context.Contains('ConfigMap')) { $settingsConfig = [hashtable]$Context['ConfigMap'] }
-        $settingValues = Get-ClagnosManifestSettingValueMap -Settings $Package.PackageTask.Settings -ConfigMap $settingsConfig
+        $settingValues = Get-ProdicloudManifestSettingValueMap -Settings $Package.PackageTask.Settings -ConfigMap $settingsConfig
         foreach ($settingKey in @($settingValues.Keys)) { $template = $template.Replace(('__{0}__' -f [string]$settingKey),[string]$settingValues[$settingKey]) }
     }
     return [string]$template
 }
 
-function Get-ClagnosPackageStructuredResult {
+function Get-ProdicloudPackageStructuredResult {
     param([psobject]$TaskResult)
     if ($null -eq $TaskResult -or $null -eq $TaskResult.Result -or @($TaskResult.Result.TaskOutputs).Count -eq 0) { return $null }
     $output = [string]$TaskResult.Result.TaskOutputs[0].Output
-    $match = [regex]::Match($output,'(?m)^CLAGNOS_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
+    $match = [regex]::Match($output,'(?m)^PRODICLOUD_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
     if (-not $match.Success) { return $null }
     return (ConvertFrom-JsonCompat -InputObject ([string]$match.Groups['json'].Value))
 }
 
-function New-ClagnosPackageGuestScript {
+function New-ProdicloudPackageGuestScript {
     param(
         [string]$Action,
         [object[]]$Packages,
@@ -656,7 +656,7 @@ done <<EOF
 $records
 EOF
 json="${json}]"
-printf 'CLAGNOS_PACKAGE_RESULTS:%s\n' "$json"
+printf 'PRODICLOUD_PACKAGE_RESULTS:%s\n' "$json"
 '@
             return $bash.Replace('__RECORDS__',$recordBase64)
         }
@@ -671,13 +671,13 @@ printf 'CLAGNOS_PACKAGE_RESULTS:%s\n' "$json"
             'snap' { "sudo -n snap remove $quoted" }
             default { throw ("Unsupported Linux uninstall kind '{0}'." -f [string]$uninstall.kind) }
         }
-        return ("set -e`n{0}`nprintf 'CLAGNOS_PACKAGE_REMOVED:{1}\\n' '{1}'" -f $bashAction,[string]$package.Id)
+        return ("set -e`n{0}`nprintf 'PRODICLOUD_PACKAGE_REMOVED:{1}\\n' '{1}'" -f $bashAction,[string]$package.Id)
     }
     if ([string]::Equals([string]$Action, 'status', [System.StringComparison]::OrdinalIgnoreCase)) {
         return @"
 `$payload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$base64'))
 `$parsedPackageInput = ConvertFrom-Json -InputObject `$payload
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
 `$packages = @()
 foreach (`$entry in @(`$parsedPackageInput)) {
     # Windows PowerShell 5.1 can return a JSON root array as one nested collection object.
@@ -695,7 +695,7 @@ $script:PackageStatusDetails = @{}
 `$wingetInventory = ''
 `$wingetInventoryReady = `$false
 if (`$hasWingetPackages) {
-    `$wingetExePath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+    `$wingetExePath = 'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
     if (-not (Test-Path -LiteralPath `$wingetExePath -PathType Leaf)) {
         `$wingetExe = Get-Command winget.exe -ErrorAction SilentlyContinue
         if (`$wingetExe -and -not [string]::IsNullOrWhiteSpace([string]`$wingetExe.Source)) { `$wingetExePath = [string]`$wingetExe.Source }
@@ -734,8 +734,8 @@ function Get-PackageStatus {
     `$value = [string]`$check.value
     switch ([string]`$check.kind) {
         'command' { if ((Test-Path -LiteralPath `$value -PathType Leaf) -or (Get-Command `$value -ErrorAction SilentlyContinue)) { return 'installed' }; return 'not-installed' }
-        'windscribe' { `$record = Get-ClagnosWindscribePackageRecord -Spec `$Package; return [string]`$record.Status }
-        'wsl' { `$record = Get-ClagnosWslPackageRecord -DisplayName `$value; return [string]`$record.Status }
+        'windscribe' { `$record = Get-ProdicloudWindscribePackageRecord -Spec `$Package; return [string]`$record.Status }
+        'wsl' { `$record = Get-ProdicloudWslPackageRecord -DisplayName `$value; return [string]`$record.Status }
         'winget' {
             if (-not `$wingetInventoryReady) { return 'unknown' }
             if (`$wingetInventory -match ('(?im)(?:^|\s)' + [regex]::Escape(`$value) + '(?:\s|$)')) { return 'installed' }
@@ -746,7 +746,7 @@ function Get-PackageStatus {
             if (`$chocoInventory -match ('(?im)^' + [regex]::Escape(`$value) + '\|[^|\s]+\s*$')) {
                 if (-not [string]::IsNullOrWhiteSpace([string]`$check.executable)) {
                     `$versionArgument = if ([string]::IsNullOrWhiteSpace([string]`$check.versionArgument)) { '-version' } else { [string]`$check.versionArgument }
-                    `$executableRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId `$value -ExecutableName ([string]`$check.executable) -VersionArgument `$versionArgument -AdditionalPaths @(`$check.executablePaths)
+                    `$executableRecord = Get-ProdicloudChocolateyPackageExecutableRecord -PackageId `$value -ExecutableName ([string]`$check.executable) -VersionArgument `$versionArgument -AdditionalPaths @(`$check.executablePaths)
                     `$script:PackageStatusDetails[[string]`$Package.id] = [string]`$executableRecord.Detail
                     if ([string]`$executableRecord.Status -ne 'installed') { return 'installed-drifted' }
                 }
@@ -754,7 +754,7 @@ function Get-PackageStatus {
             }
             if (-not [string]::IsNullOrWhiteSpace([string]`$check.executable)) {
                 `$versionArgument = if ([string]::IsNullOrWhiteSpace([string]`$check.versionArgument)) { '-version' } else { [string]`$check.versionArgument }
-                `$executableRecord = Get-ClagnosChocolateyPackageExecutableRecord -PackageId `$value -ExecutableName ([string]`$check.executable) -VersionArgument `$versionArgument -AdditionalPaths @(`$check.executablePaths)
+                `$executableRecord = Get-ProdicloudChocolateyPackageExecutableRecord -PackageId `$value -ExecutableName ([string]`$check.executable) -VersionArgument `$versionArgument -AdditionalPaths @(`$check.executablePaths)
                 if ([string]`$executableRecord.Status -in @('installed','installed-drifted')) {
                     `$script:PackageStatusDetails[[string]`$Package.id] = 'The executable exists without a matching Chocolatey registration.'
                     return 'unknown'
@@ -785,12 +785,12 @@ function Get-PackageStatus {
                 if (`$appMatches.Count -gt 0) { return 'installed' }
             }
             `$safeName = [regex]::Replace(`$value, '[^A-Za-z0-9._-]', '_')
-            `$path = Join-Path (Join-Path `$env:ProgramData 'clagnos\state\store-installs') (`$safeName + '.json')
+            `$path = Join-Path (Join-Path `$env:ProgramData 'prodicloud\state\store-installs') (`$safeName + '.json')
             if (-not (Test-Path -LiteralPath `$path)) { if (`$appxInventoryReady) { return 'not-installed' }; return 'unknown' }
             try { `$state = Get-Content -LiteralPath `$path -Raw | ConvertFrom-Json; if ([string]`$state.State -eq 'installed') { return 'unknown' }; return 'not-installed' } catch { return 'unknown' }
         }
         'choco-self' { if (Test-Path -LiteralPath (Join-Path `$env:ProgramData 'chocolatey\bin\choco.exe')) { return 'installed' }; return 'not-installed' }
-        'sysinternals' { `$sysinternals = Get-ClagnosSysinternalsPackageRecord -Spec `$Package; return [string]`$sysinternals.Status }
+        'sysinternals' { `$sysinternals = Get-ProdicloudSysinternalsPackageRecord -Spec `$Package; return [string]`$sysinternals.Status }
         default { return 'unknown' }
     }
 }
@@ -799,20 +799,20 @@ foreach (`$package in `$packages) {
     `$status = Get-PackageStatus -Package `$package
     `$detail = if (`$script:PackageStatusDetails.ContainsKey([string]`$package.id)) { [string]`$script:PackageStatusDetails[[string]`$package.id] } else { '' }
     if ([string]`$package.id -eq 'windscribe') {
-        `$windscribeRecord = Get-ClagnosWindscribePackageRecord -Spec `$package
+        `$windscribeRecord = Get-ProdicloudWindscribePackageRecord -Spec `$package
         `$status = [string]`$windscribeRecord.Status
         `$detail = [string]`$windscribeRecord.Detail
     }
     elseif ([string]`$package.id -eq 'windows-subsystem-linux') {
-        `$wslRecord = Get-ClagnosWslPackageRecord -DisplayName ([string]`$package.statusCheck.value)
+        `$wslRecord = Get-ProdicloudWslPackageRecord -DisplayName ([string]`$package.statusCheck.value)
         `$status = [string]`$wslRecord.Status
         `$detail = [string]`$wslRecord.Detail
     }
     elseif (`$status -eq 'installed') {
         if ([string]`$package.id -eq 'jaws' -and @(`$package.targetUsers).Count -gt 0) {
-            `$missingUsers = @(`$package.targetUsers | Where-Object { -not (Test-ClagnosJawsPostLogonStartup -UserName ([string]`$_) -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe') })
-                `$logonScreenReady = Test-ClagnosJawsLogonScreenStartup
-                `$jawsState = Get-ClagnosJawsPackageStatusDetails -Spec `$package
+            `$missingUsers = @(`$package.targetUsers | Where-Object { -not (Test-ProdicloudJawsPostLogonStartup -UserName ([string]`$_) -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe') })
+                `$logonScreenReady = Test-ProdicloudJawsLogonScreenStartup
+                `$jawsState = Get-ProdicloudJawsPackageStatusDetails -Spec `$package
                 if (`$missingUsers.Count -gt 0 -or -not `$logonScreenReady) {
                     `$detailParts = @()
                     if (`$missingUsers.Count -gt 0) { `$detailParts += 'post-logon startup is missing for: ' + (`$missingUsers -join ', ') }
@@ -825,7 +825,7 @@ foreach (`$package in `$packages) {
                 else { `$detail = 'JAWS starts at the Windows logon screen and after logon for manager and assistant; ENU-only, offline, and app-state checks passed.' }
         }
         elseif ([string]`$package.id -in @('ollama','docker-desktop')) {
-            `$detail = Test-ClagnosPackageStartupState -Spec `$package
+            `$detail = Test-ProdicloudPackageStartupState -Spec `$package
             if (`$detail -match '(?i)missing|not verified') { `$status = 'installed-drifted' }
         }
     }
@@ -833,7 +833,7 @@ foreach (`$package in `$packages) {
 }
 `$jsonResult = ConvertTo-Json -InputObject `$results -Depth 4 -Compress
 `$global:LASTEXITCODE = 0
-Write-Output ('CLAGNOS_PACKAGE_RESULTS:' + `$jsonResult)
+Write-Output ('PRODICLOUD_PACKAGE_RESULTS:' + `$jsonResult)
 "@
     }
 
@@ -854,15 +854,15 @@ foreach (`$package in `$packages) {
     `$results += [pscustomobject]@{ id = [string]`$package.id; status = `$status }
 }
 `$jsonResult = ConvertTo-Json -InputObject `$results -Depth 4 -Compress
-Write-Output ('CLAGNOS_PACKAGE_RESULTS:' + `$jsonResult)
+Write-Output ('PRODICLOUD_PACKAGE_RESULTS:' + `$jsonResult)
 "@
 }
 
-function New-ClagnosPackageUninstallScript {
+function New-ProdicloudPackageUninstallScript {
     param([object]$Package, [ValidateSet('windows','linux')][string]$Platform = 'windows',[object]$Context = $null)
 
     if (-not [string]::IsNullOrWhiteSpace([string]$Package.UninstallScriptText)) {
-        return (New-ClagnosPackageLifecycleScript -Action 'uninstall' -Package $Package -Context $Context)
+        return (New-ProdicloudPackageLifecycleScript -Action 'uninstall' -Package $Package -Context $Context)
     }
 
     $actionPackage = [pscustomobject]@{
@@ -884,7 +884,7 @@ function New-ClagnosPackageUninstallScript {
             'snap' { "sudo -n snap remove $quoted" }
             default { throw ("Unsupported Linux uninstall kind '{0}'." -f [string]$uninstall.kind) }
         }
-        return ("set -e`n{0}`nprintf 'CLAGNOS_PACKAGE_REMOVED:{1}\\n' '{1}'" -f $bashAction,[string]$package.Id)
+        return ("set -e`n{0}`nprintf 'PRODICLOUD_PACKAGE_REMOVED:{1}\\n' '{1}'" -f $bashAction,[string]$package.Id)
     }
     return @"
 `$payload = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('$base64'))
@@ -899,19 +899,19 @@ switch ([string]`$uninstall.kind) {
     'appx' { `$packages = @(Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue | Where-Object { `$_.Name -like ('*' + `$value + '*') -or `$_.PackageFamilyName -like ('*' + `$value + '*') -or `$_.PackageFullName -like ('*' + `$value + '*') }); foreach (`$package in `$packages) { Remove-AppxPackage -Package `$package.PackageFullName -AllUsers -ErrorAction Stop } }
     'windows-feature' { Disable-WindowsOptionalFeature -Online -FeatureName `$value -NoRestart -ErrorAction Stop | Out-Null }
     'choco-self' { if (Test-Path -LiteralPath `$value) { Remove-Item -LiteralPath `$value -Recurse -Force }; Write-Output 'Chocolatey files removed.' }
-    'sysinternals' { Remove-ClagnosSysinternalsPackage -Spec `$package }
+    'sysinternals' { Remove-ProdicloudSysinternalsPackage -Spec `$package }
     default { throw ('Unsupported safe uninstall type: ' + [string]`$uninstall.kind) }
 }
 if ([string]`$package.statusCheck.kind -eq 'store-state') {
     `$safeName = [regex]::Replace([string]`$package.statusCheck.value, '[^A-Za-z0-9._-]', '_')
-    `$statePath = Join-Path (Join-Path `$env:ProgramData 'clagnos\state\store-installs') (`$safeName + '.json')
+    `$statePath = Join-Path (Join-Path `$env:ProgramData 'prodicloud\state\store-installs') (`$safeName + '.json')
     if (Test-Path -LiteralPath `$statePath) { Remove-Item -LiteralPath `$statePath -Force }
 }
-Write-Output ('CLAGNOS_PACKAGE_REMOVED:' + [string]`$package.id)
+Write-Output ('PRODICLOUD_PACKAGE_REMOVED:' + [string]`$package.id)
 "@
 }
 
-function Invoke-ClagnosPackageGuestScript {
+function Invoke-ProdicloudPackageGuestScript {
     param(
         [hashtable]$Options,
         [string]$Platform,
@@ -923,25 +923,25 @@ function Invoke-ClagnosPackageGuestScript {
     )
 
     if ($null -eq $Runtime) {
-        $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') -Options $Options
+        $Runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') -Options $Options
     }
     if ($null -eq $Target) {
-        $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package'
+        $Target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package'
     }
     $Runtime.Context.ResourceGroup = [string]$Target.ResourceGroup
     $Runtime.Context.VmName = [string]$Target.VmName
-    $vmDetails = Get-ClagnosVmDetails -Context $Runtime.Context -AllowCachedInventory
+    $vmDetails = Get-ProdicloudVmDetails -Context $Runtime.Context -AllowCachedInventory
     $sshHost = [string]$vmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($sshHost)) { $sshHost = [string]$vmDetails.PublicIP }
     if ([string]::IsNullOrWhiteSpace($sshHost)) { throw 'Package management could not resolve a guest host.' }
-    $transport = Get-ClagnosPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)
+    $transport = Get-ProdicloudPackageTransport -ConfigMap ([hashtable]$Runtime.EffectiveConfigMap)
     $block = [pscustomobject]@{
         Name = [string]$TaskLabel
         Script = [string]$ScriptText
         RelativePath = ('vm-packages/{0}' -f [string]$TaskLabel)
-        DirectoryPath = (Get-ClagnosRepoRoot)
-        TaskRootPath = (Get-ClagnosRepoRoot)
-        StageRootDirectoryPath = (Get-ClagnosRepoRoot)
+        DirectoryPath = (Get-ProdicloudRepoRoot)
+        TaskRootPath = (Get-ProdicloudRepoRoot)
+        StageRootDirectoryPath = (Get-ProdicloudRepoRoot)
         TimeoutSeconds = [int]$TimeoutSeconds
         Priority = 1
         TaskType = 'package'
@@ -954,17 +954,17 @@ function Invoke-ClagnosPackageGuestScript {
         Extensions = $null
         DependsOn = @()
     }
-    if ([string]$Platform -eq 'windows' -and $ScriptText -match 'clagnos-package-operations\.psm1') {
+    if ([string]$Platform -eq 'windows' -and $ScriptText -match 'prodicloud-package-operations\.psm1') {
         $block.AssetSpecs = @([pscustomobject]@{
-            LocalPath = (Join-Path (Get-ClagnosRepoRoot) 'modules/commands/package/clagnos-package-operations.psm1')
-            RemotePath = 'C:/Windows/Temp/clagnos-package-operations.psm1'
+            LocalPath = (Join-Path (Get-ProdicloudRepoRoot) 'modules/commands/package/prodicloud-package-operations.psm1')
+            RemotePath = 'C:/Windows/Temp/prodicloud-package-operations.psm1'
         })
     }
-    $resolvedBlock = Apply-ClagnosTaskBlockReplacements -TaskBlocks @($block) -Replacements (Get-ClagnosTaskTokenReplacements -Context $runtime.Context) -Context $runtime.Context
+    $resolvedBlock = Apply-ProdicloudTaskBlockReplacements -TaskBlocks @($block) -Replacements (Get-ProdicloudTaskTokenReplacements -Context $runtime.Context) -Context $runtime.Context
     if ($transport -eq 'winrm') {
         if ($Platform -ne 'windows') { throw 'PACKAGE_TRANSPORT=winrm is supported only for Windows package operations.' }
-        if ($Runtime.Context.PSObject.Properties.Match('PowerShellPort').Count -eq 0) { $Runtime.Context | Add-Member -NotePropertyName PowerShellPort -NotePropertyValue (Get-ClagnosDefaultPowerShellPortText) }
-        return (Invoke-ClagnosWinRmTaskBlocks `
+        if ($Runtime.Context.PSObject.Properties.Match('PowerShellPort').Count -eq 0) { $Runtime.Context | Add-Member -NotePropertyName PowerShellPort -NotePropertyValue (Get-ProdicloudDefaultPowerShellPortText) }
+        return (Invoke-ProdicloudWinRmTaskBlocks `
             -Platform 'windows' `
             -HostName $sshHost `
             -Runtime $Runtime `
@@ -973,10 +973,10 @@ function Invoke-ClagnosPackageGuestScript {
             -TaskOutcomeMode 'strict' `
             -PerfTaskCategory 'task-run')
     }
-    $pySsh = Ensure-ClagnosPySshTools -RepoRoot (Get-ClagnosRepoRoot) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
-    return (Invoke-ClagnosSshTaskBlocks `
+    $pySsh = Ensure-ProdicloudPySshTools -RepoRoot (Get-ProdicloudRepoRoot) -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath)
+    return (Invoke-ProdicloudSshTaskBlocks `
         -Platform $Platform `
-        -RepoRoot (Get-ClagnosRepoRoot) `
+        -RepoRoot (Get-ProdicloudRepoRoot) `
         -SshHost $sshHost `
         -SshUser ([string]$Runtime.Context.VmUser) `
         -SshPassword ([string]$Runtime.Context.VmPass) `
@@ -993,7 +993,7 @@ function Invoke-ClagnosPackageGuestScript {
         -ConfiguredPySshClientPath ([string]$Runtime.ConfiguredPySshClientPath))
 }
 
-function Get-ClagnosPackageStatusSnapshot {
+function Get-ProdicloudPackageStatusSnapshot {
     param(
         [object[]]$Packages,
         [hashtable]$Options,
@@ -1004,31 +1004,31 @@ function Get-ClagnosPackageStatusSnapshot {
         [psobject]$Target = $null
     )
 
-    $cacheInfo = Get-ClagnosPackageStatusCacheEntry -Packages $Packages -Options $Options -Platform $Platform
-    $key = if ($null -ne $cacheInfo) { [string]$cacheInfo.Key } else { Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform }
+    $cacheInfo = Get-ProdicloudPackageStatusCacheEntry -Packages $Packages -Options $Options -Platform $Platform
+    $key = if ($null -ne $cacheInfo) { [string]$cacheInfo.Key } else { Get-ProdicloudPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform }
     if (-not $Force -and $null -ne $cacheInfo -and [bool]$cacheInfo.IsFresh) { return $cacheInfo.Entry.StatusByPackage }
-    if ($null -eq $Runtime) { $Runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') -Options $Options }
-    if ($null -eq $Target) { $Target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package' }
+    if ($null -eq $Runtime) { $Runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag:([string]$Platform -eq 'windows') -LinuxFlag:([string]$Platform -eq 'linux') -Options $Options }
+    if ($null -eq $Target) { $Target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $Runtime.EffectiveConfigMap -OperationName 'package' }
     $Runtime.Context.ResourceGroup = [string]$Target.ResourceGroup
     $Runtime.Context.VmName = [string]$Target.VmName
     $requiresStartupDriftCheck = @($Packages | Where-Object { [string]$_.Id -in @('jaws','ollama','docker-desktop') }).Count -gt 0
     $scriptText = if (@($Packages).Count -eq 1 -and -not $requiresStartupDriftCheck -and -not [string]::IsNullOrWhiteSpace([string]$Packages[0].StatusScriptText)) {
-        New-ClagnosPackageLifecycleScript -Action 'status' -Package $Packages[0] -Context $Runtime.Context
+        New-ProdicloudPackageLifecycleScript -Action 'status' -Package $Packages[0] -Context $Runtime.Context
     }
-    else { New-ClagnosPackageGuestScript -Action 'status' -Packages $Packages -Platform $Platform -Context $Runtime.Context }
+    else { New-ProdicloudPackageGuestScript -Action 'status' -Packages $Packages -Platform $Platform -Context $Runtime.Context }
     $statusTimeoutSeconds = 300
-    if (@($Packages).Count -eq 1) { $statusTimeoutSeconds = Get-ClagnosPackageTimeoutSeconds -Package $Packages[0] -Action 'status' }
+    if (@($Packages).Count -eq 1) { $statusTimeoutSeconds = Get-ProdicloudPackageTimeoutSeconds -Package $Packages[0] -Action 'status' }
     else {
-        $configuredStatusTimeouts = @($Packages | ForEach-Object { Get-ClagnosPackageTimeoutSeconds -Package $_ -Action 'status' })
+        $configuredStatusTimeouts = @($Packages | ForEach-Object { Get-ProdicloudPackageTimeoutSeconds -Package $_ -Action 'status' })
         if ($configuredStatusTimeouts.Count -gt 0) { $statusTimeoutSeconds = [int](($configuredStatusTimeouts | Measure-Object -Maximum).Maximum) }
     }
     if ($TimeoutSeconds -gt 0) { $statusTimeoutSeconds = [Math]::Min($statusTimeoutSeconds,[int]$TimeoutSeconds) }
-    $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status' -TimeoutSeconds $statusTimeoutSeconds -Runtime $Runtime -Target $Target
+    $result = Invoke-ProdicloudPackageGuestScript -Options $Options -Platform $Platform -ScriptText $scriptText -TaskLabel 'package-status' -TimeoutSeconds $statusTimeoutSeconds -Runtime $Runtime -Target $Target
     $output = ''
     if ($result.TaskOutputs.Count -gt 0) { $output = [string]$result.TaskOutputs[0].Output }
-    $match = [regex]::Match($output,'(?m)^CLAGNOS_PACKAGE_RESULTS:(?<json>\[.*\])\s*$')
+    $match = [regex]::Match($output,'(?m)^PRODICLOUD_PACKAGE_RESULTS:(?<json>\[.*\])\s*$')
     if (-not $match.Success) {
-        $singleMatch = [regex]::Match($output,'(?m)^CLAGNOS_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
+        $singleMatch = [regex]::Match($output,'(?m)^PRODICLOUD_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
         if ($singleMatch.Success) {
             $singleRow = ConvertFrom-JsonCompat -InputObject ([string]$singleMatch.Groups['json'].Value)
             $match = [pscustomobject]@{ Success = $true; Groups = @{ json = [pscustomobject]@{ Value = ('[' + (ConvertTo-Json -InputObject $singleRow -Compress -Depth 8) + ']') } } }
@@ -1043,26 +1043,26 @@ function Get-ClagnosPackageStatusSnapshot {
         $map[[string]$row.id] = $rowStatus
     }
     $entry = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $true; StatusByPackage = $map }
-    $script:ClagnosPackageStatusCache[$key] = $entry
-    Save-ClagnosPackageStatusCacheEntry -Key $key -Entry $entry
+    $script:ProdicloudPackageStatusCache[$key] = $entry
+    Save-ProdicloudPackageStatusCacheEntry -Key $key -Entry $entry
     return $map
 }
 
-function Get-ClagnosPackageStatus {
+function Get-ProdicloudPackageStatus {
     param([object]$Package, [psobject]$Vm)
     $options = @{
-        group = [string]$Vm.ClagnosResourceGroup
+        group = [string]$Vm.ProdicloudResourceGroup
         'vm-name' = [string]$Vm.name
-        'subscription-id' = [string]$Vm.ClagnosSubscriptionId
+        'subscription-id' = [string]$Vm.ProdicloudSubscriptionId
     }
     $platform = if ([string]::Equals([string]$Vm.storageProfile.osDisk.osType,'Windows',[System.StringComparison]::OrdinalIgnoreCase)) { 'windows' } else { 'linux' }
-    $catalog = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog ([string]$Package.Catalog))
-    $snapshot = Get-ClagnosPackageStatusSnapshot -Packages $catalog -Options $options -Platform $platform
+    $catalog = @(Get-ProdicloudPackageCatalog -Platform $platform -Catalog ([string]$Package.Catalog))
+    $snapshot = Get-ProdicloudPackageStatusSnapshot -Packages $catalog -Options $options -Platform $platform
     if ($snapshot.ContainsKey([string]$Package.Id)) { return [string]$snapshot[[string]$Package.Id] }
     return 'unknown'
 }
 
-function Set-ClagnosPackageStatusCacheValue {
+function Set-ProdicloudPackageStatusCacheValue {
     param(
         [object[]]$Packages,
         [hashtable]$Options,
@@ -1073,26 +1073,26 @@ function Set-ClagnosPackageStatusCacheValue {
         [switch]$MarkIncomplete
     )
 
-    $key = Get-ClagnosPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
-    if ($null -eq $script:ClagnosPackageStatusCache) { $script:ClagnosPackageStatusCache = @{} }
-    if (-not $script:ClagnosPackageStatusCache.ContainsKey($key)) {
+    $key = Get-ProdicloudPackageStatusCacheKey -Packages $Packages -Options $Options -Platform $Platform
+    if ($null -eq $script:ProdicloudPackageStatusCache) { $script:ProdicloudPackageStatusCache = @{} }
+    if (-not $script:ProdicloudPackageStatusCache.ContainsKey($key)) {
         $initialStatuses = @{}
         foreach ($candidatePackage in @($Packages)) { $initialStatuses[[string]$candidatePackage.Id] = 'unknown' }
-        $script:ClagnosPackageStatusCache[$key] = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $false; StatusByPackage = $initialStatuses }
+        $script:ProdicloudPackageStatusCache[$key] = @{ CreatedAtUtc = [DateTime]::UtcNow; Complete = $false; StatusByPackage = $initialStatuses }
     }
-    $entry = $script:ClagnosPackageStatusCache[$key]
+    $entry = $script:ProdicloudPackageStatusCache[$key]
     if ($null -eq $entry.StatusByPackage) { return }
     $entry.StatusByPackage[[string]$PackageId] = [string]$Status
     if ($RefreshTimestamp) { $entry.CreatedAtUtc = [DateTime]::UtcNow }
     if ($MarkIncomplete) { $entry.Complete = $false }
-    Save-ClagnosPackageStatusCacheEntry -Key $key -Entry $entry
+    Save-ProdicloudPackageStatusCacheEntry -Key $key -Entry $entry
 }
 
-function Clear-ClagnosPackageStatusCache {
-    $script:ClagnosPackageStatusCache = @{}
+function Clear-ProdicloudPackageStatusCache {
+    $script:ProdicloudPackageStatusCache = @{}
 }
 
-function Get-ClagnosPackageDependencyOrder {
+function Get-ProdicloudPackageDependencyOrder {
     param([object[]]$Packages)
 
     $remaining = New-Object 'System.Collections.Generic.List[object]'
@@ -1118,7 +1118,7 @@ function Get-ClagnosPackageDependencyOrder {
     return @($ordered.ToArray())
 }
 
-function Select-ClagnosConfiguredPackages {
+function Select-ProdicloudConfiguredPackages {
     param([object[]]$Packages,[string]$SelectionText)
     if ([string]::IsNullOrWhiteSpace([string]$SelectionText)) { return @($Packages) }
     $tokens = @($SelectionText -split ',' | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
@@ -1157,7 +1157,7 @@ function Select-ClagnosConfiguredPackages {
     return @($Packages | Where-Object { $selected.Contains(([string]$_.Catalog + ':' + [string]$_.Id)) })
 }
 
-function New-ClagnosPackageSetupPlan {
+function New-ProdicloudPackageSetupPlan {
     param(
         [object[]]$Packages,
         [hashtable]$Options,
@@ -1167,20 +1167,20 @@ function New-ClagnosPackageSetupPlan {
         [switch]$LinuxFlag
     )
 
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
+    $runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+    $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $runtime.Context.VmName = [string]$target.VmName
     $Options['group'] = [string]$target.ResourceGroup
     $Options['vm-name'] = [string]$target.VmName
-    $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+    $resolvedSubscription = Get-ProdicloudResolvedSubscriptionContext
     if ($null -ne $resolvedSubscription) { $Options['subscription-id'] = [string]$resolvedSubscription.SubscriptionId }
 
-    $orderedPackages = @(Get-ClagnosPackageDependencyOrder -Packages $Packages)
+    $orderedPackages = @(Get-ProdicloudPackageDependencyOrder -Packages $Packages)
     $enabledPackages = @($orderedPackages | Where-Object { [bool]$_.Enabled })
     $statusByPackage = @{}
     if ($enabledPackages.Count -gt 0) {
-        $statusByPackage = Get-ClagnosPackageStatusSnapshot -Packages $enabledPackages -Options $Options -Platform $Platform -Force -Runtime $runtime -Target $target
+        $statusByPackage = Get-ProdicloudPackageStatusSnapshot -Packages $enabledPackages -Options $Options -Platform $Platform -Force -Runtime $runtime -Target $target
     }
     $rows = @(
         foreach ($package in @($orderedPackages)) {
@@ -1208,7 +1208,7 @@ function New-ClagnosPackageSetupPlan {
                 Reason = switch ($action) {
                     'install' { 'Package is absent; install it.' }
                     'already-healthy' { 'Package is installed; leave its current version and user state unchanged.' }
-                    'repair' { 'A Clagnos-managed startup setting is missing; repair the installed version.' }
+                    'repair' { 'A Prodicloud-managed startup setting is missing; repair the installed version.' }
                     'recheck-after-dependencies' { 'Status is unknown until its declared dependencies are installed; recheck before deciding whether to install.' }
                     'skip-disabled' { 'Package is disabled in its catalog.' }
                     default { 'Status is unknown; no package mutation is safe.' }
@@ -1228,7 +1228,7 @@ function New-ClagnosPackageSetupPlan {
     }
 }
 
-function Invoke-ClagnosPackageSetupPlan {
+function Invoke-ProdicloudPackageSetupPlan {
     param([Parameter(Mandatory = $true)][psobject]$Plan)
 
     $results = New-Object 'System.Collections.Generic.List[object]'
@@ -1256,8 +1256,8 @@ function Invoke-ClagnosPackageSetupPlan {
                 continue
             }
             try {
-                Write-ClagnosActionProgress -Action ("recheck package '{0}' after its dependencies were verified" -f [string]$package.Id)
-                $refreshedStatus = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Plan.Options -Platform $Plan.Platform -Force -Runtime $Plan.Runtime -Target $Plan.Target
+                Write-ProdicloudActionProgress -Action ("recheck package '{0}' after its dependencies were verified" -f [string]$package.Id)
+                $refreshedStatus = Get-ProdicloudPackageStatusSnapshot -Packages @($package) -Options $Plan.Options -Platform $Plan.Platform -Force -Runtime $Plan.Runtime -Target $Plan.Target
                 $action = switch ([string]$refreshedStatus[[string]$package.Id]) {
                     'not-installed' { 'install' }
                     'installed' { 'already-healthy' }
@@ -1303,21 +1303,21 @@ function Invoke-ClagnosPackageSetupPlan {
         }
 
         try {
-            $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
+            $packageAppState = Get-ProdicloudTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
             if ([string]::Equals([string]$packageAppState.Status,'invalid',[System.StringComparison]::OrdinalIgnoreCase)) {
                 throw ("Package app-state archive is invalid: {0}" -f [string]$packageAppState.Message)
             }
             if ([string]::Equals([string]$packageAppState.Status,'ready',[System.StringComparison]::OrdinalIgnoreCase)) {
-                Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
+                Assert-ProdicloudPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
             }
             $installTask = [pscustomobject]@{}
             foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
             $packageAction = if ($action -eq 'repair') { 'repair' } else { 'install' }
             if ($packageAction -eq 'repair' -and $installTask.PSObject.Properties['AppStateSpec']) { $installTask.AppStateSpec = $null }
-            if ([string]$Plan.Platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action $packageAction -Package $package -Context $Plan.Runtime.Context }
-            $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $Plan.Runtime -Options $Plan.Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:([bool]$Plan.AutoMode) -TaskOutcomeModeOverride 'strict'
+            if ([string]$Plan.Platform -eq 'windows') { $installTask.Script = New-ProdicloudPackageLifecycleScript -Action $packageAction -Package $package -Context $Plan.Runtime.Context }
+            $run = Invoke-ProdicloudTaskExecutionWithTarget -Runtime $Plan.Runtime -Options $Plan.Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:([bool]$Plan.AutoMode) -TaskOutcomeModeOverride 'strict'
             if ([string]$Plan.Platform -eq 'windows') {
-                $structured = Get-ClagnosPackageStructuredResult -TaskResult $run
+                $structured = Get-ProdicloudPackageStructuredResult -TaskResult $run
                 if ($null -eq $structured -or [string]$structured.status -ne 'installed') {
                     $message = if ($null -ne $structured) { [string]$structured.message } else { 'No structured install verification was returned.' }
                     throw ("Package {0} did not verify: {1}" -f $packageAction,$message)
@@ -1344,7 +1344,7 @@ function Invoke-ClagnosPackageSetupPlan {
     return [pscustomobject]@{ Installed = $installed; Repaired = $repaired; Failed = $failed; Skipped = $skipped; Results = @($results.ToArray()) }
 }
 
-function Invoke-ClagnosPackageSetupAll {
+function Invoke-ProdicloudPackageSetupAll {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -1352,30 +1352,30 @@ function Invoke-ClagnosPackageSetupAll {
         [switch]$LinuxFlag
     )
 
-    Write-ClagnosActionProgress -Action 'review enabled builtin and custom packages for setup-all'
-    $runtime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+    Write-ProdicloudActionProgress -Action 'review enabled builtin and custom packages for setup-all'
+    $runtime = Initialize-ProdicloudTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
     $platform = [string]$runtime.Platform
     $packages = @(
-        @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'builtin') +
-        @(Get-ClagnosPackageCatalog -Platform $platform -Catalog 'custom')
+        @(Get-ProdicloudPackageCatalog -Platform $platform -Catalog 'builtin') +
+        @(Get-ProdicloudPackageCatalog -Platform $platform -Catalog 'custom')
     )
     if ($packages.Count -eq 0) { throw ("No builtin or custom packages are available for platform '{0}'." -f $platform) }
 
     $selectionText = [string](Get-ConfigValue -Config $runtime.EffectiveConfigMap -Key 'VM_PACKAGE_SETUP_PACKAGES' -DefaultValue '')
-    $packages = @(Select-ClagnosConfiguredPackages -Packages $packages -SelectionText $selectionText)
+    $packages = @(Select-ProdicloudConfiguredPackages -Packages $packages -SelectionText $selectionText)
     if ($packages.Count -eq 0) {
         Write-Host 'Package setup selection is empty; no package status checks or guest mutations are required.' -ForegroundColor DarkCyan
         return [pscustomobject]@{ Installed = 0; Repaired = 0; Failed = 0; Skipped = 0; Results = @() }
     }
 
-    $plan = New-ClagnosPackageSetupPlan -Packages $packages -Options $Options -Platform $platform -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+    $plan = New-ProdicloudPackageSetupPlan -Packages $packages -Options $Options -Platform $platform -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
     Write-Host ''
     Write-Host ("Package setup plan for {0} VM '{1}' in resource group '{2}':" -f $platform,[string]$plan.Target.VmName,[string]$plan.Target.ResourceGroup) -ForegroundColor Cyan
     foreach ($row in @($plan.Rows)) {
         Write-Host ("- [{0}] {1}: {2} ({3})" -f [string]$row.Package.Catalog,[string]$row.Package.DisplayName,[string]$row.Action,[string]$row.Reason)
     }
 
-    $approved = Get-ClagnosCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+    $approved = Get-ProdicloudCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
     if (-not $approved) {
         $confirmation = Read-Host 'Type SETUP ALL to apply this package plan'
         if (-not [string]::Equals([string]$confirmation,'SETUP ALL',[System.StringComparison]::Ordinal)) {
@@ -1384,7 +1384,7 @@ function Invoke-ClagnosPackageSetupAll {
         }
     }
 
-    $result = Invoke-ClagnosPackageSetupPlan -Plan $plan
+    $result = Invoke-ProdicloudPackageSetupPlan -Plan $plan
     $unsafe = @($result.Results | Where-Object { [string]$_.Outcome -in @('failed','skipped','skip-unknown') })
     if ($unsafe.Count -gt 0) {
         $names = @($unsafe | ForEach-Object { [string]$_.Package.DisplayName }) -join ', '
@@ -1397,48 +1397,48 @@ function Invoke-ClagnosPackageSetupAll {
     return $result
 }
 
-function Restart-ClagnosPackageVmForPendingReboot {
+function Restart-ProdicloudPackageVmForPendingReboot {
     param([psobject]$Runtime,[psobject]$Target,[hashtable]$Options,[switch]$AutoMode,[switch]$WindowsFlag,[switch]$LinuxFlag,[string]$ActionLabel='package operation',[ValidateSet('profile','ssh','winrm')][string]$WaitTransport='profile')
 
-    $subscription = Get-ClagnosResolvedSubscriptionContext
-    $subscriptionId = if ($null -ne $subscription) { [string]$subscription.SubscriptionId } else { [string](Get-ClagnosCliOptionText -Options $Options -Name 'subscription-id') }
-    Write-ClagnosActionProgress -Action ("restart VM '{0}' because {1} requested a reboot" -f [string]$Target.VmName,$ActionLabel)
+    $subscription = Get-ProdicloudResolvedSubscriptionContext
+    $subscriptionId = if ($null -ne $subscription) { [string]$subscription.SubscriptionId } else { [string](Get-ProdicloudCliOptionText -Options $Options -Name 'subscription-id') }
+    Write-ProdicloudActionProgress -Action ("restart VM '{0}' because {1} requested a reboot" -f [string]$Target.VmName,$ActionLabel)
     $restartArgs = @(
         '--vm-action=restart',
         ('--group={0}' -f [string]$Target.ResourceGroup),
         ('--vm-name={0}' -f [string]$Target.VmName),
         ('--subscription-id={0}' -f $subscriptionId)
     )
-    $parsedRestart = Parse-ClagnosCliArguments -CommandToken 'do' -RawArgs $restartArgs
-    Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds 900 -Action {
-        Invoke-ClagnosCommandDispatcher -CommandName 'do' -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
+    $parsedRestart = Parse-ProdicloudCliArguments -CommandToken 'do' -RawArgs $restartArgs
+    Invoke-ProdicloudWithAzCliTimeoutSeconds -TimeoutSeconds 900 -Action {
+        Invoke-ProdicloudCommandDispatcher -CommandName 'do' -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
     }
 
-    $nextRuntime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
-    $nextTarget = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $nextRuntime.EffectiveConfigMap -OperationName 'package'
+    $nextRuntime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+    $nextTarget = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $nextRuntime.EffectiveConfigMap -OperationName 'package'
     $nextRuntime.Context.ResourceGroup = [string]$nextTarget.ResourceGroup
     $nextRuntime.Context.VmName = [string]$nextTarget.VmName
-    $vmDetails = Get-ClagnosVmDetails -Context $nextRuntime.Context -AllowCachedInventory
+    $vmDetails = Get-ProdicloudVmDetails -Context $nextRuntime.Context -AllowCachedInventory
     $hostName = [string]$vmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = [string]$vmDetails.PublicIP }
     if ([string]::IsNullOrWhiteSpace($hostName)) { throw 'The VM restarted for package servicing, but its guest endpoint could not be resolved.' }
-    $transport = if ($WaitTransport -eq 'profile') { Get-ClagnosPackageTransport -ConfigMap ([hashtable]$nextRuntime.EffectiveConfigMap) } else { [string]$WaitTransport }
+    $transport = if ($WaitTransport -eq 'profile') { Get-ProdicloudPackageTransport -ConfigMap ([hashtable]$nextRuntime.EffectiveConfigMap) } else { [string]$WaitTransport }
     if ($transport -eq 'winrm') {
         $port = if ($nextRuntime.Context.PSObject.Properties.Match('PowerShellPort').Count -gt 0) { [int]$nextRuntime.Context.PowerShellPort } else { 5985 }
-        if (-not (Wait-ClagnosTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'WinRM after package-requested reboot')) {
+        if (-not (Wait-ProdicloudTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'WinRM after package-requested reboot')) {
             throw 'WinRM did not become reachable within 10 minutes after the package-requested VM restart.'
         }
     }
     else {
         $port = if ($nextRuntime.Context.PSObject.Properties.Match('SshPort').Count -gt 0) { [int]$nextRuntime.Context.SshPort } else { 22 }
-        if (-not (Wait-ClagnosTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'SSH after package-requested reboot')) {
+        if (-not (Wait-ProdicloudTcpPortReachable -HostName $hostName -Port $port -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'SSH after package-requested reboot')) {
             throw 'SSH did not become reachable within 10 minutes after the package-requested VM restart.'
         }
     }
     return [pscustomobject]@{ Runtime = $nextRuntime; Target = $nextTarget }
 }
 
-function Invoke-ClagnosPackageOperation {
+function Invoke-ProdicloudPackageOperation {
     param(
         [string]$Action,
         [string]$PackageId,
@@ -1452,24 +1452,24 @@ function Invoke-ClagnosPackageOperation {
 
     if ([string]::IsNullOrWhiteSpace($PackageId) -and $Action -ne 'list') { throw 'A package id is required for this action.' }
     $packageProgressTarget = if ([string]::IsNullOrWhiteSpace($PackageId)) { 'catalog' } else { "package '$PackageId'" }
-    Write-ClagnosActionProgress -Action ("{0} {1} in {2} catalog" -f [string]$Action,[string]$packageProgressTarget,[string]$Catalog)
+    Write-ProdicloudActionProgress -Action ("{0} {1} in {2} catalog" -f [string]$Action,[string]$packageProgressTarget,[string]$Catalog)
     $catalogOnlyAction = $Action -in @('enable','disable') -or
         ($Action -in @('install','repair','update','reinstall') -and ($WindowsFlag -or $LinuxFlag))
     $taskRuntime = $null
     if ($catalogOnlyAction) {
         # Availability and disabled-package checks use the global catalog platform;
         # they must not require Azure access or a valid active VC profile.
-        $repoRoot = Get-ClagnosRepoRoot
-        $envFilePath = Join-Path $repoRoot 'clagnos.env'
+        $repoRoot = Get-ProdicloudRepoRoot
+        $envFilePath = Join-Path $repoRoot 'prodicloud.env'
         $globalConfigMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
-        $catalogConfigMap = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfigMap -IgnoreActiveSelection
-        $platform = Resolve-ClagnosPlatformSelection -ConfigMap $catalogConfigMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $script:ConfigOverrides -DeferEnvWrite
+        $catalogConfigMap = Merge-ProdicloudVmEnvironmentConfig -GlobalConfigMap $globalConfigMap -IgnoreActiveSelection
+        $platform = Resolve-ProdicloudPlatformSelection -ConfigMap $catalogConfigMap -EnvFilePath $envFilePath -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -ConfigOverrides $script:ConfigOverrides -DeferEnvWrite
     }
     else {
-        $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+        $taskRuntime = Initialize-ProdicloudTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
         $platform = [string]$taskRuntime.Platform
     }
-    $packagesInCatalog = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
+    $packagesInCatalog = @(Get-ProdicloudPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
     if (@($packagesInCatalog).Count -eq 0 -and $Action -eq 'list') { Write-Host ("The {0} package catalog is empty for '{1}'." -f $Catalog, $platform) -ForegroundColor Yellow; return }
     if ($Action -in @('enable','disable')) {
         $selected = @($packagesInCatalog | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
@@ -1486,23 +1486,23 @@ function Invoke-ClagnosPackageOperation {
             Write-Host 'Package availability change canceled; no files were changed.' -ForegroundColor Yellow
             return [pscustomobject]@{ Package = $package; Enabled = [bool]$package.Enabled; Changed = $false }
         }
-        Set-ClagnosTaskCatalogEnabled -Path ([string]$package.CatalogPath) -TaskId ([string]$package.Id) -Enabled $shouldEnable
-        $verified = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[System.StringComparison]::OrdinalIgnoreCase) })
+        Set-ProdicloudTaskCatalogEnabled -Path ([string]$package.CatalogPath) -TaskId ([string]$package.Id) -Enabled $shouldEnable
+        $verified = @(Get-ProdicloudPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[System.StringComparison]::OrdinalIgnoreCase) })
         if ($verified.Count -ne 1 -or [bool]$verified[0].Enabled -ne $shouldEnable) { throw ("Package availability verification failed for '{0}'." -f $PackageId) }
         Write-Host ("Package '{0}' is now {1}." -f $package.DisplayName, $(if ($shouldEnable) { 'enabled' } else { 'disabled' })) -ForegroundColor Green
         return [pscustomobject]@{ Package = $verified[0]; Enabled = [bool]$shouldEnable; Changed = $true }
     }
 
-    $catalogRuntime = @(Get-ClagnosPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
+    $catalogRuntime = @(Get-ProdicloudPackageCatalog -Platform $platform -Catalog $Catalog -CatalogRoot $CatalogRoot)
     if ($Action -eq 'list') {
-        $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
-        $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
+        $runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+        $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
         $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
         $runtime.Context.VmName = [string]$target.VmName
         $Options['group'] = [string]$target.ResourceGroup
         $Options['vm-name'] = [string]$target.VmName
-        $Options['subscription-id'] = [string](Get-ClagnosResolvedSubscriptionContext).SubscriptionId
-        $packageList = Get-ClagnosPackageStatusSnapshot -Packages $catalogRuntime -Options $Options -Platform $platform -Runtime $runtime -Target $target
+        $Options['subscription-id'] = [string](Get-ProdicloudResolvedSubscriptionContext).SubscriptionId
+        $packageList = Get-ProdicloudPackageStatusSnapshot -Packages $catalogRuntime -Options $Options -Platform $platform -Runtime $runtime -Target $target
         foreach ($package in @($catalogRuntime)) {
             $availability = if ([bool]$package.Enabled) { 'enabled' } else { ('disabled: ' + [string]$package.DisabledReason) }
             Write-Host ("{0} [{1}] | {2} | {3} | {4}" -f [string]$package.DisplayName,$Catalog,[string]$package.Category,$availability,[string]$packageList[[string]$package.Id])
@@ -1522,21 +1522,21 @@ function Invoke-ClagnosPackageOperation {
         Throw-FriendlyError -Detail $reason -Code 66 -Summary ("'{0}' cannot be uninstalled on this Windows image." -f [string]$package.DisplayName) -Hint 'Keep the protected Windows component installed. Install, repair, update, and status remain available.'
     }
     if ($null -eq $taskRuntime) {
-        $taskRuntime = Initialize-ClagnosTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+        $taskRuntime = Initialize-ProdicloudTaskCommandRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
         $platform = [string]$taskRuntime.Platform
     }
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
+    $runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -Options $Options
+    $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $runtime.Context.VmName = [string]$target.VmName
-    $resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+    $resolvedSubscription = Get-ProdicloudResolvedSubscriptionContext
     if ($null -ne $resolvedSubscription) { $Options['subscription-id'] = [string]$resolvedSubscription.SubscriptionId }
     if ($Action -eq 'status') {
         $requiresStartupDriftCheck = [string]$package.Id -in @('jaws','ollama','docker-desktop')
-        $statusScriptText = if (-not $requiresStartupDriftCheck -and -not [string]::IsNullOrWhiteSpace([string]$package.StatusScriptText)) { New-ClagnosPackageLifecycleScript -Action 'status' -Package $package -Context $runtime.Context } else { New-ClagnosPackageGuestScript -Action 'status' -Packages @($package) -Platform $platform -Context $runtime.Context }
-        $statusResult = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $statusScriptText -TaskLabel ('package-status-' + [string]$package.Id) -TimeoutSeconds (Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'status') -Runtime $runtime -Target $target
+        $statusScriptText = if (-not $requiresStartupDriftCheck -and -not [string]::IsNullOrWhiteSpace([string]$package.StatusScriptText)) { New-ProdicloudPackageLifecycleScript -Action 'status' -Package $package -Context $runtime.Context } else { New-ProdicloudPackageGuestScript -Action 'status' -Packages @($package) -Platform $platform -Context $runtime.Context }
+        $statusResult = Invoke-ProdicloudPackageGuestScript -Options $Options -Platform $platform -ScriptText $statusScriptText -TaskLabel ('package-status-' + [string]$package.Id) -TimeoutSeconds (Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'status') -Runtime $runtime -Target $target
         $statusOutput = if ($statusResult.TaskOutputs.Count -gt 0) { [string]$statusResult.TaskOutputs[0].Output } else { '' }
-        $singleStatusMatch = [regex]::Match($statusOutput,'(?m)^CLAGNOS_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
+        $singleStatusMatch = [regex]::Match($statusOutput,'(?m)^PRODICLOUD_PACKAGE_RESULT:(?<json>\{.*\})\s*$')
         $status = ''
         if ($singleStatusMatch.Success) {
             $statusRecord = ConvertFrom-JsonCompat -InputObject ([string]$singleStatusMatch.Groups['json'].Value)
@@ -1547,7 +1547,7 @@ function Invoke-ClagnosPackageOperation {
             Write-Host ("{0}: {1}" -f [string]$package.DisplayName,$statusMessage)
         }
         else {
-            $batchStatusMatch = [regex]::Match($statusOutput,'(?m)^CLAGNOS_PACKAGE_RESULTS:(?<json>\[.*\])\s*$')
+            $batchStatusMatch = [regex]::Match($statusOutput,'(?m)^PRODICLOUD_PACKAGE_RESULTS:(?<json>\[.*\])\s*$')
             if (-not $batchStatusMatch.Success) { throw 'Package status response could not be read from the VM.' }
             $statusRow = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject ([string]$batchStatusMatch.Groups['json'].Value)) | Where-Object { [string]::Equals([string]$_.id,[string]$package.Id,[System.StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1)
             if ($statusRow.Count -ne 1) { throw 'Package status response did not include the selected package.' }
@@ -1555,14 +1555,14 @@ function Invoke-ClagnosPackageOperation {
             if ($status -eq 'installed' -and [string]$statusRow[0].detail -match '(?i)missing|not verified') { $status = 'installed-drifted' }
             Write-Host ("{0}: {1}" -f [string]$package.DisplayName,$status)
         }
-        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $status -RefreshTimestamp
+        Set-ProdicloudPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $status -RefreshTimestamp
         return
     }
     if ($Action -in @('install','repair')) {
-        $actionDeadlineUtc = [DateTime]::UtcNow.AddSeconds((Get-ClagnosPackageTimeoutSeconds -Package $package -Action $Action))
+        $actionDeadlineUtc = [DateTime]::UtcNow.AddSeconds((Get-ProdicloudPackageTimeoutSeconds -Package $package -Action $Action))
         $remainingBeforeStatus = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
         if ($remainingBeforeStatus -lt 30) { throw ("Package {0} ended before its preflight status check." -f $Action) }
-        $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -TimeoutSeconds $remainingBeforeStatus -Runtime $runtime -Target $target
+        $before = Get-ProdicloudPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -TimeoutSeconds $remainingBeforeStatus -Runtime $runtime -Target $target
         $beforeStatus = [string]$before[[string]$package.Id]
         $effectivePackageAction = [string]$Action
         if ($beforeStatus -eq 'installed-drifted') { $beforeStatus = 'installed' }
@@ -1573,31 +1573,31 @@ function Invoke-ClagnosPackageOperation {
         if ($effectivePackageAction -eq 'install' -and $beforeStatus -ne 'not-installed') { throw ("Cannot safely install '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
         if ($effectivePackageAction -eq 'repair' -and $beforeStatus -ne 'installed') { throw ("Cannot safely repair '{0}' because its current status is {1}; use install for an absent package." -f [string]$package.DisplayName,$beforeStatus) }
         if ($effectivePackageAction -eq 'repair' -and $platform -ne 'windows') { throw 'Same-version package repair is not yet defined for this platform; no package installer was run.' }
-        $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
+        $packageAppState = Get-ProdicloudTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
         if ([string]::Equals([string]$packageAppState.Status, 'invalid', [System.StringComparison]::OrdinalIgnoreCase)) {
             throw ("Package '{0}' has an invalid app-state archive: {1}" -f [string]$package.DisplayName, [string]$packageAppState.Message)
         }
         if ([string]::Equals([string]$packageAppState.Status, 'ready', [System.StringComparison]::OrdinalIgnoreCase)) {
-            Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
+            Assert-ProdicloudPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
         }
         $installTask = [pscustomobject]@{}
         foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
         if ($effectivePackageAction -eq 'repair' -and $installTask.PSObject.Properties['AppStateSpec']) { $installTask.AppStateSpec = $null }
-        if ($platform -eq 'windows') { $installTask.Script = New-ClagnosPackageLifecycleScript -Action $effectivePackageAction -Package $package -Context $runtime.Context }
+        if ($platform -eq 'windows') { $installTask.Script = New-ProdicloudPackageLifecycleScript -Action $effectivePackageAction -Package $package -Context $runtime.Context }
         $remainingInstallSeconds = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
         if ($remainingInstallSeconds -lt 30) { throw ("Package {0} ended before its {1} phase." -f $Action,$effectivePackageAction) }
-        $installTask.TimeoutSeconds = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action $effectivePackageAction),$remainingInstallSeconds)
-        $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
-        $structuredResult = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult $run } else { $null }
+        $installTask.TimeoutSeconds = [Math]::Min((Get-ProdicloudPackageTimeoutSeconds -Package $package -Action $effectivePackageAction),$remainingInstallSeconds)
+        $run = Invoke-ProdicloudTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
+        $structuredResult = if ($platform -eq 'windows') { Get-ProdicloudPackageStructuredResult -TaskResult $run } else { $null }
         if ($platform -eq 'windows' -and ($null -eq $structuredResult -or [string]$structuredResult.status -ne 'installed')) {
             $detail = if ($null -ne $structuredResult) { [string]$structuredResult.message } else { 'No structured package lifecycle result was returned.' }
             throw ("Package {0} result verification failed for '{1}': {2}" -f $effectivePackageAction,[string]$package.DisplayName,$detail)
         }
         $afterStatus = if ($platform -eq 'windows') { [string]$structuredResult.status } else {
-            $after = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
+            $after = Get-ProdicloudPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
             [string]$after[[string]$package.Id]
         }
-        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $afterStatus -RefreshTimestamp -MarkIncomplete
+        Set-ProdicloudPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $afterStatus -RefreshTimestamp -MarkIncomplete
         if ($afterStatus -ne 'installed') { throw ("Install script completed but '{0}' status verification returned {1}." -f [string]$package.DisplayName,$afterStatus) }
         $installMessage = if ($null -ne $structuredResult -and -not [string]::IsNullOrWhiteSpace([string]$structuredResult.message)) { [string]$structuredResult.message } else { ("Package {0} completed for {1}; target status verified." -f $effectivePackageAction,[string]$package.DisplayName) }
         Write-Host $installMessage -ForegroundColor Green
@@ -1605,26 +1605,26 @@ function Invoke-ClagnosPackageOperation {
     }
     if ($Action -eq 'update') {
         if ($platform -ne 'windows') { throw 'Separate package update scripts are currently supported only by the Windows package catalogs.' }
-        $actionDeadlineUtc = [DateTime]::UtcNow.AddSeconds((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'update'))
+        $actionDeadlineUtc = [DateTime]::UtcNow.AddSeconds((Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'update'))
         $remainingBeforeStatus = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
         if ($remainingBeforeStatus -lt 30) { throw 'Package update ended before its preflight status check.' }
-        $before = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -TimeoutSeconds $remainingBeforeStatus -Runtime $runtime -Target $target
+        $before = Get-ProdicloudPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -TimeoutSeconds $remainingBeforeStatus -Runtime $runtime -Target $target
         $beforeStatus = [string]$before[[string]$package.Id]
         if ($beforeStatus -eq 'not-installed') {
             Write-Host ("{0} is not installed on VM '{1}'; update was not run." -f [string]$package.DisplayName,[string]$target.VmName) -ForegroundColor Yellow
             return [pscustomobject]@{ Package = $package; Action = 'update'; Status = 'not-installed'; Changed = $false }
         }
         if ($beforeStatus -notin @('installed','installed-drifted')) { throw ("Cannot safely update '{0}' because its current status is {1}." -f [string]$package.DisplayName,$beforeStatus) }
-        $packageAppState = Get-ClagnosTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
+        $packageAppState = Get-ProdicloudTaskAppStatePluginInfo -TaskBlock ([psobject]$package.PackageTask)
         if ([string]::Equals([string]$packageAppState.Status,'invalid',[System.StringComparison]::OrdinalIgnoreCase)) {
             throw ("Package '{0}' has an invalid app-state archive: {1}" -f [string]$package.DisplayName,[string]$packageAppState.Message)
         }
         if ([string]::Equals([string]$packageAppState.Status,'ready',[System.StringComparison]::OrdinalIgnoreCase)) {
-            Assert-ClagnosPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
+            Assert-ProdicloudPackageAppStateArchivePortable -ZipPath ([string]$packageAppState.ZipPath)
         }
         $updateTask = [pscustomobject]@{}
         foreach ($property in @($package.PackageTask.PSObject.Properties)) { $updateTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
-        $updateTask.Script = New-ClagnosPackageLifecycleScript -Action 'update' -Package $package -Context $runtime.Context
+        $updateTask.Script = New-ProdicloudPackageLifecycleScript -Action 'update' -Package $package -Context $runtime.Context
         $updateTask.Name = [string]$package.Id
         if ($updateTask.PSObject.Properties['RelativePath']) { $updateTask.RelativePath = ('{0}/update.ps1' -f [string]$package.Id) }
         if ($null -ne $package.LifecycleScriptPaths -and $null -ne $package.LifecycleScriptPaths['update']) { $updateTask.Path = [string]$package.LifecycleScriptPaths['update'] }
@@ -1638,15 +1638,15 @@ function Invoke-ClagnosPackageOperation {
         }
         $remainingUpdateSeconds = [int][Math]::Floor(($actionDeadlineUtc - [DateTime]::UtcNow).TotalSeconds)
         if ($remainingUpdateSeconds -lt 30) { throw "Package update ended before its vendor-update phase." }
-        $updateTask.TimeoutSeconds = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'update'),$remainingUpdateSeconds)
-        $run = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $updateTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
-        $structuredResult = Get-ClagnosPackageStructuredResult -TaskResult $run
+        $updateTask.TimeoutSeconds = [Math]::Min((Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'update'),$remainingUpdateSeconds)
+        $run = Invoke-ProdicloudTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $updateTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
+        $structuredResult = Get-ProdicloudPackageStructuredResult -TaskResult $run
         if ($null -eq $structuredResult -or [string]$structuredResult.status -ne 'installed') {
             $detail = if ($null -ne $structuredResult) { [string]$structuredResult.message } else { 'No structured package update result was returned.' }
             throw ("Update result verification failed for '{0}': {1}" -f [string]$package.DisplayName,$detail)
         }
         $afterStatus = [string]$structuredResult.status
-        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $afterStatus -RefreshTimestamp -MarkIncomplete
+        Set-ProdicloudPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $afterStatus -RefreshTimestamp -MarkIncomplete
         if ($afterStatus -ne 'installed') { throw ("Update script completed but '{0}' status verification returned {1}." -f [string]$package.DisplayName,$afterStatus) }
         $updateMessage = if (-not [string]::IsNullOrWhiteSpace([string]$structuredResult.message)) { [string]$structuredResult.message } else { ("Updated {0}; target status verified." -f [string]$package.DisplayName) }
         Write-Host $updateMessage -ForegroundColor Green
@@ -1656,30 +1656,30 @@ function Invoke-ClagnosPackageOperation {
         if ($null -eq $package.Uninstall -or [string]::IsNullOrWhiteSpace([string]$package.Uninstall.kind) -or [string]::IsNullOrWhiteSpace([string]$package.Uninstall.value)) {
             throw ("'{0}' has no validated uninstall action in its package manifest." -f [string]$package.DisplayName)
         }
-        $approved = Get-ClagnosCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+        $approved = Get-ProdicloudCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
         if (-not $approved -and -not $AutoMode) {
             $answer = Read-Host ("Uninstall {0} from VM '{1}'? Type UNINSTALL to confirm" -f [string]$package.DisplayName,[string]$target.VmName)
             $approved = [string]::Equals([string]$answer,'UNINSTALL',[System.StringComparison]::Ordinal)
         }
         if (-not $approved) { Write-Host 'Uninstall canceled.' -ForegroundColor Yellow; return }
-        $scriptText = New-ClagnosPackageUninstallScript -Package $package -Platform $platform -Context $runtime.Context
-        $result = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $scriptText -TaskLabel ('package-uninstall-' + [string]$package.Id) -TimeoutSeconds (Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'uninstall') -Runtime $runtime -Target $target
-        $structuredResult = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult ([pscustomobject]@{ Result = $result }) } else { $null }
+        $scriptText = New-ProdicloudPackageUninstallScript -Package $package -Platform $platform -Context $runtime.Context
+        $result = Invoke-ProdicloudPackageGuestScript -Options $Options -Platform $platform -ScriptText $scriptText -TaskLabel ('package-uninstall-' + [string]$package.Id) -TimeoutSeconds (Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'uninstall') -Runtime $runtime -Target $target
+        $structuredResult = if ($platform -eq 'windows') { Get-ProdicloudPackageStructuredResult -TaskResult ([pscustomobject]@{ Result = $result }) } else { $null }
         if ($null -ne $structuredResult) {
             $uninstallStatus = [string]$structuredResult.status
             if ($uninstallStatus -ne 'not-installed') { throw ("Uninstall verification failed for {0}: {1}" -f [string]$package.DisplayName,[string]$structuredResult.message) }
         }
         else {
-            $verify = Get-ClagnosPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
+            $verify = Get-ProdicloudPackageStatusSnapshot -Packages @($package) -Options $Options -Platform $platform -Force -Runtime $runtime -Target $target
             $uninstallStatus = [string]$verify[[string]$package.Id]
             if ($uninstallStatus -eq 'installed' -or $uninstallStatus -eq 'unknown') { throw ("Uninstall command completed but absence of {0} could not be verified (status: {1})." -f [string]$package.DisplayName,$uninstallStatus) }
         }
-        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $uninstallStatus -RefreshTimestamp -MarkIncomplete
+        Set-ProdicloudPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status $uninstallStatus -RefreshTimestamp -MarkIncomplete
         Write-Host ("Uninstall completed for {0}." -f [string]$package.DisplayName) -ForegroundColor Green
         return $result
     }
     if ($Action -eq 'reinstall') {
-        $approved = Get-ClagnosCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
+        $approved = Get-ProdicloudCliOptionBool -Options $Options -Name 'yes' -DefaultValue $false
         if (-not $approved -and -not $AutoMode) {
             $answer = Read-Host ("Force uninstall and reinstall {0} on VM '{1}'? Type REINSTALL to confirm" -f [string]$package.DisplayName,[string]$target.VmName)
             $approved = [string]::Equals([string]$answer,'REINSTALL',[System.StringComparison]::Ordinal)
@@ -1687,38 +1687,38 @@ function Invoke-ClagnosPackageOperation {
         if (-not $approved) { Write-Host 'Reinstall canceled.' -ForegroundColor Yellow; return }
 
         $overallWatch = [Diagnostics.Stopwatch]::StartNew()
-        $overallTimeout = Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'reinstall'
-        Write-ClagnosActionProgress -Action ("reinstall package '{0}' with a {1}s total operation budget" -f [string]$package.Id,$overallTimeout)
-        Write-ClagnosActionProgress -Action ("reinstall phase 1/2: uninstall '{0}'" -f [string]$package.Id)
-        $uninstallText = New-ClagnosPackageUninstallScript -Package $package -Platform $platform -Context $runtime.Context
+        $overallTimeout = Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'reinstall'
+        Write-ProdicloudActionProgress -Action ("reinstall package '{0}' with a {1}s total operation budget" -f [string]$package.Id,$overallTimeout)
+        Write-ProdicloudActionProgress -Action ("reinstall phase 1/2: uninstall '{0}'" -f [string]$package.Id)
+        $uninstallText = New-ProdicloudPackageUninstallScript -Package $package -Platform $platform -Context $runtime.Context
         $remaining = [Math]::Max(30,($overallTimeout - [int][Math]::Ceiling($overallWatch.Elapsed.TotalSeconds)))
-        $uninstallBudget = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'uninstall'),$remaining)
-        $uninstallResult = Invoke-ClagnosPackageGuestScript -Options $Options -Platform $platform -ScriptText $uninstallText -TaskLabel ('package-reinstall-uninstall-' + [string]$package.Id) -TimeoutSeconds $uninstallBudget -Runtime $runtime -Target $target
-        $uninstallRecord = if ($platform -eq 'windows') { Get-ClagnosPackageStructuredResult -TaskResult ([pscustomobject]@{ Result = $uninstallResult }) } else { $null }
+        $uninstallBudget = [Math]::Min((Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'uninstall'),$remaining)
+        $uninstallResult = Invoke-ProdicloudPackageGuestScript -Options $Options -Platform $platform -ScriptText $uninstallText -TaskLabel ('package-reinstall-uninstall-' + [string]$package.Id) -TimeoutSeconds $uninstallBudget -Runtime $runtime -Target $target
+        $uninstallRecord = if ($platform -eq 'windows') { Get-ProdicloudPackageStructuredResult -TaskResult ([pscustomobject]@{ Result = $uninstallResult }) } else { $null }
         if ($platform -eq 'windows' -and ($null -eq $uninstallRecord -or [string]$uninstallRecord.status -ne 'not-installed')) {
             throw ("Reinstall failed during phase 'uninstall' for '{0}': absence was not verified." -f [string]$package.DisplayName)
         }
         if ($platform -eq 'windows' -and $null -ne $uninstallRecord -and [bool]$uninstallRecord.rebootRequired) {
-            $restarted = Restart-ClagnosPackageVmForPendingReboot -Runtime $runtime -Target $target -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
+            $restarted = Restart-ProdicloudPackageVmForPendingReboot -Runtime $runtime -Target $target -Options $Options -AutoMode:$AutoMode -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag
             $runtime = $restarted.Runtime
             $target = $restarted.Target
         }
 
-        Write-ClagnosActionProgress -Action ("reinstall phase 2/2: install '{0}'" -f [string]$package.Id)
+        Write-ProdicloudActionProgress -Action ("reinstall phase 2/2: install '{0}'" -f [string]$package.Id)
         $remaining = $overallTimeout - [int][Math]::Ceiling($overallWatch.Elapsed.TotalSeconds)
         if ($remaining -lt 30) { throw ("Reinstall failed during phase 'install' for '{0}': total operation budget expired after verified uninstall." -f [string]$package.DisplayName) }
         $installTask = [pscustomobject]@{}
         foreach ($property in @($package.PackageTask.PSObject.Properties)) { $installTask | Add-Member -NotePropertyName $property.Name -NotePropertyValue $property.Value }
-        $installTask.Script = New-ClagnosPackageLifecycleScript -Action 'install' -Package $package -Context $runtime.Context
-        $installTask.TimeoutSeconds = [Math]::Min((Get-ClagnosPackageTimeoutSeconds -Package $package -Action 'install'),$remaining)
-        $installRun = Invoke-ClagnosTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
-        $installRecord = Get-ClagnosPackageStructuredResult -TaskResult $installRun
+        $installTask.Script = New-ProdicloudPackageLifecycleScript -Action 'install' -Package $package -Context $runtime.Context
+        $installTask.TimeoutSeconds = [Math]::Min((Get-ProdicloudPackageTimeoutSeconds -Package $package -Action 'install'),$remaining)
+        $installRun = Invoke-ProdicloudTaskExecutionWithTarget -Runtime $runtime -Options $Options -OperationName 'package' -Stage 'update' -Requested ([string]$package.Id) -PackageTaskBlock $installTask -AutoMode:$AutoMode -TaskOutcomeModeOverride 'strict'
+        $installRecord = Get-ProdicloudPackageStructuredResult -TaskResult $installRun
         if ($null -eq $installRecord -or [string]$installRecord.status -ne 'installed') {
             $failureMessage = if ($null -ne $installRecord) { [string]$installRecord.message } else { 'No structured install result was returned.' }
             throw ("Reinstall failed during phase 'install' for '{0}': {1}" -f [string]$package.DisplayName,$failureMessage)
         }
         $overallWatch.Stop()
-        Set-ClagnosPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status 'installed' -RefreshTimestamp -MarkIncomplete
+        Set-ProdicloudPackageStatusCacheValue -Packages $catalogRuntime -Options $Options -Platform $platform -PackageId ([string]$package.Id) -Status 'installed' -RefreshTimestamp -MarkIncomplete
         Write-Host ("Reinstall completed for {0} in {1}s; installed state verified." -f [string]$package.DisplayName,[int]$overallWatch.Elapsed.TotalSeconds) -ForegroundColor Green
         return $installRun
     }

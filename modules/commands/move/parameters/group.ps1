@@ -1,5 +1,5 @@
 # 'group' option binding for 'move'.
 
-function Get-ClagnosMoveGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudMoveGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

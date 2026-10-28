@@ -1,5 +1,5 @@
 # Shared 'quiet' command option specification.
 
-function Get-ClagnosSharedQuietOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'quiet' -ShortNames @('q'))
+function Get-ProdicloudSharedQuietOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'quiet' -ShortNames @('q'))
 }

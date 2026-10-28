@@ -1,5 +1,5 @@
 # 'group' option binding for 'connect'.
 
-function Get-ClagnosConnectGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudConnectGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

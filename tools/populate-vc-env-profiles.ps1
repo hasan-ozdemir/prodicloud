@@ -6,19 +6,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
-$globalPath = Join-Path $RepoRoot 'clagnos.env'
+$globalPath = Join-Path $RepoRoot 'prodicloud.env'
 $templatePath = Join-Path $RepoRoot 'vc.env.example'
-if (-not (Test-Path -LiteralPath $globalPath -PathType Leaf)) { throw 'clagnos.env is required to populate VC profiles.' }
+if (-not (Test-Path -LiteralPath $globalPath -PathType Leaf)) { throw 'prodicloud.env is required to populate VC profiles.' }
 if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) { throw 'vc.env.example is required to populate VC profiles.' }
-. (Join-Path $RepoRoot 'clagnos.ps1')
+. (Join-Path $RepoRoot 'prodicloud.ps1')
 
 $globalConfig = Read-DotEnvFile -Path $globalPath -GlobalOnly
 if ([string]::IsNullOrWhiteSpace([string]$SubscriptionId)) { $SubscriptionId = [string]$globalConfig['SELECTED_AZURE_SUBSCRIPTION_ID'] }
-if ([string]::IsNullOrWhiteSpace([string]$SubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in clagnos.env or pass -SubscriptionId.' }
+if ([string]::IsNullOrWhiteSpace([string]$SubscriptionId)) { throw 'Set SELECTED_AZURE_SUBSCRIPTION_ID in prodicloud.env or pass -SubscriptionId.' }
 
 $logsRoot = Join-Path $RepoRoot '.logs'
 if (-not (Test-Path -LiteralPath $logsRoot -PathType Container)) { New-Item -ItemType Directory -Path $logsRoot -Force | Out-Null }
-$transcriptPath = Join-Path $logsRoot ('clagnos-populate-vc-env-' + (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss-fff',[System.Globalization.CultureInfo]::InvariantCulture) + '.txt')
+$transcriptPath = Join-Path $logsRoot ('prodicloud-populate-vc-env-' + (Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss-fff',[System.Globalization.CultureInfo]::InvariantCulture) + '.txt')
 Start-Transcript -LiteralPath $transcriptPath -Force | Out-Null
 
 function Invoke-PopulateVcAzureJson {
@@ -212,10 +212,10 @@ function Get-PopulateVcFallbackValue {
     if ($Key -eq 'VM_ADMIN_PASS' -or $Key -eq 'VM_ASSISTANT_PASS') { return '@secret-required' }
     if ($Key -eq 'NIC_DNS_SERVERS' -or $Key -like 'NSG_RULE_*' -or $Key -like 'SUBNET_*' -or $Key -like 'VNET_*' -or $Key -like 'NIC_*' -or $Key -like 'PUBLIC_IP_*') { return 'none' }
     if ($GlobalConfig.ContainsKey($Key) -and -not [string]::IsNullOrWhiteSpace([string]$GlobalConfig[$Key])) { return [string]$GlobalConfig[$Key] }
-    if (Get-ClagnosManifestDeclaredSettingKeys | Where-Object { [string]::Equals([string]$_,$Key,[System.StringComparison]::OrdinalIgnoreCase) }) {
-        $descriptor = Get-ClagnosManifestSettingDescriptor -Key $Key
+    if (Get-ProdicloudManifestDeclaredSettingKeys | Where-Object { [string]::Equals([string]$_,$Key,[System.StringComparison]::OrdinalIgnoreCase) }) {
+        $descriptor = Get-ProdicloudManifestSettingDescriptor -Key $Key
         $settings = @{}; $settings[$Key] = $descriptor
-        try { return [string](Get-ClagnosManifestSettingValueMap -Settings ([pscustomobject]$settings) -ConfigMap @{})[$Key] } catch { }
+        try { return [string](Get-ProdicloudManifestSettingValueMap -Settings ([pscustomobject]$settings) -ConfigMap @{})[$Key] } catch { }
     }
     if ($Key -like 'SELECTED_COMPANY_*' -or $Key -like 'SELECTED_EMPLOYEE_*' -or $Key -like 'WIN_PUBLIC_SHORTCUT_*') { return '@global' }
     if ($globalKey -and $GlobalConfig.ContainsKey($globalKey) -and -not [string]::IsNullOrWhiteSpace([string]$GlobalConfig[$globalKey])) { return [string]$GlobalConfig[$globalKey] }
@@ -227,7 +227,7 @@ try {
     $accounts = Invoke-PopulateVcAzureJson -AzArguments @('account','show') -Action 'verify Azure login and selected subscription'
     if ($null -eq $accounts -or -not [string]::Equals([string]$accounts.id,$SubscriptionId,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'Azure CLI account does not match the selected subscription. Run az login and select the configured subscription.' }
     $templateKeys = @(Get-Content -LiteralPath $templatePath | ForEach-Object { if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=') { $Matches[1] } })
-    $profiles = @(Get-ChildItem -LiteralPath $RepoRoot -File -Filter '*.env' | Where-Object { $_.Name -ine 'clagnos.env' -and $_.Name -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}\.env$' })
+    $profiles = @(Get-ChildItem -LiteralPath $RepoRoot -File -Filter '*.env' | Where-Object { $_.Name -ine 'prodicloud.env' -and $_.Name -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}\.env$' })
     foreach ($profileFile in @($profiles)) {
         $vmName = [System.IO.Path]::GetFileNameWithoutExtension($profileFile.Name)
         $profile = Read-DotEnvFile -Path $profileFile.FullName -GlobalOnly
@@ -240,7 +240,7 @@ try {
         $changedKeys = New-Object 'System.Collections.Generic.List[string]'
         foreach ($key in @($templateKeys)) {
             $current = if ($profile.ContainsKey($key)) { [string]$profile[$key] } else { '' }
-            $needsValue = [string]::IsNullOrWhiteSpace($current) -or (Test-ClagnosConfigPlaceholderValue -Value $current)
+            $needsValue = [string]::IsNullOrWhiteSpace($current) -or (Test-ProdicloudConfigPlaceholderValue -Value $current)
             if (-not $needsValue -and $current -ne '@secret-required') { continue }
             if (-not $needsValue) { continue }
             $value = Get-PopulateVcFallbackValue -Key $key -VmName $vmName -GlobalConfig $globalConfig -AzureState $azureState
@@ -253,7 +253,7 @@ try {
         $stillEmpty = @($templateKeys | Where-Object { -not $valuesAfter.ContainsKey($_) -or [string]::IsNullOrWhiteSpace([string]$valuesAfter[$_]) })
         if ($stillEmpty.Count -gt 0) { throw ("VC profile '{0}' still has empty fields after fallback population: {1}" -f $profileFile.Name,($stillEmpty -join ', ')) }
         if ($changedKeys.Count -gt 0 -and $PSCmdlet.ShouldProcess($profileFile.Name,('populate {0} missing values' -f $changedKeys.Count))) {
-            $temporaryPath = $profileFile.FullName + '.clagnos-populate.tmp'
+            $temporaryPath = $profileFile.FullName + '.prodicloud-populate.tmp'
             try {
                 [System.IO.File]::WriteAllText($temporaryPath,($lines -join $newline),[System.Text.UTF8Encoding]::new($false))
                 Move-Item -LiteralPath $temporaryPath -Destination $profileFile.FullName -Force -ErrorAction Stop

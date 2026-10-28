@@ -1,5 +1,5 @@
 # 'group' option binding for 'update'.
 
-function Get-ClagnosUpdateGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudUpdateGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

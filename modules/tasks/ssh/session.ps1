@@ -1,7 +1,7 @@
 # SSH session lifecycle helpers.
 
-# Handles Initialize-ClagnosSshHostKey.
-function Initialize-ClagnosSshHostKey {
+# Handles Initialize-ProdicloudSshHostKey.
+function Initialize-ProdicloudSshHostKey {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -19,24 +19,24 @@ function Initialize-ClagnosSshHostKey {
         throw "Python executable for pyssh was not found."
     }
 
-    if ($null -eq $script:ClagnosSshBootstrapCache) { $script:ClagnosSshBootstrapCache = @{} }
+    if ($null -eq $script:ProdicloudSshBootstrapCache) { $script:ProdicloudSshBootstrapCache = @{} }
     $passwordBytes = [System.Text.Encoding]::UTF8.GetBytes([string]$Password)
     $passwordSha = [System.Security.Cryptography.SHA256]::Create()
     try { $passwordFingerprint = ([BitConverter]::ToString($passwordSha.ComputeHash($passwordBytes))).Replace('-', '').ToLowerInvariant() }
     finally { $passwordSha.Dispose() }
     $cacheKey = ('{0}|{1}|{2}|{3}|{4}|{5}' -f [string]$HostName.ToLowerInvariant(),[string]$Port,[string]$UserName.ToLowerInvariant(),[string]$PySshPythonPath,[string]$PySshClientPath,$passwordFingerprint)
-    $cacheTtlSeconds = if ([int]$script:ClagnosSshBootstrapCacheTtlSeconds -gt 0) { [int]$script:ClagnosSshBootstrapCacheTtlSeconds } else { 20 }
-    foreach ($staleKey in @($script:ClagnosSshBootstrapCache.Keys)) {
-        if (([DateTime]::UtcNow - [DateTime]$script:ClagnosSshBootstrapCache[$staleKey].CreatedAtUtc).TotalSeconds -ge $cacheTtlSeconds) {
-            $script:ClagnosSshBootstrapCache.Remove([string]$staleKey)
+    $cacheTtlSeconds = if ([int]$script:ProdicloudSshBootstrapCacheTtlSeconds -gt 0) { [int]$script:ProdicloudSshBootstrapCacheTtlSeconds } else { 20 }
+    foreach ($staleKey in @($script:ProdicloudSshBootstrapCache.Keys)) {
+        if (([DateTime]::UtcNow - [DateTime]$script:ProdicloudSshBootstrapCache[$staleKey].CreatedAtUtc).TotalSeconds -ge $cacheTtlSeconds) {
+            $script:ProdicloudSshBootstrapCache.Remove([string]$staleKey)
         }
     }
-    if (-not $Force -and $script:ClagnosSshBootstrapCache.ContainsKey($cacheKey)) {
-        $cached = $script:ClagnosSshBootstrapCache[$cacheKey]
+    if (-not $Force -and $script:ProdicloudSshBootstrapCache.ContainsKey($cacheKey)) {
+        $cached = $script:ProdicloudSshBootstrapCache[$cacheKey]
         return [pscustomobject]@{ ExitCode = 0; Output = ''; HostKey = [string]$cached.HostKey; Cached = $true }
     }
 
-    $result = Invoke-ClagnosProcessWithRetry `
+    $result = Invoke-ProdicloudProcessWithRetry `
         -FilePath $PySshPythonPath `
         -Arguments @(
             $PySshClientPath,
@@ -56,7 +56,7 @@ function Initialize-ClagnosSshHostKey {
         Write-Warning "Python SSH bootstrap returned non-zero exit code. Continuing and allowing retry flow."
     }
     else {
-        $script:ClagnosSshBootstrapCache[$cacheKey] = @{ CreatedAtUtc = [DateTime]::UtcNow; HostKey = 'auto-add' }
+        $script:ProdicloudSshBootstrapCache[$cacheKey] = @{ CreatedAtUtc = [DateTime]::UtcNow; HostKey = 'auto-add' }
     }
 
     return [pscustomobject]@{
@@ -67,8 +67,8 @@ function Initialize-ClagnosSshHostKey {
     }
 }
 
-# Handles Start-ClagnosPersistentSshSession.
-function Start-ClagnosPersistentSshSession {
+# Handles Start-ProdicloudPersistentSshSession.
+function Start-ProdicloudPersistentSshSession {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -103,7 +103,7 @@ function Start-ClagnosPersistentSshSession {
         "--task-timeout", [string]$DefaultTaskTimeoutSeconds,
         "--shell", [string]$Shell
     )
-    $argText = ($argList | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' '
+    $argText = ($argList | ForEach-Object { Convert-ProdicloudProcessArgument -Value ([string]$_) }) -join ' '
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = [string]$PySshPythonPath
@@ -148,8 +148,8 @@ function Start-ClagnosPersistentSshSession {
     }
 }
 
-# Handles Write-ClagnosPersistentSshProtocolLine.
-function Write-ClagnosPersistentSshProtocolLine {
+# Handles Write-ProdicloudPersistentSshProtocolLine.
+function Write-ProdicloudPersistentSshProtocolLine {
     param(
         [psobject]$Session,
         [string]$Line
@@ -169,8 +169,8 @@ function Write-ClagnosPersistentSshProtocolLine {
     $stream.Flush()
 }
 
-# Handles Stop-ClagnosPersistentSshSession.
-function Stop-ClagnosPersistentSshSession {
+# Handles Stop-ProdicloudPersistentSshSession.
+function Stop-ProdicloudPersistentSshSession {
     param(
         [psobject]$Session
     )
@@ -180,7 +180,7 @@ function Stop-ClagnosPersistentSshSession {
     }
 
     if ($Session.PSObject.Properties.Match('TransientConsoleActive').Count -gt 0 -and [bool]$Session.TransientConsoleActive) {
-        Clear-ClagnosTransientConsoleText
+        Clear-ProdicloudTransientConsoleText
         $Session.TransientConsoleActive = $false
     }
 
@@ -190,7 +190,7 @@ function Stop-ClagnosPersistentSshSession {
             if (-not $proc.HasExited) {
                 try {
                     $closePayload = @{ action = "close" } | ConvertTo-Json -Compress
-                    Write-ClagnosPersistentSshProtocolLine -Session $Session -Line ([string]$closePayload)
+                    Write-ProdicloudPersistentSshProtocolLine -Session $Session -Line ([string]$closePayload)
                     $proc.StandardInput.Close()
                 }
                 catch { }
@@ -207,8 +207,8 @@ function Stop-ClagnosPersistentSshSession {
     }
 }
 
-# Handles Test-ClagnosPersistentSshSessionUsable.
-function Test-ClagnosPersistentSshSessionUsable {
+# Handles Test-ProdicloudPersistentSshSessionUsable.
+function Test-ProdicloudPersistentSshSessionUsable {
     param(
         [psobject]$Session
     )
@@ -225,8 +225,8 @@ function Test-ClagnosPersistentSshSessionUsable {
     }
 }
 
-# Handles Invoke-ClagnosOneShotSshTask.
-function Invoke-ClagnosOneShotSshTask {
+# Handles Invoke-ProdicloudOneShotSshTask.
+function Invoke-ProdicloudOneShotSshTask {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -262,19 +262,19 @@ function Invoke-ClagnosOneShotSshTask {
     }
 
     $extension = if ($Shell -eq 'bash') { 'sh' } else { 'ps1' }
-    $localTempPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-task-{0}-{1}.{2}' -f $safeTaskName, ([guid]::NewGuid().ToString('N')), $extension)
+    $localTempPath = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-task-{0}-{1}.{2}' -f $safeTaskName, ([guid]::NewGuid().ToString('N')), $extension)
     $remoteScriptPath = if ($Shell -eq 'bash') {
-        '/tmp/clagnos-task-{0}.sh' -f ([guid]::NewGuid().ToString('N'))
+        '/tmp/prodicloud-task-{0}.sh' -f ([guid]::NewGuid().ToString('N'))
     }
     else {
-        'C:/Windows/Temp/clagnos-task-{0}.ps1' -f ([guid]::NewGuid().ToString('N'))
+        'C:/Windows/Temp/prodicloud-task-{0}.ps1' -f ([guid]::NewGuid().ToString('N'))
     }
 
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($localTempPath, $scriptPayload, $utf8NoBom)
 
     try {
-        Copy-ClagnosAssetToVm `
+        Copy-ProdicloudAssetToVm `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -292,7 +292,7 @@ function Invoke-ClagnosOneShotSshTask {
             'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f [string]$remoteScriptPath
         }
 
-        $result = Invoke-ClagnosProcessWithRetry `
+        $result = Invoke-ProdicloudProcessWithRetry `
             -FilePath $PySshPythonPath `
             -Arguments @(
                 $PySshClientPath,
@@ -331,7 +331,7 @@ function Invoke-ClagnosOneShotSshTask {
                     'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath ''{0}'' -Force -ErrorAction SilentlyContinue"' -f [string]$remoteScriptPath
                 }
 
-                Invoke-ClagnosProcessWithRetry `
+                Invoke-ProdicloudProcessWithRetry `
                     -FilePath $PySshPythonPath `
                     -Arguments @(
                         $PySshClientPath,
@@ -352,8 +352,8 @@ function Invoke-ClagnosOneShotSshTask {
     }
 }
 
-# Handles Invoke-ClagnosSshTaskScript.
-function Invoke-ClagnosSshTaskScript {
+# Handles Invoke-ProdicloudSshTaskScript.
+function Invoke-ProdicloudSshTaskScript {
     param(
         [psobject]$Session,
         [string]$PySshPythonPath,
@@ -370,11 +370,11 @@ function Invoke-ClagnosSshTaskScript {
         [switch]$SkipRemoteCleanup
     )
 
-    if (Test-ClagnosPersistentSshSessionUsable -Session $Session) {
-        return (Invoke-ClagnosPersistentSshTask -Session $Session -TaskName $TaskName -TaskScript $TaskScript -TimeoutSeconds $TimeoutSeconds)
+    if (Test-ProdicloudPersistentSshSessionUsable -Session $Session) {
+        return (Invoke-ProdicloudPersistentSshTask -Session $Session -TaskName $TaskName -TaskScript $TaskScript -TimeoutSeconds $TimeoutSeconds)
     }
 
-    return (Invoke-ClagnosOneShotSshTask `
+    return (Invoke-ProdicloudOneShotSshTask `
         -PySshPythonPath $PySshPythonPath `
         -PySshClientPath $PySshClientPath `
         -HostName $HostName `
@@ -388,8 +388,8 @@ function Invoke-ClagnosSshTaskScript {
         -SkipRemoteCleanup:$SkipRemoteCleanup)
 }
 
-# Handles Test-ClagnosSshTransportRecoverySignal.
-function Test-ClagnosSshTransportRecoverySignal {
+# Handles Test-ProdicloudSshTransportRecoverySignal.
+function Test-ProdicloudSshTransportRecoverySignal {
     param(
         [AllowNull()]
         [string]$Text
@@ -405,8 +405,8 @@ function Test-ClagnosSshTransportRecoverySignal {
         'Thread failed to start',
         'System.Management.Automation.RemoteException',
         'EOF during negotiation',
-        'CLAGNOS_SESSION_TASK_ERROR:',
-        'CLAGNOS_SESSION_ERROR:'
+        'PRODICLOUD_SESSION_TASK_ERROR:',
+        'PRODICLOUD_SESSION_ERROR:'
     )) {
         if ($value.IndexOf($pattern, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             return $true

@@ -1,8 +1,8 @@
 # 'type' option binding for 'list'.
 
-function Get-ClagnosListTypeOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'type' -TakesValue -Validate {
+function Get-ProdicloudListTypeOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'type' -TakesValue -Validate {
         param([hashtable]$Options)
-        [void](Resolve-ClagnosListRequestedTypes -Options $Options)
+        [void](Resolve-ProdicloudListRequestedTypes -Options $Options)
     })
 }

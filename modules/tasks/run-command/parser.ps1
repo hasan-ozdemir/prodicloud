@@ -1,7 +1,7 @@
 # Run-command result parsing helpers.
 
-# Handles Test-ClagnosBenignRunCommandStdErr.
-function Test-ClagnosBenignRunCommandStdErr {
+# Handles Test-ProdicloudBenignRunCommandStdErr.
+function Test-ProdicloudBenignRunCommandStdErr {
     param(
         [string]$Message
     )
@@ -28,8 +28,8 @@ function Test-ClagnosBenignRunCommandStdErr {
     return $false
 }
 
-# Handles Get-ClagnosRunCommandResultEnvelope.
-function Get-ClagnosRunCommandResultEnvelope {
+# Handles Get-ProdicloudRunCommandResultEnvelope.
+function Get-ProdicloudRunCommandResultEnvelope {
     param(
         [string]$TaskName,
         [object]$RawJson,
@@ -64,7 +64,7 @@ function Get-ClagnosRunCommandResultEnvelope {
         }
 
         if ($isStdErrCode -and -not [string]::IsNullOrWhiteSpace($message)) {
-            if (Test-ClagnosBenignRunCommandStdErr -Message $message) {
+            if (Test-ProdicloudBenignRunCommandStdErr -Message $message) {
                 Write-Warning ("Ignoring benign run-command stderr line for task '{0}': {1}" -f $TaskName, $message.Trim())
             }
             elseif ($message -match '(?i)(terminatingerror|exception|failed|not recognized|cannot find|categoryinfo)') {
@@ -93,15 +93,15 @@ function Get-ClagnosRunCommandResultEnvelope {
     }
 }
 
-# Handles Get-ClagnosRunCommandResultMessage.
-function Get-ClagnosRunCommandResultMessage {
+# Handles Get-ProdicloudRunCommandResultMessage.
+function Get-ProdicloudRunCommandResultMessage {
     param(
         [string]$TaskName,
         [object]$RawJson,
         [string]$ModeLabel
     )
 
-    $envelope = Get-ClagnosRunCommandResultEnvelope -TaskName $TaskName -RawJson $RawJson -ModeLabel $ModeLabel
+    $envelope = Get-ProdicloudRunCommandResultEnvelope -TaskName $TaskName -RawJson $RawJson -ModeLabel $ModeLabel
     if ([bool]$envelope.HasError) {
         throw [string]$envelope.ErrorMessage
     }
@@ -109,8 +109,8 @@ function Get-ClagnosRunCommandResultMessage {
     return [string]$envelope.MessageText
 }
 
-# Handles Parse-ClagnosRunCommandBatchMarkers.
-function Parse-ClagnosRunCommandBatchMarkers {
+# Handles Parse-ProdicloudRunCommandBatchMarkers.
+function Parse-ProdicloudRunCommandBatchMarkers {
     param(
         [string]$MessageText
     )
@@ -152,7 +152,7 @@ function Parse-ClagnosRunCommandBatchMarkers {
             continue
         }
 
-        if ($trimmed -match '^CLAGNOS_REBOOT_REQUIRED:') {
+        if ($trimmed -match '^PRODICLOUD_REBOOT_REQUIRED:') {
             $result.RebootRequired = $true
             continue
         }
@@ -161,8 +161,8 @@ function Parse-ClagnosRunCommandBatchMarkers {
     return [pscustomobject]$result
 }
 
-# Handles Test-ClagnosOutputIndicatesRebootRequired.
-function Test-ClagnosOutputIndicatesRebootRequired {
+# Handles Test-ProdicloudOutputIndicatesRebootRequired.
+function Test-ProdicloudOutputIndicatesRebootRequired {
     param(
         [string]$MessageText
     )
@@ -171,7 +171,7 @@ function Test-ClagnosOutputIndicatesRebootRequired {
         return $false
     }
 
-    if ($MessageText -match '^CLAGNOS_REBOOT_REQUIRED:' -or $MessageText -match '(?im)^TASK_REBOOT_REQUIRED:') {
+    if ($MessageText -match '^PRODICLOUD_REBOOT_REQUIRED:' -or $MessageText -match '(?im)^TASK_REBOOT_REQUIRED:') {
         return $true
     }
 
@@ -188,8 +188,8 @@ function Test-ClagnosOutputIndicatesRebootRequired {
     return (@($positiveRestartSignalLines).Count -gt 0)
 }
 
-# Handles Get-ClagnosTaskDurationsFromMessageText.
-function Get-ClagnosTaskDurationsFromMessageText {
+# Handles Get-ProdicloudTaskDurationsFromMessageText.
+function Get-ProdicloudTaskDurationsFromMessageText {
     param(
         [string]$MessageText
     )

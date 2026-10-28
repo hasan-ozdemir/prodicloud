@@ -1,18 +1,18 @@
 # Contract for the 'create' command.
 
-function Get-ClagnosCreateOptionSpecifications {
+function Get-ProdicloudCreateOptionSpecifications {
     return @(
-        (Get-ClagnosCreateAutoOptionSpecification),
-        (Get-ClagnosCreatePerfOptionSpecification),
-        (Get-ClagnosCreateWindowsOptionSpecification),
-        (Get-ClagnosCreateLinuxOptionSpecification),
-        (Get-ClagnosCreateHelpOptionSpecification),
-        (Get-ClagnosCreateStepToOptionSpecification),
-        (Get-ClagnosCreateStepFromOptionSpecification),
-        (Get-ClagnosCreateStepOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosCreateVmNameOptionSpecification),
-        (Get-ClagnosCreateVmRegionOptionSpecification),
-        (Get-ClagnosCreateVmSizeOptionSpecification)
+        (Get-ProdicloudCreateAutoOptionSpecification),
+        (Get-ProdicloudCreatePerfOptionSpecification),
+        (Get-ProdicloudCreateWindowsOptionSpecification),
+        (Get-ProdicloudCreateLinuxOptionSpecification),
+        (Get-ProdicloudCreateHelpOptionSpecification),
+        (Get-ProdicloudCreateStepToOptionSpecification),
+        (Get-ProdicloudCreateStepFromOptionSpecification),
+        (Get-ProdicloudCreateStepOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudCreateVmNameOptionSpecification),
+        (Get-ProdicloudCreateVmRegionOptionSpecification),
+        (Get-ProdicloudCreateVmSizeOptionSpecification)
     )
 }

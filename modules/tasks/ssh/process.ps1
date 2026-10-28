@@ -1,6 +1,6 @@
 # SSH process execution helpers.
 
-function Invoke-ClagnosCapturedProcess {
+function Invoke-ProdicloudCapturedProcess {
     param(
         [string]$FilePath,
         [string[]]$Arguments,
@@ -9,7 +9,7 @@ function Invoke-ClagnosCapturedProcess {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = [string]$FilePath
-    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
+    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-ProdicloudProcessArgument -Value ([string]$_) }) -join ' ')
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     $psi.RedirectStandardOutput = $true
@@ -40,7 +40,7 @@ function Invoke-ClagnosCapturedProcess {
             $elapsedSeconds = [int][Math]::Floor($waitWatch.Elapsed.TotalSeconds)
             if ($elapsedSeconds -ge 30 -and ($elapsedSeconds - $lastProgressSeconds) -ge 30) {
                 $lastProgressSeconds = $elapsedSeconds
-                Write-ClagnosActionProgress -Action ("{0} is still running; {1}s elapsed" -f [string]$ProgressLabel,$elapsedSeconds)
+                Write-ProdicloudActionProgress -Action ("{0} is still running; {1}s elapsed" -f [string]$ProgressLabel,$elapsedSeconds)
             }
         }
         $proc.WaitForExit()
@@ -65,7 +65,7 @@ function Invoke-ClagnosCapturedProcess {
     }
 }
 
-function Invoke-ClagnosStreamingCapturedProcess {
+function Invoke-ProdicloudStreamingCapturedProcess {
     param(
         [string]$FilePath,
         [string[]]$Arguments,
@@ -74,7 +74,7 @@ function Invoke-ClagnosStreamingCapturedProcess {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = [string]$FilePath
-    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-ClagnosProcessArgument -Value ([string]$_) }) -join ' ')
+    $psi.Arguments = ((@($Arguments) | ForEach-Object { Convert-ProdicloudProcessArgument -Value ([string]$_) }) -join ' ')
     $psi.UseShellExecute = $false
     $psi.CreateNoWindow = $true
     $psi.RedirectStandardOutput = $true
@@ -119,7 +119,7 @@ function Invoke-ClagnosStreamingCapturedProcess {
             $elapsedSeconds = [int][Math]::Floor($processWatch.Elapsed.TotalSeconds)
             if ($elapsedSeconds -ge 30 -and ($elapsedSeconds - $lastProgressSeconds) -ge 30) {
                 $lastProgressSeconds = $elapsedSeconds
-                Write-ClagnosActionProgress -Action ("{0} is still running; {1}s elapsed" -f [string]$ProgressLabel,$elapsedSeconds)
+                Write-ProdicloudActionProgress -Action ("{0} is still running; {1}s elapsed" -f [string]$ProgressLabel,$elapsedSeconds)
             }
 
             $completedIndex = [System.Threading.Tasks.Task]::WaitAny(@($activeTasks), 250)
@@ -141,11 +141,11 @@ function Invoke-ClagnosStreamingCapturedProcess {
             }
 
             $lineText = [string]$line
-            $normalizedLine = Normalize-ClagnosProtocolLine -Text $lineText
+            $normalizedLine = Normalize-ProdicloudProtocolLine -Text $lineText
             if ($null -eq $normalizedLine) {
                 $normalizedLine = ""
             }
-            if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
+            if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
                 if ($isStdoutTask) {
                     $stdoutTask = $stdoutReader.ReadLineAsync()
                 }
@@ -178,9 +178,9 @@ function Invoke-ClagnosStreamingCapturedProcess {
         if ($proc.HasExited -and -not $stdoutClosed) {
             $stdoutTail = [string]$stdoutReader.ReadToEnd()
             foreach ($tailLine in @($stdoutTail -split "`r?`n")) {
-                $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$tailLine)
+                $normalizedTailLine = Normalize-ProdicloudProtocolLine -Text ([string]$tailLine)
                 if ([string]::IsNullOrWhiteSpace([string]$normalizedTailLine)) { continue }
-                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
                 [void]$outputLines.Add([string]$normalizedTailLine)
                 Write-Host ([string]$normalizedTailLine)
             }
@@ -188,9 +188,9 @@ function Invoke-ClagnosStreamingCapturedProcess {
         if ($proc.HasExited -and -not $stderrClosed) {
             $stderrTail = [string]$stderrReader.ReadToEnd()
             foreach ($tailLine in @($stderrTail -split "`r?`n")) {
-                $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$tailLine)
+                $normalizedTailLine = Normalize-ProdicloudProtocolLine -Text ([string]$tailLine)
                 if ([string]::IsNullOrWhiteSpace([string]$normalizedTailLine)) { continue }
-                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
                 [void]$outputLines.Add([string]$normalizedTailLine)
                 Write-Warning ([string]$normalizedTailLine)
             }
@@ -208,8 +208,8 @@ function Invoke-ClagnosStreamingCapturedProcess {
     }
 }
 
-# Handles Invoke-ClagnosProcessWithRetry.
-function Invoke-ClagnosProcessWithRetry {
+# Handles Invoke-ProdicloudProcessWithRetry.
+function Invoke-ProdicloudProcessWithRetry {
     param(
         [string]$FilePath,
         [string[]]$Arguments,
@@ -235,19 +235,19 @@ function Invoke-ClagnosProcessWithRetry {
         $effectiveArguments = if ($SkipPythonBytecodeFlag) { @($Arguments) } else { @('-B') + @($Arguments) }
         if ($SuppressTrackedLogging) {
             $processResult = if ($RelayOutput) {
-                Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
+                Invoke-ProdicloudStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
             }
             else {
-                Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
+                Invoke-ProdicloudCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
             }
         }
         else {
             $processResult = Invoke-TrackedAction -Label $attemptLabel -Action {
                 if ($RelayOutput) {
-                    Invoke-ClagnosStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
+                    Invoke-ProdicloudStreamingCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
                 }
                 else {
-                    Invoke-ClagnosCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
+                    Invoke-ProdicloudCapturedProcess -FilePath $FilePath -Arguments $effectiveArguments -ProgressLabel $attemptLabel
                 }
             }
         }
@@ -263,7 +263,7 @@ function Invoke-ClagnosProcessWithRetry {
         }
 
         if ($attempt -lt $MaxAttempts) {
-            Write-ClagnosActionProgress -Action ("wait 2s before retrying {0} after exit {1} (attempt {2}/{3})" -f $Label,$lastExit,($attempt + 1),$MaxAttempts)
+            Write-ProdicloudActionProgress -Action ("wait 2s before retrying {0} after exit {1} (attempt {2}/{3})" -f $Label,$lastExit,($attempt + 1),$MaxAttempts)
             Start-Sleep -Seconds 2
         }
     }
@@ -271,8 +271,8 @@ function Invoke-ClagnosProcessWithRetry {
     throw ("{0} failed after {1} attempt(s). Exit={2}. Output={3}" -f $Label, $MaxAttempts, $lastExit, $lastOutput)
 }
 
-# Handles Convert-ClagnosProcessArgument.
-function Convert-ClagnosProcessArgument {
+# Handles Convert-ProdicloudProcessArgument.
+function Convert-ProdicloudProcessArgument {
     param(
         [string]$Value
     )

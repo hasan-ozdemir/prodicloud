@@ -22,7 +22,7 @@ $taskConfig = [ordered]@{
     )
 }
 
-function Ensure-ClagnosDirectory {
+function Ensure-ProdicloudDirectory {
     param([string]$Path)
 
     if ([string]::IsNullOrWhiteSpace([string]$Path)) {
@@ -35,7 +35,7 @@ function Ensure-ClagnosDirectory {
 }
 
 function Ensure-CreateProfileType {
-    if ('ClagnosUserProfileNative' -as [type]) {
+    if ('ProdicloudUserProfileNative' -as [type]) {
         return
     }
 
@@ -44,7 +44,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-public struct ClagnosProfileInfo
+public struct ProdicloudProfileInfo
 {
     public int dwSize;
     public int dwFlags;
@@ -61,7 +61,7 @@ public struct ClagnosProfileInfo
     public IntPtr hProfile;
 }
 
-public static class ClagnosUserProfileNative
+public static class ProdicloudUserProfileNative
 {
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool LogonUser(
@@ -82,7 +82,7 @@ public static class ClagnosUserProfileNative
     [DllImport("userenv.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool LoadUserProfile(
         IntPtr hToken,
-        ref ClagnosProfileInfo lpProfileInfo);
+        ref ProdicloudProfileInfo lpProfileInfo);
 
     [DllImport("userenv.dll", SetLastError = true)]
     public static extern bool UnloadUserProfile(
@@ -301,7 +301,7 @@ function Copy-ProfileHiveArtifactsIfMissing {
         return
     }
 
-    Ensure-ClagnosDirectory -Path $TargetProfilePath
+    Ensure-ProdicloudDirectory -Path $TargetProfilePath
 
     $targetNtUserPath = Join-Path $TargetProfilePath 'NTUSER.DAT'
     if (-not (Test-Path -LiteralPath $targetNtUserPath) -and -not [string]::IsNullOrWhiteSpace([string]$Sid)) {
@@ -332,7 +332,7 @@ function Copy-ProfileHiveArtifactsIfMissing {
     }
 
     $targetUsrClassRoot = Join-Path $TargetProfilePath 'AppData\Local\Microsoft\Windows'
-    Ensure-ClagnosDirectory -Path $targetUsrClassRoot
+    Ensure-ProdicloudDirectory -Path $targetUsrClassRoot
     $targetUsrClassPath = Join-Path $targetUsrClassRoot 'UsrClass.dat'
     if (-not (Test-Path -LiteralPath $targetUsrClassPath) -and -not [string]::IsNullOrWhiteSpace([string]$Sid)) {
         $loadedClassesHivePath = "Registry::HKEY_USERS\${Sid}_Classes"
@@ -430,7 +430,7 @@ function Repair-TemporaryProfileMappingIfNeeded {
     return [string]$bakProfilePath
 }
 
-function Get-ClagnosInteractivePaths {
+function Get-ProdicloudInteractivePaths {
     param([string]$TaskName)
 
     $taskNameText = [string]$TaskName
@@ -443,29 +443,29 @@ function Get-ClagnosInteractivePaths {
         throw 'Interactive task name became empty after sanitization.'
     }
 
-    $rootPath = Join-Path 'C:\ProgramData\clagnos\interactive' $safeTaskName
+    $rootPath = Join-Path 'C:\ProgramData\prodicloud\interactive' $safeTaskName
     return [pscustomobject]@{
         RootPath = $rootPath
         WorkerPath = Join-Path $rootPath 'worker.ps1'
         ResultPath = Join-Path $rootPath 'result.json'
-        ScheduledTaskName = ('ClagnosInteractive-' + $safeTaskName)
+        ScheduledTaskName = ('ProdicloudInteractive-' + $safeTaskName)
         TaskName = $safeTaskName
     }
 }
 
-function Write-ClagnosJsonFile {
+function Write-ProdicloudJsonFile {
     param(
         [string]$Path,
         [object]$Value
     )
 
     $parentPath = Split-Path -Path $Path -Parent
-    Ensure-ClagnosDirectory -Path $parentPath
+    Ensure-ProdicloudDirectory -Path $parentPath
     $jsonText = [string]($Value | ConvertTo-Json -Depth 8)
     [System.IO.File]::WriteAllText($Path, $jsonText, (New-Object System.Text.UTF8Encoding($false)))
 }
 
-function Read-ClagnosJsonFile {
+function Read-ProdicloudJsonFile {
     param([string]$Path)
 
     if (-not (Test-Path -LiteralPath $Path)) {
@@ -480,7 +480,7 @@ function Read-ClagnosJsonFile {
     return (ConvertFrom-Json -InputObject $text)
 }
 
-function Get-ClagnosPowerShellExePath {
+function Get-ProdicloudPowerShellExePath {
     $cmd = Get-Command powershell.exe -ErrorAction SilentlyContinue
     if ($cmd -and -not [string]::IsNullOrWhiteSpace([string]$cmd.Source)) {
         return [string]$cmd.Source
@@ -494,7 +494,7 @@ function Get-ClagnosPowerShellExePath {
     throw 'powershell.exe was not found.'
 }
 
-function Get-ClagnosLocalPrincipalName {
+function Get-ProdicloudLocalPrincipalName {
     param([string]$UserName)
 
     if ([string]::IsNullOrWhiteSpace([string]$UserName)) {
@@ -504,7 +504,7 @@ function Get-ClagnosLocalPrincipalName {
     return ("{0}\{1}" -f [string]$env:COMPUTERNAME, [string]$UserName)
 }
 
-function Remove-ClagnosInteractiveScheduledTask {
+function Remove-ProdicloudInteractiveScheduledTask {
     param([string]$TaskName)
 
     if ([string]::IsNullOrWhiteSpace([string]$TaskName)) {
@@ -524,7 +524,7 @@ function Remove-ClagnosInteractiveScheduledTask {
     }
 }
 
-function Register-ClagnosInteractiveScheduledTask {
+function Register-ProdicloudInteractiveScheduledTask {
     param(
         [string]$TaskName,
         [string]$RunAsUser,
@@ -532,14 +532,14 @@ function Register-ClagnosInteractiveScheduledTask {
         [string]$WorkerPath
     )
 
-    Remove-ClagnosInteractiveScheduledTask -TaskName $TaskName
+    Remove-ProdicloudInteractiveScheduledTask -TaskName $TaskName
 
     $service = New-Object -ComObject 'Schedule.Service'
     $service.Connect()
     $root = $service.GetFolder('\')
     $definition = $service.NewTask(0)
 
-    $definition.RegistrationInfo.Description = ("clagnos interactive materialization for {0}" -f [string]$TaskName)
+    $definition.RegistrationInfo.Description = ("prodicloud interactive materialization for {0}" -f [string]$TaskName)
     $definition.Settings.Enabled = $true
     $definition.Settings.Hidden = $true
     $definition.Settings.StartWhenAvailable = $true
@@ -549,13 +549,13 @@ function Register-ClagnosInteractiveScheduledTask {
     $definition.Settings.ExecutionTimeLimit = 'PT1H'
     $definition.Settings.MultipleInstances = 0
 
-    $principalName = Get-ClagnosLocalPrincipalName -UserName $RunAsUser
+    $principalName = Get-ProdicloudLocalPrincipalName -UserName $RunAsUser
     $definition.Principal.UserId = $principalName
     $definition.Principal.LogonType = 1
     $definition.Principal.RunLevel = 1
 
     $action = $definition.Actions.Create(0)
-    $action.Path = Get-ClagnosPowerShellExePath
+    $action.Path = Get-ProdicloudPowerShellExePath
     $action.Arguments = ('-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f [string]$WorkerPath)
     $action.WorkingDirectory = (Split-Path -Path $WorkerPath -Parent)
 
@@ -569,7 +569,7 @@ function Register-ClagnosInteractiveScheduledTask {
     $null = $root.RegisterTaskDefinition($TaskName, $definition, 6, $principalName, [string]$RunAsPassword, 1, $null)
 }
 
-function Start-ClagnosInteractiveScheduledTask {
+function Start-ProdicloudInteractiveScheduledTask {
     param([string]$TaskName)
 
     $service = New-Object -ComObject 'Schedule.Service'
@@ -583,7 +583,7 @@ function Start-ClagnosInteractiveScheduledTask {
     $null = $task.Run($null)
 }
 
-function Get-ClagnosInteractiveScheduledTaskSnapshot {
+function Get-ProdicloudInteractiveScheduledTaskSnapshot {
     param([string]$TaskName)
 
     if ([string]::IsNullOrWhiteSpace([string]$TaskName)) {
@@ -611,7 +611,7 @@ function Get-ClagnosInteractiveScheduledTaskSnapshot {
     }
 }
 
-function Get-ClagnosInteractiveWorkerProcesses {
+function Get-ProdicloudInteractiveWorkerProcesses {
     param([string]$WorkerPath)
 
     if ([string]::IsNullOrWhiteSpace([string]$WorkerPath)) {
@@ -628,10 +628,10 @@ function Get-ClagnosInteractiveWorkerProcesses {
     )
 }
 
-function Stop-ClagnosInteractiveWorkerProcesses {
+function Stop-ProdicloudInteractiveWorkerProcesses {
     param([string]$WorkerPath)
 
-    foreach ($process in @(Get-ClagnosInteractiveWorkerProcesses -WorkerPath $WorkerPath)) {
+    foreach ($process in @(Get-ProdicloudInteractiveWorkerProcesses -WorkerPath $WorkerPath)) {
         try {
             Stop-Process -Id ([int]$process.ProcessId) -Force -ErrorAction Stop
         }
@@ -640,7 +640,7 @@ function Stop-ClagnosInteractiveWorkerProcesses {
     }
 }
 
-function Invoke-ClagnosInteractiveProfileMaterialization {
+function Invoke-ProdicloudInteractiveProfileMaterialization {
     param(
         [string]$TaskName,
         [string]$RunAsUser,
@@ -648,9 +648,9 @@ function Invoke-ClagnosInteractiveProfileMaterialization {
         [int]$WaitTimeoutSeconds = 180
     )
 
-    $paths = Get-ClagnosInteractivePaths -TaskName $TaskName
-    Ensure-ClagnosDirectory -Path $paths.RootPath
-    Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
+    $paths = Get-ProdicloudInteractivePaths -TaskName $TaskName
+    Ensure-ProdicloudDirectory -Path $paths.RootPath
+    Stop-ProdicloudInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
     Remove-Item -LiteralPath $paths.ResultPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $paths.WorkerPath -Force -ErrorAction SilentlyContinue
 
@@ -697,15 +697,15 @@ catch {
     [System.IO.File]::WriteAllText($paths.WorkerPath, [string]$workerScript, (New-Object System.Text.UTF8Encoding($false)))
 
     try {
-        Register-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -RunAsPassword $RunAsPassword -WorkerPath $paths.WorkerPath
-        Start-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+        Register-ProdicloudInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -RunAsPassword $RunAsPassword -WorkerPath $paths.WorkerPath
+        Start-ProdicloudInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
 
         $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(30, [int]$WaitTimeoutSeconds))
         while ([DateTime]::UtcNow -lt $deadline) {
             if (Test-Path -LiteralPath $paths.ResultPath) {
                 $fileInfo = Get-Item -LiteralPath $paths.ResultPath -ErrorAction SilentlyContinue
                 if ($null -ne $fileInfo -and [int64]$fileInfo.Length -gt 0) {
-                    $result = Read-ClagnosJsonFile -Path $paths.ResultPath
+                    $result = Read-ProdicloudJsonFile -Path $paths.ResultPath
                     if ($result.PSObject.Properties.Match('Success').Count -gt 0 -and [bool]$result.Success) {
                         return $result
                     }
@@ -718,7 +718,7 @@ catch {
             Start-Sleep -Seconds 2
         }
 
-        $snapshot = Get-ClagnosInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
+        $snapshot = Get-ProdicloudInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
         if ($null -eq $snapshot) {
             throw ("Interactive worker timed out without a result file: {0}" -f [string]$paths.ResultPath)
         }
@@ -727,12 +727,12 @@ catch {
     }
     finally {
         try {
-            Remove-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+            Remove-ProdicloudInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
         }
         catch {
         }
 
-        Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
+        Stop-ProdicloudInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath
         Remove-Item -LiteralPath $paths.WorkerPath -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $paths.ResultPath -Force -ErrorAction SilentlyContinue
     }
@@ -745,9 +745,9 @@ function Ensure-StandardProfileDirectories {
         throw 'Profile path is empty.'
     }
 
-    Ensure-ClagnosDirectory -Path $ProfilePath
+    Ensure-ProdicloudDirectory -Path $ProfilePath
     foreach ($relativePath in @($taskConfig.StandardProfileDirectories)) {
-        Ensure-ClagnosDirectory -Path (Join-Path $ProfilePath ([string]$relativePath))
+        Ensure-ProdicloudDirectory -Path (Join-Path $ProfilePath ([string]$relativePath))
     }
 }
 
@@ -767,7 +767,7 @@ function Invoke-CreateProfileForLocalUser {
     Ensure-CreateProfileType
 
     $profilePathBuilder = New-Object System.Text.StringBuilder 260
-    $createProfileResult = [ClagnosUserProfileNative]::CreateProfile(
+    $createProfileResult = [ProdicloudUserProfileNative]::CreateProfile(
         [string]$Sid,
         [string]$UserName,
         $profilePathBuilder,
@@ -795,18 +795,18 @@ function Invoke-LoadUserProfileForLocalUser {
     Ensure-CreateProfileType
 
     $tokenHandle = [IntPtr]::Zero
-    $profileInfo = New-Object ClagnosProfileInfo
-    $profileInfo.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type][ClagnosProfileInfo])
+    $profileInfo = New-Object ProdicloudProfileInfo
+    $profileInfo.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf([type][ProdicloudProfileInfo])
     $profileInfo.dwFlags = 1
     $profileInfo.lpUserName = [string]$UserName
 
-    if (-not [ClagnosUserProfileNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)) {
+    if (-not [ProdicloudUserProfileNative]::LogonUser([string]$UserName, '.', [string]$Password, 2, 0, [ref]$tokenHandle)) {
         $logonError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
         throw ("LogonUser failed for '{0}' with Win32 error {1}." -f [string]$UserName, [int]$logonError)
     }
 
     try {
-        if (-not [ClagnosUserProfileNative]::LoadUserProfile($tokenHandle, [ref]$profileInfo)) {
+        if (-not [ProdicloudUserProfileNative]::LoadUserProfile($tokenHandle, [ref]$profileInfo)) {
             $loadError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
             throw ("LoadUserProfile failed for '{0}' with Win32 error {1}." -f [string]$UserName, [int]$loadError)
         }
@@ -816,12 +816,12 @@ function Invoke-LoadUserProfileForLocalUser {
     finally {
         try {
             if ($profileInfo.hProfile -ne [IntPtr]::Zero) {
-                [void][ClagnosUserProfileNative]::UnloadUserProfile($tokenHandle, $profileInfo.hProfile)
+                [void][ProdicloudUserProfileNative]::UnloadUserProfile($tokenHandle, $profileInfo.hProfile)
             }
         }
         finally {
             if ($tokenHandle -ne [IntPtr]::Zero) {
-                [void][ClagnosUserProfileNative]::CloseHandle($tokenHandle)
+                [void][ProdicloudUserProfileNative]::CloseHandle($tokenHandle)
             }
         }
     }
@@ -857,7 +857,7 @@ function Ensure-LocalUserProfileMaterialized {
     $managedPassword = Get-ManagedLocalUserPassword -UserName $userName
     if (-not [string]::IsNullOrWhiteSpace([string]$managedPassword)) {
         try {
-            $null = Invoke-ClagnosInteractiveProfileMaterialization -TaskName ("configure-all-users-materialize-{0}" -f [string]$userName) -RunAsUser $userName -RunAsPassword $managedPassword -WaitTimeoutSeconds ([int]$taskConfig.InteractiveMaterializationWaitSeconds)
+            $null = Invoke-ProdicloudInteractiveProfileMaterialization -TaskName ("configure-all-users-materialize-{0}" -f [string]$userName) -RunAsUser $userName -RunAsPassword $managedPassword -WaitTimeoutSeconds ([int]$taskConfig.InteractiveMaterializationWaitSeconds)
         }
         catch {
             Write-Host ("profile-materialization-fallback: {0} => {1}" -f [string]$userName, [string]$_.Exception.Message)

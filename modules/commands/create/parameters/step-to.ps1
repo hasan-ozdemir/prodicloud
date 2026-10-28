@@ -1,5 +1,5 @@
 # 'step-to' option binding for 'create'.
 
-function Get-ClagnosCreateStepToOptionSpecification {
-    return (Get-ClagnosSharedStepToOptionSpecification)
+function Get-ProdicloudCreateStepToOptionSpecification {
+    return (Get-ProdicloudSharedStepToOptionSpecification)
 }

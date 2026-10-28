@@ -1,5 +1,5 @@
 # Shared 'nested-virtualization' command option specification.
 
-function Get-ClagnosSharedNestedVirtualizationOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'nested-virtualization' -TakesValue)
+function Get-ProdicloudSharedNestedVirtualizationOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'nested-virtualization' -TakesValue)
 }

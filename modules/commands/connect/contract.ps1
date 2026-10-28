@@ -1,17 +1,17 @@
 # Contract for the 'connect' command.
 
-function Get-ClagnosConnectOptionSpecifications {
+function Get-ProdicloudConnectOptionSpecifications {
     return @(
-        (Get-ClagnosConnectPerfOptionSpecification),
-        (Get-ClagnosConnectHelpOptionSpecification),
-        (Get-ClagnosConnectSubscriptionIdOptionSpecification),
-        (Get-ClagnosConnectGroupOptionSpecification),
-        (Get-ClagnosConnectVmNameOptionSpecification),
-        (Get-ClagnosConnectUserOptionSpecification),
-        (Get-ClagnosConnectCommandOptionSpecification),
-        (Get-ClagnosConnectTestOptionSpecification),
-        (Get-ClagnosConnectSshOptionSpecification),
-        (Get-ClagnosConnectRdpOptionSpecification),
-        (Get-ClagnosConnectPowerShellOptionSpecification)
+        (Get-ProdicloudConnectPerfOptionSpecification),
+        (Get-ProdicloudConnectHelpOptionSpecification),
+        (Get-ProdicloudConnectSubscriptionIdOptionSpecification),
+        (Get-ProdicloudConnectGroupOptionSpecification),
+        (Get-ProdicloudConnectVmNameOptionSpecification),
+        (Get-ProdicloudConnectUserOptionSpecification),
+        (Get-ProdicloudConnectCommandOptionSpecification),
+        (Get-ProdicloudConnectTestOptionSpecification),
+        (Get-ProdicloudConnectSshOptionSpecification),
+        (Get-ProdicloudConnectRdpOptionSpecification),
+        (Get-ProdicloudConnectPowerShellOptionSpecification)
     )
 }

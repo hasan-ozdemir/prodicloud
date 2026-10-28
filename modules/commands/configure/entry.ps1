@@ -1,7 +1,7 @@
 # Configure command entry.
 
-# Handles Invoke-ClagnosConfigureCommand.
-function Invoke-ClagnosConfigureCommand {
+# Handles Invoke-ProdicloudConfigureCommand.
+function Invoke-ProdicloudConfigureCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -9,7 +9,7 @@ function Invoke-ClagnosConfigureCommand {
         [switch]$LinuxFlag
     )
 
-    $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot 'clagnos.env'
-    Invoke-ClagnosConfigureInteractiveEditor -RepoRoot $repoRoot -EnvFilePath $envFilePath -Perf:$PerfMode
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Join-Path $repoRoot 'prodicloud.env'
+    Invoke-ProdicloudConfigureInteractiveEditor -RepoRoot $repoRoot -EnvFilePath $envFilePath -Perf:$PerfMode
 }

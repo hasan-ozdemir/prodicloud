@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 
-public static class ClagnosTuiAzFixture
+public static class ProdicloudTuiAzFixture
 {
     public static int Main(string[] args)
     {
@@ -15,7 +15,7 @@ public static class ClagnosTuiAzFixture
         startInfo.FileName = powershellPath;
         startInfo.Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + fixturePath + "\"";
         startInfo.UseShellExecute = false;
-        startInfo.EnvironmentVariables["CLAGNOS_TUI_AZ_ARGUMENTS_BASE64"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(arguments));
+        startInfo.EnvironmentVariables["PRODICLOUD_TUI_AZ_ARGUMENTS_BASE64"] = Convert.ToBase64String(Encoding.UTF8.GetBytes(arguments));
 
         using (Process fixture = Process.Start(startInfo))
         {

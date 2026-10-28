@@ -1,5 +1,5 @@
 # Shared 'auto' command option specification.
 
-function Get-ClagnosSharedAutoOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'auto' -ShortNames @('a'))
+function Get-ProdicloudSharedAutoOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'auto' -ShortNames @('a'))
 }

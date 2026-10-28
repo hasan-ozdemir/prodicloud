@@ -23,7 +23,7 @@ if ([string]::IsNullOrWhiteSpace([string]$RepoRoot)) {
     $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 }
 
-function Read-ClagnosE2eDotEnv {
+function Read-ProdicloudE2eDotEnv {
     param([string]$Path)
 
     $values = @{}
@@ -39,7 +39,7 @@ function Read-ClagnosE2eDotEnv {
     return $values
 }
 
-function Invoke-ClagnosE2eAzJson {
+function Invoke-ProdicloudE2eAzJson {
     param([string[]]$Arguments, [string]$Description)
 
     Write-Host ("Doing: Azure JSON query - {0}" -f [string]$Description) -ForegroundColor DarkCyan
@@ -50,7 +50,7 @@ function Invoke-ClagnosE2eAzJson {
     catch { throw ("Azure returned invalid JSON during {0}." -f $Description) }
 }
 
-function Invoke-ClagnosE2eAzText {
+function Invoke-ProdicloudE2eAzText {
     param([string[]]$Arguments, [string]$Description)
 
     Write-Host ("Doing: Azure text query - {0}" -f [string]$Description) -ForegroundColor DarkCyan
@@ -59,7 +59,7 @@ function Invoke-ClagnosE2eAzText {
     return (@($text | ForEach-Object { [string]$_ }) -join "`n").Trim()
 }
 
-function Get-ClagnosE2eStatusRows {
+function Get-ProdicloudE2eStatusRows {
     param([object]$View)
 
     $statusRows = @()
@@ -74,17 +74,17 @@ function Get-ClagnosE2eStatusRows {
     return @($statusRows)
 }
 
-function Get-ClagnosE2ePowerState {
+function Get-ProdicloudE2ePowerState {
     param([string]$ResourceGroup)
 
-    $view = Invoke-ClagnosE2eAzJson -Arguments @('vm','get-instance-view','--subscription',$SubscriptionId,'--resource-group',$ResourceGroup,'--name',$VmName) -Description 'VM power and hibernation state'
-    $statusRows = @(Get-ClagnosE2eStatusRows -View $view)
+    $view = Invoke-ProdicloudE2eAzJson -Arguments @('vm','get-instance-view','--subscription',$SubscriptionId,'--resource-group',$ResourceGroup,'--name',$VmName) -Description 'VM power and hibernation state'
+    $statusRows = @(Get-ProdicloudE2eStatusRows -View $view)
     $powerRow = @($statusRows | Where-Object { [string]$_.code -like 'PowerState/*' } | Select-Object -First 1)
     if ($powerRow.Count -ne 1) { return '' }
     return ([string]$powerRow[0].code).Substring('PowerState/'.Length).ToLowerInvariant()
 }
 
-function New-ClagnosE2eJawsPayloadVerifier {
+function New-ProdicloudE2eJawsPayloadVerifier {
     param([string]$ArchivePath, [string]$ScriptPath)
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -123,20 +123,20 @@ foreach (`$property in @(`$expected.PSObject.Properties)) {
     [IO.File]::WriteAllText($ScriptPath,[string]$remoteScript,[System.Text.UTF8Encoding]::new($false))
 }
 
-function Get-ClagnosE2eActiveTaskCount {
+function Get-ProdicloudE2eActiveTaskCount {
     param([ValidateSet('init','update')][string]$Stage, [ValidateSet('windows','linux')][string]$Platform)
 
     $stageName = if ($Stage -eq 'init') { 'vm-init' } else { 'vm-update' }
     $stageRoot = Join-Path $RepoRoot (Join-Path $stageName $Platform)
-    $catalog = Get-ClagnosTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
+    $catalog = Get-ProdicloudTaskBlocksFromDirectory -DirectoryPath $stageRoot -Platform $Platform -Stage $Stage -SuppressSkipMessages
     return @($catalog.ActiveTasks).Count
 }
-function Get-ClagnosE2ePackageInventory {
+function Get-ProdicloudE2ePackageInventory {
     param([ValidateSet('builtin','custom')][string]$Catalog, [ValidateSet('windows','linux')][string]$Platform)
 
     $catalogRoot = Join-Path $RepoRoot (Join-Path 'vm-packages' (Join-Path $Catalog $Platform))
     if (-not (Test-Path -LiteralPath $catalogRoot -PathType Container)) { return @() }
-    $availability = Read-ClagnosTaskCatalogState -Path (Join-Path $catalogRoot 'tasks.toml')
+    $availability = Read-ProdicloudTaskCatalogState -Path (Join-Path $catalogRoot 'tasks.toml')
     $packages = @()
     foreach ($folder in @(Get-ChildItem -LiteralPath $catalogRoot -Directory -Force | Sort-Object Name)) {
         if ($folder.Name -in @('backup-app-states')) { continue }
@@ -170,7 +170,7 @@ function Get-ClagnosE2ePackageInventory {
     return @($packages)
 }
 
-function Resolve-ClagnosE2ePackageOrder {
+function Resolve-ProdicloudE2ePackageOrder {
     param([object[]]$Packages)
 
     $allPackages = @($Packages)
@@ -215,12 +215,12 @@ function Resolve-ClagnosE2ePackageOrder {
     return @($ordered)
 }
 
-function Invoke-ClagnosE2eCommand {
+function Invoke-ProdicloudE2eCommand {
     param([string]$Label, [string[]]$Arguments)
 
     Write-Host ("[{0}] {1}" -f (Get-Date).ToUniversalTime().ToString('HH:mm:ssZ'),$Label) -ForegroundColor Cyan
     $lines = New-Object 'System.Collections.Generic.List[string]'
-    & $script:PowerShellExecutable -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:ClagnosEntryPoint @Arguments 2>&1 | ForEach-Object {
+    & $script:PowerShellExecutable -NoLogo -NoProfile -ExecutionPolicy Bypass -File $script:ProdicloudEntryPoint @Arguments 2>&1 | ForEach-Object {
         $line = [string]$_
         [void]$lines.Add($line)
         Write-Host $line
@@ -234,7 +234,7 @@ function Invoke-ClagnosE2eCommand {
     return $output
 }
 
-function Assert-ClagnosE2eStageSummary {
+function Assert-ProdicloudE2eStageSummary {
     param([string]$Output, [ValidateSet('init','update')][string]$Stage, [int]$ExpectedSuccessCount)
 
     $pattern = if ($Stage -eq 'init') {
@@ -256,7 +256,7 @@ function Assert-ClagnosE2eStageSummary {
     Write-Host ("[PASS] {0} tasks: {1}/{1} succeeded with zero failures, warnings, or errors." -f $Stage,$success) -ForegroundColor Green
 }
 
-function Assert-ClagnosE2ePackageStatuses {
+function Assert-ProdicloudE2ePackageStatuses {
     param([string]$Output, [object[]]$Packages, [string]$Catalog)
 
     $catalogPackages = @($Packages | Where-Object { [string]$_.Catalog -eq $Catalog })
@@ -278,12 +278,12 @@ if ($ResumeAfterUpdate -and ($ResumeFromUpdate -or -not [string]::IsNullOrWhiteS
 if ($RunLive -and ([string]$env:CI -eq 'true' -or [string]$env:GITHUB_ACTIONS -eq 'true')) { throw 'The live Azure E2E test is disabled in CI.' }
 
 $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot)
-$globalEnvPath = Join-Path $resolvedRepoRoot 'clagnos.env'
+$globalEnvPath = Join-Path $resolvedRepoRoot 'prodicloud.env'
 $vmEnvPath = Join-Path $resolvedRepoRoot ($VmName + '.env')
-if (-not (Test-Path -LiteralPath $globalEnvPath -PathType Leaf)) { throw 'The live E2E test requires a local clagnos.env file.' }
+if (-not (Test-Path -LiteralPath $globalEnvPath -PathType Leaf)) { throw 'The live E2E test requires a local prodicloud.env file.' }
 if (-not (Test-Path -LiteralPath $vmEnvPath -PathType Leaf)) { throw ("The live E2E test requires the target VC profile '{0}.env'." -f $VmName) }
-$globalConfig = Read-ClagnosE2eDotEnv -Path $globalEnvPath
-$vmConfig = Read-ClagnosE2eDotEnv -Path $vmEnvPath
+$globalConfig = Read-ProdicloudE2eDotEnv -Path $globalEnvPath
+$vmConfig = Read-ProdicloudE2eDotEnv -Path $vmEnvPath
 if ([string]$vmConfig['SELECTED_VM_NAME'] -cne $VmName) { throw ("VC profile identity does not match its filename: {0}" -f $vmEnvPath) }
 $config = @{}
 foreach ($key in @($globalConfig.Keys)) { $config[[string]$key] = [string]$globalConfig[$key] }
@@ -320,13 +320,13 @@ foreach ($key in @('VM_ADMIN_USER','VM_ADMIN_PASS','VM_ASSISTANT_USER','VM_ASSIS
 }
 
 $script:PowerShellExecutable = (Get-Command pwsh.exe -ErrorAction Stop).Source
-$script:ClagnosEntryPoint = Join-Path $resolvedRepoRoot 'clagnos.ps1'
-if (-not (Test-Path -LiteralPath $script:ClagnosEntryPoint -PathType Leaf)) { throw 'The clagnos.ps1 entrypoint is missing.' }
+$script:ProdicloudEntryPoint = Join-Path $resolvedRepoRoot 'prodicloud.ps1'
+if (-not (Test-Path -LiteralPath $script:ProdicloudEntryPoint -PathType Leaf)) { throw 'The prodicloud.ps1 entrypoint is missing.' }
 $script:LogDirectory = Join-Path $resolvedRepoRoot '.tmp\live-e2e'
 New-Item -ItemType Directory -Path $script:LogDirectory -Force | Out-Null
 $safeVmName = [regex]::Replace($VmName,'[^A-Za-z0-9-]','_')
 $script:LogPath = Join-Path $script:LogDirectory ("{0}-{1}.log" -f $safeVmName,(Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss'))
-Set-Content -LiteralPath $script:LogPath -Value ("Clagnos live acceptance started {0} UTC." -f (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) -Encoding UTF8
+Set-Content -LiteralPath $script:LogPath -Value ("Prodicloud live acceptance started {0} UTC." -f (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm:ss')) -Encoding UTF8
 
 $packageArchives = @(Get-ChildItem -LiteralPath (Join-Path $resolvedRepoRoot 'vm-packages') -Recurse -File -Filter app-state.zip -ErrorAction SilentlyContinue)
 if ($packageArchives.Count -gt 0) {
@@ -334,31 +334,31 @@ if ($packageArchives.Count -gt 0) {
     if ($LASTEXITCODE -ne 0) { throw 'Package app-state snapshot validation failed before Azure mutation.' }
 }
 
-$packages = @((Get-ClagnosE2ePackageInventory -Catalog builtin -Platform windows) + (Get-ClagnosE2ePackageInventory -Catalog custom -Platform windows))
-$packageOrder = @(Resolve-ClagnosE2ePackageOrder -Packages $packages)
+$packages = @((Get-ProdicloudE2ePackageInventory -Catalog builtin -Platform windows) + (Get-ProdicloudE2ePackageInventory -Catalog custom -Platform windows))
+$packageOrder = @(Resolve-ProdicloudE2ePackageOrder -Packages $packages)
 if ($packages.Count -eq 0) { throw 'No enabled Windows package add-ons were found.' }
-$initTaskCount = Get-ClagnosE2eActiveTaskCount -Stage init -Platform windows
-$updateTaskCount = Get-ClagnosE2eActiveTaskCount -Stage update -Platform windows
+$initTaskCount = Get-ProdicloudE2eActiveTaskCount -Stage init -Platform windows
+$updateTaskCount = Get-ProdicloudE2eActiveTaskCount -Stage update -Platform windows
 if ($initTaskCount -eq 0 -or $updateTaskCount -eq 0) { throw 'The enabled Windows VC init or add-on task inventory is empty.' }
 Write-Host ("Local preflight passed: init={0}, update={1}, enabled packages={2}, package app-state archives={3}." -f $initTaskCount,$updateTaskCount,$packageOrder.Count,$packageArchives.Count) -ForegroundColor DarkCyan
 
-$account = Invoke-ClagnosE2eAzJson -Arguments @('account','show','--subscription',$SubscriptionId) -Description 'selected Azure subscription'
-$activeAccount = Invoke-ClagnosE2eAzJson -Arguments @('account','show') -Description 'active Azure CLI subscription'
-if (-not [string]::Equals([string]$account.id,[string]$activeAccount.id,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The selected clagnos.env subscription is not the active Azure CLI subscription.' }
+$account = Invoke-ProdicloudE2eAzJson -Arguments @('account','show','--subscription',$SubscriptionId) -Description 'selected Azure subscription'
+$activeAccount = Invoke-ProdicloudE2eAzJson -Arguments @('account','show') -Description 'active Azure CLI subscription'
+if (-not [string]::Equals([string]$account.id,[string]$activeAccount.id,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The selected prodicloud.env subscription is not the active Azure CLI subscription.' }
 if ([string]$account.state -ne 'Enabled') { throw 'The selected Azure subscription is not enabled.' }
-$existingVm = @(Invoke-ClagnosE2eAzJson -Arguments @('vm','list','--subscription',$SubscriptionId,'--query',("[?name=='{0}'].{{name:name,resourceGroup:resourceGroup,location:location}}" -f $VmName)) -Description 'fresh or resume target-name check')
+$existingVm = @(Invoke-ProdicloudE2eAzJson -Arguments @('vm','list','--subscription',$SubscriptionId,'--query',("[?name=='{0}'].{{name:name,resourceGroup:resourceGroup,location:location}}" -f $VmName)) -Description 'fresh or resume target-name check')
 if ($ResumeExisting) {
     if ($existingVm.Count -ne 1) { throw ("Resume requires exactly one existing VM named '{0}' in the selected subscription; found {1}." -f $VmName,$existingVm.Count) }
     $resumeGroupName = [string]$existingVm[0].resourceGroup
-    $resumeGroup = Invoke-ClagnosE2eAzJson -Arguments @('group','show','--name',$resumeGroupName,'--subscription',$SubscriptionId) -Description 'resume target ownership check'
-    if ($null -eq $resumeGroup.tags -or -not [string]::Equals([string]$resumeGroup.tags.'managed-by','clagnos',[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The existing resume target is not in a Clagnos-managed resource group.' }
+    $resumeGroup = Invoke-ProdicloudE2eAzJson -Arguments @('group','show','--name',$resumeGroupName,'--subscription',$SubscriptionId) -Description 'resume target ownership check'
+    if ($null -eq $resumeGroup.tags -or -not [string]::Equals([string]$resumeGroup.tags.'managed-by','prodicloud',[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The existing resume target is not in a Prodicloud-managed resource group.' }
     if (-not [string]::Equals([string]$existingVm[0].location,$Region,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The existing resume target is in an unexpected region.' }
-    $resumeSize = Invoke-ClagnosE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resumeGroupName,'--name',$VmName,'--query','hardwareProfile.vmSize') -Description 'resume target VM size'
+    $resumeSize = Invoke-ProdicloudE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resumeGroupName,'--name',$VmName,'--query','hardwareProfile.vmSize') -Description 'resume target VM size'
     if (-not [string]::Equals($resumeSize,$VmSize,[System.StringComparison]::OrdinalIgnoreCase)) { throw ("Resume target size '{0}' does not match requested E2E size '{1}'." -f $resumeSize,$VmSize) }
 }
 elseif ($existingVm.Count -gt 0) { throw ("VM '{0}' already exists in the selected subscription. This fresh-create test will not overwrite or delete it." -f $VmName) }
 
-$skuRows = @(Invoke-ClagnosE2eAzJson -Arguments @('vm','list-skus','--location',$Region,'--size',$VmSize,'--resource-type','virtualMachines','--all','--query',("[?name=='{0}']" -f $VmSize)) -Description 'target VM size feature and regional availability')
+$skuRows = @(Invoke-ProdicloudE2eAzJson -Arguments @('vm','list-skus','--location',$Region,'--size',$VmSize,'--resource-type','virtualMachines','--all','--query',("[?name=='{0}']" -f $VmSize)) -Description 'target VM size feature and regional availability')
 if ($skuRows.Count -eq 0) { throw ("VM size '{0}' is not listed in Azure region '{1}'." -f $VmSize,$Region) }
 $selectedSku = $skuRows[0]
 $hibernationCapability = @($selectedSku.capabilities | Where-Object { [string]$_.name -eq 'HibernationSupported' } | Select-Object -First 1)
@@ -388,24 +388,24 @@ try {
         Write-Host ("[PASS] Resuming the existing managed VM: {0} / {1}." -f $resourceGroup,$VmName) -ForegroundColor Green
     }
     else {
-        $createOutput = Invoke-ClagnosE2eCommand -Label 'Create fresh virtual computer' -Arguments @('create','--auto','--windows','--vm-name',$VmName,'--vm-region',$Region,'--vm-size',$VmSize,'--subscription-id',$SubscriptionId)
-        $createdVmRows = @(Invoke-ClagnosE2eAzJson -Arguments @('vm','list','--subscription',$SubscriptionId,'--query',("[?name=='{0}'].{{name:name,resourceGroup:resourceGroup,location:location}}" -f $VmName)) -Description 'created VM inventory')
+        $createOutput = Invoke-ProdicloudE2eCommand -Label 'Create fresh virtual computer' -Arguments @('create','--auto','--windows','--vm-name',$VmName,'--vm-region',$Region,'--vm-size',$VmSize,'--subscription-id',$SubscriptionId)
+        $createdVmRows = @(Invoke-ProdicloudE2eAzJson -Arguments @('vm','list','--subscription',$SubscriptionId,'--query',("[?name=='{0}'].{{name:name,resourceGroup:resourceGroup,location:location}}" -f $VmName)) -Description 'created VM inventory')
         if ($createdVmRows.Count -ne 1) { throw ("Expected exactly one newly created VM named '{0}', found {1}." -f $VmName,$createdVmRows.Count) }
         $resourceGroup = [string]$createdVmRows[0].resourceGroup
         $vmLocation = [string]$createdVmRows[0].location
         if (-not [string]::Equals($vmLocation,$Region,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The newly created VM is in an unexpected region.' }
-        $group = Invoke-ClagnosE2eAzJson -Arguments @('group','show','--name',$resourceGroup,'--subscription',$SubscriptionId) -Description 'managed resource-group ownership check'
-        if ($null -eq $group.tags -or -not [string]::Equals([string]$group.tags.'managed-by','clagnos',[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The newly created resource group is not tagged managed-by=clagnos.' }
+        $group = Invoke-ProdicloudE2eAzJson -Arguments @('group','show','--name',$resourceGroup,'--subscription',$SubscriptionId) -Description 'managed resource-group ownership check'
+        if ($null -eq $group.tags -or -not [string]::Equals([string]$group.tags.'managed-by','prodicloud',[System.StringComparison]::OrdinalIgnoreCase)) { throw 'The newly created resource group is not tagged managed-by=prodicloud.' }
         Write-Host ("[PASS] Fresh VM and managed resource group were created: {0} / {1}." -f $resourceGroup,$VmName) -ForegroundColor Green
 
-        $initOutput = Invoke-ClagnosE2eCommand -Label 'Run all enabled VC init tasks' -Arguments @('initialize','--auto','--windows','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
-        Assert-ClagnosE2eStageSummary -Output $initOutput -Stage init -ExpectedSuccessCount $initTaskCount
+        $initOutput = Invoke-ProdicloudE2eCommand -Label 'Run all enabled VC init tasks' -Arguments @('initialize','--auto','--windows','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+        Assert-ProdicloudE2eStageSummary -Output $initOutput -Stage init -ExpectedSuccessCount $initTaskCount
     }
 
     if (-not $ResumeAfterUpdate) {
-        $setOutput = Invoke-ClagnosE2eCommand -Label 'Verify nested virtualization in the guest' -Arguments @('set','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--nested-virtualization=on')
-        if ($setOutput -notmatch '(?i)Guest virtualization extensions are available for nested virtualization') { throw 'Clagnos did not report available nested-virtualization guest extensions.' }
-        $hibernationEnabled = Invoke-ClagnosE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName,'--query','additionalCapabilities.hibernationEnabled') -Description 'Azure hibernation feature state'
+        $setOutput = Invoke-ProdicloudE2eCommand -Label 'Verify nested virtualization in the guest' -Arguments @('set','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--nested-virtualization=on')
+        if ($setOutput -notmatch '(?i)Guest virtualization extensions are available for nested virtualization') { throw 'Prodicloud did not report available nested-virtualization guest extensions.' }
+        $hibernationEnabled = Invoke-ProdicloudE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName,'--query','additionalCapabilities.hibernationEnabled') -Description 'Azure hibernation feature state'
         if ($hibernationEnabled -notmatch '(?i)^true$') { throw 'Azure VM hibernation is not enabled.' }
     }
     else {
@@ -428,15 +428,15 @@ try {
             $index++
             if ($index -lt $startIndex) { continue }
             $packageLabel = ('{0} {1}/{2}: {3}/{4}' -f [string]$package.Catalog,$index,$packageOrder.Count,[string]$package.Id,[string]$package.DisplayName)
-            $null = Invoke-ClagnosE2eCommand -Label ("Install VC add-on package {0}" -f $packageLabel) -Arguments @('package','--action','install','--catalog',[string]$package.Catalog,'--package',[string]$package.Id,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows','--yes')
+            $null = Invoke-ProdicloudE2eCommand -Label ("Install VC add-on package {0}" -f $packageLabel) -Arguments @('package','--action','install','--catalog',[string]$package.Catalog,'--package',[string]$package.Id,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows','--yes')
         }
     }
     if (-not $ResumeFromUpdate -and -not $ResumeAfterUpdate) {
         foreach ($catalog in @('builtin','custom')) {
             $catalogPackages = @($packages | Where-Object { [string]$_.Catalog -eq $catalog })
             if ($catalogPackages.Count -eq 0) { continue }
-            $statusOutput = Invoke-ClagnosE2eCommand -Label ("Verify every enabled {0} package" -f $catalog) -Arguments @('package','--action','list','--catalog',$catalog,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows')
-            Assert-ClagnosE2ePackageStatuses -Output $statusOutput -Packages $catalogPackages -Catalog $catalog
+            $statusOutput = Invoke-ProdicloudE2eCommand -Label ("Verify every enabled {0} package" -f $catalog) -Arguments @('package','--action','list','--catalog',$catalog,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId,'--windows')
+            Assert-ProdicloudE2ePackageStatuses -Output $statusOutput -Packages $catalogPackages -Catalog $catalog
             Write-Host ("[PASS] {0} enabled {1} packages report installed." -f $catalogPackages.Count,$catalog) -ForegroundColor Green
         }
     }
@@ -446,8 +446,8 @@ try {
     }
 
     if (-not $ResumeAfterUpdate) {
-        $updateOutput = Invoke-ClagnosE2eCommand -Label 'Run all enabled VC add-on/update tasks' -Arguments @('update','--auto','--windows','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
-        Assert-ClagnosE2eStageSummary -Output $updateOutput -Stage update -ExpectedSuccessCount $updateTaskCount
+        $updateOutput = Invoke-ProdicloudE2eCommand -Label 'Run all enabled VC add-on/update tasks' -Arguments @('update','--auto','--windows','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+        Assert-ProdicloudE2eStageSummary -Output $updateOutput -Stage update -ExpectedSuccessCount $updateTaskCount
     }
     else {
         Write-Host 'All enabled vm-update tasks already passed with zero warnings; resuming at final VM verification.' -ForegroundColor DarkCyan
@@ -455,10 +455,10 @@ try {
 
     $jawsArchivePath = Join-Path $resolvedRepoRoot 'vm-packages\builtin\windows\jaws\app-state\app-state.zip'
     $jawsVerifierPath = Join-Path (Split-Path $script:LogPath -Parent) 'verify-jaws-update-files.ps1'
-    New-ClagnosE2eJawsPayloadVerifier -ArchivePath $jawsArchivePath -ScriptPath $jawsVerifierPath
-    $null = Invoke-ClagnosE2eCommand -Label 'Verify JAWS app-state update files byte-for-byte on the target VM' -Arguments @('exec','--quiet','--file',$jawsVerifierPath,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    New-ProdicloudE2eJawsPayloadVerifier -ArchivePath $jawsArchivePath -ScriptPath $jawsVerifierPath
+    $null = Invoke-ProdicloudE2eCommand -Label 'Verify JAWS app-state update files byte-for-byte on the target VM' -Arguments @('exec','--quiet','--file',$jawsVerifierPath,'--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
 
-    $showOutput = Invoke-ClagnosE2eCommand -Label 'Inspect complete VM and attached-resource summary' -Arguments @('show','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $showOutput = Invoke-ProdicloudE2eCommand -Label 'Inspect complete VM and attached-resource summary' -Arguments @('show','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
     foreach ($requiredText in @('Azure VM Show Report','Resource types:','Resources:','VM details:','Size (SKU):','OS type:','Public IPs:','Private IPs:','OS disk:','Data disks:','NIC ids:','Hibernation enabled: True','VM_ADMIN_PASS: [redacted]','VM_ASSISTANT_PASS: [redacted]','Nested virtualization available to guest: True')) {
         if ($showOutput -notmatch [regex]::Escape($requiredText)) { throw ("The complete show summary did not include required evidence: {0}" -f $requiredText) }
     }
@@ -467,15 +467,15 @@ try {
         if ($secret.Length -gt 0 -and $showOutput.Contains($secret)) { throw 'The show report exposed a configured password instead of redacting it.' }
     }
 
-    $null = Invoke-ClagnosE2eCommand -Label 'Verify VM lifecycle status' -Arguments @('do','--vm-action=status','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
-    $null = Invoke-ClagnosE2eCommand -Label 'Verify SSH connectivity' -Arguments @('connect','--ssh','--test','--user','manager','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
-    $null = Invoke-ClagnosE2eCommand -Label 'Verify RDP connectivity' -Arguments @('connect','--rdp','--test','--user','manager','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $null = Invoke-ProdicloudE2eCommand -Label 'Verify VM lifecycle status' -Arguments @('do','--vm-action=status','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $null = Invoke-ProdicloudE2eCommand -Label 'Verify SSH connectivity' -Arguments @('connect','--ssh','--test','--user','manager','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $null = Invoke-ProdicloudE2eCommand -Label 'Verify RDP connectivity' -Arguments @('connect','--rdp','--test','--user','manager','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
 
-    $null = Invoke-ClagnosE2eCommand -Label 'Exercise Azure hibernation path' -Arguments @('do','--vm-action=hibernate-deallocate','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $null = Invoke-ProdicloudE2eCommand -Label 'Exercise Azure hibernation path' -Arguments @('do','--vm-action=hibernate-deallocate','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
     $hibernatedState = ''
     for ($attempt = 1; $attempt -le 18; $attempt++) {
-        $view = Invoke-ClagnosE2eAzJson -Arguments @('vm','get-instance-view','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName) -Description 'hibernation completion check'
-        $stateRows = @(Get-ClagnosE2eStatusRows -View $view)
+        $view = Invoke-ProdicloudE2eAzJson -Arguments @('vm','get-instance-view','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName) -Description 'hibernation completion check'
+        $stateRows = @(Get-ProdicloudE2eStatusRows -View $view)
         $hibernationRows = @($stateRows | Where-Object { [string]$_.code -like 'HibernationState/*' })
         if ($hibernationRows.Count -gt 0) { $hibernatedState = [string]$hibernationRows[0].code }
         if ($hibernatedState -match '(?i)^HibernationState/Hibernated$') { break }
@@ -483,16 +483,16 @@ try {
     }
     if ($hibernatedState -notmatch '(?i)^HibernationState/Hibernated$') { throw 'Azure did not report the VM in Hibernated state after the hibernation operation.' }
     Write-Host '[PASS] Azure reports HibernationState/Hibernated.' -ForegroundColor Green
-    $null = Invoke-ClagnosE2eCommand -Label 'Restore VM to running state after hibernation' -Arguments @('do','--vm-action=start','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
-    $null = Invoke-ClagnosE2eCommand -Label 'Confirm final VM running state' -Arguments @('do','--vm-action=status','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $null = Invoke-ProdicloudE2eCommand -Label 'Restore VM to running state after hibernation' -Arguments @('do','--vm-action=start','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
+    $null = Invoke-ProdicloudE2eCommand -Label 'Confirm final VM running state' -Arguments @('do','--vm-action=status','--group',$resourceGroup,'--vm-name',$VmName,'--subscription-id',$SubscriptionId)
     $finalPowerState = ''
     for ($attempt = 1; $attempt -le 18; $attempt++) {
-        $finalPowerState = Get-ClagnosE2ePowerState -ResourceGroup $resourceGroup
+        $finalPowerState = Get-ProdicloudE2ePowerState -ResourceGroup $resourceGroup
         if ($finalPowerState -eq 'running') { break }
         Start-Sleep -Seconds 10
     }
     if ($finalPowerState -ne 'running') { throw 'The E2E acceptance did not leave the VM running.' }
-    $finalHibernation = Invoke-ClagnosE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName,'--query','additionalCapabilities.hibernationEnabled') -Description 'final hibernation feature state'
+    $finalHibernation = Invoke-ProdicloudE2eAzText -Arguments @('vm','show','--subscription',$SubscriptionId,'--resource-group',$resourceGroup,'--name',$VmName,'--query','additionalCapabilities.hibernationEnabled') -Description 'final hibernation feature state'
     if ($finalHibernation -notmatch '(?i)^true$') { throw 'The VM ended without hibernation enabled.' }
     Write-Host ''
     Write-Host 'LIVE VC E2E PASSED' -ForegroundColor Green
@@ -504,7 +504,7 @@ try {
 catch {
     if (-not [string]::IsNullOrWhiteSpace([string]$resourceGroup)) {
         try {
-            $currentPowerState = Get-ClagnosE2ePowerState -ResourceGroup $resourceGroup
+            $currentPowerState = Get-ProdicloudE2ePowerState -ResourceGroup $resourceGroup
             if ($currentPowerState -ne 'running') {
                 Write-Host 'E2E failed; attempting to restore the new VM to a running state for operator access.' -ForegroundColor Yellow
                 Write-Host 'Doing: start VM for operator recovery after E2E failure.' -ForegroundColor DarkCyan

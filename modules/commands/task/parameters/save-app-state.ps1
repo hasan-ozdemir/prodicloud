@@ -1,5 +1,5 @@
 # 'save-app-state' option binding for 'task'.
 
-function Get-ClagnosTaskSaveAppStateOptionSpecification {
-    return (Get-ClagnosSharedSaveAppStateOptionSpecification)
+function Get-ProdicloudTaskSaveAppStateOptionSpecification {
+    return (Get-ProdicloudSharedSaveAppStateOptionSpecification)
 }

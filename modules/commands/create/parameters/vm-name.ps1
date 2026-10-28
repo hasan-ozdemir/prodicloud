@@ -1,5 +1,5 @@
 # 'vm-name' option binding for 'create'.
 
-function Get-ClagnosCreateVmNameOptionSpecification {
-    return (Get-ClagnosSharedVmNameOptionSpecification)
+function Get-ProdicloudCreateVmNameOptionSpecification {
+    return (Get-ProdicloudSharedVmNameOptionSpecification)
 }

@@ -1,13 +1,13 @@
 # Contract for the 'delete' command.
 
-function Get-ClagnosDeleteOptionSpecifications {
+function Get-ProdicloudDeleteOptionSpecifications {
     return @(
-        (Get-ClagnosDeleteAutoOptionSpecification),
-        (Get-ClagnosDeletePerfOptionSpecification),
-        (Get-ClagnosDeleteHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosDeleteTargetOptionSpecification),
-        (Get-ClagnosDeleteGroupOptionSpecification),
-        (Get-ClagnosDeleteYesOptionSpecification)
+        (Get-ProdicloudDeleteAutoOptionSpecification),
+        (Get-ProdicloudDeletePerfOptionSpecification),
+        (Get-ProdicloudDeleteHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudDeleteTargetOptionSpecification),
+        (Get-ProdicloudDeleteGroupOptionSpecification),
+        (Get-ProdicloudDeleteYesOptionSpecification)
     )
 }

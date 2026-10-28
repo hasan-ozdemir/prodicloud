@@ -1,5 +1,5 @@
 # 'perf' option binding for 'update'.
 
-function Get-ClagnosUpdatePerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudUpdatePerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

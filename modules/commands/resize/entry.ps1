@@ -1,6 +1,6 @@
 # Resize command entry.
 
-function Invoke-ClagnosResizeCommand {
+function Invoke-ProdicloudResizeCommand {
     param(
         [hashtable]$Options,
         [switch]$AutoMode,
@@ -8,7 +8,7 @@ function Invoke-ClagnosResizeCommand {
         [switch]$LinuxFlag
     )
 
-    if (Test-ClagnosCliOptionPresent -Options $Options -Name 'vm-region') {
+    if (Test-ProdicloudCliOptionPresent -Options $Options -Name 'vm-region') {
         Throw-FriendlyError `
             -Detail "Option '--vm-region' is not supported with resize command." `
             -Code 62 `
@@ -16,16 +16,16 @@ function Invoke-ClagnosResizeCommand {
             -Hint "Use move command for region changes."
     }
 
-    $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot 'clagnos.env'
-    $configMap = Read-DotEnvFile -Path $envFilePath
-    $operationRequest = Resolve-ClagnosResizeOperationRequest -Options $Options
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'resize'
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Get-ProdicloudGlobalEnvPath
+    $configMap = Read-DotEnvFile -Path $envFilePath -GlobalOnly
+    $operationRequest = Resolve-ProdicloudResizeOperationRequest -Options $Options
+    $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $configMap -OperationName 'resize'
     $resourceGroup = [string]$target.ResourceGroup
     $vmName = [string]$target.VmName
-    $isDirectRequest = Test-ClagnosResizeDirectRequest -Options $Options
+    $isDirectRequest = Test-ProdicloudResizeDirectRequest -Options $Options
 
-    Write-ClagnosActionProgress -Action ("inspect resize target '{0}' in '{1}'" -f $vmName, $resourceGroup)
+    Write-ProdicloudActionProgress -Action ("inspect resize target '{0}' in '{1}'" -f $vmName, $resourceGroup)
     $vmJson = az vm show -g $resourceGroup -n $vmName -o json --only-show-errors
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace([string]$vmJson)) {
         Throw-FriendlyError `
@@ -38,11 +38,11 @@ function Invoke-ClagnosResizeCommand {
     $vmObject = ConvertFrom-JsonCompat -InputObject $vmJson
     $currentRegion = [string]$vmObject.location
     $currentSize = [string]$vmObject.hardwareProfile.vmSize
-    $actualPlatform = Get-ClagnosPlatformNameFromOsType -OsType ([string]$vmObject.storageProfile.osDisk.osType)
-    $vmSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_SIZE' } else { Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE' }
-    $vmDiskSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_DISK_SIZE_GB' } else { Get-ClagnosPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB' }
+    $actualPlatform = Get-ProdicloudPlatformNameFromOsType -OsType ([string]$vmObject.storageProfile.osDisk.osType)
+    $vmSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_SIZE' } else { Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_SIZE' }
+    $vmDiskSizeConfigKey = if ([string]::IsNullOrWhiteSpace([string]$actualPlatform)) { 'VM_DISK_SIZE_GB' } else { Get-ProdicloudPlatformVmConfigKey -Platform $actualPlatform -BaseKey 'VM_DISK_SIZE_GB' }
 
-    Assert-ClagnosResizePlatformExpectation `
+    Assert-ProdicloudResizePlatformExpectation `
         -ActualPlatform $actualPlatform `
         -WindowsFlag:$WindowsFlag `
         -LinuxFlag:$LinuxFlag `
@@ -65,102 +65,13 @@ function Invoke-ClagnosResizeCommand {
     }
 
     if ([string]::Equals([string]$operationRequest.Kind, 'disk', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $diskContext = Get-ClagnosResizeOsDiskContext -VmObject $vmObject -ResourceGroup $resourceGroup -VmName $vmName
-        $targetDiskSizeGb = [int]$operationRequest.TargetDiskSizeGb
-
-        if ([string]::Equals([string]$operationRequest.Intent, 'shrink', [System.StringComparison]::OrdinalIgnoreCase)) {
-            Write-Host ("Shrink request summary for VM '{0}' in '{1}': disk '{2}' current={3} GB, requested={4} ({5} => {6} GB)." -f $vmName, $resourceGroup, $diskContext.DiskName, $diskContext.DiskSizeGb, $operationRequest.RawText, $operationRequest.Unit, $targetDiskSizeGb) -ForegroundColor Yellow
-            Show-ClagnosResizeShrinkAlternatives
-
-            if ($targetDiskSizeGb -ge $diskContext.DiskSizeGb) {
-                Throw-FriendlyError `
-                    -Detail ("Shrink request '{0}' normalizes to {1} GB, which is not smaller than the current OS disk size {2} GB." -f $operationRequest.RawText, $targetDiskSizeGb, $diskContext.DiskSizeGb) `
-                    -Code 62 `
-                    -Summary "Resize shrink request is not a smaller target." `
-                    -Hint "Use --expand for larger targets, or provide a smaller --disk-size value."
-            }
-
-            Throw-FriendlyError `
-                -Detail ("Azure does not support shrinking the existing managed OS disk '{0}' for VM '{1}'. Current size: {2} GB. Requested size: {3} GB." -f $diskContext.DiskName, $vmName, $diskContext.DiskSizeGb, $targetDiskSizeGb) `
-                -Code 62 `
-                -Summary "Azure managed OS disk shrink is not supported." `
-                -Hint "Use one of the supported rebuild or migration alternatives printed above."
-        }
-
-        if ($targetDiskSizeGb -lt $diskContext.DiskSizeGb) {
-            Throw-FriendlyError `
-                -Detail ("Expand request '{0}' normalizes to {1} GB, which is smaller than the current OS disk size {2} GB." -f $operationRequest.RawText, $targetDiskSizeGb, $diskContext.DiskSizeGb) `
-                -Code 62 `
-                -Summary "Resize expand request is smaller than the current OS disk size." `
-                -Hint "Use --shrink for unsupported shrink guidance, or provide a larger --disk-size value."
-        }
-
-        if ($targetDiskSizeGb -eq $diskContext.DiskSizeGb) {
-            Write-Host ("No effective OS disk expansion is required. Managed OS disk '{0}' is already {1} GB." -f $diskContext.DiskName, $diskContext.DiskSizeGb) -ForegroundColor Yellow
-            return
-        }
-
-        if (-not $isDirectRequest) {
-            $approveDiskExpand = Confirm-YesNo -PromptText "Continue with managed OS disk expansion?" -DefaultYes $false
-            if (-not $approveDiskExpand) {
-                Write-Host "Resize command canceled by user." -ForegroundColor Yellow
-                return
-            }
-        }
-
-        Write-Host ("Managed OS disk expansion plan for '{0}' in '{1}': disk '{2}' {3} GB -> {4} GB (requested '{5}')." -f $vmName, $resourceGroup, $diskContext.DiskName, $diskContext.DiskSizeGb, $targetDiskSizeGb, $operationRequest.RawText)
-        Write-Host "Managed OS disk expansion requires the VM to be deallocated before Azure updates the disk size."
-        $beforeSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'before resize'
-        Write-ClagnosResizeStateSnapshot -Stage 'before' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -DiskName $diskContext.DiskName -DiskSizeGb $diskContext.DiskSizeGb -LifecycleSnapshot $beforeSnapshot
-
-        Invoke-TrackedAction -Label ("az vm deallocate -g {0} -n {1}" -f $resourceGroup, $vmName) -Action {
-            az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
-            Assert-LastExitCode "az vm deallocate"
-        } | Out-Null
-        $deallocated = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
-        if (-not $deallocated) {
-            Throw-FriendlyError `
-                -Detail ("VM '{0}' did not reach deallocated state in expected time." -f $vmName) `
-                -Code 62 `
-                -Summary "Resize command stopped because VM deallocation was not confirmed." `
-                -Hint "Check VM power state in Azure and retry the disk expansion."
-        }
-
-        Write-Host ("Applying managed OS disk size update: '{0}' -> {1} GB." -f $diskContext.DiskName, $targetDiskSizeGb)
-        Invoke-TrackedAction -Label ("az disk update -g {0} -n {1} --size-gb {2}" -f $resourceGroup, $diskContext.DiskName, $targetDiskSizeGb) -Action {
-            az disk update -g $resourceGroup -n $diskContext.DiskName --size-gb $targetDiskSizeGb -o none --only-show-errors
-            Assert-LastExitCode "az disk update"
-        } | Out-Null
-
-        Write-Host ("Managed OS disk '{0}' is now {1} GB in Azure. Starting VM '{2}'..." -f $diskContext.DiskName, $targetDiskSizeGb, $vmName)
-        Invoke-TrackedAction -Label ("az vm start -g {0} -n {1}" -f $resourceGroup, $vmName) -Action {
-            az vm start -g $resourceGroup -n $vmName -o none --only-show-errors
-            Assert-LastExitCode "az vm start"
-        } | Out-Null
-
-        $running = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM running" -MaxAttempts 18 -DelaySeconds 10
-        if (-not $running) {
-            Throw-FriendlyError `
-                -Detail "VM did not return to running state after the managed OS disk expansion." `
-                -Code 62 `
-                -Summary "Resize command completed with unhealthy VM power state." `
-                -Hint "Check VM power state in Azure Portal and start VM manually if needed."
-        }
-
-        $afterSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'after resize'
-        $actualDiskSizeGb = Get-ClagnosResizeDiskSizeReadback -DiskId ([string]$diskContext.DiskId) -DiskName ([string]$diskContext.DiskName)
-        Write-ClagnosResizeStateSnapshot -Stage 'after' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -DiskName $diskContext.DiskName -DiskSizeGb $actualDiskSizeGb -LifecycleSnapshot $afterSnapshot
-        Assert-ClagnosResizeReadback -Kind 'disk-size' -ExpectedValue ([string]$targetDiskSizeGb) -ActualValue ([string]$actualDiskSizeGb) -ResourceGroup $resourceGroup -VmName $vmName -LifecycleSnapshot $afterSnapshot
-
-        Set-DotEnvValue -Path $envFilePath -Key $vmDiskSizeConfigKey -Value ([string]$targetDiskSizeGb)
-        $script:ConfigOverrides[$vmDiskSizeConfigKey] = [string]$targetDiskSizeGb
-
-        Write-Host ("Managed OS disk expansion completed successfully. Disk '{0}' is now {1} GB." -f $diskContext.DiskName, $targetDiskSizeGb) -ForegroundColor Green
+        $initialSnapshot = Get-ProdicloudVmLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName
+        Invoke-ProdicloudResizeDiskOperation -Options $Options -VmObject $vmObject -OperationRequest $operationRequest -ResourceGroup $resourceGroup -VmName $vmName -Region $currentRegion -Platform $actualPlatform -InitialSnapshot $initialSnapshot
         return
     }
 
-    $targetSize = Resolve-ClagnosResizeTargetSize -Options $Options -CurrentRegion $currentRegion -CurrentSize $currentSize -ConfigMap $configMap
-    Write-ClagnosActionProgress -Action ("validate VM size '{0}' in region '{1}'" -f $targetSize, $currentRegion)
+    $targetSize = Resolve-ProdicloudResizeTargetSize -Options $Options -CurrentRegion $currentRegion -CurrentSize $currentSize -ConfigMap $configMap
+    Write-ProdicloudActionProgress -Action ("validate VM size '{0}' in region '{1}'" -f $targetSize, $currentRegion)
     Assert-LocationExists -Location $currentRegion
     Assert-VmSkuAvailableViaRest -Location $currentRegion -VmSize $targetSize
 
@@ -177,21 +88,45 @@ function Invoke-ClagnosResizeCommand {
         }
     }
 
+    $beforeSnapshot = Get-ProdicloudResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'before resize'
+    $allocationFailed = ($null -ne $beforeSnapshot -and [string]$beforeSnapshot.ProvisioningStateCode -match '(?i)failed')
+    $initialPowerState = if ($allocationFailed) {
+        Write-Warning 'Azure reports a failed provisioning/allocation state; resize recovery will deallocate, apply the requested SKU, and retry start.'
+        'started'
+    }
+    else {
+        Assert-ProdicloudResizeLifecycleStateSupported -Snapshot $beforeSnapshot -VmName $vmName
+    }
+    if ($null -ne $beforeSnapshot -and [bool]$beforeSnapshot.HibernationEnabled) {
+        Write-ProdicloudActionProgress -Action ("verify hibernation support for target SKU '{0}'" -f $targetSize)
+        $hibernationSupport = Get-ProdicloudHibernationSupportInfo -Location $currentRegion -VmSize $targetSize
+        if ([bool]$hibernationSupport.Known -and -not [bool]$hibernationSupport.Supported) {
+            Throw-FriendlyError `
+                -Detail ("VM hibernation is enabled, but target SKU '{0}' in '{1}' does not advertise hibernation support. {2}" -f $targetSize,$currentRegion,(Resolve-ProdicloudFeatureSupportReasonText -FeatureLabel 'Hibernation' -CapabilityLabel 'HibernationSupported' -ReasonCode ([string]$hibernationSupport.Message) -Evidence @($hibernationSupport.Evidence))) `
+                -Code 62 `
+                -Summary 'VM resize is incompatible with its enabled hibernation feature.' `
+                -Hint 'Select a regionally available SKU that supports hibernation or disable hibernation first.'
+        }
+    }
     Write-Host ("Applying VM size update for '{0}' in '{1}': {2} -> {3}" -f $vmName, $resourceGroup, $currentSize, $targetSize)
-    $beforeSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'before resize'
-    Write-ClagnosResizeStateSnapshot -Stage 'before' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -LifecycleSnapshot $beforeSnapshot
+    Write-ProdicloudResizeStateSnapshot -Stage 'before' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $currentSize -LifecycleSnapshot $beforeSnapshot
 
     Invoke-TrackedAction -Label ("az vm deallocate -g {0} -n {1}" -f $resourceGroup, $vmName) -Action {
         az vm deallocate -g $resourceGroup -n $vmName -o none --only-show-errors
         Assert-LastExitCode "az vm deallocate"
     } | Out-Null
-    $deallocated = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
+    $deallocated = Wait-ProdicloudVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState "VM deallocated" -MaxAttempts 18 -DelaySeconds 10
     if (-not $deallocated) {
+        if ($allocationFailed) {
+            Write-Warning 'Azure accepted deallocation for the allocation-failed VM but did not report a power state. Continuing with the repair resize after the successful deallocate command.'
+        }
+        else {
         Throw-FriendlyError `
             -Detail ("VM '{0}' did not reach deallocated state in expected time." -f $vmName) `
             -Code 62 `
             -Summary "Resize command stopped because VM deallocation was not confirmed." `
             -Hint "Check VM power state in Azure and retry resize."
+        }
     }
 
     Invoke-TrackedAction -Label ("az vm resize -g {0} -n {1} --size {2}" -f $resourceGroup, $vmName, $targetSize) -Action {
@@ -199,26 +134,14 @@ function Invoke-ClagnosResizeCommand {
         Assert-LastExitCode "az vm resize"
     } | Out-Null
 
-    Invoke-TrackedAction -Label ("az vm start -g {0} -n {1}" -f $resourceGroup, $vmName) -Action {
-        az vm start -g $resourceGroup -n $vmName -o none --only-show-errors
-        Assert-LastExitCode "az vm start"
-    } | Out-Null
+    Set-ProdicloudResizeVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredState $initialPowerState
 
-    $running = Wait-ClagnosVmPowerState -ResourceGroup $resourceGroup -VmName $vmName -DesiredPowerState 'VM running' -MaxAttempts 3 -DelaySeconds 10
-    if (-not $running) {
-        Throw-FriendlyError `
-            -Detail "VM did not return to running state after resize operation." `
-            -Code 62 `
-            -Summary "Resize command completed with unhealthy VM power state." `
-            -Hint "Check VM power state in Azure Portal and start VM manually if needed."
-    }
+    $afterSnapshot = Get-ProdicloudResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'after resize'
+    $actualSize = Get-ProdicloudResizeVmSizeReadback -ResourceGroup $resourceGroup -VmName $vmName
+    Write-ProdicloudResizeStateSnapshot -Stage 'after' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $actualSize -LifecycleSnapshot $afterSnapshot
+    Assert-ProdicloudResizeReadback -Kind 'vm-size' -ExpectedValue $targetSize -ActualValue $actualSize -ResourceGroup $resourceGroup -VmName $vmName -LifecycleSnapshot $afterSnapshot
 
-    $afterSnapshot = Get-ClagnosResizeLifecycleSnapshot -ResourceGroup $resourceGroup -VmName $vmName -Stage 'after resize'
-    $actualSize = Get-ClagnosResizeVmSizeReadback -ResourceGroup $resourceGroup -VmName $vmName
-    Write-ClagnosResizeStateSnapshot -Stage 'after' -VmName $vmName -ResourceGroup $resourceGroup -Region $currentRegion -VmSize $actualSize -LifecycleSnapshot $afterSnapshot
-    Assert-ClagnosResizeReadback -Kind 'vm-size' -ExpectedValue $targetSize -ActualValue $actualSize -ResourceGroup $resourceGroup -VmName $vmName -LifecycleSnapshot $afterSnapshot
-
-    Set-DotEnvValue -Path $envFilePath -Key $vmSizeConfigKey -Value $targetSize
+    Set-DotEnvValue -Path $envFilePath -Key $vmSizeConfigKey -Value $targetSize -VmName $vmName
     $script:ConfigOverrides[$vmSizeConfigKey] = $targetSize
 
     Write-Host ("Resize completed successfully. VM size is now '{0}'." -f $targetSize) -ForegroundColor Green

@@ -6,23 +6,23 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $catalogRoot = Join-Path $repoRoot 'vm-packages/builtin/windows'
 $statusTemplate = @'
 $ErrorActionPreference = 'Stop'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action status -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
+Invoke-ProdicloudPackageLifecycle -Action status -PackageSpecBase64 '__PRODICLOUD_PACKAGE_SPEC_B64__'
 '@
 $uninstallTemplate = @'
 $ErrorActionPreference = 'Stop'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action uninstall -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
+Invoke-ProdicloudPackageLifecycle -Action uninstall -PackageSpecBase64 '__PRODICLOUD_PACKAGE_SPEC_B64__'
 '@
 $updateTemplate = @'
 $ErrorActionPreference = 'Stop'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action update -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
+Invoke-ProdicloudPackageLifecycle -Action update -PackageSpecBase64 '__PRODICLOUD_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__PRODICLOUD_INSTALL_SCRIPT_B64__'
 '@
 $repairTemplate = @'
 $ErrorActionPreference = 'Stop'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
-Invoke-ClagnosPackageLifecycle -Action repair -PackageSpecBase64 '__CLAGNOS_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__CLAGNOS_INSTALL_SCRIPT_B64__'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
+Invoke-ProdicloudPackageLifecycle -Action repair -PackageSpecBase64 '__PRODICLOUD_PACKAGE_SPEC_B64__' -InstallScriptBase64 '__PRODICLOUD_INSTALL_SCRIPT_B64__'
 '@
 
 function Get-UpdateStrategy {

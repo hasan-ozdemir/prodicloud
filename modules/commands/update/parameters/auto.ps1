@@ -1,5 +1,5 @@
 # 'auto' option binding for 'update'.
 
-function Get-ClagnosUpdateAutoOptionSpecification {
-    return (Get-ClagnosSharedAutoOptionSpecification)
+function Get-ProdicloudUpdateAutoOptionSpecification {
+    return (Get-ProdicloudSharedAutoOptionSpecification)
 }

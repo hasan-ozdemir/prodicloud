@@ -1,5 +1,5 @@
 # 'hibernation' option binding for 'set'.
 
-function Get-ClagnosSetHibernationOptionSpecification {
-    return (Get-ClagnosSharedHibernationOptionSpecification)
+function Get-ProdicloudSetHibernationOptionSpecification {
+    return (Get-ProdicloudSharedHibernationOptionSpecification)
 }

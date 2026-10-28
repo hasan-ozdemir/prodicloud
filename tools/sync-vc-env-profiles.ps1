@@ -14,7 +14,7 @@ foreach ($line in @(Get-Content -LiteralPath $templatePath -ErrorAction Stop)) {
     if ($match.Success) { $templateValues[[string]$match.Groups['key'].Value] = [string]$match.Groups['value'].Value }
 }
 
-$profiles = @(Get-ChildItem -LiteralPath $RepoRoot -File -Filter '*.env' -ErrorAction Stop | Where-Object { $_.Name -ine 'clagnos.env' -and $_.Name -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}\.env$' })
+$profiles = @(Get-ChildItem -LiteralPath $RepoRoot -File -Filter '*.env' -ErrorAction Stop | Where-Object { $_.Name -ine 'prodicloud.env' -and $_.Name -match '^[A-Za-z0-9][A-Za-z0-9-]{0,63}\.env$' })
 $updatedCount = 0
 foreach ($profile in @($profiles)) {
     $profileName = [System.IO.Path]::GetFileNameWithoutExtension($profile.Name)
@@ -61,7 +61,7 @@ foreach ($profile in @($profiles)) {
     if (-not $changed) { continue }
     if (-not $PSCmdlet.ShouldProcess($profile.Name,'add only missing VC profile schema keys')) { continue }
     if ($lines.Count -gt 0 -and [string]::IsNullOrWhiteSpace([string]$lines[$lines.Count - 1])) { $lines.RemoveAt($lines.Count - 1) }
-    $temporaryPath = $profile.FullName + '.clagnos-schema.tmp'
+    $temporaryPath = $profile.FullName + '.prodicloud-schema.tmp'
     try {
         [System.IO.File]::WriteAllText($temporaryPath,($lines -join $newline),[System.Text.UTF8Encoding]::new($false))
         Move-Item -LiteralPath $temporaryPath -Destination $profile.FullName -Force -ErrorAction Stop

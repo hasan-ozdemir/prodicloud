@@ -1,7 +1,7 @@
 # SSH tooling and pyssh bootstrap helpers.
 
-# Handles Resolve-ClagnosSshRetryCount.
-function Resolve-ClagnosSshRetryCount {
+# Handles Resolve-ProdicloudSshRetryCount.
+function Resolve-ProdicloudSshRetryCount {
     param(
         [string]$RetryText,
         [int]$DefaultValue = 3
@@ -22,8 +22,8 @@ function Resolve-ClagnosSshRetryCount {
     return $value
 }
 
-# Handles Resolve-ClagnosPySshToolPath.
-function Resolve-ClagnosPySshToolPath {
+# Handles Resolve-ProdicloudPySshToolPath.
+function Resolve-ProdicloudPySshToolPath {
     param(
         [string]$ConfiguredPath,
         [string]$RepoRoot,
@@ -48,15 +48,15 @@ function Resolve-ClagnosPySshToolPath {
     return $defaultPath
 }
 
-# Handles Ensure-ClagnosPySshTools.
-function Ensure-ClagnosPySshTools {
+# Handles Ensure-ProdicloudPySshTools.
+function Ensure-ProdicloudPySshTools {
     param(
         [string]$RepoRoot,
         [string]$ConfiguredPySshClientPath = ""
     )
 
     $configuredClientPath = [string]$ConfiguredPySshClientPath
-    $pySshClientPath = Resolve-ClagnosPySshToolPath -ConfiguredPath $configuredClientPath -RepoRoot $RepoRoot -ToolName "ssh_client.py"
+    $pySshClientPath = Resolve-ProdicloudPySshToolPath -ConfiguredPath $configuredClientPath -RepoRoot $RepoRoot -ToolName "ssh_client.py"
     $pySshVenvRoot = Join-Path (Join-Path $RepoRoot "tools\pyssh") ".venv"
     $isWindowsPlatform = ([System.IO.Path]::DirectorySeparatorChar -eq '\')
     $pySshPythonPath = if ($isWindowsPlatform) {

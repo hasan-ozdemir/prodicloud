@@ -14,10 +14,10 @@ $ProgressPreference = 'SilentlyContinue'
 if (-not $RunLive) { throw 'This package lifecycle test changes software on a live VM. Pass -RunLive to execute it.' }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-. (Join-Path $repoRoot 'clagnos.ps1')
+. (Join-Path $repoRoot 'prodicloud.ps1')
 
 $mutexToken = [regex]::Replace([string]$VmName,'[^A-Za-z0-9_.-]','_')
-$mutexName = 'Local\ClagnosPackageLifecycleE2E_' + $mutexToken
+$mutexName = 'Local\ProdicloudPackageLifecycleE2E_' + $mutexToken
 $livePackageE2eMutex = New-Object System.Threading.Mutex($false,$mutexName)
 $livePackageE2eLockAcquired = $false
 try { $livePackageE2eLockAcquired = [bool]$livePackageE2eMutex.WaitOne(0) }
@@ -33,10 +33,10 @@ function Get-LivePackageAzureSnapshot {
     param([string]$Name,[string]$Group,[string]$Subscription)
 
     $query = '{name:name,location:location,size:hardwareProfile.vmSize,powerState:powerState,osDiskId:storageProfile.osDisk.managedDisk.id,osDiskSize:storageProfile.osDisk.diskSizeGb,dataDisks:storageProfile.dataDisks[].{name:name,id:managedDisk.id,size:diskSizeGb},nics:networkProfile.networkInterfaces[].id}'
-    $raw = Invoke-ClagnosAzCliCommand -Arguments @('vm','show','--resource-group',$Group,'--name',$Name,'--subscription',$Subscription,'--show-details','--query',$query,'--output','json','--only-show-errors')
+    $raw = Invoke-ProdicloudAzCliCommand -Arguments @('vm','show','--resource-group',$Group,'--name',$Name,'--subscription',$Subscription,'--show-details','--query',$query,'--output','json','--only-show-errors')
     if ($global:LASTEXITCODE -ne 0) { throw 'Read-only Azure VM infrastructure snapshot failed.' }
     $vm = ConvertFrom-JsonCompat -InputObject ([string]$raw)
-    $ipRaw = Invoke-ClagnosAzCliCommand -Arguments @('vm','list-ip-addresses','--resource-group',$Group,'--name',$Name,'--subscription',$Subscription,'--query','[0].virtualMachine.network.publicIpAddresses[].{ip:ipAddress,dns:dnsSettings.fqdn}','--output','json','--only-show-errors')
+    $ipRaw = Invoke-ProdicloudAzCliCommand -Arguments @('vm','list-ip-addresses','--resource-group',$Group,'--name',$Name,'--subscription',$Subscription,'--query','[0].virtualMachine.network.publicIpAddresses[].{ip:ipAddress,dns:dnsSettings.fqdn}','--output','json','--only-show-errors')
     if ($global:LASTEXITCODE -ne 0) { throw 'Read-only Azure network endpoint snapshot failed.' }
     $ips = @(ConvertTo-ObjectArrayCompat -InputObject (ConvertFrom-JsonCompat -InputObject ([string]$ipRaw)))
     $dataDisks = @($vm.dataDisks | ForEach-Object { '{0}|{1}|{2}' -f [string]$_.name,[string]$_.id,[string]$_.size } | Sort-Object)
@@ -63,7 +63,7 @@ function Get-LivePackageResultRecord {
         return [pscustomobject]@{ status = [string]$OperationResult.Status; message = [string]$OperationResult.Message; phase = [string]$OperationResult.Phase; durationSeconds = 0 }
     }
     $taskResult = if ($OperationResult.PSObject.Properties.Match('Result').Count -gt 0) { $OperationResult } else { [pscustomobject]@{ Result = $OperationResult } }
-    return (Get-ClagnosPackageStructuredResult -TaskResult $taskResult)
+    return (Get-ProdicloudPackageStructuredResult -TaskResult $taskResult)
 }
 
 function Invoke-LivePackageAction {
@@ -87,13 +87,13 @@ function Invoke-LivePackageAction {
         '--windows'
     )
     if ($Action -in @('uninstall','reinstall')) { $rawArgs += '--yes' }
-    $parsed = Parse-ClagnosCliArguments -CommandToken 'package' -RawArgs $rawArgs
-    Assert-ClagnosCommandOptions -CommandName ([string]$parsed.Command) -Options ([hashtable]$parsed.Options)
+    $parsed = Parse-ProdicloudCliArguments -CommandToken 'package' -RawArgs $rawArgs
+    Assert-ProdicloudCommandOptions -CommandName ([string]$parsed.Command) -Options ([hashtable]$parsed.Options)
     $script:ActiveCommand = 'package'
     $script:AutoMode = $false
     $script:PerfMode = $false
     $script:ConfigOverrides['SELECTED_VM_NAME'] = [string]$BaseOptions['vm-name']
-    Invoke-ClagnosPackageCommand -Options ([hashtable]$parsed.Options) -AutoMode:$false -WindowsFlag
+    Invoke-ProdicloudPackageCommand -Options ([hashtable]$parsed.Options) -AutoMode:$false -WindowsFlag
 }
 
 function Set-LivePackageTimeoutMeasurements {
@@ -152,7 +152,7 @@ function Set-LivePackageTimeoutMeasurements {
 function Get-LivePackageStatusSnapshot {
     param([object[]]$Packages,[hashtable]$Options,[psobject]$Runtime,[psobject]$Target)
     $watch = [Diagnostics.Stopwatch]::StartNew()
-    $snapshot = Get-ClagnosPackageStatusSnapshot -Packages $Packages -Options $Options -Platform 'windows' -Force -Runtime $Runtime -Target $Target
+    $snapshot = Get-ProdicloudPackageStatusSnapshot -Packages $Packages -Options $Options -Platform 'windows' -Force -Runtime $Runtime -Target $Target
     $watch.Stop()
     Write-Host ("Doing: all {0} package status checks completed in {1:N1}s" -f @($Packages).Count,$watch.Elapsed.TotalSeconds) -ForegroundColor DarkCyan
     return [pscustomobject]@{ StatusByPackage = $snapshot; DurationSeconds = [double]$watch.Elapsed.TotalSeconds }
@@ -171,33 +171,33 @@ $options = @{
     'subscription-id' = [string]$SubscriptionId
     'windows' = $true
 }
-$subscriptionRaw = Invoke-ClagnosAzCliCommand -Arguments @('account','show','--subscription',$SubscriptionId,'--query','{id:id,name:name,tenantId:tenantId}','--output','json','--only-show-errors')
+$subscriptionRaw = Invoke-ProdicloudAzCliCommand -Arguments @('account','show','--subscription',$SubscriptionId,'--query','{id:id,name:name,tenantId:tenantId}','--output','json','--only-show-errors')
 if ($global:LASTEXITCODE -ne 0) { throw 'The requested subscription is not accessible to the authenticated Azure CLI session.' }
 $subscriptionInfo = ConvertFrom-JsonCompat -InputObject ([string]$subscriptionRaw)
-Set-ClagnosResolvedSubscriptionContext -SubscriptionId ([string]$subscriptionInfo.id) -SubscriptionName ([string]$subscriptionInfo.name) -TenantId ([string]$subscriptionInfo.tenantId) -ResolutionSource 'live-package-test-explicit-override'
+Set-ProdicloudResolvedSubscriptionContext -SubscriptionId ([string]$subscriptionInfo.id) -SubscriptionName ([string]$subscriptionInfo.name) -TenantId ([string]$subscriptionInfo.tenantId) -ResolutionSource 'live-package-test-explicit-override'
 $script:ConfigOverrides['SELECTED_AZURE_SUBSCRIPTION_ID'] = [string]$SubscriptionId
-$globalConfigPath = Get-ClagnosGlobalEnvPath
+$globalConfigPath = Get-ProdicloudGlobalEnvPath
 $globalConfig = Read-DotEnvFile -Path $globalConfigPath -GlobalOnly
-$targetConfig = Merge-ClagnosVmEnvironmentConfig -GlobalConfigMap $globalConfig -VmName $VmName
-$transport = Get-ClagnosPackageTransport -ConfigMap $targetConfig
+$targetConfig = Merge-ProdicloudVmEnvironmentConfig -GlobalConfigMap $globalConfig -VmName $VmName
+$transport = Get-ProdicloudPackageTransport -ConfigMap $targetConfig
 if ($transport -ne 'winrm') { throw ("The live package test requires VC profile PACKAGE_TRANSPORT=winrm; observed '{0}'." -f $transport) }
 
-$runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag -Options $options
-$target = Resolve-ClagnosManagedVmTarget -Options $options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
+$runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag -Options $options
+$target = Resolve-ProdicloudManagedVmTarget -Options $options -ConfigMap $runtime.EffectiveConfigMap -OperationName 'package'
 $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
 $runtime.Context.VmName = [string]$target.VmName
-$resolvedSubscription = Get-ClagnosResolvedSubscriptionContext
+$resolvedSubscription = Get-ProdicloudResolvedSubscriptionContext
 if ($null -eq $resolvedSubscription -or -not [string]::Equals([string]$resolvedSubscription.SubscriptionId,$SubscriptionId,[StringComparison]::OrdinalIgnoreCase)) {
     throw 'The live package test did not resolve the explicitly requested Azure subscription.'
 }
 
-$allPackages = @(Get-ClagnosPackageCatalog -Platform 'windows' -Catalog 'builtin')
+$allPackages = @(Get-ProdicloudPackageCatalog -Platform 'windows' -Catalog 'builtin')
 if ($allPackages.Count -ne 36) { throw ("Expected all 36 Windows builtin packages; found {0}." -f $allPackages.Count) }
 $disabledPackages = @($allPackages | Where-Object { -not [bool]$_.Enabled })
 if ($disabledPackages.Count -gt 0) { throw ("This test covers enabled packages only; enable these first: {0}" -f (@($disabledPackages | ForEach-Object { [string]$_.Id }) -join ', ')) }
 $matrixPackages = if ([string]::IsNullOrWhiteSpace($PackageId)) { @($allPackages) } else { @($allPackages | Where-Object { [string]::Equals([string]$_.Id,[string]$PackageId,[StringComparison]::OrdinalIgnoreCase) }) }
 if ($matrixPackages.Count -eq 0) { throw ("Package '{0}' was not found in the enabled builtin Windows catalog." -f $PackageId) }
-$orderedPackages = @(Get-ClagnosPackageDependencyOrder -Packages $matrixPackages)
+$orderedPackages = @(Get-ProdicloudPackageDependencyOrder -Packages $matrixPackages)
 $beforeInfrastructure = Get-LivePackageAzureSnapshot -Name $VmName -Group $ResourceGroup -Subscription $SubscriptionId
 if (-not [string]::Equals([string]$beforeInfrastructure.Name,[string]$VmName,[StringComparison]::OrdinalIgnoreCase)) { throw 'Azure returned a different VM than requested.' }
 if ($beforeInfrastructure.PowerState -notmatch '(?i)running') { throw 'The live package test requires VC2 to be running before package operations.' }
@@ -220,7 +220,7 @@ for ($packageIndex = 0; $packageIndex -lt $orderedPackages.Count; $packageIndex+
         $message = ''
         $phase = ''
         $record = $null
-        Write-ClagnosActionProgress -Action ("live package matrix {0} '{1}' on {2}" -f $action,[string]$package.Id,[string]$VmName)
+        Write-ProdicloudActionProgress -Action ("live package matrix {0} '{1}' on {2}" -f $action,[string]$package.Id,[string]$VmName)
         try {
             $result = Invoke-LivePackageAction -Action $action -Package $package -BaseOptions $options
             $record = Get-LivePackageResultRecord -OperationResult $result
@@ -238,7 +238,7 @@ for ($packageIndex = 0; $packageIndex -lt $orderedPackages.Count; $packageIndex+
                     }
                 }
                 if ($outcome -eq 'succeeded' -and [bool]$record.rebootRequired) {
-                    $restarted = Restart-ClagnosPackageVmForPendingReboot -Runtime $runtime -Target $target -Options $options -WindowsFlag
+                    $restarted = Restart-ProdicloudPackageVmForPendingReboot -Runtime $runtime -Target $target -Options $options -WindowsFlag
                     $runtime = $restarted.Runtime
                     $target = $restarted.Target
                     $packageRequestedRebootCount++
@@ -287,7 +287,7 @@ for ($packageIndex = 0; $packageIndex -lt $orderedPackages.Count; $packageIndex+
             $failureInfrastructure = $null
             try { $failureInfrastructure = Get-LivePackageAzureSnapshot -Name $VmName -Group $ResourceGroup -Subscription $SubscriptionId } catch { }
             if ([string]::IsNullOrWhiteSpace($ReportPath)) {
-                $ReportPath = Join-Path ([IO.Path]::GetTempPath()) ('clagnos-package-lifecycle-{0}-{1}-stopped.json' -f $VmName,[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'))
+                $ReportPath = Join-Path ([IO.Path]::GetTempPath()) ('prodicloud-package-lifecycle-{0}-{1}-stopped.json' -f $VmName,[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ'))
             }
             $partialReport = [ordered]@{
                 StartedAtUtc = $startedAtUtc.ToString('o')
@@ -315,7 +315,7 @@ for ($packageIndex = 0; $packageIndex -lt $orderedPackages.Count; $packageIndex+
     $packageStatus = Get-LivePackageStatusSnapshot -Packages @($package) -Options $options -Runtime $runtime -Target $target
     $lastPackageStatusSnapshot = $packageStatus
     if ([string]$packageStatus.StatusByPackage[[string]$package.Id] -notin @('installed','installed-drifted')) {
-        Write-ClagnosActionProgress -Action ("recovery install for '{0}' after lifecycle matrix" -f [string]$package.Id)
+        Write-ProdicloudActionProgress -Action ("recovery install for '{0}' after lifecycle matrix" -f [string]$package.Id)
         try { $null = Invoke-LivePackageAction -Action 'install' -Package $package -BaseOptions $options }
         catch {
             $message = [string]$_.Exception.Message
@@ -346,29 +346,29 @@ $measuredAtUtc = [DateTime]::UtcNow
 $rebootResult = if ($packageRequestedRebootCount -gt 0) { 'completed after package vendor request' } else { 'not-requested' }
 if ($RestartAfterPass -and $failedOperations.Count -eq 0) {
     try {
-    Write-ClagnosActionProgress -Action ("perform the single authorized VC restart on '{0}'" -f $VmName)
+    Write-ProdicloudActionProgress -Action ("perform the single authorized VC restart on '{0}'" -f $VmName)
     $restartArgs = @('--vm-action=restart',('--group={0}' -f $ResourceGroup),('--vm-name={0}' -f $VmName),('--subscription-id={0}' -f $SubscriptionId),'--windows')
-    $parsedRestart = Parse-ClagnosCliArguments -CommandToken 'do' -RawArgs $restartArgs
-    Invoke-ClagnosCommandDispatcher -CommandName ([string]$parsedRestart.Command) -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
+    $parsedRestart = Parse-ProdicloudCliArguments -CommandToken 'do' -RawArgs $restartArgs
+    Invoke-ProdicloudCommandDispatcher -CommandName ([string]$parsedRestart.Command) -Options ([hashtable]$parsedRestart.Options) -HelpTopic ([string]$parsedRestart.HelpTopic)
     $restartDeadline = [DateTime]::UtcNow.AddMinutes(20)
     do {
-        $powerState = [string](Invoke-ClagnosAzCliCommand -Arguments @('vm','show','--resource-group',$ResourceGroup,'--name',$VmName,'--subscription',$SubscriptionId,'--show-details','--query','powerState','--output','tsv','--only-show-errors'))
+        $powerState = [string](Invoke-ProdicloudAzCliCommand -Arguments @('vm','show','--resource-group',$ResourceGroup,'--name',$VmName,'--subscription',$SubscriptionId,'--show-details','--query','powerState','--output','tsv','--only-show-errors'))
         if ($powerState -match '(?i)running') { break }
         if ([DateTime]::UtcNow -ge $restartDeadline) { throw 'The authorized post-package restart did not return VC2 to running before the 20-minute deadline.' }
         Write-Host ("Doing: waiting for post-package VM restart; state={0}" -f $powerState) -ForegroundColor DarkCyan
         Start-Sleep -Seconds 15
     } while ($true)
 
-    $runtime = Initialize-ClagnosTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag -Options $options
+    $runtime = Initialize-ProdicloudTaskExecutionRuntimeContext -AutoMode:$false -WindowsFlag -Options $options
     $runtime.Context.ResourceGroup = [string]$target.ResourceGroup
     $runtime.Context.VmName = [string]$target.VmName
-    $vmDetails = Get-ClagnosVmDetails -Context $runtime.Context -AllowCachedInventory
+    $vmDetails = Get-ProdicloudVmDetails -Context $runtime.Context -AllowCachedInventory
     $hostName = [string]$vmDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = [string]$vmDetails.PublicIP }
-    if (-not (Wait-ClagnosTcpPortReachable -HostName $hostName -Port 5985 -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'WinRM after package restart')) {
+    if (-not (Wait-ProdicloudTcpPortReachable -HostName $hostName -Port 5985 -MaxAttempts 40 -DelaySeconds 15 -TimeoutSeconds 5 -Label 'WinRM after package restart')) {
         throw 'WinRM did not become reachable within 10 minutes after the controlled package restart.'
     }
-    $session = New-ClagnosPackagePowerShellSession -Runtime $runtime -HostName $hostName -OpenTimeoutSeconds 30 -OperationTimeoutSeconds 60
+    $session = New-ProdicloudPackagePowerShellSession -Runtime $runtime -HostName $hostName -OpenTimeoutSeconds 30 -OperationTimeoutSeconds 60
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $jawsZipPath = Join-Path $repoRoot 'vm-packages/builtin/windows/jaws/app-state/app-state.zip'
@@ -383,7 +383,7 @@ if ($RestartAfterPass -and $failedOperations.Count -eq 0) {
         finally { $jawsArchive.Dispose() }
         $jawsStartup = Invoke-Command -Session $session -ArgumentList ([string]$runtime.Context.VmUser,[string]$runtime.Context.VmAssistantUser,[string[]]$jawsRelativePaths) -ErrorAction Stop -ScriptBlock {
             param([string]$ManagerUser,[string]$AssistantUser,[string[]]$PreferencePaths)
-            Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking
+            Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking
             $profilePaths = @{}
             $profiles = @(Get-CimInstance -ClassName Win32_UserProfile -ErrorAction Stop | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.LocalPath) })
             foreach ($role in @(@{ Name = 'manager'; User = $ManagerUser },@{ Name = 'assistant'; User = $AssistantUser })) {
@@ -399,10 +399,10 @@ if ($RestartAfterPass -and $failedOperations.Count -eq 0) {
                 }
             }
             [pscustomobject]@{
-                LogonScreenRunEnabled = Test-ClagnosJawsLogonScreenStartup
+                LogonScreenRunEnabled = Test-ProdicloudJawsLogonScreenStartup
                 MachinePostLogonEntry = [string](Get-ItemProperty -LiteralPath 'Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'JAWS' -ErrorAction SilentlyContinue).JAWS
-                ManagerPostLogonReady = Test-ClagnosJawsPostLogonStartup -UserName $ManagerUser -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe'
-                AssistantPostLogonReady = Test-ClagnosJawsPostLogonStartup -UserName $AssistantUser -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe'
+                ManagerPostLogonReady = Test-ProdicloudJawsPostLogonStartup -UserName $ManagerUser -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe'
+                AssistantPostLogonReady = Test-ProdicloudJawsPostLogonStartup -UserName $AssistantUser -Executable 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe'
                 JawsExecutablePresent = Test-Path -LiteralPath 'C:\Program Files\Freedom Scientific\JAWS\2025\jfw.exe' -PathType Leaf
                 MissingPreferenceFiles = @($missingPreferenceFiles)
             }
@@ -412,7 +412,7 @@ if ($RestartAfterPass -and $failedOperations.Count -eq 0) {
     if (-not [bool]$jawsStartup.LogonScreenRunEnabled -or -not [bool]$jawsStartup.ManagerPostLogonReady -or -not [bool]$jawsStartup.AssistantPostLogonReady -or -not [bool]$jawsStartup.JawsExecutablePresent -or @($jawsStartup.MissingPreferenceFiles).Count -gt 0) {
         throw 'JAWS startup verification after the controlled restart did not pass for the logon screen and both managed users.'
     }
-    if ([string](Invoke-ClagnosAzCliCommand -Arguments @('vm','show','--resource-group',$ResourceGroup,'--name',$VmName,'--subscription',$SubscriptionId,'--show-details','--query','powerState','--output','tsv','--only-show-errors')) -notmatch '(?i)running') {
+    if ([string](Invoke-ProdicloudAzCliCommand -Arguments @('vm','show','--resource-group',$ResourceGroup,'--name',$VmName,'--subscription',$SubscriptionId,'--show-details','--query','powerState','--output','tsv','--only-show-errors')) -notmatch '(?i)running') {
         throw 'VC2 must remain running after the package lifecycle test.'
     }
     $postRestartStatus = Get-LivePackageStatusSnapshot -Packages $allPackages -Options $options -Runtime $runtime -Target $target
@@ -452,7 +452,7 @@ foreach ($package in @($matrixPackages)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($ReportPath)) {
-    $ReportPath = Join-Path ([IO.Path]::GetTempPath()) ('clagnos-package-lifecycle-{0}-{1}.json' -f $VmName,$measuredAtUtc.ToString('yyyyMMddTHHmmssZ'))
+    $ReportPath = Join-Path ([IO.Path]::GetTempPath()) ('prodicloud-package-lifecycle-{0}-{1}.json' -f $VmName,$measuredAtUtc.ToString('yyyyMMddTHHmmssZ'))
 }
 $report = [ordered]@{
     StartedAtUtc = $startedAtUtc.ToString('o')

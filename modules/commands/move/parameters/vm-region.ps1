@@ -1,5 +1,5 @@
 # 'vm-region' option binding for 'move'.
 
-function Get-ClagnosMoveVmRegionOptionSpecification {
-    return (Get-ClagnosSharedVmRegionOptionSpecification)
+function Get-ProdicloudMoveVmRegionOptionSpecification {
+    return (Get-ProdicloudSharedVmRegionOptionSpecification)
 }

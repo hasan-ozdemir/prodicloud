@@ -1,5 +1,5 @@
 # 'linux' option binding for 'update'.
 
-function Get-ClagnosUpdateLinuxOptionSpecification {
-    return (Get-ClagnosSharedLinuxOptionSpecification)
+function Get-ProdicloudUpdateLinuxOptionSpecification {
+    return (Get-ProdicloudSharedLinuxOptionSpecification)
 }

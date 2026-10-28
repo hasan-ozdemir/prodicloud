@@ -1,5 +1,5 @@
 # 'perf' option binding for 'connect'.
 
-function Get-ClagnosConnectPerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudConnectPerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

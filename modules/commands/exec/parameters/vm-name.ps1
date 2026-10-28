@@ -1,5 +1,5 @@
 # 'vm-name' option binding for 'exec'.
 
-function Get-ClagnosExecVmNameOptionSpecification {
-    return (Get-ClagnosSharedVmNameOptionSpecification)
+function Get-ProdicloudExecVmNameOptionSpecification {
+    return (Get-ProdicloudSharedVmNameOptionSpecification)
 }

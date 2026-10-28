@@ -1,5 +1,5 @@
 # Shared 'disabled' command option specification.
 
-function Get-ClagnosSharedDisabledOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'disabled')
+function Get-ProdicloudSharedDisabledOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'disabled')
 }

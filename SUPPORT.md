@@ -4,11 +4,11 @@
 
 Before opening an issue, review:
 
-- [README.md](README.md)
+- [PRODICLOUD.md](PRODICLOUD.md)
 - [release-notes.md](release-notes.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- `clagnos -h`
-- `clagnos help <command>`
+- `prodicloud -h`
+- `prodicloud help <command>`
 
 ## Best Support Paths
 
@@ -24,7 +24,7 @@ For normal support or bug reports, include:
 - expected behavior
 - actual behavior
 - relevant help/docs section you followed
-- a sanitized `clagnos show` excerpt or lifecycle snapshot when the issue is state-related
+- a sanitized `prodicloud show` excerpt or lifecycle snapshot when the issue is state-related
 - sanitized logs or error output
 - platform details such as Windows or Linux guest target
 

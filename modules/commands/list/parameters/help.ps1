@@ -1,5 +1,5 @@
 # 'help' option binding for 'list'.
 
-function Get-ClagnosListHelpOptionSpecification {
-    return (Get-ClagnosSharedHelpOptionSpecification)
+function Get-ProdicloudListHelpOptionSpecification {
+    return (Get-ProdicloudSharedHelpOptionSpecification)
 }

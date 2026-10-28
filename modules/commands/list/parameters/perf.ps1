@@ -1,5 +1,5 @@
 # 'perf' option binding for 'list'.
 
-function Get-ClagnosListPerfOptionSpecification {
-    return (Get-ClagnosSharedPerfOptionSpecification)
+function Get-ProdicloudListPerfOptionSpecification {
+    return (Get-ProdicloudSharedPerfOptionSpecification)
 }

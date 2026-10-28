@@ -1,7 +1,7 @@
 # SSH protocol parsing and console-noise helpers.
 
-# Handles Normalize-ClagnosProtocolLine.
-function Normalize-ClagnosProtocolLine {
+# Handles Normalize-ProdicloudProtocolLine.
+function Normalize-ProdicloudProtocolLine {
     param(
         [AllowNull()]
         [string]$Text
@@ -16,14 +16,14 @@ function Normalize-ClagnosProtocolLine {
     $value = $value.TrimStart([char]0xFEFF)
     $value = $value.TrimEnd("`r", "`n")
     $trimmedLeading = $value.TrimStart()
-    if ($trimmedLeading -match '^(?<spinner>[\|/\\-]{1,16})\s+(?<marker>(?:\[stderr\]\s+)?CLAGNOS_[A-Z_]+:.*)$') {
+    if ($trimmedLeading -match '^(?<spinner>[\|/\\-]{1,16})\s+(?<marker>(?:\[stderr\]\s+)?PRODICLOUD_[A-Z_]+:.*)$') {
         return [string]$Matches.marker
     }
     return $value
 }
 
-# Handles Test-ClagnosTransientSpinnerLine.
-function Test-ClagnosTransientSpinnerLine {
+# Handles Test-ProdicloudTransientSpinnerLine.
+function Test-ProdicloudTransientSpinnerLine {
     param(
         [AllowNull()]
         [string]$Text
@@ -46,8 +46,8 @@ function Test-ClagnosTransientSpinnerLine {
     return [regex]::IsMatch($value, '^[\|/\\-]{1,16}$')
 }
 
-# Handles Write-ClagnosTransientConsoleText.
-function Write-ClagnosTransientConsoleText {
+# Handles Write-ProdicloudTransientConsoleText.
+function Write-ProdicloudTransientConsoleText {
     param(
         [AllowNull()]
         [string]$Text
@@ -57,13 +57,13 @@ function Write-ClagnosTransientConsoleText {
     [Console]::Write(("`r{0}" -f $value))
 }
 
-# Handles Clear-ClagnosTransientConsoleText.
-function Clear-ClagnosTransientConsoleText {
+# Handles Clear-ProdicloudTransientConsoleText.
+function Clear-ProdicloudTransientConsoleText {
     [Console]::WriteLine("")
 }
 
-# Handles Test-ClagnosTaskOutputNoiseLine.
-function Test-ClagnosTaskOutputNoiseLine {
+# Handles Test-ProdicloudTaskOutputNoiseLine.
+function Test-ProdicloudTaskOutputNoiseLine {
     param(
         [AllowNull()]
         [string]$Text
@@ -82,8 +82,8 @@ function Test-ClagnosTaskOutputNoiseLine {
     }
 
     return (
-        $value.StartsWith("CLAGNOS_TASK_BEGIN:", [System.StringComparison]::OrdinalIgnoreCase) -or
-        $value.StartsWith("CLAGNOS_TASK_END:", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $value.StartsWith("PRODICLOUD_TASK_BEGIN:", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $value.StartsWith("PRODICLOUD_TASK_END:", [System.StringComparison]::OrdinalIgnoreCase) -or
         $value.StartsWith("TASK_STATUS:", [System.StringComparison]::OrdinalIgnoreCase) -or
         $value.StartsWith("RUN_COMMAND_SUMMARY:", [System.StringComparison]::OrdinalIgnoreCase) -or
         $value.StartsWith("TASK started:", [System.StringComparison]::OrdinalIgnoreCase) -or
@@ -103,7 +103,7 @@ function Test-ClagnosTaskOutputNoiseLine {
         ($value -match '^(?i)WARNING:\s+wsl\.exe : The Windows Subsystem for Linux is not installed\. You\s*$') -or
         ($value -match '^(?i)WARNING:\s+can install by running ''wsl\.exe --install''\.$') -or
         ($value -match '^(?i)WARNING:\s+For more information please visit https://aka\.ms/wslinstall$') -or
-        ($value -match '^(?i)WARNING:\s+At .+clagnos-task-.*\.ps1:\d+ char:\d+$') -or
+        ($value -match '^(?i)WARNING:\s+At .+prodicloud-task-.*\.ps1:\d+ char:\d+$') -or
         ($value -match '^(?i)WARNING:\s+\+\s+wsl\.exe --install --no-distribution$') -or
         ($value -match '^(?i)WARNING:\s+\+\s+~+$') -or
         ($value -match '^(?i)WARNING:\s+\+\s+CategoryInfo\s+:.*NativeCommandError$') -or
@@ -115,8 +115,8 @@ function Test-ClagnosTaskOutputNoiseLine {
     )
 }
 
-# Handles Convert-ClagnosProtocolTaskExitCode.
-function Convert-ClagnosProtocolTaskExitCode {
+# Handles Convert-ProdicloudProtocolTaskExitCode.
+function Convert-ProdicloudProtocolTaskExitCode {
     param(
         [AllowNull()]
         [string]$Text

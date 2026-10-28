@@ -1,5 +1,5 @@
 # 'help' option binding for 'move'.
 
-function Get-ClagnosMoveHelpOptionSpecification {
-    return (Get-ClagnosSharedHelpOptionSpecification)
+function Get-ProdicloudMoveHelpOptionSpecification {
+    return (Get-ProdicloudSharedHelpOptionSpecification)
 }

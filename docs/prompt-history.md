@@ -1,6 +1,6 @@
 # Prompt History
 
-Human-readable prompt ledger for the `clagnos` repository. This file is reconstructed primarily from the relevant `.codex` session JSONL file and records completed user-assistant interactions only. Incomplete or interrupted turns are appended after they are completed.
+Human-readable prompt ledger for the `prodicloud` repository. This file is reconstructed primarily from the relevant `.codex` session JSONL file and records completed user-assistant interactions only. Incomplete or interrupted turns are appended after they are completed.
 
 ## Source
 
@@ -14,25 +14,25 @@ Human-readable prompt ledger for the `clagnos` repository. This file is reconstr
 **User Prompt**
 
 ````text
-task: let's run the `clagnos-deploy.ps1` script here non-interactively, with the default values. Let's perform an SSH connection test using the SSH connection command provided at the end of the script. This way, we can confirm and make sure that this Azure VM deployment script is doing its job. If there is a problem, let's fix it in the script; delete the relevant Azure resource group; rerun the script, and keep working until it is clear that the issue has been resolved...
+task: let's run the `prodicloud-deploy.ps1` script here non-interactively, with the default values. Let's perform an SSH connection test using the SSH connection command provided at the end of the script. This way, we can confirm and make sure that this Azure VM deployment script is doing its job. If there is a problem, let's fix it in the script; delete the relevant Azure resource group; rerun the script, and keep working until it is clear that the issue has been resolved...
 
 ````
 
 **Assistant Summary**
 
-Completed: I ran the `clagnos-deploy.ps1` script non-interactively + with defaults, found and fixed the error, deleted the resource group and redeployed, and verified SSH access. - The first non-interactive deploy was successful, but `443` was closed from the outside (`Connection refused`). - Root cause: In the VM update script, `ssh.socke...
+Completed: I ran the `prodicloud-deploy.ps1` script non-interactively + with defaults, found and fixed the error, deleted the resource group and redeployed, and verified SSH access. - The first non-interactive deploy was successful, but `443` was closed from the outside (`Connection refused`). - Root cause: In the VM update script, `ssh.socke...
 
 ### 2026-03-01 22:56 UTC
 **User Prompt**
 
 ````text
-task: rename the clagnos-*.* script files to clagnos-lin*.*; because they are used only for linux vm deployment.
+task: rename the prodicloud-*.* script files to prodicloud-lin*.*; because they are used only for linux vm deployment.
 
 ````
 
 **Assistant Summary**
 
-Renaming is complete. - The `[clagnos-deploy.ps1]` file was renamed to `[clagnos-lin-deploy.ps1](<user-home>/source/az/clagnos/clagnos-lin-deploy.ps1)`. - The `[clagnos-deploy.cmd]` file was renamed to `[clagnos-lin-deploy.cmd](<user-home>/source/az/clagnos/clagnos-lin-deploy.cmd)`. - The script name/log inside `.ps1`...
+Renaming is complete. - The `[prodicloud-deploy.ps1]` file was renamed to `[prodicloud-lin-deploy.ps1](<user-home>/source/az/prodicloud/prodicloud-lin-deploy.ps1)`. - The `[prodicloud-deploy.cmd]` file was renamed to `[prodicloud-lin-deploy.cmd](<user-home>/source/az/prodicloud/prodicloud-lin-deploy.cmd)`. - The script name/log inside `.ps1`...
 
 ### 2026-03-01 22:58 UTC
 **User Prompt**
@@ -44,7 +44,7 @@ a small correction: the files should end with `***lin.*`; the trailing `-deploy`
 
 **Assistant Summary**
 
-The fix has been applied; the `-deploy` suffix was removed. - `[clagnos-lin-deploy.ps1](<user-home>/source/az/clagnos/clagnos-lin-deploy.ps1)` -> `[clagnos-lin.ps1](<user-home>/source/az/clagnos/clagnos-lin.ps1)` - `[clagnos-lin-deploy.cmd](<user-home>/source/az/clagnos/clagnos-lin-deploy.cmd)` -> `[clagnos-lin.cmd](<user-home>/sourc...
+The fix has been applied; the `-deploy` suffix was removed. - `[prodicloud-lin-deploy.ps1](<user-home>/source/az/prodicloud/prodicloud-lin-deploy.ps1)` -> `[prodicloud-lin.ps1](<user-home>/source/az/prodicloud/prodicloud-lin.ps1)` - `[prodicloud-lin-deploy.cmd](<user-home>/source/az/prodicloud/prodicloud-lin-deploy.cmd)` -> `[prodicloud-lin.cmd](<user-home>/sourc...
 
 ### 2026-03-01 23:00 UTC
 **User Prompt**
@@ -56,17 +56,17 @@ review: whether these two-stage file name and content changes caused any regress
 
 **Assistant Summary**
 
-**Findings** - No critical/major/minor findings: I did not detect broken references after the two-stage rename (static review). - The `cmd -> ps1` chain is correct: [clagnos-lin.cmd:13](<user-home>/source/az/clagnos/clagnos-lin.cmd:13) calls `clagnos-lin.ps1`. - In-script naming is consistent: - File name text: [az-...
+**Findings** - No critical/major/minor findings: I did not detect broken references after the two-stage rename (static review). - The `cmd -> ps1` chain is correct: [prodicloud-lin.cmd:13](<user-home>/source/az/prodicloud/prodicloud-lin.cmd:13) calls `prodicloud-lin.ps1`. - In-script naming is consistent: - File name text: [az-...
 
 ### 2026-03-01 23:43 UTC
 **User Prompt**
 
 ````text
-task: now prepare the `clagnos-win.cmd` and `clagnos-win.ps1` scripts as well:
+task: now prepare the `prodicloud-win.cmd` and `prodicloud-win.ps1` scripts as well:
 *this scripts should do exactly the same thing their Linux counterparts do, one for one: create the resource group and resources; configure them in the same way, including the network structure, startup scripts, VM creation, configuration, preparation for SSH connectivity, providing SSH access, performing the necessary installations inside the VM, etc...
 *as an extra, please configure the RDP service as well: make it ready for RDP clients to connect; ensure broad RDP client compatibility; use the same username and user password as SSH; the Windows user should have full authority, meaning be a power admin.
 *since the ready `.sh` init/update commands will not run on the Windows side, the `.sh` file that will be executed after VM creation should be converted into a PowerShell script.
-**in summary: exactly the same as the `clagnos-lin` scripts; while preserving the existing scripts, rewrite them into new files as `clagnos-win` scripts; refactor and adapt everything to be suitable for the Windows environment.
+**in summary: exactly the same as the `prodicloud-lin` scripts; while preserving the existing scripts, rewrite them into new files as `prodicloud-win` scripts; refactor and adapt everything to be suitable for the Windows environment.
 **after the coding phase is finished, run these scripts, test them step by step, log their behaviors; whatever can be done on the Linux side should also be possible on the Windows side one for one; these scripts should make it possible to bring up Windows VMs.
 **please make the VM name / server name on the Windows side `examplevm`. As you know, our VM name on the Linux side was `examplelinuxvm`...
 **the Windows image you will put inside the Windows VM should be the Windows Datacenter version that is most compatible with all well-known server applications and frameworks on the market.
@@ -77,7 +77,7 @@ task: now prepare the `clagnos-win.cmd` and `clagnos-win.ps1` scripts as well:
 
 **Assistant Summary**
 
-I prepared the `clagnos-win` script set, ran it, found and fixed an error, and verified it by running it again. **Generated Files** - [clagnos-win.ps1](<user-home>/source/az/clagnos/clagnos-win.ps1) - [clagnos-win.cmd](<user-home>/source/az/clagnos/clagnos-win.cmd) Files generated by the script during execution: - [clagnos-w...
+I prepared the `prodicloud-win` script set, ran it, found and fixed an error, and verified it by running it again. **Generated Files** - [prodicloud-win.ps1](<user-home>/source/az/prodicloud/prodicloud-win.ps1) - [prodicloud-win.cmd](<user-home>/source/az/prodicloud/prodicloud-win.cmd) Files generated by the script during execution: - [prodicloud-w...
 
 ### 2026-03-02 00:28 UTC
 **User Prompt**
@@ -90,7 +90,7 @@ fix: do not install Python with a fallback; install it with a clear command like
 
 **Assistant Summary**
 
-The fix you requested has been applied. - Python installation is no longer a fallback; it now uses an explicit command: - `choco upgrade python312 -y --no-progress` - Location: [clagnos-win.ps1:294](<user-home>/source/az/clagnos/clagnos-win.ps1:294) - Chocolatey bootstrap + full unattended setup was added to the beginning of the VM update script: 1. `Ensure-Chocolatey` functio...
+The fix you requested has been applied. - Python installation is no longer a fallback; it now uses an explicit command: - `choco upgrade python312 -y --no-progress` - Location: [prodicloud-win.ps1:294](<user-home>/source/az/prodicloud/prodicloud-win.ps1:294) - Chocolatey bootstrap + full unattended setup was added to the beginning of the VM update script: 1. `Ensure-Chocolatey` functio...
 
 ### 2026-03-02 00:33 UTC
 **User Prompt**
@@ -102,19 +102,19 @@ fix update improve: now let's make sure this resource group and all resources ar
 
 **Assistant Summary**
 
-The requested fix was applied, and the script was rerun from the beginning and verified. **Applied changes** 1. The location was moved to a region within India that supports `Standard_B2as_v2`: `centralindia` - [clagnos-win.ps1:96](<user-home>/source/az/clagnos/clagnos-win.ps1:96) 2. The Python installation was changed to an explicit command: `choco upgrade python...
+The requested fix was applied, and the script was rerun from the beginning and verified. **Applied changes** 1. The location was moved to a region within India that supports `Standard_B2as_v2`: `centralindia` - [prodicloud-win.ps1:96](<user-home>/source/az/prodicloud/prodicloud-win.ps1:96) 2. The Python installation was changed to an explicit command: `choco upgrade python...
 
 ### 2026-03-02 02:38 UTC
 **User Prompt**
 
 ````text
-update: the folder structure and code file organization here have changed and been updated; could you also please review, analyze, and sync up? I grouped and organized my clagnos-lin and clagnos-win scripts under two separate folders; you should work accordingly under these folders, under this main folder...
+update: the folder structure and code file organization here have changed and been updated; could you also please review, analyze, and sync up? I grouped and organized my prodicloud-lin and prodicloud-win scripts under two separate folders; you should work accordingly under these folders, under this main folder...
 
 ````
 
 **Assistant Summary**
 
-I synced up, reviewed the new folder structure, and verified the references. - New structure: 1. [lin-vm](<user-home>/source/az/clagnos/lin-vm) 2. [win-vm](<user-home>/source/az/clagnos/win-vm) - Files are grouped correctly: 1. [clagnos-lin.cmd](<user-home>/source/az/clagnos/lin-vm/clagnos-lin.cmd), [clagnos-lin.ps1](C:/Users/hasa...
+I synced up, reviewed the new folder structure, and verified the references. - New structure: 1. [lin-vm](<user-home>/source/az/prodicloud/lin-vm) 2. [win-vm](<user-home>/source/az/prodicloud/win-vm) - Files are grouped correctly: 1. [prodicloud-lin.cmd](<user-home>/source/az/prodicloud/lin-vm/prodicloud-lin.cmd), [prodicloud-lin.ps1](C:/Users/hasa...
 
 ### 2026-03-02 02:40 UTC
 **User Prompt**
@@ -151,7 +151,7 @@ Let's set the Win11 25H2 AVD M365 image; then delete the relevant resource group
 
 **Assistant Summary**
 
-Done. - I verified the `westindia` (Mumbai/West India) region: available. - I verified the `win11-25h2-avd-m365` image: available. - I updated the script: - Region: [clagnos-win.ps1:96](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:96) - Image: [clagnos-win.ps1:105](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:105) S...
+Done. - I verified the `westindia` (Mumbai/West India) region: available. - I verified the `win11-25h2-avd-m365` image: available. - I updated the script: - Region: [prodicloud-win.ps1:96](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:96) - Image: [prodicloud-win.ps1:105](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:105) S...
 
 ### 2026-03-02 08:12 UTC
 **User Prompt**
@@ -163,7 +163,7 @@ question: is there currently any fallback in the scripts? 2- what types of VM SK
 
 **Assistant Summary**
 
-Yes, in the current state there are fallbacks in the scripts. 1. **Are there fallbacks in the scripts?** - In the `win-vm` script, **yes**: - automatic installation if `choco` is missing: [clagnos-win.ps1:287](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:287) - trying multiple candidate paths for `refreshenv.cmd`: [clagnos-win.ps1:316](<user-home>/so...
+Yes, in the current state there are fallbacks in the scripts. 1. **Are there fallbacks in the scripts?** - In the `win-vm` script, **yes**: - automatic installation if `choco` is missing: [prodicloud-win.ps1:287](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:287) - trying multiple candidate paths for `refreshenv.cmd`: [prodicloud-win.ps1:316](<user-home>/so...
 
 ### 2026-03-02 08:23 UTC
 **User Prompt**
@@ -177,7 +177,7 @@ Leave the e2e integration testing for the end: first make the bulk fixes; then y
 
 **Assistant Summary**
 
-I completed the bulk fix, then ran E2E. 1. The `choco-only` installation flow was set up: - [clagnos-win.ps1](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1):394 `Ensure-Chocolatey` - [clagnos-win.ps1](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1):382 `Invoke-ChocoUpgrade` - Packages: `git`, `python312`, `no...
+I completed the bulk fix, then ran E2E. 1. The `choco-only` installation flow was set up: - [prodicloud-win.ps1](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1):394 `Ensure-Chocolatey` - [prodicloud-win.ps1](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1):382 `Invoke-ChocoUpgrade` - Packages: `git`, `python312`, `no...
 
 ### 2026-03-02 09:18 UTC
 **User Prompt**
@@ -190,7 +190,7 @@ This way, before resource deletion, resource group deletion, and resource creati
 
 **Assistant Summary**
 
-The update was made and verified. What changed: 1. An **availability precheck at the very beginning** was added to the `win-vm` script (before deleting/creating the RG): - Is the region available? - Is the image accessible? - Is the VM size available in the region? (with `az rest` and `Microsoft.Compute/skus`) Relevant locations: - [clagnos-win.ps1](<user-home>/source/az/clagnos/w...
+The update was made and verified. What changed: 1. An **availability precheck at the very beginning** was added to the `win-vm` script (before deleting/creating the RG): - Is the region available? - Is the image accessible? - Is the VM size available in the region? (with `az rest` and `Microsoft.Compute/skus`) Relevant locations: - [prodicloud-win.ps1](<user-home>/source/az/prodicloud/w...
 
 ### 2026-03-02 09:34 UTC
 **User Prompt**
@@ -202,7 +202,7 @@ fix: It waited too long in step 2; let's filter by region and size, handle the l
 
 **Assistant Summary**
 
-I applied the fixes you requested and verified them. **What Changed** 1. I made error handling structured and user-friendly (`exit code + reason + what to do`): - [clagnos-win.ps1:61](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:61) - [clagnos-win.ps1:747](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:747)...
+I applied the fixes you requested and verified them. **What Changed** 1. I made error handling structured and user-friendly (`exit code + reason + what to do`): - [prodicloud-win.ps1:61](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:61) - [prodicloud-win.ps1:747](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:747)...
 
 ### 2026-03-02 10:41 UTC
 **User Prompt**
@@ -214,7 +214,7 @@ feat: the script should have two modes of operation: default=interactive; the se
 
 **Assistant Summary**
 
-The two modes you requested were added: default `interactive`, and the second mode `auto` (`--auto` or `-a`). **Updates** - The `Auto` parameter and short alias were added (`-a`), the default remained interactive: - [clagnos-win.ps1:7](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:7) - [clagnos-lin.ps1:7](<user-home>/source/az/az-v...
+The two modes you requested were added: default `interactive`, and the second mode `auto` (`--auto` or `-a`). **Updates** - The `Auto` parameter and short alias were added (`-a`), the default remained interactive: - [prodicloud-win.ps1:7](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:7) - [prodicloud-lin.ps1:7](<user-home>/source/az/az-v...
 
 ### 2026-03-02 11:21 UTC
 **User Prompt**
@@ -238,7 +238,7 @@ question: the VM name on the Linux side should remain `examplelinuxvm`, and the 
 
 **Assistant Summary**
 
-The situation is correct, no fix is needed. - `lin` side: `$serverName = "examplelinuxvm"` → [clagnos-lin.ps1:182](<user-home>/source/az/clagnos/lin-vm/clagnos-lin.ps1:182) - `win` side: `$serverName = "examplevm"` → [clagnos-win.ps1:182](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:182)
+The situation is correct, no fix is needed. - `lin` side: `$serverName = "examplelinuxvm"` → [prodicloud-lin.ps1:182](<user-home>/source/az/prodicloud/lin-vm/prodicloud-lin.ps1:182) - `win` side: `$serverName = "examplevm"` → [prodicloud-win.ps1:182](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:182)
 
 ### 2026-03-02 11:28 UTC
 **User Prompt**
@@ -250,7 +250,7 @@ Use region=austriaeast on both sides.
 
 **Assistant Summary**
 
-Okay, the region has been updated to `austriaeast` on both sides. - Linux: [clagnos-lin.ps1:207](<user-home>/source/az/clagnos/lin-vm/clagnos-lin.ps1:207) - Windows: [clagnos-win.ps1:207](<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:207)
+Okay, the region has been updated to `austriaeast` on both sides. - Linux: [prodicloud-lin.ps1:207](<user-home>/source/az/prodicloud/lin-vm/prodicloud-lin.ps1:207) - Windows: [prodicloud-win.ps1:207](<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:207)
 
 ### 2026-03-02 14:53 UTC
 **User Prompt**
@@ -264,7 +264,7 @@ update: I made some changes in the Linux-side `.ps1` code. For example: I added 
 
 **Assistant Summary**
 
-I made the port-sync refactor you wanted; the network policy on the `lin` and `win` sides now uses the same port set (NSG + OS firewall). Updated points: - Linux NSG port list was expanded: [clagnos-lin.ps1:259](<user-home>/source/az/clagnos/lin-vm/clagnos-lin.ps1:259) - The Linux OS firewall (UFW) side now uses the same via a loop...
+I made the port-sync refactor you wanted; the network policy on the `lin` and `win` sides now uses the same port set (NSG + OS firewall). Updated points: - Linux NSG port list was expanded: [prodicloud-lin.ps1:259](<user-home>/source/az/prodicloud/lin-vm/prodicloud-lin.ps1:259) - The Linux OS firewall (UFW) side now uses the same via a loop...
 
 ### 2026-03-02 15:12 UTC
 **User Prompt**
@@ -279,7 +279,7 @@ put the PowerShell commands to be run into an array; if the `--step` parameter i
 
 **Assistant Summary**
 
-The refactor is complete; in both scripts, `--step/-s` and the normal flow are now tied to the same `commandBlocks` logic. - `win` side: - `Step 8` now creates a single `commandBlocks` array and runs the same blocks in both step and normal mode: [clagnos-win.ps1:793](<user-home>\source\az\clagnos\win-vm\clagnos-win.ps1:793) - Common...
+The refactor is complete; in both scripts, `--step/-s` and the normal flow are now tied to the same `commandBlocks` logic. - `win` side: - `Step 8` now creates a single `commandBlocks` array and runs the same blocks in both step and normal mode: [prodicloud-win.ps1:793](<user-home>\source\az\prodicloud\win-vm\prodicloud-win.ps1:793) - Common...
 
 ### 2026-03-02 15:27 UTC
 **User Prompt**
@@ -291,7 +291,7 @@ test: now let's run the lin side with the --auto and --step parameters: let's re
 
 **Assistant Summary**
 
-I tested the `lin` side in a loop the way you wanted (`-Auto -Step`), caught and fixed the issue, and reran it from scratch. 1. First e2e run: - Command: `powershell -NoProfile -ExecutionPolicy Bypass -File .\lin-vm\clagnos-lin.ps1 -Auto -Step` - The script returned `exit 0` and completed 9/9 steps. - But the SSH test `Connection refused` a...
+I tested the `lin` side in a loop the way you wanted (`-Auto -Step`), caught and fixed the issue, and reran it from scratch. 1. First e2e run: - Command: `powershell -NoProfile -ExecutionPolicy Bypass -File .\lin-vm\prodicloud-lin.ps1 -Auto -Step` - The script returned `exit 0` and completed 9/9 steps. - But the SSH test `Connection refused` a...
 
 ### 2026-03-02 16:41 UTC
 **User Prompt**
@@ -343,7 +343,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Plan implementation is complete and the code has been updated. **What Was Done** - The `.env` loading flow was kept intact in the `win` and `lin` main scripts. - [clagnos-win.ps1](/<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1):365, [clagnos-win.ps1](/<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1):463 - [clagnos-lin.ps1](/C:/...
+Plan implementation is complete and the code has been updated. **What Was Done** - The `.env` loading flow was kept intact in the `win` and `lin` main scripts. - [prodicloud-win.ps1](/<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1):365, [prodicloud-win.ps1](/<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1):463 - [prodicloud-lin.ps1](/C:/...
 
 ### 2026-03-02 19:37 UTC
 **User Prompt**
@@ -356,7 +356,7 @@ test: the test on the Windows side should run like this: disk size should be upd
 
 **Assistant Summary**
 
-I implemented it and tested it. - `VM_DISK_SIZE_GB` was updated to `128`: - [win-vm/.env](/<user-home>/source/az/clagnos/win-vm/.env):15 - [win-vm/.env.example](/<user-home>/source/az/clagnos/win-vm/.env.example):15 - [clagnos-win.ps1](/<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1):521 (`DefaultValue "128"`) - C...
+I implemented it and tested it. - `VM_DISK_SIZE_GB` was updated to `128`: - [win-vm/.env](/<user-home>/source/az/prodicloud/win-vm/.env):15 - [win-vm/.env.example](/<user-home>/source/az/prodicloud/win-vm/.env.example):15 - [prodicloud-win.ps1](/<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1):521 (`DefaultValue "128"`) - C...
 
 ### 2026-03-02 20:04 UTC
 **User Prompt**
@@ -371,7 +371,7 @@ fix improve update: let's make the following adjustments on the Windows side:
 
 **Assistant Summary**
 
-Done. Two changes were applied and the `win` side was retested using only `--auto`. **Code Updates** 1. `System error 1378` fix: - Added a local-group membership check before `add`. - Applied both in the update template and in the Step-8 `01-ensure-local-admin-user` block. - References: - [clagnos-win.ps1](/C...
+Done. Two changes were applied and the `win` side was retested using only `--auto`. **Code Updates** 1. `System error 1378` fix: - Added a local-group membership check before `add`. - Applied both in the update template and in the Step-8 `01-ensure-local-admin-user` block. - References: - [prodicloud-win.ps1](/C...
 
 ### 2026-03-02 20:33 UTC
 **User Prompt**
@@ -383,7 +383,7 @@ But don't test it. I'll do it.
 
 **Assistant Summary**
 
-Yes, you're right: it had been reversed. I fixed it, and the behavior is now as follows: 1. If `--step` is provided: Step 8 substeps run **one by one** with separate `az vm run-command invoke` calls. [clagnos-win.ps1:327](/<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1:327) 2. If `--step` is not provided: Step 8 substeps run with **a single** `az vm...
+Yes, you're right: it had been reversed. I fixed it, and the behavior is now as follows: 1. If `--step` is provided: Step 8 substeps run **one by one** with separate `az vm run-command invoke` calls. [prodicloud-win.ps1:327](/<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1:327) 2. If `--step` is not provided: Step 8 substeps run with **a single** `az vm...
 
 ### 2026-03-02 20:45 UTC
 **User Prompt**
@@ -419,7 +419,7 @@ Between win and lin, aside from the differences that naturally need to exist due
 
 **Assistant Summary**
 
-Short answer: **not completely identical**, there are still a few logic differences that are not platform-specific. 1. `Step 8` task orchestration is different. - `win`: the tasks are defined inline in the script (10 tasks) and run that way. [clagnos-win.ps1](/<user-home>/source/az/clagnos/win-vm/clagnos-win.ps1):1148 - `lin`: there is a single task, directly...
+Short answer: **not completely identical**, there are still a few logic differences that are not platform-specific. 1. `Step 8` task orchestration is different. - `win`: the tasks are defined inline in the script (10 tasks) and run that way. [prodicloud-win.ps1](/<user-home>/source/az/prodicloud/win-vm/prodicloud-win.ps1):1148 - `lin`: there is a single task, directly...
 
 ### 2026-03-02 20:59 UTC
 **User Prompt**
@@ -434,7 +434,7 @@ fix: then let's fix these cases as well:
 
 **Assistant Summary**
 
-<proposed_plan> ## Title Align Linux/Windows VM Deploy Scripts: Step/Task Semantics, Task-Orchestrated Step 8, and Cross-Platform Consistency ## Summary We will refactor `lin-vm/clagnos-lin.ps1` to match the `win-vm/clagnos-win.ps1` orchestration model as closely as possible (except unavoidable OS-specific behavior). Ke...
+<proposed_plan> ## Title Align Linux/Windows VM Deploy Scripts: Step/Task Semantics, Task-Orchestrated Step 8, and Cross-Platform Consistency ## Summary We will refactor `lin-vm/prodicloud-lin.ps1` to match the `win-vm/prodicloud-win.ps1` orchestration model as closely as possible (except unavoidable OS-specific behavior). Ke...
 
 ### 2026-03-02 21:02 UTC
 **User Prompt**
@@ -446,7 +446,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-The plan was implemented. - Linux Step 8 no longer runs as a single-piece script; it now works in a multi-`taskBlocks` structure like on the Windows side: split into user/password, packages, SSHD, firewall, capability, service restart, and health snapshot. File: [lin-vm/clagnos-lin.ps1](<user-home>\source\az\clagnos\lin-vm\clagnos-lin.ps1) (oz...
+The plan was implemented. - Linux Step 8 no longer runs as a single-piece script; it now works in a multi-`taskBlocks` structure like on the Windows side: split into user/password, packages, SSHD, firewall, capability, service restart, and health snapshot. File: [lin-vm/prodicloud-lin.ps1](<user-home>\source\az\prodicloud\lin-vm\prodicloud-lin.ps1) (oz...
 
 ### 2026-03-02 21:14 UTC
 **User Prompt**
@@ -458,26 +458,26 @@ test: let's run the Windows side once with only the --auto parameter.
 
 **Assistant Summary**
 
-I ran the `win-vm` side only with `--auto`: Command: `powershell -ExecutionPolicy Bypass -File .\win-vm\clagnos-win.ps1 --auto` Result: - Exit code: `1` - Status: `failed` Critical error: - `VM task batch execution failed in combined mode` - `az vm run-command invoke (task-batch-combined) failed with exit code 1` -...
+I ran the `win-vm` side only with `--auto`: Command: `powershell -ExecutionPolicy Bypass -File .\win-vm\prodicloud-win.ps1 --auto` Result: - Exit code: `1` - Status: `failed` Critical error: - `VM task batch execution failed in combined mode` - `az vm run-command invoke (task-batch-combined) failed with exit code 1` -...
 
 ### 2026-03-02 21:23 UTC
 **User Prompt**
 
 ````text
-fix: when in combine mode, that is, when the `--step` parameter is not provided; then let it write the entire script to disk as 'clagnos-win-update.ps1' like before and run that file instead. Make this change and test it.
+fix: when in combine mode, that is, when the `--step` parameter is not provided; then let it write the entire script to disk as 'prodicloud-win-update.ps1' like before and run that file instead. Make this change and test it.
 
 ````
 
 **Assistant Summary**
 
-Done. When `--step` is not provided (in the combine/auto flow), Step 8 now runs the update script file directly from disk instead of using inline concatenation. Updated location: - [clagnos-win.ps1](<user-home>\source\az\clagnos\win-vm\clagnos-win.ps1:1141) - Auto-mode invocation: `az vm run-command invoke --scripts "@$vmUpdateScri...
+Done. When `--step` is not provided (in the combine/auto flow), Step 8 now runs the update script file directly from disk instead of using inline concatenation. Updated location: - [prodicloud-win.ps1](<user-home>\source\az\prodicloud\win-vm\prodicloud-win.ps1:1141) - Auto-mode invocation: `az vm run-command invoke --scripts "@$vmUpdateScri...
 
 ### 2026-03-02 22:11 UTC
 **User Prompt**
 
 ````text
 improve full-synced code reuse: first, let's also carry the latest changes we made on the win side over to the lin side, without breaking Linux compatibility and without causing a regression.
-*then: for maximum code reuse, let's move to an architecture like this: alongside the `lin-vm` and `win-vm` folders, let's also create a folder called `co-vm`, create and refactor reusable `.ps1` files there for both lin and win, and have the lin and win sides call the relevant `clagnos-co-*.ps1` scripts. For example: the initial and final code on both the win and lin sides is almost completely the same; the middle and some parts contain platform- and OS-specific code; those should remain on the lin and win sides; but the common parts should accumulate in the `clagnos-co-*.ps1` files under this `co-vm` folder, so they can be called from there and reused.
+*then: for maximum code reuse, let's move to an architecture like this: alongside the `lin-vm` and `win-vm` folders, let's also create a folder called `co-vm`, create and refactor reusable `.ps1` files there for both lin and win, and have the lin and win sides call the relevant `prodicloud-co-*.ps1` scripts. For example: the initial and final code on both the win and lin sides is almost completely the same; the middle and some parts contain platform- and OS-specific code; those should remain on the lin and win sides; but the common parts should accumulate in the `prodicloud-co-*.ps1` files under this `co-vm` folder, so they can be called from there and reused.
 
 ````
 
@@ -495,19 +495,19 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. ## Changes Made - Shared layer created: - [clagnos-co-core.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-core.ps1) - [clagnos-co-config.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-config.ps1) - [clagnos-co-azure.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-azure.ps1) - [clagnos-co-runcommand.p...
+Implemented. ## Changes Made - Shared layer created: - [prodicloud-co-core.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-core.ps1) - [prodicloud-co-config.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-config.ps1) - [prodicloud-co-azure.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-azure.ps1) - [prodicloud-co-runcommand.p...
 
 ### 2026-03-02 22:25 UTC
 **User Prompt**
 
 ````text
-update: let's move our `*.cmd` launcher files to the root here, namely the `clagnos` folder; however, let's also ensure that both the Windows and Linux sides can be launched, without doing real testing.
+update: let's move our `*.cmd` launcher files to the root here, namely the `prodicloud` folder; however, let's also ensure that both the Windows and Linux sides can be launched, without doing real testing.
 
 ````
 
 **Assistant Summary**
 
-Completed. - I moved the launcher files to the root: - [clagnos-lin.cmd](<user-home>\source\az\clagnos\clagnos-lin.cmd) - [clagnos-win.cmd](<user-home>\source\az\clagnos\clagnos-win.cmd) - I removed the old subfolder launchers: - `lin-vm/clagnos-lin.cmd` (deleted) - `win-vm/clagnos-win.cmd` (deleted) - New launcher targets...
+Completed. - I moved the launcher files to the root: - [prodicloud-lin.cmd](<user-home>\source\az\prodicloud\prodicloud-lin.cmd) - [prodicloud-win.cmd](<user-home>\source\az\prodicloud\prodicloud-win.cmd) - I removed the old subfolder launchers: - `lin-vm/prodicloud-lin.cmd` (deleted) - `win-vm/prodicloud-win.cmd` (deleted) - New launcher targets...
 
 ### 2026-03-02 22:27 UTC
 **User Prompt**
@@ -519,7 +519,7 @@ scan and fix: are there any files left here and in the subfolders that are not u
 
 **Assistant Summary**
 
-The scan is complete. Files that currently appear to be “unreferenced”: 1. [lin-vm/.env.example](<user-home>\source\az\clagnos\lin-vm\.env.example) 2. [win-vm/.env.example](<user-home>\source\az\clagnos\win-vm\.env.example) Notes: - [clagnos-lin.cmd](<user-home>\source\az\clagnos\clagnos-lin.cmd) and [clagnos-win.cmd](<user-home>\source\az\clagnos\...
+The scan is complete. Files that currently appear to be “unreferenced”: 1. [lin-vm/.env.example](<user-home>\source\az\prodicloud\lin-vm\.env.example) 2. [win-vm/.env.example](<user-home>\source\az\prodicloud\win-vm\.env.example) Notes: - [prodicloud-lin.cmd](<user-home>\source\az\prodicloud\prodicloud-lin.cmd) and [prodicloud-win.cmd](<user-home>\source\az\prodicloud\...
 
 ### 2026-03-02 22:29 UTC
 **User Prompt**
@@ -531,7 +531,7 @@ No, don't delete it; create a real `.env.example` template file with all current
 
 **Assistant Summary**
 
-I didn't delete it. I turned it into a real template as you requested. Updated files: - [lin-vm/.env.example](<user-home>\source\az\clagnos\lin-vm\.env.example) - [win-vm/.env.example](<user-home>\source\az\clagnos\win-vm\.env.example) Improvements I made: - All valid variables were preserved and organized by section. -...
+I didn't delete it. I turned it into a real template as you requested. Updated files: - [lin-vm/.env.example](<user-home>\source\az\prodicloud\lin-vm\.env.example) - [win-vm/.env.example](<user-home>\source\az\prodicloud\win-vm\.env.example) Improvements I made: - All valid variables were preserved and organized by section. -...
 
 ### 2026-03-02 22:33 UTC
 **User Prompt**
@@ -543,7 +543,7 @@ fix or update: on the Windows side; are all TCP ports provided via `.env` or con
 
 **Assistant Summary**
 
-Correct observation: in the previous state, there was an inconsistency on the Win side. - NSG: it was already using the `.env` `TCP_PORTS` list dynamically. - Windows Firewall: - it was dynamic in the `--step` flow. - in the `--auto` flow (`clagnos-win-update.ps1` running from disk), the port list was hard-coded inside `Ensure-FirewallRules`. I fixed this. ...
+Correct observation: in the previous state, there was an inconsistency on the Win side. - NSG: it was already using the `.env` `TCP_PORTS` list dynamically. - Windows Firewall: - it was dynamic in the `--step` flow. - in the `--auto` flow (`prodicloud-win-update.ps1` running from disk), the port list was hard-coded inside `Ensure-FirewallRules`. I fixed this. ...
 
 ### 2026-03-02 22:37 UTC
 **User Prompt**
@@ -555,7 +555,7 @@ Please now also add port 11434 on both the Linux and Windows sides, to both the 
 
 **Assistant Summary**
 
-Okay, I added port `11434` on both sides. Updated locations: - Linux: - [clagnos-lin.ps1](<user-home>\source\az\clagnos\lin-vm\clagnos-lin.ps1:111) added `11434` to `defaultPortsCsv` - [lin-vm/.env](<user-home>\source\az\clagnos\lin-vm\.env) - [lin-vm/.env.example](<user-home>\source\az\clagnos\lin-vm\.env.example...)
+Okay, I added port `11434` on both sides. Updated locations: - Linux: - [prodicloud-lin.ps1](<user-home>\source\az\prodicloud\lin-vm\prodicloud-lin.ps1:111) added `11434` to `defaultPortsCsv` - [lin-vm/.env](<user-home>\source\az\prodicloud\lin-vm\.env) - [lin-vm/.env.example](<user-home>\source\az\prodicloud\lin-vm\.env.example...)
 
 ### 2026-03-02 23:15 UTC
 **User Prompt**
@@ -569,7 +569,7 @@ update and test: please use port 444 instead of 443 for the SSH port; make this 
 
 **Assistant Summary**
 
-I made the requested updates and tested both sides in parallel with `--auto`. ## Code updates - Both the win and lin sides were made parameterized so that the SSH port is `444` (`SSH_PORT`, default `444`): - [clagnos-win.ps1](<user-home>\source\az\clagnos\win-vm\clagnos-win.ps1:105) - [clagnos-lin.ps1](<user-home>...
+I made the requested updates and tested both sides in parallel with `--auto`. ## Code updates - Both the win and lin sides were made parameterized so that the SSH port is `444` (`SSH_PORT`, default `444`): - [prodicloud-win.ps1](<user-home>\source\az\prodicloud\win-vm\prodicloud-win.ps1:105) - [prodicloud-lin.ps1](<user-home>...
 
 ### 2026-03-02 23:44 UTC
 **User Prompt**
@@ -605,7 +605,7 @@ fix nit: choco enable global confirmation should be in only one place: immediate
 
 **Assistant Summary**
 
-Fixed. - I removed the extra `allowGlobalConfirmation` call from where it was redundant. - Right now this setting remains in only one place in the Win script: - [clagnos-win.ps1](<user-home>\source\az\clagnos\win-vm\clagnos-win.ps1:879) As requested, I only performed a syntax check: - `win-vm/clagnos-win.ps1` → `SYNTAX_OK`
+Fixed. - I removed the extra `allowGlobalConfirmation` call from where it was redundant. - Right now this setting remains in only one place in the Win script: - [prodicloud-win.ps1](<user-home>\source\az\prodicloud\win-vm\prodicloud-win.ps1:879) As requested, I only performed a syntax check: - `win-vm/prodicloud-win.ps1` → `SYNTAX_OK`
 
 ### 2026-03-02 23:58 UTC
 **User Prompt**
@@ -619,7 +619,7 @@ update dev env: create a git repo here; then review all of our chat and prompt h
 
 **Assistant Summary**
 
-<proposed_plan> # Reconstructed Git History + AGENTS.md Bootstrapping Plan (clagnos) ## Summary Initialize this folder as a new git repository, generate a top-level `AGENTS.md` that codifies your working conventions, and reconstruct a **very high granularity (80+ commit)** historical timeline from: 1. This conversatio...
+<proposed_plan> # Reconstructed Git History + AGENTS.md Bootstrapping Plan (prodicloud) ## Summary Initialize this folder as a new git repository, generate a top-level `AGENTS.md` that codifies your working conventions, and reconstruct a **very high granularity (80+ commit)** historical timeline from: 1. This conversatio...
 
 ### 2026-03-03 00:04 UTC
 **User Prompt**
@@ -631,7 +631,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-I implemented the plan you requested. - A new git repo was created under `<user-home>\source\az\clagnos` (`main` branch). - An incremental history totaling **108 commits** was produced. - First commit: `c304092` - Last commit: `067565a` - The working tree is clean (`git status` is empty). - `.env` files are untracked, `.env.example` files are tracked...
+I implemented the plan you requested. - A new git repo was created under `<user-home>\source\az\prodicloud` (`main` branch). - An incremental history totaling **108 commits** was produced. - First commit: `c304092` - Last commit: `067565a` - The working tree is clean (`git status` is empty). - `.env` files are untracked, `.env.example` files are tracked...
 
 ### 2026-03-03 00:09 UTC
 **User Prompt**
@@ -643,7 +643,7 @@ question: what is in those `.md` files you added?
 
 **Assistant Summary**
 
-The contents of the `.md` files I added are briefly as follows: - [AGENTS.md](<user-home>\source\az\clagnos\AGENTS.md) The project's development rules: folder structure, lin/win parity principles, `interactive/auto/step` mode semantics, `.env` precedence order, port/firewall rules, error handling, commit standards, and “final summary...
+The contents of the `.md` files I added are briefly as follows: - [AGENTS.md](<user-home>\source\az\prodicloud\AGENTS.md) The project's development rules: folder structure, lin/win parity principles, `interactive/auto/step` mode semantics, `.env` precedence order, port/firewall rules, error handling, commit standards, and “final summary...
 
 ### 2026-03-03 00:16 UTC
 **User Prompt**
@@ -655,14 +655,14 @@ update docs: starting with a fast quick start section: prepare a `readme.md` doc
 
 **Assistant Summary**
 
-`README.md` was prepared and committed. - File: [README.md](<user-home>\source\az\clagnos\README.md) - Commit: `6592ce9` - Content: Quick Start, prerequisites, installation/configuration, `interactive/--auto/--step` modes, step/task semantics, lin/win flow architecture, port-security model, usage examples, log/exit da...
+`PRODICLOUD.md` was prepared and committed. - File: [PRODICLOUD.md](<user-home>\source\az\prodicloud\PRODICLOUD.md) - Commit: `6592ce9` - Content: Quick Start, prerequisites, installation/configuration, `interactive/--auto/--step` modes, step/task semantics, lin/win flow architecture, port-security model, usage examples, log/exit da...
 
 ### 2026-03-03 08:29 UTC
 **User Prompt**
 
 ````text
 feat: while running in interactive mode, I want to see Azure regions and Azure VM SKUs together with their size and pricing information:
-*for this, I want to move my PowerShell script code from this location here: "<user-home>\source\test\az\clagnos-ls.ps1"
+*for this, I want to move my PowerShell script code from this location here: "<user-home>\source\test\az\prodicloud-ls.ps1"
 -just like there; Azure regions should appear in the same layout, numbered the same way; I should be able to select the target region by entering its number; including the default region, the exact code from my source location should be integrated here.
 *after that, it should ask me which VM type I am looking for: I should be able to enter partial values like "b2a", "d2", or leave it blank for all VM types.
 *then, just like in my code at the source, it should list the available VM SKUs in the selected region, filtered according to the partial VM type value I entered, together with their sizes and prices, and with their availability statuses, numbered as well. When calculating the price, it should use 730 as the total number of hours in a month, without asking the user. It should read that automatically from the settings.
@@ -673,7 +673,7 @@ feat: while running in interactive mode, I want to see Azure regions and Azure V
 
 **Assistant Summary**
 
-<proposed_plan> # Interactive Region + SKU Selector Integration Plan (lin/win parity, max reuse) ## Summary Integrate an interactive Azure region + VM SKU discovery/selection flow into **both** `lin-vm/clagnos-lin.ps1` and `win-vm/clagnos-win.ps1`, using logic adapted from `<user-home>\source\test\az\clagnos-ls.ps1`. B...
+<proposed_plan> # Interactive Region + SKU Selector Integration Plan (lin/win parity, max reuse) ## Summary Integrate an interactive Azure region + VM SKU discovery/selection flow into **both** `lin-vm/prodicloud-lin.ps1` and `win-vm/prodicloud-win.ps1`, using logic adapted from `<user-home>\source\test\az\prodicloud-ls.ps1`. B...
 
 ### 2026-03-03 08:37 UTC
 **User Prompt**
@@ -697,7 +697,7 @@ fix: I ran the Windows side; during region selection, it did not show any region
 
 **Assistant Summary**
 
-The fix has been applied. - Commit: `190a334` - File: [co-vm/clagnos-co-sku-picker.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-sku-picker.ps1) What was fixed: - The region list is now written directly to the host instead of using `Format-Table`. - The list is displayed in a numbered grid format with 10 columns (10 regions/line). - Default r...
+The fix has been applied. - Commit: `190a334` - File: [co-vm/prodicloud-co-sku-picker.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-sku-picker.ps1) What was fixed: - The region list is now written directly to the host instead of using `Format-Table`. - The list is displayed in a numbered grid format with 10 columns (10 regions/line). - Default r...
 
 ### 2026-03-03 08:49 UTC
 **User Prompt**
@@ -709,7 +709,7 @@ fix: there are different names among Azure regions, such as country names; I onl
 
 **Assistant Summary**
 
-Fix completed. - Commit: `0a1e393` - File: [co-vm/clagnos-co-sku-picker.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-sku-picker.ps1) What changed: - The region source now shows only deployment regions where `metadata.regionType == Physical`. - This excludes edge/special types; the list is ~50-60...
+Fix completed. - Commit: `0a1e393` - File: [co-vm/prodicloud-co-sku-picker.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-sku-picker.ps1) What changed: - The region source now shows only deployment regions where `metadata.regionType == Physical`. - This excludes edge/special types; the list is ~50-60...
 
 ### 2026-03-03 08:58 UTC
 **User Prompt**
@@ -721,7 +721,7 @@ fix: even though I typed "standard_b2" or "b2a" into the partial filtering field
 
 **Assistant Summary**
 
-You're right, I fixed this and tested it myself. - Commit: `856b30f` - File: [co-vm/clagnos-co-sku-picker.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-sku-picker.ps1) Fix applied: - Partial SKU search is now more tolerant: - quoted inputs: `"b2a"`, `"standard_b2"` - separator variations: `standard_b2`, `sta...
+You're right, I fixed this and tested it myself. - Commit: `856b30f` - File: [co-vm/prodicloud-co-sku-picker.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-sku-picker.ps1) Fix applied: - Partial SKU search is now more tolerant: - quoted inputs: `"b2a"`, `"standard_b2"` - separator variations: `standard_b2`, `sta...
 
 ### 2026-03-03 09:02 UTC
 **User Prompt**
@@ -736,7 +736,7 @@ if it is the default, it should be shown as *2-x.
 
 Format fixed.
 - Commit: `f213f0b`
-- File: [co-vm/clagnos-co-sku-picker.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-sku-picker.ps1)
+- File: [co-vm/prodicloud-co-sku-picker.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-sku-picker.ps1)
 
 The new region display is now in this format:
 - normal: `1-eastus.`
@@ -773,7 +773,7 @@ Available VM SKUs in region 'austriaeast' (prices use 730 hours/month):
 
 **Assistant Summary**
 
-The root cause was clearly identified and fixed. - Commit: `8dcc0cd` - File: [co-vm/clagnos-co-sku-picker.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-sku-picker.ps1) Why was it breaking for you while working for me? - The host you ran it on: **Windows PowerShell 5.1** - My previous validation host: **pwsh 7** - `ConvertFr...
+The root cause was clearly identified and fixed. - Commit: `8dcc0cd` - File: [co-vm/prodicloud-co-sku-picker.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-sku-picker.ps1) Why was it breaking for you while working for me? - The host you ran it on: **Windows PowerShell 5.1** - My previous validation host: **pwsh 7** - `ConvertFr...
 
 ### 2026-03-03 09:34 UTC
 **User Prompt**
@@ -785,7 +785,7 @@ fix bugs proactively: if there are other potential incompatibilities in this cod
 
 **Assistant Summary**
 
-I performed a proactive compatibility scan and fixed critical differences caused by PS5.1 vs PS7. - Last commit: `0c3af9f` - Working tree is clean. Main points fixed: 1. The JSON parse layer was made host-independent - [clagnos-co-core.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-core.ps1) - New shared helpers: - `Co...`
+I performed a proactive compatibility scan and fixed critical differences caused by PS5.1 vs PS7. - Last commit: `0c3af9f` - Working tree is clean. Main points fixed: 1. The JSON parse layer was made host-independent - [prodicloud-co-core.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-core.ps1) - New shared helpers: - `Co...`
 
 ### 2026-03-03 09:41 UTC
 **User Prompt**
@@ -845,7 +845,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Plan applied: I removed the UTF-8 BOM difference between PS5/PS7 deterministically. **What I changed** - Added a shared helper: `Write-TextFileNormalized` [clagnos-co-core.ps1](<user-home>/source/az/clagnos/co-vm/clagnos-co-core.ps1) - `.env` writing was moved to the helper so it uses UTF-8 no-BOM + CRLF [clagnos-co-co...
+Plan applied: I removed the UTF-8 BOM difference between PS5/PS7 deterministically. **What I changed** - Added a shared helper: `Write-TextFileNormalized` [prodicloud-co-core.ps1](<user-home>/source/az/prodicloud/co-vm/prodicloud-co-core.ps1) - `.env` writing was moved to the helper so it uses UTF-8 no-BOM + CRLF [prodicloud-co-co...
 
 ### 2026-03-03 11:03 UTC
 **User Prompt**
@@ -905,7 +905,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-I implemented the Step 3 UI flow you wanted. **What Was Done** - A shared confirmation helper was added: `Confirm-YesNo` [clagnos-co-core.ps1](<user-home>/source/az/clagnos/co-vm/clagnos-co-core.ps1) - Linux Step 3 was updated: - If the RG exists, a "will be deleted" message is shown. - In interactive mode, a clear confirmation is requested. - `yes` => delete + wait + continue...
+I implemented the Step 3 UI flow you wanted. **What Was Done** - A shared confirmation helper was added: `Confirm-YesNo` [prodicloud-co-core.ps1](<user-home>/source/az/prodicloud/co-vm/prodicloud-co-core.ps1) - Linux Step 3 was updated: - If the RG exists, a "will be deleted" message is shown. - In interactive mode, a clear confirmation is requested. - `yes` => delete + wait + continue...
 
 ### 2026-03-03 12:10 UTC
 **User Prompt**
@@ -945,7 +945,7 @@ update git repo: the currently pending modified files were created as auto-gener
 
 **Assistant Summary**
 
-Completed. - I added the auto-generated files to the ignore list: [.gitignore](<user-home>\source\az\clagnos\.gitignore) - I removed these files from repo tracking (they remain locally): - [lin-vm/clagnos-lin-cloud-init.yaml](<user-home>\source\az\clagnos\lin-vm\clagnos-lin-cloud-init.yaml) - [lin-vm/clagnos-lin-update.sh](C...
+Completed. - I added the auto-generated files to the ignore list: [.gitignore](<user-home>\source\az\prodicloud\.gitignore) - I removed these files from repo tracking (they remain locally): - [lin-vm/prodicloud-lin-cloud-init.yaml](<user-home>\source\az\prodicloud\lin-vm\prodicloud-lin-cloud-init.yaml) - [lin-vm/prodicloud-lin-update.sh](C...
 
 ### 2026-03-03 12:35 UTC
 **User Prompt**
@@ -999,13 +999,13 @@ Implemented. Changes made: - The Step 7 VM existence flow was aligned with the i
 **User Prompt**
 
 ````text
-refactor and update: in the clagnos-win.ps1 and clagnos-lin.ps1 code files; can you identify the parts that are exactly the same or very similar and could be used as reusable and common components; place them under the co-vm folder; and perform a careful refactoring operation with maximum effort so that the Windows and Linux sides use those parts in common? However, the current behavior must be preserved completely; there must be no regression in any way; absolutely no regression should be caused!
+refactor and update: in the prodicloud-win.ps1 and prodicloud-lin.ps1 code files; can you identify the parts that are exactly the same or very similar and could be used as reusable and common components; place them under the co-vm folder; and perform a careful refactoring operation with maximum effort so that the Windows and Linux sides use those parts in common? However, the current behavior must be preserved completely; there must be no regression in any way; absolutely no regression should be caused!
 
 ````
 
 **Assistant Summary**
 
-<proposed_plan> ## Refactor Plan: Maximize `lin/win` Reuse via `co-vm` While Preserving Behavior ### Summary The shared flow, decision logic, and message behavior in `clagnos-lin.ps1` and `clagnos-win.ps1` will be moved under `co-vm`. Goal: maximum consolidation **including Step 1**, but the OS/platform-specific sections will remain sepa...
+<proposed_plan> ## Refactor Plan: Maximize `lin/win` Reuse via `co-vm` While Preserving Behavior ### Summary The shared flow, decision logic, and message behavior in `prodicloud-lin.ps1` and `prodicloud-win.ps1` will be moved under `co-vm`. Goal: maximum consolidation **including Step 1**, but the OS/platform-specific sections will remain sepa...
 
 ### 2026-03-03 13:58 UTC
 **User Prompt**
@@ -1017,20 +1017,20 @@ Implement the plan.
 
 **Assistant Summary**
 
-The plan was implemented and the consolidation refactor was completed; the shared main steps in the `lin` and `win` flows were moved under `co-vm` in a behavior-preserving manner. Main files changed: - [clagnos-co-orchestration.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-orchestration.ps1) - [clagnos-lin.ps1](<user-home>\source\az\clagnos...
+The plan was implemented and the consolidation refactor was completed; the shared main steps in the `lin` and `win` flows were moved under `co-vm` in a behavior-preserving manner. Main files changed: - [prodicloud-co-orchestration.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-orchestration.ps1) - [prodicloud-lin.ps1](<user-home>\source\az\prodicloud...
 
 ### 2026-03-03 14:09 UTC
 **User Prompt**
 
 ````text
-analyze and fix: when I look at the `clagnos-win.ps1` file, I see that it is 35 KB, whereas when I check the `clagnos-lin.ps1` file, I see that it is 14 KB.
+analyze and fix: when I look at the `prodicloud-win.ps1` file, I see that it is 35 KB, whereas when I check the `prodicloud-lin.ps1` file, I see that it is 14 KB.
 Although in our previous task we aimed for maximum code reuse and collected all similar or identical behaviors into a shared orchestration script, why is there still such a size difference? Is this difference in file and code size caused by OS-specific, platform-specific, Linux/Windows-specific differences? Or are there still some pieces of code left on both sides that we could orchestrate from a shared place? (`lin` - `win`)?
 
 ````
 
 **Assistant Summary**
 
-Analysis + fix completed. Current sizes: - `win-vm/clagnos-win.ps1`: **34,898 bytes** - `lin-vm/clagnos-lin.ps1`: **13,505 bytes** Why there is still a large difference: - The main source of the difference is truly **OS/platform-specific** content. - On the Windows side especially: - **Step 6**: 429 lines - **Step 8**: 284 lines - On the Linux side: ...
+Analysis + fix completed. Current sizes: - `win-vm/prodicloud-win.ps1`: **34,898 bytes** - `lin-vm/prodicloud-lin.ps1`: **13,505 bytes** Why there is still a large difference: - The main source of the difference is truly **OS/platform-specific** content. - On the Windows side especially: - **Step 6**: 429 lines - **Step 8**: 284 lines - On the Linux side: ...
 
 ### 2026-03-03 14:14 UTC
 **User Prompt**
@@ -1042,7 +1042,7 @@ analysis: what areas are left that could still be unified if we wanted to push o
 
 **Assistant Summary**
 
-Yes, there is still room for consolidation. Brief technical picture: - Total lines: `win=921`, `lin=412`. - Almost all of the difference is in Step 6 and Step 8: - Step 6: `win=429`, `lin=78` - Step 8: `win=284`, `lin=119` - The other steps are already very close/identical (`Step 0-4` have exactly the same line counts). References: - [clagnos-win.ps1#L13...
+Yes, there is still room for consolidation. Brief technical picture: - Total lines: `win=921`, `lin=412`. - Almost all of the difference is in Step 6 and Step 8: - Step 6: `win=429`, `lin=78` - Step 8: `win=284`, `lin=119` - The other steps are already very close/identical (`Step 0-4` have exactly the same line counts). References: - [prodicloud-win.ps1#L13...
 
 ### 2026-03-03 14:20 UTC
 **User Prompt**
@@ -1066,7 +1066,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-I implemented the plan: I moved the large Step `5/6/8` bodies on the `lin`/`win` side to a shared task-first structure and turned the two scripts into thin wrappers. **What Was Done** - Added a new shared module: [co-vm/clagnos-co-guest.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-guest.ps1) - Linux cloud-init content generation - W...
+I implemented the plan: I moved the large Step `5/6/8` bodies on the `lin`/`win` side to a shared task-first structure and turned the two scripts into thin wrappers. **What Was Done** - Added a new shared module: [co-vm/prodicloud-co-guest.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-guest.ps1) - Linux cloud-init content generation - W...
 
 ### 2026-03-03 14:49 UTC
 **User Prompt**
@@ -1130,7 +1130,7 @@ update: contextually in different steps as well; whichever values are being read
 
 **Assistant Summary**
 
-I applied the update you wanted: on a step basis, contextual values are now printed to the console on first reference. - Shared first-use tracing was added and wired into Step 2/3/4/7/9: [clagnos-co-orchestration.ps1](/<user-home>/source/az/clagnos/co-vm/clagnos-co-orchestration.ps1:157), [clagnos-co-orchestration.ps1](/C:/Users/has...
+I applied the update you wanted: on a step basis, contextual values are now printed to the console on first reference. - Shared first-use tracing was added and wired into Step 2/3/4/7/9: [prodicloud-co-orchestration.ps1](/<user-home>/source/az/prodicloud/co-vm/prodicloud-co-orchestration.ps1:157), [prodicloud-co-orchestration.ps1](/C:/Users/has...
 
 ### 2026-03-03 15:16 UTC
 **User Prompt**
@@ -1150,7 +1150,7 @@ The probable cause was that the `az account show` / `az account tenant list` cal
 **User Prompt**
 
 ````text
-fix test update improve: I ran `clagnos-win.cmd --auto`; and I encountered a number of errors; run this Windows side yourself, analyze it; evaluate the results, apply the fixes, and run it again; within this loop, resolve these issues and inform me as well about the causes of the errors and how they were fixed...
+fix test update improve: I ran `prodicloud-win.cmd --auto`; and I encountered a number of errors; run this Windows side yourself, analyze it; evaluate the results, apply the fixes, and run it again; within this loop, resolve these issues and inform me as well about the causes of the errors and how they were fixed...
 *current error outputs:
 ........
 Substep mode is not enabled: Step 8 tasks will run from the VM update script file.
@@ -1170,7 +1170,7 @@ At C:\Packages\Plugins\Microsoft.CPlat.Core.RunCommandWindows\1.1.22\Downloads\s
     + CategoryInfo          : OperationStopped: (Adding 'examplevm\...th exit code 2.:String) [], RuntimeException
     + FullyQualifiedErrorId : Adding 'examplevm\manager' to 'Administrators' failed with exit code 2.
 Suggested action: Review the related task in the log file and fix the command.
-<user-home>\source\az\clagnos>
+<user-home>\source\az\prodicloud>
 
 ````
 
@@ -1183,7 +1183,7 @@ I ran the Windows side live and fixed the error. **Root cause** - In the Windows
 
 ````text
 *improve ui verbosity: please look at the latest logs from what I ran on the Windows side; reduce and optimize the overwhelming, duplicate output: each parameter value, environment variable, or fixed setting should appear only once; only show it again if there is a change/update to the relevant value; in other words, make the logs useful, make sure they are shown, and do not lose any information.
-*test action: then run the clagnos-lin.cmd --auto command to start an end-to-end Linux VM installation and configuration; try to complete the test successfully by fixing any issues that come up...
+*test action: then run the prodicloud-lin.cmd --auto command to start an end-to-end Linux VM installation and configuration; try to complete the test successfully by fixing any issues that come up...
 
 ````
 
@@ -1236,7 +1236,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-I implemented the plan. - A new comprehensive UX/performance task was added to the Windows VM update flow: `09-configure-ux-windows` - File: [clagnos-co-guest.ps1](/<user-home>/source/az/clagnos/co-vm/clagnos-co-guest.ps1:515) - The following headings were added within this task: - Explorer: `This PC`, hidden+protected files, extensions visible...
+I implemented the plan. - A new comprehensive UX/performance task was added to the Windows VM update flow: `09-configure-ux-windows` - File: [prodicloud-co-guest.ps1](/<user-home>/source/az/prodicloud/co-vm/prodicloud-co-guest.ps1:515) - The following headings were added within this task: - Explorer: `This PC`, hidden+protected files, extensions visible...
 
 ### 2026-03-03 18:42 UTC
 **User Prompt**
@@ -1299,7 +1299,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Plan implemented and committed. - Windows Step 8 task catalog was expanded in [co-vm/clagnos-co-guest.ps1](<user-home>/source/az/clagnos/co-vm/clagnos-co-guest.ps1): - Added one private local-only accessibility package, extra Chocolatey packages (`ollama`, `sysinternals`, `powershell-core`, `io-unlocker`, `gh`, `ffmpeg`, `7zip`, `azure-cli`), Chrome install ...
+Plan implemented and committed. - Windows Step 8 task catalog was expanded in [co-vm/prodicloud-co-guest.ps1](<user-home>/source/az/prodicloud/co-vm/prodicloud-co-guest.ps1): - Added one private local-only accessibility package, extra Chocolatey packages (`ollama`, `sysinternals`, `powershell-core`, `io-unlocker`, `gh`, `ffmpeg`, `7zip`, `azure-cli`), Chrome install ...
 
 ### 2026-03-03 19:13 UTC
 **User Prompt**
@@ -1311,21 +1311,21 @@ feat: just as "f" enables re-filtering on the VM type SKU selection screen; plea
 
 **Assistant Summary**
 
-Completed. - `r=change region` was added to the SKU selection screen. - When `r` is entered, it goes back one step from the SKU screen to region selection. - The existing `f=change filter` behavior is preserved. Updated files: - [co-vm/clagnos-co-sku-picker.ps1](<user-home>/source/az/clagnos/co-vm/clagnos-co-sku-picker.ps1) - [co-vm/az-...
+Completed. - `r=change region` was added to the SKU selection screen. - When `r` is entered, it goes back one step from the SKU screen to region selection. - The existing `f=change filter` behavior is preserved. Updated files: - [co-vm/prodicloud-co-sku-picker.ps1](<user-home>/source/az/prodicloud/co-vm/prodicloud-co-sku-picker.ps1) - [co-vm/az-...
 
 ### 2026-03-03 19:55 UTC
 **User Prompt**
 
 ````text
-fix test improve update: I ran the `clagnos-win` command with `--auto`; although the process completed successfully, some sub-steps in step 8, meaning some `vm-update` tasks, appear not to have worked correctly, not to have been installed correctly, or not to have been configured correctly; I also saved the log file for the relevant steps here: `./clagnos-win.log`
-*what I expect from you: using the `"clagnos-win.cmd --auto"` command, by performing real e2e tests and collecting the generated logs; I want you to solve the problems in the sub-tasks in step 8 one by one.
+fix test improve update: I ran the `prodicloud-win` command with `--auto`; although the process completed successfully, some sub-steps in step 8, meaning some `vm-update` tasks, appear not to have worked correctly, not to have been installed correctly, or not to have been configured correctly; I also saved the log file for the relevant steps here: `./prodicloud-win.log`
+*what I expect from you: using the `"prodicloud-win.cmd --auto"` command, by performing real e2e tests and collecting the generated logs; I want you to solve the problems in the sub-tasks in step 8 one by one.
 -based on the logs; think deeply about the solutions, do deep web research; instead of trying frequently: find, design, and implement robust solutions, and then run this script with the `--auto` parameter as needed; you may not have much chance to try often because real e2e tests take a while!
 
 ````
 
 **Assistant Summary**
 
-<proposed_plan> ## Windows Auto E2E Reliability Plan for Step 8 Tasks ### Summary According to the `clagnos-win.log` review, the main issue is that although Step 8 completes successfully, some tasks cannot complete the actual installation/configuration. The main axis of the root causes: - Azure Run Command runs in the `SYSTEM` context on Windows (...
+<proposed_plan> ## Windows Auto E2E Reliability Plan for Step 8 Tasks ### Summary According to the `prodicloud-win.log` review, the main issue is that although Step 8 completes successfully, some tasks cannot complete the actual installation/configuration. The main axis of the root causes: - Azure Run Command runs in the `SYSTEM` context on Windows (...
 
 ### 2026-03-03 20:01 UTC
 **User Prompt**
@@ -1347,7 +1347,7 @@ fix test update improve:
 `az vm run-command` calls are taking far too long this way.
 Let's temporarily change step 8: at that exact point, let's establish an SSH connection using the PuTTY command line; then run the VM update scripts we generated in steps 5 and 6, along with any other necessary PS scripts, step by step on the remote VM and analyze what is happening based on the results we get.
 In other words, let's test and confirm in that remote PowerShell session we connect to over the PuTTY SSH connection that all substeps under step 8 execute successfully on the remote VM; then we can revert the script to its original form and make all of this run via `az vm run-command`.
-Also, let's add a `--ssh` parameter to the `clagnos-*` scripts: this option should let us bypass the sluggishness of `az vm run-command` and allow us to execute all substeps in step 8 directly with PuTTY...
+Also, let's add a `--ssh` parameter to the `prodicloud-*` scripts: this option should let us bypass the sluggishness of `az vm run-command` and allow us to execute all substeps in step 8 directly with PuTTY...
 
 ````
 
@@ -1378,7 +1378,7 @@ just like I said above and as you planned: run the Windows side with `--auto --u
 
 **Assistant Summary**
 
-I implemented the requested flow and tested it live. - I integrated a `Paramiko`-based solution as the new portable SSH client. - I verified SSH on the existing VM: `whoami -> examplevm\\manager`. - Then I repeatedly ran `clagnos-win.cmd --auto --update --substep --ssh` live and patched the Step 8 issues....
+I implemented the requested flow and tested it live. - I integrated a `Paramiko`-based solution as the new portable SSH client. - I verified SSH on the existing VM: `whoami -> examplevm\\manager`. - Then I repeatedly ran `prodicloud-win.cmd --auto --update --substep --ssh` live and patched the Step 8 issues....
 
 ### 2026-03-04 06:55 UTC
 **User Prompt**
@@ -1403,7 +1403,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. - In the Windows Step 8 `--ssh --substep` flow, a single SSH session is now opened, task scripts are sent one by one over stdin, live stdout/stderr is read, and if necessary the session is reopened and processing continues: [clagnos-co-ssh.ps1](<user-home>\source\az\clagnos\co-vm\clagnos-co-ssh.ps1:279), [clagnos-co-ssh.ps...
+Implemented. - In the Windows Step 8 `--ssh --substep` flow, a single SSH session is now opened, task scripts are sent one by one over stdin, live stdout/stderr is read, and if necessary the session is reopened and processing continues: [prodicloud-co-ssh.ps1](<user-home>\source\az\prodicloud\co-vm\prodicloud-co-ssh.ps1:279), [prodicloud-co-ssh.ps...
 
 ### 2026-03-04 07:38 UTC
 **User Prompt**
@@ -1448,7 +1448,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-The plan was implemented and committed. **What Changed** - The Win flow was migrated to the new semantics: `--auto`, `--update/-u`, and an explicit destructive rebuild flow; `--ssh` and `--substep` were removed on the Win side. [<user-home>\source\az\clagnos\win-vm\clagnos-win.ps1](<user-home>\source\az\clagnos\win-vm\clagnos-win.ps1) - Step 8 Win behavior was clarified: ...
+The plan was implemented and committed. **What Changed** - The Win flow was migrated to the new semantics: `--auto`, `--update/-u`, and an explicit destructive rebuild flow; `--ssh` and `--substep` were removed on the Win side. [<user-home>\source\az\prodicloud\win-vm\prodicloud-win.ps1](<user-home>\source\az\prodicloud\win-vm\prodicloud-win.ps1) - Step 8 Win behavior was clarified: ...
 
 ### 2026-03-04 09:34 UTC
 **User Prompt**
@@ -1460,7 +1460,7 @@ test: now run the Windows side using only the --auto parameter: if issues come u
 
 **Assistant Summary**
 
-I ran the `win` side live for a few rounds with `--auto`, patched the errors, and ran it again. Latest status: - Command: `powershell -NoProfile -ExecutionPolicy Bypass -File .\win-vm\clagnos-win.ps1 --auto` - Exit code: `0` (successful) - Step 8 summary: `STEP8_SUMMARY:success=13;warning=0;error=0;reboot=0` - VM connection: - SSH `man...
+I ran the `win` side live for a few rounds with `--auto`, patched the errors, and ran it again. Latest status: - Command: `powershell -NoProfile -ExecutionPolicy Bypass -File .\win-vm\prodicloud-win.ps1 --auto` - Exit code: `0` (successful) - Step 8 summary: `STEP8_SUMMARY:success=13;warning=0;error=0;reboot=0` - VM connection: - SSH `man...
 
 ### 2026-03-04 10:21 UTC
 **User Prompt**
@@ -1484,15 +1484,15 @@ test: now let's test this new update on the Windows side with the --auto paramet
 
 **Assistant Summary**
 
-I ran the test on the `win-vm` side: ```powershell powershell -NoProfile -ExecutionPolicy Bypass -File .\win-vm\clagnos-win.ps1 --auto ``` Result: - Exit code: `0` (successful) - Duration: ~`251s` - Step 8 summary: `STEP8_SUMMARY:success=13;warning=0;error=0;reboot=0` - VM connection outputs were generated (SSH 444 and RDP 3389) Pre...
+I ran the test on the `win-vm` side: ```powershell powershell -NoProfile -ExecutionPolicy Bypass -File .\win-vm\prodicloud-win.ps1 --auto ``` Result: - Exit code: `0` (successful) - Duration: ~`251s` - Step 8 summary: `STEP8_SUMMARY:success=13;warning=0;error=0;reboot=0` - VM connection outputs were generated (SSH 444 and RDP 3389) Pre...
 
 ### 2026-03-04 10:39 UTC
 **User Prompt**
 
 ````text
 feat: let's unify the Windows and Linux sides under a single interface:
-*let only two main launch scripts remain now, named `cg.cmd` and `clagnos.ps1`: make it possible to select `vm_os_type=[windows|linux]` with the `--windows` or `--linux` parameters. This setting should also be storable in `.env`.
--let's merge all `ps1` code under `co-vm`, `lin-vm`, and `win-vm` into this `clagnos.ps1`: this way, let's increase portability...
+*let only two main launch scripts remain now, named `pd.cmd` and `prodicloud.ps1`: make it possible to select `vm_os_type=[windows|linux]` with the `--windows` or `--linux` parameters. This setting should also be storable in `.env`.
+-let's merge all `ps1` code under `co-vm`, `lin-vm`, and `win-vm` into this `prodicloud.ps1`: this way, let's increase portability...
 *let's also split the `vm init` and `vm update` tasks into files: inside the `.\linux` and `.\windows` folders, the `vm init` and `vm update` tasks should exist as `*.sh` and `*.ps1` files; file names should follow the format `{task number-task description in 2-5 English words using Latin letters}`.
 -according to the "vm os type" selected via parameters or through `.env`: let us run the `vm init` tasks under the relevant folders one by one using `az vm run-command`; and let us run the `vm update` tasks one by one using `pyssh`...
 **after this final structural change, let's analyze the code from start to finish and apply a deep end-to-end refactor so it can be simplified and streamlined, allowing both platforms to run through a single script. But there must never be any regression in functionality; we must absolutely not cause a regression under any circumstances!
@@ -1501,7 +1501,7 @@ feat: let's unify the Windows and Linux sides under a single interface:
 
 **Assistant Summary**
 
-<proposed_plan> ## Unified `clagnos` Refactor Plan (Single Entry, No Regression) ### Summary This refactor will replace split Linux/Windows launch flows with one unified entrypoint (`cg.cmd` + `clagnos.ps1`), migrate guest initialization/update logic into OS-specific task files under `.\linux` and `.\windows`, and pr...
+<proposed_plan> ## Unified `prodicloud` Refactor Plan (Single Entry, No Regression) ### Summary This refactor will replace split Linux/Windows launch flows with one unified entrypoint (`pd.cmd` + `prodicloud.ps1`), migrate guest initialization/update logic into OS-specific task files under `.\linux` and `.\windows`, and pr...
 
 ### 2026-03-04 10:55 UTC
 **User Prompt**
@@ -1513,19 +1513,19 @@ Implement the plan.
 
 **Assistant Summary**
 
-I implemented the plan and completed the transition to a single architecture. **Implemented** - Switched to a single entrypoint: - [cg.cmd](/<user-home>/source/az/clagnos/cg.cmd) - [clagnos.ps1](/<user-home>/source/az/clagnos/clagnos.ps1) - Linux/Windows flows were unified in a single script (`--windows` / `--linux`, `VM_OS_TYPE` support from `.env`...
+I implemented the plan and completed the transition to a single architecture. **Implemented** - Switched to a single entrypoint: - [pd.cmd](/<user-home>/source/az/prodicloud/pd.cmd) - [prodicloud.ps1](/<user-home>/source/az/prodicloud/prodicloud.ps1) - Linux/Windows flows were unified in a single script (`--windows` / `--linux`, `VM_OS_TYPE` support from `.env`...
 
 ### 2026-03-04 11:26 UTC
 **User Prompt**
 
 ````text
-test: now let's do a trial run with clagnos --auto: using the preconfigured Windows VM setup. If any issues come up, let's find the information ourselves, update the .env file, and run it again with --auto.
+test: now let's do a trial run with prodicloud --auto: using the preconfigured Windows VM setup. If any issues come up, let's find the information ourselves, update the .env file, and run it again with --auto.
 
 ````
 
 **Assistant Summary**
 
-(Waiting for your confirmation about `README.md` state before I continue with the `clagnos --auto` test.)
+(Waiting for your confirmation about `PRODICLOUD.md` state before I continue with the `prodicloud --auto` test.)
 
 ### 2026-03-04 12:28 UTC
 **User Prompt**
@@ -1578,7 +1578,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented and committed. Commit: - `8d8416a` — `refactor(win): split init/update tasks, remove output suppression, and optimize docker/wsl checks` What I changed: - Split Windows init into standalone tasks under `windows/init`: - [00-ensure-users-local.ps1](<user-home>\source\az\clagnos\windows\init\00-ensu...
+Implemented and committed. Commit: - `8d8416a` — `refactor(win): split init/update tasks, remove output suppression, and optimize docker/wsl checks` What I changed: - Split Windows init into standalone tasks under `windows/init`: - [00-ensure-users-local.ps1](<user-home>\source\az\prodicloud\windows\init\00-ensu...
 
 ### 2026-03-04 13:38 UTC
 **User Prompt**
@@ -1591,7 +1591,7 @@ continue the remaining --auto test from where you left off after this change...
 
 **Assistant Summary**
 
-I implemented it, tested it, and committed it. - Commit: `23d6e44` - Main changes: - Step 8 init now runs in batch in a single `az vm run-command` call: [clagnos.ps1:644](<user-home>\source\az\clagnos\clagnos.ps1:644) - The `wmic not recognized` output is treated as benign in the run-command parser, preventing a false fail: [clagnos....
+I implemented it, tested it, and committed it. - Commit: `23d6e44` - Main changes: - Step 8 init now runs in batch in a single `az vm run-command` call: [prodicloud.ps1:644](<user-home>\source\az\prodicloud\prodicloud.ps1:644) - The `wmic not recognized` output is treated as benign in the run-command parser, preventing a false fail: [prodicloud....
 
 ### 2026-03-04 16:14 UTC
 **User Prompt**
@@ -1643,7 +1643,7 @@ it is still stuck at the same place; you can also check the logs: for God's sake
 
 **Assistant Summary**
 
-I found and fixed the root cause: the hang was not inside `Task15`, but because the parser sometimes could not see the end due to `NUL` (`\0`) appearing at the start of the `CO_VM_TASK_END` marker line. Because of this, the e2e flow was timing out. The fixes I made: - Added marker/parsing cleanup: [clagnos.ps1](<user-home>\source\az\clagnos\clagnos...
+I found and fixed the root cause: the hang was not inside `Task15`, but because the parser sometimes could not see the end due to `NUL` (`\0`) appearing at the start of the `CO_VM_TASK_END` marker line. Because of this, the e2e flow was timing out. The fixes I made: - Added marker/parsing cleanup: [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud...
 
 ### 2026-03-04 21:08 UTC
 **User Prompt**
@@ -1655,7 +1655,7 @@ analysis: aside from the issue of using different SSH clients; is there anything
 
 **Assistant Summary**
 
-Yes, aside from the SSH client issue, a few lingering points remain. 1. The `substep/ssh` legacy still leaves traces in the code (even if it is not used in the active flow). - In [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1:5233), `Show-CoVmRuntimeConfigurationSnapshot` still carries the `SubstepMode` / `SshMode` parameters. - [clagnos....
+Yes, aside from the SSH client issue, a few lingering points remain. 1. The `substep/ssh` legacy still leaves traces in the code (even if it is not used in the active flow). - In [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1:5233), `Show-CoVmRuntimeConfigurationSnapshot` still carries the `SubstepMode` / `SshMode` parameters. - [prodicloud....
 
 ### 2026-03-04 22:22 UTC
 **User Prompt**
@@ -1679,20 +1679,20 @@ task: let's make another improvement on pyssh like this: if the other side happe
 
 **Assistant Summary**
 
-Implemented and committed: `195e5cf` What changed: 1. I kept the progress spinner lines out of the transcript - Transient lines like `|\-/` are no longer written to the log; they are shown only in the live console. - Implementation: [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) 2. I adjusted the Windows update task order to the arrangement you wanted...
+Implemented and committed: `195e5cf` What changed: 1. I kept the progress spinner lines out of the transcript - Transient lines like `|\-/` are no longer written to the log; they are shown only in the live console. - Implementation: [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) 2. I adjusted the Windows update task order to the arrangement you wanted...
 
 ### 2026-03-04 23:22 UTC
 **User Prompt**
 
 ````text
 task: from now on, make the ./tools/install-pyssh-tools.ps1 file do the following: create a Python venv using the Python installed on the system; install all pip requirements for the ssh_client.py script under pyssh; in other words, make the SSH client fully self-contained, independent, stand-alone, and fully portable so it runs that way; finish this by running a simple isolated SSH connection test.
-test: then run the clagnos explicit destructive rebuild acceptance test in auto mode, confirm that our e2e live rebuild test also succeeds, and inform me.
+test: then run the prodicloud explicit destructive rebuild acceptance test in auto mode, confirm that our e2e live rebuild test also succeeds, and inform me.
 
 ````
 
 **Assistant Summary**
 
-I implemented it and tested it. 1. Code update - [install-pyssh-tools.ps1](<user-home>\source\az\clagnos\tools\install-pyssh-tools.ps1): - Creates `tools/pyssh/.venv` with the system Python. - Installs the pip dependencies in [requirements.txt](<user-home>\source\az\clagnos\tools\pyssh\requirements.txt) (`parami...
+I implemented it and tested it. 1. Code update - [install-pyssh-tools.ps1](<user-home>\source\az\prodicloud\tools\install-pyssh-tools.ps1): - Creates `tools/pyssh/.venv` with the system Python. - Installs the pip dependencies in [requirements.txt](<user-home>\source\az\prodicloud\tools\pyssh\requirements.txt) (`parami...
 
 ### 2026-03-05 00:02 UTC
 **User Prompt**
@@ -1704,7 +1704,7 @@ fix: when writing logs to the screen, you don't need to write " [new]" for newly
 
 **Assistant Summary**
 
-I made the requested fix. - The ` [new]` / ` [updated]` tags were removed from the log lines. - The rest of the line formatting was preserved. - Updated file: [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) Commit: - `a00f492` — `fix: remove [new]/[updated] suffixes from console value logs` I did not run tests (...
+I made the requested fix. - The ` [new]` / ` [updated]` tags were removed from the log lines. - The rest of the line formatting was preserved. - Updated file: [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) Commit: - `a00f492` — `fix: remove [new]/[updated] suffixes from console value logs` I did not run tests (...
 
 ### 2026-03-05 00:03 UTC
 **User Prompt**
@@ -1716,7 +1716,7 @@ fix: you don't need to phrase it as "Step value usage " in the logs; clean up th
 
 **Assistant Summary**
 
-I made the fix. - The `Step value usage ...` headings in the log were removed entirely. - The value lines (`- Key = Value`) are preserved exactly. - File: [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) Commit: - `a6b910b` — `fix: remove step value usage heading from console logs`
+I made the fix. - The `Step value usage ...` headings in the log were removed entirely. - The value lines (`- Key = Value`) are preserved exactly. - File: [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) Commit: - `a6b910b` — `fix: remove step value usage heading from console logs`
 
 ### 2026-03-05 00:10 UTC
 **User Prompt**
@@ -1729,19 +1729,19 @@ fix: there is a phrase like this in the logs: "VM power state: VM running (attem
 
 **Assistant Summary**
 
-I fixed it. - The `VM power state ... (attempt x/y)` check is now capped at a maximum of `3` attempts. - Both the call site and the function itself are capped: - Post-reboot call: `-MaxAttempts 3` - `Wait-CoVmVmRunningState` default: `3` and hard cap: `if ($MaxAttempts -gt 3) { $MaxAttempts = 3 }` - File: [clagnos.ps1](<user-home>\so...
+I fixed it. - The `VM power state ... (attempt x/y)` check is now capped at a maximum of `3` attempts. - Both the call site and the function itself are capped: - Post-reboot call: `-MaxAttempts 3` - `Wait-CoVmVmRunningState` default: `3` and hard cap: `if ($MaxAttempts -gt 3) { $MaxAttempts = 3 }` - File: [prodicloud.ps1](<user-home>\so...
 
 ### 2026-03-05 00:12 UTC
 **User Prompt**
 
 ````text
-task: please make the explicit destructive rebuild flow the default behavior when clagnos is run interactively.
+task: please make the explicit destructive rebuild flow the default behavior when prodicloud is run interactively.
 
 ````
 
 **Assistant Summary**
 
-Completed. - In interactive runs (when `--auto` is not used), if `--update` or the destructive rebuild flow is not specified, the default mode at that time became the destructive rebuild flow. - The current default behavior of auto mode was preserved. - File: [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) Commit: - `15247a9` — `feat: default interactive runs to destructive rebuild mode`
+Completed. - In interactive runs (when `--auto` is not used), if `--update` or the destructive rebuild flow is not specified, the default mode at that time became the destructive rebuild flow. - The current default behavior of auto mode was preserved. - File: [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) Commit: - `15247a9` — `feat: default interactive runs to destructive rebuild mode`
 
 ### 2026-03-05 00:27 UTC
 **User Prompt**
@@ -1753,7 +1753,7 @@ fix: in the `.env` and `.env.example` files; remove all env variables that are c
 
 **Assistant Summary**
 
-Completed. - Based on the usage scan, unused keys in `.env` were cleaned up: - `PUTTY_PLINK_PATH` - `PUTTY_PSCP_PATH` - File: [.env](<user-home>\source\az\clagnos\.env) - No unused keys were found in `.env.example`, so no changes were needed. - File: [.env.example](<user-home>\sou...
+Completed. - Based on the usage scan, unused keys in `.env` were cleaned up: - `PUTTY_PLINK_PATH` - `PUTTY_PSCP_PATH` - File: [.env](<user-home>\source\az\prodicloud\.env) - No unused keys were found in `.env.example`, so no changes were needed. - File: [.env.example](<user-home>\sou...
 
 ### 2026-03-05 00:29 UTC
 **User Prompt**
@@ -1765,7 +1765,7 @@ task: add `ssh_port=444` to the `.env` file; also make sure we use this value fr
 
 **Assistant Summary**
 
-Done. - I wrote `ssh_port=444` into `.env` (I changed the existing `SSH_PORT=444` line to this). - The application now actively uses this value: - It reads `ssh_port` first; if not present, it falls back to `SSH_PORT`. - Updated files: - [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) - [install-pyssh-tools.ps1](C:\Users...
+Done. - I wrote `ssh_port=444` into `.env` (I changed the existing `SSH_PORT=444` line to this). - The application now actively uses this value: - It reads `ssh_port` first; if not present, it falls back to `SSH_PORT`. - Updated files: - [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) - [install-pyssh-tools.ps1](C:\Users...
 
 ### 2026-03-05 00:33 UTC
 **User Prompt**
@@ -1777,7 +1777,7 @@ task: the install_pyssh_tool.ps1 script should be able to bring the pyssh tool t
 
 **Assistant Summary**
 
-The work is complete. - I cleaned the `tools/pyssh` folder and left only `ssh_client.py`. - Then I performed a fresh installation with [install-pyssh-tools.ps1](<user-home>\source\az\clagnos\tools\install-pyssh-tools.ps1): - `.venv` was recreated - `pip` and `requirements.txt` dependencies were installed - Isolated SSH tes...
+The work is complete. - I cleaned the `tools/pyssh` folder and left only `ssh_client.py`. - Then I performed a fresh installation with [install-pyssh-tools.ps1](<user-home>\source\az\prodicloud\tools\install-pyssh-tools.ps1): - `.venv` was recreated - `pip` and `requirements.txt` dependencies were installed - Isolated SSH tes...
 
 ### 2026-03-05 00:36 UTC
 **User Prompt**
@@ -1789,7 +1789,7 @@ fix: the name of the file that installs the tool should be exactly install-pyssh
 
 **Assistant Summary**
 
-I updated it as you requested. What changed: - Installer file name changed: - `tools/install-pyssh-tool.ps1` (new) - `tools/install-pyssh-tools.ps1` (old, removed) - Application reference updated: - [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) now calls the new file name. - Default behavior chan...
+I updated it as you requested. What changed: - Installer file name changed: - `tools/install-pyssh-tool.ps1` (new) - `tools/install-pyssh-tools.ps1` (old, removed) - Application reference updated: - [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) now calls the new file name. - Default behavior chan...
 
 ### 2026-03-05 00:59 UTC
 **User Prompt**
@@ -1807,11 +1807,11 @@ I ran the isolated test; results: - `powershell` (5.1): **successful** - NSG + a
 **User Prompt**
 
 ````text
-feat: let's add some commands to the clagnos script:
-the CLI invocation format should change to: clagnos [command] --option-name=value
+feat: let's add some commands to the prodicloud script:
+the CLI invocation format should change to: prodicloud [command] --option-name=value
 *the first command, which is also the current behavior, should be create; --auto should remain; the previous destructive rebuild parameter name should be changed to --purge, meaning that if the resource already exists, it should be deleted first before creating.
 *the second command should be update; it should do on all resources what the "create" command does, regardless of whether they already exist or not; it should support --auto; it should not support --purge; it should also do what the --update parameter does, and the --update parameter should be removed.
-*the third and new command should be change; for now it should be able to change the VM region or VM size; the syntax should be like this: clagnos change --vm-region=austriaeast; before moving, it should check whether there is availability in the target region, and if not, the user should be warned and the process should end; if there is availability, the current VM should first be shut down, it should wait until the move operation is completed, and the process should be completed by reporting the result of the move operation. if only --vm-region is written, meaning the parameter value is empty, then please show the region picker we use in interactive mode and let the user make the selection interactively.
+*the third and new command should be change; for now it should be able to change the VM region or VM size; the syntax should be like this: prodicloud change --vm-region=austriaeast; before moving, it should check whether there is availability in the target region, and if not, the user should be warned and the process should end; if there is availability, the current VM should first be shut down, it should wait until the move operation is completed, and the process should be completed by reporting the result of the move operation. if only --vm-region is written, meaning the parameter value is empty, then please show the region picker we use in interactive mode and let the user make the selection interactively.
 -change should also take another parameter in the form of --vm-size: it should behave exactly like --vm-size; if the parameter value is empty, it should show the application's VM size picker screen interactively. after the VM size is selected either as a parameter value or interactively, availability of the target VM size in the target region should be queried; if unavailable, warn and exit; if available, first shut down the VM, then perform the move operation, wait until the operation is finished, and close the process by showing the result to the user.
 *the fourth and again new command: exec --init-task=[task number] | --update-task=[task number]: this command should run the VM init or VM update task with the specified number. init-tasks run with az vm run-command; VM update tasks run by establishing a pyssh connection; in other words, it should run the way the script's e2e "create" command does. if no task number is provided as the parameter value, please open an interactive screen; list the existing tasks; run the task with the number I enter and exit.
 **important note: for the "change" command to work reliably and for operational safety; source and target region checks and source and target VM size checks must absolutely be performed; the process should start only after ensuring that the transition will complete smoothly, and if there is any possibility of a problem, the process should be managed properly; the user should be informed at every stage.
@@ -1820,7 +1820,7 @@ the CLI invocation format should change to: clagnos [command] --option-name=valu
 
 **Assistant Summary**
 
-<proposed_plan> ## clagnos CLI Refactor: `create / update / change / exec` ### Summary - Convert CLI to command-based format: `clagnos [command] --option-name=value`. - Enforce explicit command (no implicit default command). - Replace old mode switches with command semantics: - `create` supports `--purge` (renamed from ...
+<proposed_plan> ## prodicloud CLI Refactor: `create / update / change / exec` ### Summary - Convert CLI to command-based format: `prodicloud [command] --option-name=value`. - Enforce explicit command (no implicit default command). - Replace old mode switches with command semantics: - `create` supports `--purge` (renamed from ...
 
 ### 2026-03-05 10:33 UTC
 **User Prompt**
@@ -1832,7 +1832,7 @@ the plan looks good; one small addition: when changing the `vm` region and `vm` 
 
 **Assistant Summary**
 
-<proposed_plan> ## clagnos Command Model Refactor + Fast `change` Strategy ### Summary - CLI format will be command-first: `clagnos [command] --option=value`. - Required commands: `create`, `update`, `change`, `exec`. - Command is mandatory (`clagnos` alone will fail with usage). - Boolean options accept both styles: `--a...
+<proposed_plan> ## prodicloud Command Model Refactor + Fast `change` Strategy ### Summary - CLI format will be command-first: `prodicloud [command] --option=value`. - Required commands: `create`, `update`, `change`, `exec`. - Command is mandatory (`prodicloud` alone will fail with usage). - Boolean options accept both styles: `--a...
 
 ### 2026-03-05 10:35 UTC
 **User Prompt**
@@ -1844,13 +1844,13 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented in [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1). What changed: - New CLI model: `clagnos <command> --option=value` with strict long options. - Command parsing/help: [clagnos.ps1:10](<user-home>\source\az\clagnos\clagnos.ps1:10), [clagnos.ps1:1113](<user-home>\source\az\clagnos\clagnos.ps1:1113), [clagnos....
+Implemented in [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1). What changed: - New CLI model: `prodicloud <command> --option=value` with strict long options. - Command parsing/help: [prodicloud.ps1:10](<user-home>\source\az\prodicloud\prodicloud.ps1:10), [prodicloud.ps1:1113](<user-home>\source\az\prodicloud\prodicloud.ps1:1113), [prodicloud....
 
 ### 2026-03-05 11:14 UTC
 **User Prompt**
 
 ````text
-feat: we are adding two new parameters to the "create" and "update" clagnos commands:
+feat: we are adding two new parameters to the "create" and "update" prodicloud commands:
 *parameter name: --multi-action; the parameter values and their functions are as follows:
 =config: runs the configuration and validation operations at the beginning of the script and stops.
 =group: creates/updates the resource group and stops.
@@ -1865,7 +1865,7 @@ feat: we are adding two new parameters to the "create" and "update" clagnos comm
 
 **Assistant Summary**
 
-<proposed_plan> ## Add `--multi-action` / `--single-action` to `create` and `update` ### Summary Two new action parameters will be added to the `clagnos create` and `clagnos update` commands: - `--multi-action=<config|group|network|deploy|init|update|finish>` It will restart the flow from the beginning and run **cumulatively** up to the target action...
+<proposed_plan> ## Add `--multi-action` / `--single-action` to `create` and `update` ### Summary Two new action parameters will be added to the `prodicloud create` and `prodicloud update` commands: - `--multi-action=<config|group|network|deploy|init|update|finish>` It will restart the flow from the beginning and run **cumulatively** up to the target action...
 
 ### 2026-03-05 11:18 UTC
 **User Prompt**
@@ -1877,7 +1877,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. ### What I changed - Added `--multi-action` and `--single-action` support for `create` and `update` in [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1). - Supported action values (both params): - `config`, `group`, `network`, `deploy`, `init`, `update`, `finish` - Semantics implemented: - `--multi-...
+Implemented. ### What I changed - Added `--multi-action` and `--single-action` support for `create` and `update` in [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1). - Supported action values (both params): - `config`, `group`, `network`, `deploy`, `init`, `update`, `finish` - Semantics implemented: - `--multi-...
 
 ### 2026-03-05 11:33 UTC
 **User Prompt**
@@ -1889,7 +1889,7 @@ test: now let's try create --single-action=finish
 
 **Assistant Summary**
 
-The test completed successfully. Command I ran: - `cg.cmd create --single-action=finish --auto` Result: - As expected, only `Step 9/9` ran. - The flow stopped with `Stopped after single-action target 'finish'.` - The VM connection information was generated successfully. Key output: - Public IP: `<example-public-ip>` - SSH: - `..."
+The test completed successfully. Command I ran: - `pd.cmd create --single-action=finish --auto` Result: - As expected, only `Step 9/9` ran. - The flow stopped with `Stopped after single-action target 'finish'.` - The VM connection information was generated successfully. Key output: - Public IP: `<example-public-ip>` - SSH: - `..."
 
 ### 2026-03-05 11:35 UTC
 **User Prompt**
@@ -1901,7 +1901,7 @@ test: now let's also try the single-action parameter with config.
 
 **Assistant Summary**
 
-Test succeeded. Command run: - `cg.cmd create --single-action=config --auto` Verified behavior: - Only `Step 1/9` and `Step 2/9` ran. - It then stopped as expected: - `Stopped after single-action target 'config'.` Notable output: - `AzLocation = centralindia` - `VmSize = Standard_F2ams_v6` - `Vm...`
+Test succeeded. Command run: - `pd.cmd create --single-action=config --auto` Verified behavior: - Only `Step 1/9` and `Step 2/9` ran. - It then stopped as expected: - `Stopped after single-action target 'config'.` Notable output: - `AzLocation = centralindia` - `VmSize = Standard_F2ams_v6` - `Vm...`
 
 ### 2026-03-05 11:36 UTC
 **User Prompt**
@@ -1913,7 +1913,7 @@ test: now let's try single-action=group too.
 
 **Assistant Summary**
 
-Test succeeded. Command run: - `cg.cmd create --single-action=group --auto` Result: - As expected, only `Step 3/9` (resource group check) ran. - Because `rg-examplevm` already existed, the create step was skipped in default mode. - The flow stopped at the correct point: - `Stopped after single-action target 'group'.` Log file...
+Test succeeded. Command run: - `pd.cmd create --single-action=group --auto` Result: - As expected, only `Step 3/9` (resource group check) ran. - Because `rg-examplevm` already existed, the create step was skipped in default mode. - The flow stopped at the correct point: - `Stopped after single-action target 'group'.` Log file...
 
 ### 2026-03-05 11:37 UTC
 **User Prompt**
@@ -1925,7 +1925,7 @@ test: now let's try single-action=group as well; but this time with the update c
 
 **Assistant Summary**
 
-The test was successful. Executed command: - `cg.cmd update --single-action=group --auto` Verified behavior: - Only `Step 3/9` ran. - `ResourceExecutionMode = update` was passed correctly. - In update mode, the RG step ran `create-or-update` (`az group create`), then stopped. - The expected closing message appeared: -...
+The test was successful. Executed command: - `pd.cmd update --single-action=group --auto` Verified behavior: - Only `Step 3/9` ran. - `ResourceExecutionMode = update` was passed correctly. - In update mode, the RG step ran `create-or-update` (`az group create`), then stopped. - The expected closing message appeared: -...
 
 ### 2026-03-05 11:39 UTC
 **User Prompt**
@@ -1937,7 +1937,7 @@ test: now let's create one temporary diagnostic task under `vm update`; let it p
 
 **Assistant Summary**
 
-Completed. Changes made: - New temporary diagnostic task file added under `windows/update` - Contents: `Write-Host "hello world!"` Test run: - `cg.cmd exec --update-task=51 --auto` Result: - The task ran successfully. - The expected line appeared in the console output:...
+Completed. Changes made: - New temporary diagnostic task file added under `windows/update` - Contents: `Write-Host "hello world!"` Test run: - `pd.cmd exec --update-task=51 --auto` Result: - The task ran successfully. - The expected line appeared in the console output:...
 
 ### 2026-03-05 11:40 UTC
 **User Prompt**
@@ -1949,7 +1949,7 @@ fix: don't make me provide the `--auto` parameter when using `exec`; `--auto` sh
 
 **Assistant Summary**
 
-Fix applied. Change made: - In [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1), the default `auto` value for the `exec` command was set to `true`. - That means you no longer have to write `--auto` in the `exec` invocation. - If you want, you can still return to interactive behavior by passing `--auto=false`. Verification: - PS5 ...
+Fix applied. Change made: - In [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1), the default `auto` value for the `exec` command was set to `true`. - That means you no longer have to write `--auto` in the `exec` invocation. - If you want, you can still return to interactive behavior by passing `--auto=false`. Verification: - PS5 ...
 
 ### 2026-03-05 12:01 UTC
 **User Prompt**
@@ -1986,7 +1986,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented and committed. Commit: - `073f0d4` — `fix: harden region-change resource mover orchestration and stale cleanup` What I changed: - Updated [`clagnos.ps1`](<user-home>/source/az/clagnos/clagnos.ps1): - Added robust stale Resource Mover cleanup before new `change --vm-region` runs. - Enforced your requested be...
+Implemented and committed. Commit: - `073f0d4` — `fix: harden region-change resource mover orchestration and stale cleanup` What I changed: - Updated [`prodicloud.ps1`](<user-home>/source/az/prodicloud/prodicloud.ps1): - Added robust stale Resource Mover cleanup before new `change --vm-region` runs. - Enforced your requested be...
 
 ### 2026-03-05 17:23 UTC
 **User Prompt**
@@ -2005,7 +2005,7 @@ multiple-step planning and execution tasks: I intentionally stopped this working
 
 **Assistant Summary**
 
-<proposed_plan> ## Change Command Refactor Plan: Snapshot-Based Region Move (No Resource Mover) ### Summary Replace `change --vm-region` inside `clagnos.ps1` with a snapshot-copy based migration flow (same RG), using staged target resources, deterministic rollback, and final cutover that preserves original resource na...
+<proposed_plan> ## Change Command Refactor Plan: Snapshot-Based Region Move (No Resource Mover) ### Summary Replace `change --vm-region` inside `prodicloud.ps1` with a snapshot-copy based migration flow (same RG), using staged target resources, deterministic rollback, and final cutover that preserves original resource na...
 
 ### 2026-03-05 18:00 UTC
 **User Prompt**
@@ -2096,7 +2096,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented in commit `12f2dd5` with the planned refactor. - Updated naming engine in [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1): - Added static `REGION_CODE` map + resolver. - Added template/token resolvers for `{SERVER_NAME}`, `{REGION_CODE}`, `{N}`. - Added per-resource-type `nX` auto-index allocator. ...
+Implemented in commit `12f2dd5` with the planned refactor. - Updated naming engine in [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1): - Added static `REGION_CODE` map + resolver. - Added template/token resolvers for `{SERVER_NAME}`, `{REGION_CODE}`, `{N}`. - Added per-resource-type `nX` auto-index allocator. ...
 
 ### 2026-03-05 19:22 UTC
 **User Prompt**
@@ -2114,7 +2114,7 @@ feat: new commands, new parameters:
 
 **Assistant Summary**
 
-<proposed_plan> ## clagnos CLI Refactor Plan (change/exec/delete + step options) ### Summary We are moving the `clagnos` command surface to the new syntax and clarifying behaviors: - `change` enters an interactive selection flow when called without parameters. - `exec` opens a persistent pyssh REPL when called without parameters. - for `create/update`...
+<proposed_plan> ## prodicloud CLI Refactor Plan (change/exec/delete + step options) ### Summary We are moving the `prodicloud` command surface to the new syntax and clarifying behaviors: - `change` enters an interactive selection flow when called without parameters. - `exec` opens a persistent pyssh REPL when called without parameters. - for `create/update`...
 
 ### 2026-03-05 19:43 UTC
 **User Prompt**
@@ -2126,7 +2126,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented and committed. Commit: - `84e221e` — `feat: add delete command and interactive change/exec flows` What I changed: - Updated CLI surface in [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1): - Added `delete` command with `--target=group|network|vm|disk`, `--group`, `--yes`. - Removed `--purge` behavio...
+Implemented and committed. Commit: - `84e221e` — `feat: add delete command and interactive change/exec flows` What I changed: - Updated CLI surface in [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1): - Added `delete` command with `--target=group|network|vm|disk`, `--group`, `--yes`. - Removed `--purge` behavio...
 
 ### 2026-03-05 19:59 UTC
 **User Prompt**
@@ -2139,7 +2139,7 @@ action: delete untracked files from disk; if you haven't committed, commit; let 
 **Assistant Summary**
 
 The untracked file was deleted from disk:
-- `clagnos-mv-disk.ps1`
+- `prodicloud-mv-disk.ps1`
 
 The repo is now clean:
 - `git status` is empty (working tree clean)
@@ -2176,7 +2176,7 @@ On top of this plan, also add a `--help` parameter to the application: thanks to
 
 **Assistant Summary**
 
-<proposed_plan> ## clagnos Assurance + Help UX Plan (History Replay + Balanced Cleanup) ### Summary - Goal: produce evidence-based assurance for the changes from the last 2 days, fix any issues found without regressions, and clarify the `--help`/`help` help experience. - Working model: first a non-mutating audit, then your o...
+<proposed_plan> ## prodicloud Assurance + Help UX Plan (History Replay + Balanced Cleanup) ### Summary - Goal: produce evidence-based assurance for the changes from the last 2 days, fix any issues found without regressions, and clarify the `--help`/`help` help experience. - Working model: first a non-mutating audit, then your o...
 
 ### 2026-03-05 20:27 UTC
 **User Prompt**
@@ -2188,15 +2188,15 @@ Implement the plan.
 
 **Assistant Summary**
 
-I implemented the plan; updated the code, tested it, and committed it. **Commits** 1. `c0fb83f` — `feat(cli): add global --help and detailed help topic workflow` 2. `2253a0a` — `test(docs): expand help contracts and add quality replay audit scripts` **What Was Done** - Global `--help` support was added, `clagnos --help` quick gen...
+I implemented the plan; updated the code, tested it, and committed it. **Commits** 1. `c0fb83f` — `feat(cli): add global --help and detailed help topic workflow` 2. `2253a0a` — `test(docs): expand help contracts and add quality replay audit scripts` **What Was Done** - Global `--help` support was added, `prodicloud --help` quick gen...
 
 ### 2026-03-05 20:46 UTC
 **User Prompt**
 
 ````text
 feat: let's add a command called "config": it should run interactively; take us up to the resource-group creation step, provide the information, and exit.
-*when we then run the clagnos create auto command; all the settings we made with the config command should flow through and work end to end...
-*in fact, when we then run the clagnos create --to-step=vm-deploy command; it should use the information we previously configured with the config command, create the VM, and then politely inform us and exit before moving on to the vm-init stage.
+*when we then run the prodicloud create auto command; all the settings we made with the config command should flow through and work end to end...
+*in fact, when we then run the prodicloud create --to-step=vm-deploy command; it should use the information we previously configured with the config command, create the VM, and then politely inform us and exit before moving on to the vm-init stage.
 
 ````
 
@@ -2208,13 +2208,13 @@ feat: let's add a command called "config": it should run interactively; take us 
 **User Prompt**
 
 ````text
-A small addition: keep the clagnos help xxx syntax, but we don't need the clagnos help --command xxx syntax; remove it.
+A small addition: keep the prodicloud help xxx syntax, but we don't need the prodicloud help --command xxx syntax; remove it.
 
 ````
 
 **Assistant Summary**
 
-<proposed_plan> ## `config` Command + Help Syntax Simplification Plan ### Summary - Add new interactive `config` command that runs through Step 1 + Step 2 + Step 3 preview, saves changes to `.env`, prints effective configuration, and exits without provisioning/updating/deleting Azure resources. - Keep `clagnos help <c...
+<proposed_plan> ## `config` Command + Help Syntax Simplification Plan ### Summary - Add new interactive `config` command that runs through Step 1 + Step 2 + Step 3 preview, saves changes to `.env`, prints effective configuration, and exits without provisioning/updating/deleting Azure resources. - Keep `prodicloud help <c...
 
 ### 2026-03-05 20:58 UTC
 **User Prompt**
@@ -2250,7 +2250,7 @@ fix: the Azure Retail Pricing API keeps giving a 429 Too Many Requests error; is
 
 **Assistant Summary**
 
-I implemented the fix to reduce the 429 risk and committed it. - `Get-SkuPriceMap` no longer makes repeated chunk calls; it reads from the location-based cache: [clagnos.ps1](/<user-home>/source/az/clagnos/clagnos.ps1):5434 - A new throttling-aware call was added for Retail Pricing (HTTP `429/5xx` retry + `Retry-After` handling...
+I implemented the fix to reduce the 429 risk and committed it. - `Get-SkuPriceMap` no longer makes repeated chunk calls; it reads from the location-based cache: [prodicloud.ps1](/<user-home>/source/az/prodicloud/prodicloud.ps1):5434 - A new throttling-aware call was added for Retail Pricing (HTTP `429/5xx` retry + `Retry-After` handling...
 
 ### 2026-03-05 21:42 UTC
 **User Prompt**
@@ -2274,7 +2274,7 @@ fix bug: when I select the centralindia region and the b4as_v2 VM size in intera
 
 **Assistant Summary**
 
-I ran an isolated test and applied the patch that eliminates the crash risk with `AZ_LOCATION=''`. - The region picker now safely resolves the region name from the selected item (Name/name/DisplayName/fallback): [clagnos.ps1](/<user-home>/source/az/clagnos/clagnos.ps1:5202) - If `Select-AzLocationInteractive` returns an empty value, the user now...
+I ran an isolated test and applied the patch that eliminates the crash risk with `AZ_LOCATION=''`. - The region picker now safely resolves the region name from the selected item (Name/name/DisplayName/fallback): [prodicloud.ps1](/<user-home>/source/az/prodicloud/prodicloud.ps1:5202) - If `Select-AzLocationInteractive` returns an empty value, the user now...
 
 ### 2026-03-05 22:17 UTC
 **User Prompt**
@@ -2291,7 +2291,7 @@ Reason: Region name is invalid or unavailable.
 Detail: Region '' was not found.
 Suggested action: Select a valid region with az account list-locations.
 
-<user-home>\source\az\clagnos>
+<user-home>\source\az\prodicloud>
 
 ````
 
@@ -2303,13 +2303,13 @@ I fixed it. The root cause was that the context produced in Step 1 of the `confi
 **User Prompt**
 
 ````text
-test: now I want you to execute the clagnos create --to-step=vm-deploy --auto command as a test; whenever you encounter a breakage or issue, go back and make the necessary fixes, rerun the test with the same parameters; until you succeed...
+test: now I want you to execute the prodicloud create --to-step=vm-deploy --auto command as a test; whenever you encounter a breakage or issue, go back and make the necessary fixes, rerun the test with the same parameters; until you succeed...
 
 ````
 
 **Assistant Summary**
 
-The test completed and the command finished successfully: - Command run: `.\cg.cmd create --to-step=vm-deploy --auto` - Result: `exit code 0` (successful) - The flow stopped at the `vm-deploy` step as planned. - Log file: `<user-home>\source\az\clagnos\clagnos-log-06mar26-042606.txt` Created VM details: - VM: `examplevm` - R...
+The test completed and the command finished successfully: - Command run: `.\pd.cmd create --to-step=vm-deploy --auto` - Result: `exit code 0` (successful) - The flow stopped at the `vm-deploy` step as planned. - Log file: `<user-home>\source\az\prodicloud\prodicloud-log-06mar26-042606.txt` Created VM details: - VM: `examplevm` - R...
 
 ### 2026-03-05 22:32 UTC
 **User Prompt**
@@ -2365,7 +2365,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-The plan was implemented and committed. - `--perf` telemetry was expanded: - Command-level duration: [clagnos.ps1](/<user-home>/source/az/clagnos/clagnos.ps1:7818), [clagnos.ps1](/<user-home>/source/az/clagnos/clagnos.ps1:7923) - Step-level duration: [clagnos.ps1](/<user-home>/source/az/clagnos/clagnos.ps1:1393), [clagnos.ps1](/<user-home>/source/az/clagnos/...)
+The plan was implemented and committed. - `--perf` telemetry was expanded: - Command-level duration: [prodicloud.ps1](/<user-home>/source/az/prodicloud/prodicloud.ps1:7818), [prodicloud.ps1](/<user-home>/source/az/prodicloud/prodicloud.ps1:7923) - Step-level duration: [prodicloud.ps1](/<user-home>/source/az/prodicloud/prodicloud.ps1:1393), [prodicloud.ps1](/<user-home>/source/az/prodicloud/...)
 
 ### 2026-03-05 23:17 UTC
 **User Prompt**
@@ -2377,7 +2377,7 @@ Continue where you left off; I accidentally pressed the Esc key.
 
 **Assistant Summary**
 
-Added the `show` command and implemented the plan. - New command: `clagnos show [--group=<rg>] [--auto] [--perf]` - Full dump contents: - Azure account summary (subscription/tenant/user) - Application resource groups (default: `rg-*`, optionally `--group`) - All resources under each RG + counts by type - Status/su... for each VM
+Added the `show` command and implemented the plan. - New command: `prodicloud show [--group=<rg>] [--auto] [--perf]` - Full dump contents: - Azure account summary (subscription/tenant/user) - Application resource groups (default: `rg-*`, optionally `--group`) - All resources under each RG + counts by type - Status/su... for each VM
 
 ### 2026-03-05 23:47 UTC
 **User Prompt**
@@ -2391,14 +2391,14 @@ by the way, az vm skuslist takes too long, don't call it; instead, do it like th
 
 **Assistant Summary**
 
-I resolved the `show` performance issue by drilling down into it, then reran the command and verified it. 1. Bottleneck finding (`--perf`): - The most expensive step was the per-VM SKU query (`az vm list-skus`); additionally, some VM detail calls (especially `vm show -d`) were increasing the total duration. - Measurement (single group): `clagnos show --auto ...
+I resolved the `show` performance issue by drilling down into it, then reran the command and verified it. 1. Bottleneck finding (`--perf`): - The most expensive step was the per-VM SKU query (`az vm list-skus`); additionally, some VM detail calls (especially `vm show -d`) were increasing the total duration. - Measurement (single group): `prodicloud show --auto ...
 
 ### 2026-03-06 00:08 UTC
 **User Prompt**
 
 ````text
 test fix test: run this command; it can't find the task in the catalog, figure out why, fix it, and run it again.
-*command: clagnos create --single-step=vm-init --auto
+*command: prodicloud create --single-step=vm-init --auto
 *in fact, since we ran into this issue, I want to turn it into an opportunity:
 Let's cancel steps 5 and 6 and replace them with these:
 -actually, the process goes like this: at the very beginning: initial configuration=config; then resource group creation=group; then building network resources=network; then creating the vm=vm-deploy; then vm init tasks=vm-init; then vm update tasks=vm-update; and finally, a summary at the end of the flow=vm-summary.
@@ -2408,7 +2408,7 @@ Let's cancel steps 5 and 6 and replace them with these:
 
 **Assistant Summary**
 
-<proposed_plan> ### Plan: `vm-init` Catalog Bug Fix + Step Model Refactor (7-Step Flow) #### Summary The “catalog exists but task count=0” problem in the `clagnos create --single-step=vm-init --auto` flow is caused by step-local scope. To solve this at the root, we will refactor the step model into 7 action-oriented steps and `vm-init` / `v...
+<proposed_plan> ### Plan: `vm-init` Catalog Bug Fix + Step Model Refactor (7-Step Flow) #### Summary The “catalog exists but task count=0” problem in the `prodicloud create --single-step=vm-init --auto` flow is caused by step-local scope. To solve this at the root, we will refactor the step model into 7 action-oriented steps and `vm-init` / `v...
 
 ### 2026-03-06 00:12 UTC
 **User Prompt**
@@ -2444,7 +2444,7 @@ task: remove the --force parameters from the winget calls in the vm-update tasks
 
 **Assistant Summary**
 
-The update you requested has been made: `--force` was removed from all `winget` calls in the `vm-update` tasks. Places where `--force` was present (before): 1. [01-bootstrap-winget-system.ps1](<user-home>\source\az\clagnos\windows\update\01-bootstrap-winget-system.ps1) lines 161-162 `winget source reset --force` 2. one private local-only accessibility check task ...
+The update you requested has been made: `--force` was removed from all `winget` calls in the `vm-update` tasks. Places where `--force` was present (before): 1. [01-bootstrap-winget-system.ps1](<user-home>\source\az\prodicloud\windows\update\01-bootstrap-winget-system.ps1) lines 161-162 `winget source reset --force` 2. one private local-only accessibility check task ...
 
 ### 2026-03-06 00:54 UTC
 **User Prompt**
@@ -2456,7 +2456,7 @@ task: restore the --force parameters in the winget bootstrap; if there are any o
 
 **Assistant Summary**
 
-Completed. Change I made: - I restored the following call in [01-bootstrap-winget-system.ps1](<user-home>\source\az\clagnos\windows\update\01-bootstrap-winget-system.ps1): - `winget source reset --force` Report: - Among the `winget` calls in this file, the only call that supports `--force` is `winget source reset`. - `winget sourc...
+Completed. Change I made: - I restored the following call in [01-bootstrap-winget-system.ps1](<user-home>\source\az\prodicloud\windows\update\01-bootstrap-winget-system.ps1): - `winget source reset --force` Report: - Among the `winget` calls in this file, the only call that supports `--force` is `winget source reset`. - `winget sourc...
 
 ### 2026-03-06 00:56 UTC
 **User Prompt**
@@ -2469,7 +2469,7 @@ task: in the `vm-init` task, right after Chocolatey is installed, do we make a c
 **Assistant Summary**
 
 Yes, we do. In Windows `vm-init`, in the Chocolatey bootstrap task, immediately after installation, there is this call:
-- [02-bootstrap-choco-system.ps1](<user-home>\source\az\clagnos\windows\init\02-bootstrap-choco-system.ps1:17) `& $chocoExe feature enable -n allowGlobalConfirmation`
+- [02-bootstrap-choco-system.ps1](<user-home>\source\az\prodicloud\windows\init\02-bootstrap-choco-system.ps1:17) `& $chocoExe feature enable -n allowGlobalConfirmation`
 This setting enables **global confirmation**. However, despite this, s...
 
 ### 2026-03-06 09:28 UTC
@@ -2518,8 +2518,8 @@ I keep making important additions: make the console messages more consistent: fo
 
 ````text
 I have more important additions to the plan again:
-1- let's tag the resource group we create with this application with the phrase "clagnos"; that way, when listing resource groups, let's deal only with the resource groups created by our application; in that case, the "show" command should not unnecessarily traverse other resource groups. Apply this logic, meaning resource group creation and listing, everywhere it is done.
-2- let's add a command called "set": let it take --group=resource_group_name and --vm=vm_name as parameters; if no parameters are given, let it also work interactively; this command should apply some settings related to the VM: for example: clagnos set hibernation=on/off; nested-virtualization=on/off and similar practical and useful settings...
+1- let's tag the resource group we create with this application with the phrase "prodicloud"; that way, when listing resource groups, let's deal only with the resource groups created by our application; in that case, the "show" command should not unnecessarily traverse other resource groups. Apply this logic, meaning resource group creation and listing, everywhere it is done.
+2- let's add a command called "set": let it take --group=resource_group_name and --vm=vm_name as parameters; if no parameters are given, let it also work interactively; this command should apply some settings related to the VM: for example: prodicloud set hibernation=on/off; nested-virtualization=on/off and similar practical and useful settings...
 
 ````
 
@@ -2565,7 +2565,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented and committed: `7c76541` **What changed** - CLI surface finalized and legacy command surface removed in [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1): - Removed `change` command from public CLI. - Added `move`, `resize`, `set` commands. - `config`, `exec`, `show` no longer accept `--auto`. - Help...
+Implemented and committed: `7c76541` **What changed** - CLI surface finalized and legacy command surface removed in [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1): - Removed `change` command from public CLI. - Added `move`, `resize`, `set` commands. - `config`, `exec`, `show` no longer accept `--auto`. - Help...
 
 ### 2026-03-06 12:47 UTC
 **User Prompt**
@@ -2577,7 +2577,7 @@ update: to include the new resource group in our system: can you tag the resourc
 
 **Assistant Summary**
 
-Completed. Resource groups starting with `rg-examplevm` were tagged with the `managed-by=clagnos` tag and verified: - `rg-examplevm` -> `managed-by=clagnos` (`ok`) - `rg-examplevm-mr-centralindia` -> `managed-by=clagnos` (`ok`)
+Completed. Resource groups starting with `rg-examplevm` were tagged with the `managed-by=prodicloud` tag and verified: - `rg-examplevm` -> `managed-by=prodicloud` (`ok`) - `rg-examplevm-mr-centralindia` -> `managed-by=prodicloud` (`ok`)
 
 ### 2026-03-06 12:49 UTC
 **User Prompt**
@@ -2669,7 +2669,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. I applied the entire plan in the code and committed it. **What Changed** - I added a catalog-based synchronization mechanism for task execution. - [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) - Sync runs immediately before each `vm-init` / `vm-update` task catalog is read. - File add/delete/rename situ...
+Implemented. I applied the entire plan in the code and committed it. **What Changed** - I added a catalog-based synchronization mechanism for task execution. - [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) - Sync runs immediately before each `vm-init` / `vm-update` task catalog is read. - File add/delete/rename situ...
 
 ### 2026-03-06 15:45 UTC
 **User Prompt**
@@ -2731,7 +2731,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. The changes within the scope of the plan have been completed and committed: `918c54f`. - `AZ_LOCATION` is now required: - In Step-1, if it is empty, it exits gracefully ([clagnos.ps1:3361](/<user-home>/source/az/clagnos/clagnos.ps1:3361)). - There is also additional protection in the resource group step ([clagnos.ps1:3555](/<user-home>/source/az/clagnos/clagnos.p...
+Implemented. The changes within the scope of the plan have been completed and committed: `918c54f`. - `AZ_LOCATION` is now required: - In Step-1, if it is empty, it exits gracefully ([prodicloud.ps1:3361](/<user-home>/source/az/prodicloud/prodicloud.ps1:3361)). - There is also additional protection in the resource group step ([prodicloud.ps1:3555](/<user-home>/source/az/prodicloud/prodicloud.p...
 
 ### 2026-03-06 17:06 UTC
 **User Prompt**
@@ -2760,7 +2760,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-The plan was implemented and committed. - Changes: [clagnos.ps1](<user-home>/source/az/clagnos/clagnos.ps1) 1. `group` command added. - `clagnos group --list[=filter]` - `clagnos group --select=<name>` and `--select=` (interactive picker) - The selection is written to the `RESOURCE_GROUP` value in `.env` as the active group. 2. `--gro...
+The plan was implemented and committed. - Changes: [prodicloud.ps1](<user-home>/source/az/prodicloud/prodicloud.ps1) 1. `group` command added. - `prodicloud group --list[=filter]` - `prodicloud group --select=<name>` and `--select=` (interactive picker) - The selection is written to the `RESOURCE_GROUP` value in `.env` as the active group. 2. `--gro...
 
 ### 2026-03-06 17:41 UTC
 **User Prompt**
@@ -2772,7 +2772,7 @@ update: did you also reflect the latest changes in the --help parameters or the 
 
 **Assistant Summary**
 
-Yes, I have largely incorporated it and verified it. In the outputs I checked: - `clagnos --help` shows the current command set (including `group`). - In the detailed catalog of `clagnos help`, there is the `group` command and support for `update --group`. - In `clagnos help create`, `--group` is no longer present. - In `clagnos help update`, `--group=<resource-g...
+Yes, I have largely incorporated it and verified it. In the outputs I checked: - `prodicloud --help` shows the current command set (including `group`). - In the detailed catalog of `prodicloud help`, there is the `group` command and support for `update --group`. - In `prodicloud help create`, `--group` is no longer present. - In `prodicloud help update`, `--group=<resource-g...
 
 ### 2026-03-06 17:42 UTC
 **User Prompt**
@@ -2784,7 +2784,7 @@ fix: let's make that small fix too.
 
 **Assistant Summary**
 
-I made the fix and committed it. - Updated line: the `create` description in quick help - New text: `Create a new managed resource group and run VM init/update flow.` - Verification: it looks correct in the `clagnos --help` output. - Commit: `a6f32c8` - Message: `docs: align create description in quick help overview`
+I made the fix and committed it. - Updated line: the `create` description in quick help - New text: `Create a new managed resource group and run VM init/update flow.` - Verification: it looks correct in the `prodicloud --help` output. - Commit: `a6f32c8` - Message: `docs: align create description in quick help overview`
 
 ### 2026-03-06 17:52 UTC
 **User Prompt**
@@ -2801,7 +2801,7 @@ refactor task e2e: please analyze all of this application's code end to end and 
 
 **Assistant Summary**
 
-<proposed_plan> ## E2E Modular Refactor Plan (Maximum Modularity, Minimum Regression) ### Summary 1. We will move the `clagnos` application from a monolithic structure to a highly modular architecture. 2. The entire codebase will be in scope: the orchestrator, command flow, task scripts, tool scripts, tests, and UI messages. 3. CLI behav...
+<proposed_plan> ## E2E Modular Refactor Plan (Maximum Modularity, Minimum Regression) ### Summary 1. We will move the `prodicloud` application from a monolithic structure to a highly modular architecture. 2. The entire codebase will be in scope: the orchestrator, command flow, task scripts, tool scripts, tests, and UI messages. 3. CLI behav...
 
 ### 2026-03-06 18:08 UTC
 **User Prompt**
@@ -2825,7 +2825,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. Changes made: - Added platform task directory fallback logic: - [clagnos.ps1](<user-home>/source/az/clagnos/clagnos.ps1) - New resolution order: `VM_INIT_TASK_DIR/VM_UPDATE_TASK_DIR` > `WIN_/LIN_` task dir keys > built-in default. - Expanded the PS compat tests for this new behavior: - [ps-compat-...
+Implemented. Changes made: - Added platform task directory fallback logic: - [prodicloud.ps1](<user-home>/source/az/prodicloud/prodicloud.ps1) - New resolution order: `VM_INIT_TASK_DIR/VM_UPDATE_TASK_DIR` > `WIN_/LIN_` task dir keys > built-in default. - Expanded the PS compat tests for this new behavior: - [ps-compat-...
 
 ### 2026-03-06 18:27 UTC
 **User Prompt**
@@ -2837,7 +2837,7 @@ Why didn't you implement the rest of the plan above? Could you implement that to
 
 **Assistant Summary**
 
-You're right; in the previous turn I had only implemented the request focused on `.env + task-dir fallback`. I have now also implemented the main refactor part of the remaining plan. What was done: - The monolithic structure was split into modules: - [clagnos.ps1](<user-home>/source/az/clagnos/clagnos.ps1) is now entrypoint + module loader. - [modules/core/clagnos-core-foundation.ps1...
+You're right; in the previous turn I had only implemented the request focused on `.env + task-dir fallback`. I have now also implemented the main refactor part of the remaining plan. What was done: - The monolithic structure was split into modules: - [prodicloud.ps1](<user-home>/source/az/prodicloud/prodicloud.ps1) is now entrypoint + module loader. - [modules/core/prodicloud-core-foundation.ps1...
 
 ### 2026-03-06 18:34 UTC
 **User Prompt**
@@ -2867,7 +2867,7 @@ So, have all the changes/updates/improvements we agreed on in our latest plans b
 
 **Assistant Summary**
 
-Short answer: **no, not 100%**. Most of it was implemented, but some items in the plan were left incomplete. Completed: - The monolithic structure was split into modules (`modules/...` + `clagnos.ps1` loader). - Platform task-dir fallback/preference logic was added. - A clean-start `.env` layout was set up and `.env.example`/README were synchronized. ...
+Short answer: **no, not 100%**. Most of it was implemented, but some items in the plan were left incomplete. Completed: - The monolithic structure was split into modules (`modules/...` + `prodicloud.ps1` loader). - Platform task-dir fallback/preference logic was added. - A clean-start `.env` layout was set up and `.env.example`/README were synchronized. ...
 
 ### 2026-03-06 18:37 UTC
 **User Prompt**
@@ -2903,7 +2903,7 @@ update: I want you to proceed with and complete the remaining work from our late
 
 **Assistant Summary**
 
-I closed out the remaining work. I centralized repo root resolution; modules no longer accidentally look for paths like `modules/ui/.env`. This fix touches [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1), [modules/core/clagnos-core-foundation.ps1](<user-home>\source\az\clagnos\modules\core\clagnos-core-foundation.ps1), [module...
+I closed out the remaining work. I centralized repo root resolution; modules no longer accidentally look for paths like `modules/ui/.env`. This fix touches [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1), [modules/core/prodicloud-core-foundation.ps1](<user-home>\source\az\prodicloud\modules\core\prodicloud-core-foundation.ps1), [module...
 
 ### 2026-03-06 18:59 UTC
 **User Prompt**
@@ -2940,7 +2940,7 @@ check fix update: does this folder name appear anywhere in the code? If it does,
 
 **Assistant Summary**
 
-Generic task-dir handling was removed. - Shared config resolution no longer produces `VM_INIT_TASK_DIR` / `VM_UPDATE_TASK_DIR`; only platform keys are used: [clagnos-core-foundation.ps1](<user-home>\source\az\clagnos\modules\core\clagnos-core-foundation.ps1) - Step 1 context directs the init/update catalog paths...
+Generic task-dir handling was removed. - Shared config resolution no longer produces `VM_INIT_TASK_DIR` / `VM_UPDATE_TASK_DIR`; only platform keys are used: [prodicloud-core-foundation.ps1](<user-home>\source\az\prodicloud\modules\core\prodicloud-core-foundation.ps1) - Step 1 context directs the init/update catalog paths...
 
 ### 2026-03-06 19:22 UTC
 **User Prompt**
@@ -2964,7 +2964,7 @@ I have a question: what is the difference between `vm_name` and `server_name`? H
 
 **Assistant Summary**
 
-Short answer: - `SERVER_NAME`: the application's **logical primary name / naming seed**. - `VM_NAME`: the **actual VM resource name** in Azure. In the code, the distinction works like this: 1. `SERVER_NAME` is selected and stored first [clagnos-orchestration-runtime.ps1](<user-home>\source\az\clagnos\modules\commands\clagnos-orchestration-runtime.ps1:20) ...
+Short answer: - `SERVER_NAME`: the application's **logical primary name / naming seed**. - `VM_NAME`: the **actual VM resource name** in Azure. In the code, the distinction works like this: 1. `SERVER_NAME` is selected and stored first [prodicloud-orchestration-runtime.ps1](<user-home>\source\az\prodicloud\modules\commands\prodicloud-orchestration-runtime.ps1:20) ...
 
 ### 2026-03-06 19:30 UTC
 **User Prompt**
@@ -2988,7 +2988,7 @@ update: let's do one final UX pass; let's confirm that this change is consistent
 
 **Assistant Summary**
 
-The latest UX pass is complete. What was updated: - The `VM_NAME` prompt now explicitly says that this is the actual Azure VM name: [modules/commands/clagnos-orchestration-runtime.ps1](<user-home>\source\az\clagnos\modules\commands\clagnos-orchestration-runtime.ps1) - The Step 1 confirmation message now says that `VM_NAME` is both the VM name and the default...
+The latest UX pass is complete. What was updated: - The `VM_NAME` prompt now explicitly says that this is the actual Azure VM name: [modules/commands/prodicloud-orchestration-runtime.ps1](<user-home>\source\az\prodicloud\modules\commands\prodicloud-orchestration-runtime.ps1) - The Step 1 confirmation message now says that `VM_NAME` is both the VM name and the default...
 
 ### 2026-03-06 19:48 UTC
 **User Prompt**
@@ -3000,7 +3000,7 @@ update: ensure that the name of the desktop shortcut created for VSCode in the p
 
 **Assistant Summary**
 
-VS Code public desktop shortcut name updated. Change: - [windows/update/33-create-shortcuts-public-desktop.ps1](<user-home>\source\az\clagnos\windows\update\33-create-shortcuts-public-desktop.ps1) - `i6vscode` -> `v5vscode` Verification: - File parse check passed. - Repo is clean. Commit: - `d97...
+VS Code public desktop shortcut name updated. Change: - [windows/update/33-create-shortcuts-public-desktop.ps1](<user-home>\source\az\prodicloud\windows\update\33-create-shortcuts-public-desktop.ps1) - `i6vscode` -> `v5vscode` Verification: - File parse check passed. - Repo is clean. Commit: - `d97...
 
 ### 2026-03-06 19:50 UTC
 **User Prompt**
@@ -3012,7 +3012,7 @@ check: okay, within the same task, is there also a `u7network and sharing` short
 
 **Assistant Summary**
 
-Yes. - The shortcut is defined in the same task: [33-create-shortcuts-public-desktop.ps1](<user-home>\source\az\clagnos\windows\update\33-create-shortcuts-public-desktop.ps1:295) - The target executable resolves to `control.exe`: [33-create-shortcuts-public-desktop.ps1](<user-home>\source\az\clagnos\windows\...
+Yes. - The shortcut is defined in the same task: [33-create-shortcuts-public-desktop.ps1](<user-home>\source\az\prodicloud\windows\update\33-create-shortcuts-public-desktop.ps1:295) - The target executable resolves to `control.exe`: [33-create-shortcuts-public-desktop.ps1](<user-home>\source\az\prodicloud\windows\...
 
 ### 2026-03-06 19:52 UTC
 **User Prompt**
@@ -3024,7 +3024,7 @@ question: what does NAMING_TEMPLATE_ACTIVE=regional_v1 in the .env file control?
 
 **Assistant Summary**
 
-Short answer: right now `NAMING_TEMPLATE_ACTIVE=regional_v1` is **not a real multiple-choice mechanism**. In the code, it only checks "is this the active naming profile?". How it works: - The value is read inside Step 1: [clagnos-orchestration-runtime.ps1](<user-home>\source\az\clagnos\modules\commands\clagnos-orchestration-runtim...
+Short answer: right now `NAMING_TEMPLATE_ACTIVE=regional_v1` is **not a real multiple-choice mechanism**. In the code, it only checks "is this the active naming profile?". How it works: - The value is read inside Step 1: [prodicloud-orchestration-runtime.ps1](<user-home>\source\az\prodicloud\modules\commands\prodicloud-orchestration-runtim...
 
 ### 2026-03-06 19:54 UTC
 **User Prompt**
@@ -3036,7 +3036,7 @@ Okay, can we completely remove this variable from everywhere while preserving al
 
 **Assistant Summary**
 
-Yes, I removed it. What changed: - `NAMING_TEMPLATE_ACTIVE` was removed entirely from the code: - [modules/commands/clagnos-orchestration-runtime.ps1](<user-home>\source\az\clagnos\modules\commands\clagnos-orchestration-runtime.ps1) - It was removed from the `.env.example` contract: - [.env.example](<user-home>\source\az\clagnos\.env.example...
+Yes, I removed it. What changed: - `NAMING_TEMPLATE_ACTIVE` was removed entirely from the code: - [modules/commands/prodicloud-orchestration-runtime.ps1](<user-home>\source\az\prodicloud\modules\commands\prodicloud-orchestration-runtime.ps1) - It was removed from the `.env.example` contract: - [.env.example](<user-home>\source\az\prodicloud\.env.example...
 
 ### 2026-03-06 19:58 UTC
 **User Prompt**
@@ -3048,7 +3048,7 @@ question: starting with the resource group; can you list, one by one, the templa
 
 **Assistant Summary**
 
-Yes. The current naming system essentially works like this. **Core Logic** - The main input value is `VM_NAME`. - The second required naming input is `AZ_LOCATION`; `REGION_CODE` is derived from it. The region code comes from the static map: [clagnos-config-runtime.ps1:134](<user-home>\source\az\clagnos\modules\config\clagnos-config-r...
+Yes. The current naming system essentially works like this. **Core Logic** - The main input value is `VM_NAME`. - The second required naming input is `AZ_LOCATION`; `REGION_CODE` is derived from it. The region code comes from the static map: [prodicloud-config-runtime.ps1:134](<user-home>\source\az\prodicloud\modules\config\prodicloud-config-r...
 
 ### 2026-03-06 20:10 UTC
 **User Prompt**
@@ -3060,7 +3060,7 @@ update: apply both of these suggestions; then come back to me with numbered sugg
 
 **Assistant Summary**
 
-I applied two changes. **Applied** - The dead `NamingTemplateActive` field in the Step 1 context was removed: [clagnos-orchestration-runtime.ps1](<user-home>\source\az\clagnos\modules\commands\clagnos-orchestration-runtime.ps1) - In the normal `create/update` flow, the following resources now use the real template resolver + `{N}` ind...
+I applied two changes. **Applied** - The dead `NamingTemplateActive` field in the Step 1 context was removed: [prodicloud-orchestration-runtime.ps1](<user-home>\source\az\prodicloud\modules\commands\prodicloud-orchestration-runtime.ps1) - In the normal `create/update` flow, the following resources now use the real template resolver + `{N}` ind...
 
 ### 2026-03-06 20:18 UTC
 **User Prompt**
@@ -3139,7 +3139,7 @@ update: by the way, the expression "TASK_OUTCOME_MODE" is not descriptive enough
 
 **Assistant Summary**
 
-`TASK_OUTCOME_MODE` is now used as `VM_TASK_OUTCOME_MODE` throughout the application. Updated locations: - config reading and validation: - [clagnos-command-main.ps1](<user-home>\source\az\clagnos\modules\commands\clagnos-command-main.ps1) - [clagnos-ui-runtime.ps1](<user-home>\source\az\clagnos\modules\ui\clagnos-ui-runtime.p...
+`TASK_OUTCOME_MODE` is now used as `VM_TASK_OUTCOME_MODE` throughout the application. Updated locations: - config reading and validation: - [prodicloud-command-main.ps1](<user-home>\source\az\prodicloud\modules\commands\prodicloud-command-main.ps1) - [prodicloud-ui-runtime.ps1](<user-home>\source\az\prodicloud\modules\ui\prodicloud-ui-runtime.p...
 
 ### 2026-03-06 21:23 UTC
 **User Prompt**
@@ -3151,7 +3151,7 @@ info: but also remove the VM restart code from the `vm-update` stage.
 
 **Assistant Summary**
 
-Removed. Current status: - `vm-update` stage no longer **restarts the VM**. - It collects reboot requirements coming from tasks. - At the end of the stage, it shows the user: - whether a reboot requirement occurred - which tasks requested it - a short hint about what they should do. Code: - [clagnos-core-foundation.ps1](...
+Removed. Current status: - `vm-update` stage no longer **restarts the VM**. - It collects reboot requirements coming from tasks. - At the end of the stage, it shows the user: - whether a reboot requirement occurred - which tasks requested it - a short hint about what they should do. Code: - [prodicloud-core-foundation.ps1](...
 
 ### 2026-03-06 21:25 UTC
 **User Prompt**
@@ -3168,7 +3168,7 @@ Added. At the end of the `vm-update` stage, if a reboot is now needed:
 - then, it lists the tasks requesting a restart one by one
 - finally, it gives the user an actionable restart hint
 Updated file:
-- [clagnos-core-foundation.ps1](<user-home>\source\az\clagnos\modules\core...
+- [prodicloud-core-foundation.ps1](<user-home>\source\az\prodicloud\modules\core...
 
 ### 2026-03-06 21:26 UTC
 **User Prompt**
@@ -3180,7 +3180,7 @@ update: also, at the end of that stage; how many tasks succeeded; how many tasks
 
 **Assistant Summary**
 
-Added. At the end of the `vm-update` stage, the following information is now reported together: - how many tasks succeeded - how many tasks failed - the names of the failed tasks - the names of the tasks requesting a restart - a restart hint if needed Updated file: - [clagnos-core-foundation.ps1](<user-home>\source\az\clagnos\modules\core\clagnos-core-fo...
+Added. At the end of the `vm-update` stage, the following information is now reported together: - how many tasks succeeded - how many tasks failed - the names of the failed tasks - the names of the tasks requesting a restart - a restart hint if needed Updated file: - [prodicloud-core-foundation.ps1](<user-home>\source\az\prodicloud\modules\core\prodicloud-core-fo...
 
 ### 2026-03-06 21:29 UTC
 **User Prompt**
@@ -3216,7 +3216,7 @@ improve: there was also a previous rule like this: the vm-init stage/step, if th
 
 **Assistant Summary**
 
-Completed. What changed: - `create` and `update` full flows no longer skip `vm-init`, even if the VM already exists. - The old “skip init if the VM exists” logic was removed. - The step chain is now consistent in the full flow: - `configure` - `group` - `network` - `vm-deploy` - `vm-init` - `vm-update` - `vm-summary` Code: - [clagnos-comma...
+Completed. What changed: - `create` and `update` full flows no longer skip `vm-init`, even if the VM already exists. - The old “skip init if the VM exists” logic was removed. - The step chain is now consistent in the full flow: - `configure` - `group` - `network` - `vm-deploy` - `vm-init` - `vm-update` - `vm-summary` Code: - [prodicloud-comma...
 
 ### 2026-03-06 21:51 UTC
 **User Prompt**
@@ -3230,7 +3230,7 @@ feat: I want you to add two more practical commands:
 
 **Assistant Summary**
 
-<proposed_plan> # Add `ssh` and `rdp` Connection Commands ## Summary Add two new operator commands to launch external Windows clients against clagnos managed VMs: - `ssh`: launch Windows OpenSSH (`ssh.exe`) in a new console window - `rdp`: launch Windows Remote Desktop (`mstsc.exe`) with pre-seeded credentials This is...
+<proposed_plan> # Add `ssh` and `rdp` Connection Commands ## Summary Add two new operator commands to launch external Windows clients against prodicloud managed VMs: - `ssh`: launch Windows OpenSSH (`ssh.exe`) in a new console window - `rdp`: launch Windows Remote Desktop (`mstsc.exe`) with pre-seeded credentials This is...
 
 ### 2026-03-06 22:05 UTC
 **User Prompt**
@@ -3254,7 +3254,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented. **What changed** - Added `ssh` and `rdp` commands to the CLI surface, help, parser, dispatcher, and validation: - [modules/core/clagnos-core-runtime.ps1](<user-home>\source\az\clagnos\modules\core\clagnos-core-runtime.ps1) - [modules/ui/clagnos-ui-runtime.ps1](<user-home>\source\az\clagnos\modules\ui\clagnos-ui-r...
+Implemented. **What changed** - Added `ssh` and `rdp` commands to the CLI surface, help, parser, dispatcher, and validation: - [modules/core/prodicloud-core-runtime.ps1](<user-home>\source\az\prodicloud\modules\core\prodicloud-core-runtime.ps1) - [modules/ui/prodicloud-ui-runtime.ps1](<user-home>\source\az\prodicloud\modules\ui\prodicloud-ui-r...
 
 ### 2026-03-06 22:25 UTC
 **User Prompt**
@@ -3278,7 +3278,7 @@ Okay, can we also write the code that prevents generating this cache file for ou
 
 **Assistant Summary**
 
-A no-bytecode policy was applied for repo-managed Python executions. **What I changed** - [clagnos.ps1](<user-home>\source\az\clagnos\clagnos.ps1) - `PYTHONDONTWRITEBYTECODE=1` is set at the start of the process - [tools/install-pyssh-tool.ps1](<user-home>\source\az\clagnos\tools\install-pyssh-tool.ps1) - the same env policy was added - p...
+A no-bytecode policy was applied for repo-managed Python executions. **What I changed** - [prodicloud.ps1](<user-home>\source\az\prodicloud\prodicloud.ps1) - `PYTHONDONTWRITEBYTECODE=1` is set at the start of the process - [tools/install-pyssh-tool.ps1](<user-home>\source\az\prodicloud\tools\install-pyssh-tool.ps1) - the same env policy was added - p...
 
 ### 2026-03-06 23:13 UTC
 **User Prompt**
@@ -3430,7 +3430,7 @@ dev emv update: carefully scan my git history and the prompt history in this cod
 
 **Assistant Summary**
 
-<proposed_plan> # Documentation and Process Hardening for `clagnos` ## Summary Use three source streams to refresh the project’s long-term documentation baseline: - **Git history** as the canonical record of what changed - **Codex session/prompt history** as the canonical record of how the repo has been developed - **...
+<proposed_plan> # Documentation and Process Hardening for `prodicloud` ## Summary Use three source streams to refresh the project’s long-term documentation baseline: - **Git history** as the canonical record of what changed - **Codex session/prompt history** as the canonical record of how the repo has been developed - **...
 
 ### 2026-03-07 17:50 UTC
 **User Prompt**
@@ -3587,13 +3587,13 @@ Renamed `tests/docs-contract.ps1` to `tests/documentation-contract-check.ps1`, u
 **User Prompt**
 
 ````text
-fix: so does the powershell-smoke.ps1 file actually only run my smoke tests? If so, let's rename it to powershell-smoke-tests.ps1 as well; or if it smoke-tests clagnos functionality, let's rename it to clagnos-smoketests.ps1.
+fix: so does the powershell-smoke.ps1 file actually only run my smoke tests? If so, let's rename it to powershell-smoke-tests.ps1 as well; or if it smoke-tests prodicloud functionality, let's rename it to prodicloud-smoketests.ps1.
 
 ````
 
 **Assistant Summary**
 
-Renamed `tests/powershell-smoke.ps1` to `tests/clagnos-smoke-tests.ps1` because the script validates `clagnos` runtime contracts and repository-specific smoke behavior, updated the PowerShell compatibility runner to call the new file name, advanced the current documented release label to `2026.3.8.233`, and successfully re-ran the quality and compatibility checks.
+Renamed `tests/powershell-smoke.ps1` to `tests/prodicloud-smoke-tests.ps1` because the script validates `prodicloud` runtime contracts and repository-specific smoke behavior, updated the PowerShell compatibility runner to call the new file name, advanced the current documented release label to `2026.3.8.233`, and successfully re-ran the quality and compatibility checks.
 
 ### 2026-03-07 23:26 UTC
 **User Prompt**
@@ -3644,7 +3644,7 @@ fix: let's make a small relaxation in our `agents.md` rules: for user prompts th
 
 **Assistant Summary**
 
-Relaxed the prompt-history contract so only prompts that change repo files are mandatory prompt-history entries, while non-mutating prompts are answered directly and recorded only after explicit user confirmation, then aligned `AGENTS.md`, `README.md`, `CHANGELOG.md`, `release-notes.md`, and `tests/documentation-contract-check.ps1`, advanced the documented release label to `2026.3.8.237`, and re-ran the documentation contract plus code-quality checks successfully.
+Relaxed the prompt-history contract so only prompts that change repo files are mandatory prompt-history entries, while non-mutating prompts are answered directly and recorded only after explicit user confirmation, then aligned `AGENTS.md`, `PRODICLOUD.md`, `CHANGELOG.md`, `release-notes.md`, and `tests/documentation-contract-check.ps1`, advanced the documented release label to `2026.3.8.237`, and re-ran the documentation contract plus code-quality checks successfully.
 
 ### 2026-03-08 00:55 UTC
 **User Prompt**
@@ -3716,7 +3716,7 @@ fix: please make the rdp and ssh commands work only when the VM is running; othe
 
 **Assistant Summary**
 
-Made `ssh` and `rdp` state-aware so both commands now inspect the managed VM lifecycle state before resolving credentials or launching local clients, refuse politely when the target VM is not running, and point the operator to `clagnos do --vm-action=start`; also aligned command help, README connection guidance, release docs, and smoke coverage for the new running-state guard, then re-ran smoke, documentation, code-quality, and PowerShell compatibility checks successfully.
+Made `ssh` and `rdp` state-aware so both commands now inspect the managed VM lifecycle state before resolving credentials or launching local clients, refuse politely when the target VM is not running, and point the operator to `prodicloud do --vm-action=start`; also aligned command help, README connection guidance, release docs, and smoke coverage for the new running-state guard, then re-ran smoke, documentation, code-quality, and PowerShell compatibility checks successfully.
 
 ### 2026-03-08 21:27 UTC
 **User Prompt**
@@ -3758,7 +3758,7 @@ Replaced the failing Windows interactive UX reboot/autologon path with a bounded
 **User Prompt**
 
 ````text
-test: let's run each vm-init and vm-update task one by one in isolation with clagnos exec; if an issue comes up, let's fix it and run it again; please run these tasks with the correct priority values and the correct timeout values...
+test: let's run each vm-init and vm-update task one by one in isolation with prodicloud exec; if an issue comes up, let's fix it and run it again; please run these tasks with the correct priority values and the correct timeout values...
 *by the way, the exec command is unnecessarily scanning VM resources such as network, disk, and nsg; if these are not required for the exec command to work, please make the exec command more practical: when the exec command is given, it should quickly connect via pyssh, execute the relevant VM task, wait, and as soon as the task finishes, exit immediately...
 
 ````
@@ -3783,7 +3783,7 @@ Reworked Windows update task `18-install-ollama-system` to install `Ollama.Ollam
 **User Prompt**
 
 ````text
-fix update improve test: we got stuck at stage 09 ollama in the vm-update tasks; first, isolate this ollama test, find out why it is causing problems, and fix it; then continue this e2e test from the `clagnos create --auto --windows --perf --from-step=vm-update` stage.
+fix update improve test: we got stuck at stage 09 ollama in the vm-update tasks; first, isolate this ollama test, find out why it is causing problems, and fix it; then continue this e2e test from the `prodicloud create --auto --windows --perf --from-step=vm-update` stage.
 
 ````
 
@@ -3819,13 +3819,13 @@ Applied the same stale-installer recovery model to `16-install-docker-desktop`, 
 **User Prompt**
 
 ````text
-test: let's do an e2e live clagnos re-create from scratch.
+test: let's do an e2e live prodicloud re-create from scratch.
 
 ````
 
 **Assistant Summary**
 
-Deleted the existing managed resource group `rg-examplevm-ate1-g1`, reran a full live `clagnos create --auto --windows --perf` from scratch using the current local `.env` configuration, and rebuilt `examplevm` in `austriaeast` on `Standard_D4as_v5`; Step 6 completed in `continue` mode with `18-install-ollama-system` failing on its first cold-start API readiness check and `15-install-wsl2-system` requesting a reboot, so task `09` was rerun successfully in isolated `exec` mode, the VM was restarted through `clagnos do --vm-action=restart`, final lifecycle state was verified as `started` with provisioning `Succeeded`, and RDP port `3389` was confirmed reachable before recording this otherwise non-mutating dialog in repo history at the user's request.
+Deleted the existing managed resource group `rg-examplevm-ate1-g1`, reran a full live `prodicloud create --auto --windows --perf` from scratch using the current local `.env` configuration, and rebuilt `examplevm` in `austriaeast` on `Standard_D4as_v5`; Step 6 completed in `continue` mode with `18-install-ollama-system` failing on its first cold-start API readiness check and `15-install-wsl2-system` requesting a reboot, so task `09` was rerun successfully in isolated `exec` mode, the VM was restarted through `prodicloud do --vm-action=restart`, final lifecycle state was verified as `started` with provisioning `Succeeded`, and RDP port `3389` was confirmed reachable before recording this otherwise non-mutating dialog in repo history at the user's request.
 
 ### 2026-03-09 11:05 UTC
 **User Prompt**
@@ -3870,7 +3870,7 @@ Implemented the approved Windows shortcut-and-app expansion plan by adding bound
 feat: let's add a new vm-update task: let its name be `install-codex-app.ps1`. Let it install the app with this command: `winget install codex -s msstore`
 *Let's also add the following shortcut and target for this app to the `public-desktop-icons` vm task:
 -a3CodexApp:"%ProgramFiles%\WindowsApps\OpenAI.Codex_26.306.996.0_x64__2p2nqsd0c76g0\app\Codex.exe"
-**important note: I am running the `clagnos move` command end-to-end in the background in another window. Because of this, you do not need to do live or isolated testing on the vm. Please just implement such a feature; we will test it when the vm is available. Please code this nicely on a best-effort basis so that the tests will succeed when the time comes; you can copy from equivalent and similar features and functionality among the vm-update tasks!
+**important note: I am running the `prodicloud move` command end-to-end in the background in another window. Because of this, you do not need to do live or isolated testing on the vm. Please just implement such a feature; we will test it when the vm is available. Please code this nicely on a best-effort basis so that the tests will succeed when the time comes; you can copy from equivalent and similar features and functionality among the vm-update tasks!
 
 ````
 
@@ -3891,7 +3891,7 @@ let's compare the applications we install on the guest VM through the `vm-update
 
 **Assistant Summary**
 
-Added host-side startup-profile helpers so `clagnos` now inspects the current local Windows machine for enabled startup apps, maps supported intersections such as Docker Desktop, Ollama, OneDrive, Teams, one private local-only accessibility launcher, and iTunesHelper into a base64 task token, and feeds that profile into the new Windows `vm-update` task `31-configure-apps-startup`; implemented that task to mirror the requested apps onto the guest VM through machine Startup-folder shortcuts with StartupApproved enablement, updated `37-capture-snapshot-health` to inventory the mirrored startup launcher set, extended smoke coverage for startup-profile mapping and the new task contract, updated the Windows update catalog plus release docs, and verified everything only through non-live local checks while intentionally skipping VM execution because the guest was busy with another test.
+Added host-side startup-profile helpers so `prodicloud` now inspects the current local Windows machine for enabled startup apps, maps supported intersections such as Docker Desktop, Ollama, OneDrive, Teams, one private local-only accessibility launcher, and iTunesHelper into a base64 task token, and feeds that profile into the new Windows `vm-update` task `31-configure-apps-startup`; implemented that task to mirror the requested apps onto the guest VM through machine Startup-folder shortcuts with StartupApproved enablement, updated `37-capture-snapshot-health` to inventory the mirrored startup launcher set, extended smoke coverage for startup-profile mapping and the new task contract, updated the Windows update catalog plus release docs, and verified everything only through non-live local checks while intentionally skipping VM execution because the guest was busy with another test.
 
 ### 2026-03-09 20:16 UTC
 **User Prompt**
@@ -3903,7 +3903,7 @@ fix: I don't want this configure-apps-startup task to work on-the-fly, meaning b
 
 **Assistant Summary**
 
-Removed the dynamic local-startup discovery/token plumbing from `clagnos`, rewrote `31-configure-apps-startup` to carry a static snapshot of the currently approved startup set directly in the task file, reduced `37-capture-snapshot-health` to validate that same fixed shortcut list, updated smoke coverage so it now enforces the static contract and the absence of runtime startup-profile tokens, refreshed the release docs to describe the static model instead of host-driven sync, and kept validation strictly non-live without touching the busy guest VM.
+Removed the dynamic local-startup discovery/token plumbing from `prodicloud`, rewrote `31-configure-apps-startup` to carry a static snapshot of the currently approved startup set directly in the task file, reduced `37-capture-snapshot-health` to validate that same fixed shortcut list, updated smoke coverage so it now enforces the static contract and the absence of runtime startup-profile tokens, refreshed the release docs to describe the static model instead of host-driven sync, and kept validation strictly non-live without touching the busy guest VM.
 
 ### 2026-03-09 21:27 UTC
 **User Prompt**
@@ -3927,7 +3927,7 @@ update docs and help messages: for the move command, add appropriate documentati
 
 **Assistant Summary**
 
-Updated the `move` operator guidance in both `README.md` and `clagnos help move` to explain the live-tested cutover sequence step by step and to set a realistic timing expectation from the recorded `austriaeast -> swedencentral` move log: a `Standard_D4as_v5` VM with a `127 GB` OS disk took roughly `25-30 minutes`, with cross-region snapshot copy as the dominant `17-19 minute` phase. Also aligned the release documentation/version labels so the move timing reference is captured in the maintained project docs.
+Updated the `move` operator guidance in both `PRODICLOUD.md` and `prodicloud help move` to explain the live-tested cutover sequence step by step and to set a realistic timing expectation from the recorded `austriaeast -> swedencentral` move log: a `Standard_D4as_v5` VM with a `127 GB` OS disk took roughly `25-30 minutes`, with cross-region snapshot copy as the dominant `17-19 minute` phase. Also aligned the release documentation/version labels so the move timing reference is captured in the maintained project docs.
 
 ### 2026-03-10 11:17 UTC
 **User Prompt**
@@ -3940,7 +3940,7 @@ update: throughout this repo; everywhere in VM tasks; places where --profile-dir
 
 **Assistant Summary**
 
-Reworked the Windows Chrome-based public desktop shortcut task so all repo-managed web shortcuts now resolve their default `--profile-directory` from `.env` `company_name` instead of binding it to `VM_NAME`, while keeping a safe fallback to `VM_NAME` if the key is left empty. Added `company_name` to the committed `.env.example` contract, updated the local `.env` to `company_name=orgprofile`, extended task-token runtime plumbing plus smoke coverage for the new token, and documented the feature in `README.md`, `AGENTS.md`, `CHANGELOG.md`, and `release-notes.md`.
+Reworked the Windows Chrome-based public desktop shortcut task so all repo-managed web shortcuts now resolve their default `--profile-directory` from `.env` `company_name` instead of binding it to `VM_NAME`, while keeping a safe fallback to `VM_NAME` if the key is left empty. Added `company_name` to the committed `.env.example` contract, updated the local `.env` to `company_name=orgprofile`, extended task-token runtime plumbing plus smoke coverage for the new token, and documented the feature in `PRODICLOUD.md`, `AGENTS.md`, `CHANGELOG.md`, and `release-notes.md`.
 
 ### 2026-03-10 12:28 UTC
 **User Prompt**
@@ -3961,18 +3961,18 @@ Ran live isolated `exec` validation against the target Windows VM `examplevm` in
 update and improve dev env and docs: let's execute the following tasks one by one in sequence; this is a large task chain, so please plan and implement it carefully and comprehensively:
 task: from the `main` branch, create a local branch named `dev`, then check out that new `dev` branch.
 task: all UI messages of this application, and all documentation across the repo, especially `*.md`, must be scanned end to end and guaranteed to be completely in English; add this condition to `AGENTS.md` as well.
-task: enrich `README.md` as broadly and comprehensively as possible: what does this application do, why was it built, what problems does it solve, who is it for, and where/when/how should it be used?
-task: in `README.md`, provide broad and comprehensive information about the software architecture of this application in a from-zero-to-hero manner; document the entire process, working system, development phases, and execution logic end to end without skipping details.
-task: in `README.md`, prepare an extensive usage guide for every aspect of this application: usage scenarios, all supported commands, all parameters, all command-to-parameter variations, usage examples, practical information, what each item does, how it behaves, what users will encounter end to end when they use these commands and parameters, the possible stages and outcomes, the successful/unsuccessful returns of each command, and broad useful user-friendly information about likely notices and warnings.
-task: in `README.md`, define the license terms of this application: it may be used for learning/teaching purposes; commercial use requires permission from the developer; choose the license model that best fits these terms for a public GitHub repository; also mention that we need sponsors in order to keep developing this application; these details must also exist in the `LICENSE` file, and `README.md` should reference it.
-task: design the table of contents and topic hierarchy of `README.md` for maximum step-by-step clarity and usefulness; make it friendly for both developers and users; organize it from practical quick start toward deeper and more advanced topics.
+task: enrich `PRODICLOUD.md` as broadly and comprehensively as possible: what does this application do, why was it built, what problems does it solve, who is it for, and where/when/how should it be used?
+task: in `PRODICLOUD.md`, provide broad and comprehensive information about the software architecture of this application in a from-zero-to-hero manner; document the entire process, working system, development phases, and execution logic end to end without skipping details.
+task: in `PRODICLOUD.md`, prepare an extensive usage guide for every aspect of this application: usage scenarios, all supported commands, all parameters, all command-to-parameter variations, usage examples, practical information, what each item does, how it behaves, what users will encounter end to end when they use these commands and parameters, the possible stages and outcomes, the successful/unsuccessful returns of each command, and broad useful user-friendly information about likely notices and warnings.
+task: in `PRODICLOUD.md`, define the license terms of this application: it may be used for learning/teaching purposes; commercial use requires permission from the developer; choose the license model that best fits these terms for a public GitHub repository; also mention that we need sponsors in order to keep developing this application; these details must also exist in the `LICENSE` file, and `PRODICLOUD.md` should reference it.
+task: design the table of contents and topic hierarchy of `PRODICLOUD.md` for maximum step-by-step clarity and usefulness; make it friendly for both developers and users; organize it from practical quick start toward deeper and more advanced topics.
 task: redesign and update `roadmap.md` according to the latest development direction, taking into account our end-to-end approach, priorities, engineering preferences, and rhythm; assume that we will move to a more relaxed schedule; create a modern, efficient, business-value-driven, pragmatic roadmap that matches our style and priority policy.
 task: before every git commit, guarantee that `CHANGELOG.md` and `release-notes.md` are updated to reflect the completed changes; add that as a rule to `AGENTS.md`, but define it clearly so it does not create a weird recursive change-commit-change-commit loop.
 ````
 
 **Assistant Summary**
 
-Created and switched to the local `dev` branch, then completed the repository-wide documentation and developer-environment refresh. Rewrote `README.md` into a much broader operator/developer manual, rewrote `roadmap.md` around business value and a more relaxed delivery rhythm, added a root custom non-commercial `LICENSE`, tightened `AGENTS.md` with the English-only maintained-doc/help/runtime contract plus the non-recursive changelog/release-notes-before-commit rule, translated the full historical `docs/prompt-history.md` into an English-normalized ledger, added `tests/pre-commit-release-doc-check.ps1` and wired it into `.githooks/pre-commit`, fixed `.github/workflows/quality-gate.yml` to use the current PowerShell compatibility script, updated `CHANGELOG.md` and `release-notes.md`, and verified the result with documentation contract, code-quality, smoke, and PowerShell compatibility checks.
+Created and switched to the local `dev` branch, then completed the repository-wide documentation and developer-environment refresh. Rewrote `PRODICLOUD.md` into a much broader operator/developer manual, rewrote `roadmap.md` around business value and a more relaxed delivery rhythm, added a root custom non-commercial `LICENSE`, tightened `AGENTS.md` with the English-only maintained-doc/help/runtime contract plus the non-recursive changelog/release-notes-before-commit rule, translated the full historical `docs/prompt-history.md` into an English-normalized ledger, added `tests/pre-commit-release-doc-check.ps1` and wired it into `.githooks/pre-commit`, fixed `.github/workflows/quality-gate.yml` to use the current PowerShell compatibility script, updated `CHANGELOG.md` and `release-notes.md`, and verified the result with documentation contract, code-quality, smoke, and PowerShell compatibility checks.
 
 ### 2026-03-10 15:37 UTC
 **User Prompt**
@@ -3983,7 +3983,7 @@ Implement the plan.
 
 **Assistant Summary**
 
-Audited the repo for env-worthy hardcoded values, removed shared runtime fallbacks for legacy VM-name and password defaults, added shared helpers that fail fast on missing or placeholder-sensitive `VM_NAME` and VM credential settings, clarified the `.env` versus task-local config-block policy in the docs, and moved mutable task-only constants in the main Windows update tasks into explicit top-of-file config blocks. Updated `.env.example`, `README.md`, `AGENTS.md`, `CHANGELOG.md`, `release-notes.md`, and smoke coverage accordingly, then verified the change with documentation, code-quality, smoke, and PowerShell compatibility checks.
+Audited the repo for env-worthy hardcoded values, removed shared runtime fallbacks for legacy VM-name and password defaults, added shared helpers that fail fast on missing or placeholder-sensitive `VM_NAME` and VM credential settings, clarified the `.env` versus task-local config-block policy in the docs, and moved mutable task-only constants in the main Windows update tasks into explicit top-of-file config blocks. Updated `.env.example`, `PRODICLOUD.md`, `AGENTS.md`, `CHANGELOG.md`, `release-notes.md`, and smoke coverage accordingly, then verified the change with documentation, code-quality, smoke, and PowerShell compatibility checks.
 
 ### 2026-03-10 16:01 UTC
 **User Prompt**
@@ -3997,13 +3997,13 @@ Apply these small follow-up tasks:
 
 **Assistant Summary**
 
-Updated the local `.env` and the committed `.env.example` so `PYSSH_CLIENT_PATH` now defaults to the repo-relative `tools/pyssh/ssh_client.py` path, standardized NSG rule naming on the `nsg-rule-` prefix across runtime defaults and tests, and added shared `VM_ENABLE_HIBERNATION` / `VM_ENABLE_NESTED_VIRTUALIZATION` booleans to the configuration contract. Wired those feature toggles into create/update post-deploy behavior so `false` now cleanly skips the corresponding feature path, documented the new contract in `README.md` and `AGENTS.md`, updated release docs, and verified the result with documentation, code-quality, smoke, and PowerShell compatibility checks.
+Updated the local `.env` and the committed `.env.example` so `PYSSH_CLIENT_PATH` now defaults to the repo-relative `tools/pyssh/ssh_client.py` path, standardized NSG rule naming on the `nsg-rule-` prefix across runtime defaults and tests, and added shared `VM_ENABLE_HIBERNATION` / `VM_ENABLE_NESTED_VIRTUALIZATION` booleans to the configuration contract. Wired those feature toggles into create/update post-deploy behavior so `false` now cleanly skips the corresponding feature path, documented the new contract in `PRODICLOUD.md` and `AGENTS.md`, updated release docs, and verified the result with documentation, code-quality, smoke, and PowerShell compatibility checks.
 
 ### 2026-03-10 16:28 UTC
 **User Prompt**
 
 ````text
-Fix and update: make sure every parameter of the `clagnos set` command actually does its job in the code, and reflect the updated settings in the `.env` file at the end of that command.
+Fix and update: make sure every parameter of the `prodicloud set` command actually does its job in the code, and reflect the updated settings in the `.env` file at the end of that command.
 ````
 
 **Assistant Summary**
@@ -4085,7 +4085,7 @@ Please record this dialog in prompt history as well, and fully resolve the defau
 
 **Assistant Summary**
 
-Recorded this turn in `docs/prompt-history.md`, standardized tracked task fallback defaults end to end so missing tracked catalog entries and tracked entries without explicit priority now resolve to `priority=1000`, kept the shared default timeout at `180` across tracked and local task paths, updated all four task catalogs plus `AGENTS.md`, `README.md`, changelog/release notes, and tightened smoke/documentation coverage to verify the new fallback contract and local timeout behavior. Re-ran smoke, documentation-contract, code-quality, and PowerShell compatibility checks successfully.
+Recorded this turn in `docs/prompt-history.md`, standardized tracked task fallback defaults end to end so missing tracked catalog entries and tracked entries without explicit priority now resolve to `priority=1000`, kept the shared default timeout at `180` across tracked and local task paths, updated all four task catalogs plus `AGENTS.md`, `PRODICLOUD.md`, changelog/release notes, and tightened smoke/documentation coverage to verify the new fallback contract and local timeout behavior. Re-ran smoke, documentation-contract, code-quality, and PowerShell compatibility checks successfully.
 
 ### 2026-03-11 03:21 UTC
 **User Prompt**
@@ -4164,7 +4164,7 @@ Task: add the following shortcuts to the `public-desktop-icons` operations under
 
 **Assistant Summary**
 
-Expanded the Windows Public Desktop shortcut manifest with the requested `g1-g4` developer links and `q2-q8` quick-access web shortcuts, all reusing the same Chrome launcher contract as `i1Internet`. Updated the Windows health snapshot and smoke contract to inventory and enforce the new shortcut names and URLs, refreshed `CHANGELOG.md` and `release-notes.md` to `2026.3.11.275`, and revalidated the change with `code-quality-check`, `documentation-contract-check`, `powershell-compatibility-check`, and `clagnos-smoke-tests`.
+Expanded the Windows Public Desktop shortcut manifest with the requested `g1-g4` developer links and `q2-q8` quick-access web shortcuts, all reusing the same Chrome launcher contract as `i1Internet`. Updated the Windows health snapshot and smoke contract to inventory and enforce the new shortcut names and URLs, refreshed `CHANGELOG.md` and `release-notes.md` to `2026.3.11.275`, and revalidated the change with `code-quality-check`, `documentation-contract-check`, `powershell-compatibility-check`, and `prodicloud-smoke-tests`.
 
 ### 2026-03-11 08:18 UTC
 **User Prompt**
@@ -4181,12 +4181,12 @@ Changed the tracked Windows Public Desktop flow from a destructive full mirror i
 **User Prompt**
 
 ````text
-Update the repo for a full publish-ready documentation sync: scan the development history in reverse chronological order, refresh all maintained `.md` documents, help surfaces, and UI/help messaging so they are fully current, add `-h` as a shorthand help alias both for `clagnos -h` and command-specific forms such as `clagnos do -h`, and make the repository ready for public GitHub publishing with refreshed release docs, roadmap, prompt history, GitHub Actions, licensing/support/community files, and neutralized public-facing documentation. Then implement the agreed plan.
+Update the repo for a full publish-ready documentation sync: scan the development history in reverse chronological order, refresh all maintained `.md` documents, help surfaces, and UI/help messaging so they are fully current, add `-h` as a shorthand help alias both for `prodicloud -h` and command-specific forms such as `prodicloud do -h`, and make the repository ready for public GitHub publishing with refreshed release docs, roadmap, prompt history, GitHub Actions, licensing/support/community files, and neutralized public-facing documentation. Then implement the agreed plan.
 ````
 
 **Assistant Summary**
 
-Implemented the publish-ready sync plan end to end: added `-h` support next to `--help` across the CLI and help docs, refreshed `README.md` and the maintained help contract, added `CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates, and a pull-request template, extended GitHub Actions with the non-live smoke-contract suite, normalized tracked Linux shell scripts to LF and pinned `*.sh text eol=lf` in `.gitattributes`, redacted environment-specific VM/profile/path literals from `CHANGELOG.md`, `release-notes.md`, and `docs/prompt-history.md`, updated the documented release to `2026.3.11.277`, and revalidated the result with `bash-syntax-check`, `documentation-contract-check`, `code-quality-check`, `clagnos-smoke-tests`, and `powershell-compatibility-check`.
+Implemented the publish-ready sync plan end to end: added `-h` support next to `--help` across the CLI and help docs, refreshed `PRODICLOUD.md` and the maintained help contract, added `CONTRIBUTING.md`, `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates, and a pull-request template, extended GitHub Actions with the non-live smoke-contract suite, normalized tracked Linux shell scripts to LF and pinned `*.sh text eol=lf` in `.gitattributes`, redacted environment-specific VM/profile/path literals from `CHANGELOG.md`, `release-notes.md`, and `docs/prompt-history.md`, updated the documented release to `2026.3.11.277`, and revalidated the result with `bash-syntax-check`, `documentation-contract-check`, `code-quality-check`, `prodicloud-smoke-tests`, and `powershell-compatibility-check`.
 
 ### 2026-03-11 20:18 UTC
 **User Prompt**
@@ -4197,18 +4197,18 @@ Fix the compatibility-test code path step by step: find which step is taking unn
 
 **Assistant Summary**
 
-Traced the compatibility-matrix slowdown to two post-deploy feature-enable smoke tests that started waiting on the new provisioning-ready gate without stubbing `az vm get-instance-view`. Updated those local `az` stubs to return an immediate `Provisioning succeeded` snapshot, then reran `tests/clagnos-smoke-tests.ps1` and `tests/powershell-compatibility-check.ps1`. After the fix, the smoke suite completed in about `3.2s` and the full compatibility matrix completed in about `6.8s` without the previous synthetic multi-minute wait loop.
+Traced the compatibility-matrix slowdown to two post-deploy feature-enable smoke tests that started waiting on the new provisioning-ready gate without stubbing `az vm get-instance-view`. Updated those local `az` stubs to return an immediate `Provisioning succeeded` snapshot, then reran `tests/prodicloud-smoke-tests.ps1` and `tests/powershell-compatibility-check.ps1`. After the fix, the smoke suite completed in about `3.2s` and the full compatibility matrix completed in about `6.8s` without the previous synthetic multi-minute wait loop.
 
 ### 2026-03-11 20:32 UTC
 **User Prompt**
 
 ````text
-Implement the agreed live publish-gate plan: keep `vm-init` and `vm-update` running in their natural order of builtin `initial`, builtin `normal`, local untracked tasks, and builtin `final`; remove password display from `clagnos show`; add non-interactive `clagnos ssh --test` and `clagnos rdp --test`; require `clagnos do --vm-action=status` to report `started`; and harden hibernation, nested-virtualization, and related Windows update behavior so the repo is ready for realistic publish-gate validation.
+Implement the agreed live publish-gate plan: keep `vm-init` and `vm-update` running in their natural order of builtin `initial`, builtin `normal`, local untracked tasks, and builtin `final`; remove password display from `prodicloud show`; add non-interactive `prodicloud ssh --test` and `prodicloud rdp --test`; require `prodicloud do --vm-action=status` to report `started`; and harden hibernation, nested-virtualization, and related Windows update behavior so the repo is ready for realistic publish-gate validation.
 ````
 
 **Assistant Summary**
 
-Implemented the live publish-gate hardening set across runtime, docs, and task contracts: `create`, `update`, and `set` now verify hibernation and nested virtualization as required outcomes, `clagnos show` redacts password-bearing values and surfaces nested-virtualization evidence, `clagnos ssh --test` and `clagnos rdp --test` provide non-interactive readiness checks, the README and documentation contract now spell out the natural task order, `az vm create` omits incompatible security-type create arguments for existing VMs, and the Windows UX, profile-copy, Ollama, Docker Desktop, AnyDesk, Be My Eyes, and iCloud tasks were hardened for interactive-session, installer-settle, and deferred-install realities.
+Implemented the live publish-gate hardening set across runtime, docs, and task contracts: `create`, `update`, and `set` now verify hibernation and nested virtualization as required outcomes, `prodicloud show` redacts password-bearing values and surfaces nested-virtualization evidence, `prodicloud ssh --test` and `prodicloud rdp --test` provide non-interactive readiness checks, the README and documentation contract now spell out the natural task order, `az vm create` omits incompatible security-type create arguments for existing VMs, and the Windows UX, profile-copy, Ollama, Docker Desktop, AnyDesk, Be My Eyes, and iCloud tasks were hardened for interactive-session, installer-settle, and deferred-install realities.
 
 ### 2026-03-11 20:44 UTC
 **User Prompt**
@@ -4235,14 +4235,14 @@ Use a phased, low-regression approach: each phase extracts one concern at a time
 Current baseline on **March 11, 2026**: `dev` and `main` already point to the same commit (`513454e`), so branch alignment after the refactor is a verified same-commit sync, not a merge-reconciliation task.
 
 ## Implementation Changes
-- Keep `clagnos.ps1` as the only entrypoint and keep the current root runtime files present as compatibility loaders:
-  - `modules/core/clagnos-core-foundation.ps1`
-  - `modules/core/clagnos-core-runtime.ps1`
-  - `modules/commands/clagnos-orchestration-runtime.ps1`
-  - `modules/commands/clagnos-command-main.ps1`
-  - `modules/ui/clagnos-ui-runtime.ps1`
-  - `modules/tasks/clagnos-ssh-runtime.ps1`
-  - `modules/tasks/clagnos-run-command-runtime.ps1`
+- Keep `prodicloud.ps1` as the only entrypoint and keep the current root runtime files present as compatibility loaders:
+  - `modules/core/prodicloud-core-foundation.ps1`
+  - `modules/core/prodicloud-core-runtime.ps1`
+  - `modules/commands/prodicloud-orchestration-runtime.ps1`
+  - `modules/commands/prodicloud-command-main.ps1`
+  - `modules/ui/prodicloud-ui-runtime.ps1`
+  - `modules/tasks/prodicloud-ssh-runtime.ps1`
+  - `modules/tasks/prodicloud-run-command-runtime.ps1`
 
 - Move command ownership out of the `ui` monolith and reorganize `modules/commands/` around the public command surface.
   Every supported command gets its own subtree under `modules/commands/`:
@@ -4299,19 +4299,19 @@ Current baseline on **March 11, 2026**: `dev` and `main` already point to the sa
 
 ## Public Interfaces To Preserve
 - Preserve all current public function names and parameter contracts used across the repo and tests, especially:
-  - `Invoke-ClagnosMain`
-  - `Parse-ClagnosCliArguments`
-  - `Invoke-ClagnosCommandDispatcher`
-  - `Initialize-ClagnosCommandRuntimeContext`
-  - `Resolve-ClagnosManagedVmTarget`
-  - `Get-ClagnosTaskBlocksFromDirectory`
-  - `Resolve-ClagnosRuntimeTaskBlocks`
+  - `Invoke-ProdicloudMain`
+  - `Parse-ProdicloudCliArguments`
+  - `Invoke-ProdicloudCommandDispatcher`
+  - `Initialize-ProdicloudCommandRuntimeContext`
+  - `Resolve-ProdicloudManagedVmTarget`
+  - `Get-ProdicloudTaskBlocksFromDirectory`
+  - `Resolve-ProdicloudRuntimeTaskBlocks`
   - `Invoke-VmRunCommandBlocks`
-  - `Invoke-ClagnosSshTaskBlocks`
-  - `Invoke-ClagnosTaskCommand`
-  - `Invoke-ClagnosExecCommand`
-  - `Invoke-ClagnosSshConnectCommand`
-  - `Invoke-ClagnosRdpConnectCommand`
+  - `Invoke-ProdicloudSshTaskBlocks`
+  - `Invoke-ProdicloudTaskCommand`
+  - `Invoke-ProdicloudExecCommand`
+  - `Invoke-ProdicloudSshConnectCommand`
+  - `Invoke-ProdicloudRdpConnectCommand`
 - Preserve command names, CLI options, `.env` precedence, text output semantics, and PowerShell 5.1 compatibility.
 - Preserve the existing root module file paths because smoke tests currently inspect those files directly.
 
@@ -4319,7 +4319,7 @@ Current baseline on **March 11, 2026**: `dev` and `main` already point to the sa
 - After each phase, run at minimum:
   - `tests/code-quality-check.ps1`
   - `tests/powershell-compatibility-check.ps1`
-  - `tests/clagnos-smoke-tests.ps1`
+  - `tests/prodicloud-smoke-tests.ps1`
 - Add minimal coupled test updates outside `modules/` only when the current tests are path-text fragile and would otherwise block a behavior-preserving extraction.
 - For each command subtree, verify:
   - command help output is unchanged
@@ -4341,29 +4341,29 @@ Current baseline on **March 11, 2026**: `dev` and `main` already point to the sa
 
 **Assistant Summary**
 
-Implemented the behavior-preserving modular refactor for `modules/` by keeping the existing root runtime files as compatibility loaders while redistributing the implementation into smaller domain files under `modules/core/`, `modules/config/`, `modules/commands/`, `modules/ui/`, and `modules/tasks/`. Each supported public command now has its own subtree with command-scoped `entry`, `contract`, `runtime`, and per-parameter files, `modules/ui/` is restricted to interaction/rendering concerns, the create/update pipeline and shared command runtime were split into dedicated helper areas, the smoke suite was updated only where it still inspected old monolithic root files, and the final tree was revalidated with `tests/code-quality-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1` so the refactor lands without intended behavior regression.
+Implemented the behavior-preserving modular refactor for `modules/` by keeping the existing root runtime files as compatibility loaders while redistributing the implementation into smaller domain files under `modules/core/`, `modules/config/`, `modules/commands/`, `modules/ui/`, and `modules/tasks/`. Each supported public command now has its own subtree with command-scoped `entry`, `contract`, `runtime`, and per-parameter files, `modules/ui/` is restricted to interaction/rendering concerns, the create/update pipeline and shared command runtime were split into dedicated helper areas, the smoke suite was updated only where it still inspected old monolithic root files, and the final tree was revalidated with `tests/code-quality-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1` so the refactor lands without intended behavior regression.
 
 ### 2026-03-11 19:52 UTC
 **User Prompt**
 
 ````text
-Fix and update: I do not want any old behavior or legacy remnants left behind. I do not want any leftovers at all. I want everything to run through the new modern refactored modular and reusable files under `modules/`. Is the current state like that? I also want all documentation and the `clagnos.ps1` main launcher to work in that same modern refactored way. Can you guarantee that for me without causing any regression?
+Fix and update: I do not want any old behavior or legacy remnants left behind. I do not want any leftovers at all. I want everything to run through the new modern refactored modular and reusable files under `modules/`. Is the current state like that? I also want all documentation and the `prodicloud.ps1` main launcher to work in that same modern refactored way. Can you guarantee that for me without causing any regression?
 ````
 
 **Assistant Summary**
 
-Finalized the modular-runtime cutover by removing the transitional root loader files from `modules/`, adding `modules/clagnos-runtime-manifest.ps1` as the single ordered source of truth for leaf-file loading, and updating `clagnos.ps1` to load that manifest directly instead of chaining through legacy wrappers. I also refreshed the smoke suite so it now fails if any deleted root loader path comes back, updated the current README and release docs to describe the manifest-based runtime architecture, and revalidated the final tree with `tests/code-quality-check.ps1`, `tests/clagnos-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1` to keep the cutover behavior-preserving.
+Finalized the modular-runtime cutover by removing the transitional root loader files from `modules/`, adding `modules/prodicloud-runtime-manifest.ps1` as the single ordered source of truth for leaf-file loading, and updating `prodicloud.ps1` to load that manifest directly instead of chaining through legacy wrappers. I also refreshed the smoke suite so it now fails if any deleted root loader path comes back, updated the current README and release docs to describe the manifest-based runtime architecture, and revalidated the final tree with `tests/code-quality-check.ps1`, `tests/prodicloud-smoke-tests.ps1`, and `tests/powershell-compatibility-check.ps1` to keep the cutover behavior-preserving.
 
 ### 2026-03-11 20:50 UTC
 **User Prompt**
 
 ````text
-Update the UI message: when `clagnos` runs, do not break to a new line after `script description:`; keep the content on the same line, like `script description: xxx yyyy`.
+Update the UI message: when `prodicloud` runs, do not break to a new line after `script description:`; keep the content on the same line, like `script description: xxx yyyy`.
 ````
 
 **Assistant Summary**
 
-Changed the startup banner in `Invoke-ClagnosMain` so `script description:` now prints as a single line instead of opening a multi-line block. While closing that prompt, I also finalized the outstanding live publish-gate hardening that was still in the working tree: the provisioning-ready poll now reads `instanceView.statuses` correctly, Windows task `10005-copy-settings-user` now skips deterministic blocker aliases/reparse points and tolerates best-effort ACL or in-use failures safely, the live release-acceptance requirement is now documented in `README.md` and `AGENTS.md` and enforced by `tests/documentation-contract-check.ps1`, and the full non-live gate plus a live `clagnos update --auto --windows` acceptance rerun completed successfully.
+Changed the startup banner in `Invoke-ProdicloudMain` so `script description:` now prints as a single line instead of opening a multi-line block. While closing that prompt, I also finalized the outstanding live publish-gate hardening that was still in the working tree: the provisioning-ready poll now reads `instanceView.statuses` correctly, Windows task `10005-copy-settings-user` now skips deterministic blocker aliases/reparse points and tolerates best-effort ACL or in-use failures safely, the live release-acceptance requirement is now documented in `PRODICLOUD.md` and `AGENTS.md` and enforced by `tests/documentation-contract-check.ps1`, and the full non-live gate plus a live `prodicloud update --auto --windows` acceptance rerun completed successfully.
 
 ### 2026-03-11 23:12 UTC
 **User Prompt**
@@ -4402,12 +4402,12 @@ Closed the remaining implementation path by finishing the live Windows acceptanc
 **User Prompt**
 
 ````text
-Please add a command like `clagnos do --vm-action=reapply`; in essence it should do something like `az vm reapply -g <resource-group> -n <vm-name>`, then show status at the end.
+Please add a command like `prodicloud do --vm-action=reapply`; in essence it should do something like `az vm reapply -g <resource-group> -n <vm-name>`, then show status at the end.
 ````
 
 **Assistant Summary**
 
-Added `clagnos do --vm-action=reapply` to the managed VM lifecycle surface so the command now calls `az vm reapply` for the resolved target and then prints a refreshed lifecycle status snapshot. I also updated the interactive `do` action picker, parser hints, CLI help, README examples, changelog, and release notes to expose the new action explicitly, added smoke coverage for the `reapply` invocation path and its provisioning-guard bypass behavior, and revalidated the full non-live gate with code-quality, documentation-contract, PowerShell compatibility, and smoke checks.
+Added `prodicloud do --vm-action=reapply` to the managed VM lifecycle surface so the command now calls `az vm reapply` for the resolved target and then prints a refreshed lifecycle status snapshot. I also updated the interactive `do` action picker, parser hints, CLI help, README examples, changelog, and release notes to expose the new action explicitly, added smoke coverage for the `reapply` invocation path and its provisioning-guard bypass behavior, and revalidated the full non-live gate with code-quality, documentation-contract, PowerShell compatibility, and smoke checks.
 
 ### 2026-03-11 23:43 UTC
 **User Prompt**
@@ -4429,18 +4429,18 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented the approved Public Desktop shortcut refactor by renaming the tracked Turkish labels into the approved English `Business` and `Personal` forms, restoring `q1SourTimes` plus the company-branded `Web` and `Blog` shortcuts, and preserving `q2Spotify` and `q3Netflix` in the managed set. I also refactored the Chrome shortcut contract so business/personal intent is carried by shortcut metadata instead of label text, normalized both `company_name` and the employee email local-part to lowercase before writing `--profile-directory`, hardened Public Desktop cleanup to remove semantic installer duplicates for Chrome, Edge, AnyDesk, and Visual Studio while preserving unrelated unmanaged shortcuts, and updated the tracked health snapshot, `.env.example`, README, AGENTS contract, changelog, release notes, and smoke coverage to enforce the new contract. The non-live gate passed with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/clagnos-smoke-tests.ps1`.
+Implemented the approved Public Desktop shortcut refactor by renaming the tracked Turkish labels into the approved English `Business` and `Personal` forms, restoring `q1SourTimes` plus the company-branded `Web` and `Blog` shortcuts, and preserving `q2Spotify` and `q3Netflix` in the managed set. I also refactored the Chrome shortcut contract so business/personal intent is carried by shortcut metadata instead of label text, normalized both `company_name` and the employee email local-part to lowercase before writing `--profile-directory`, hardened Public Desktop cleanup to remove semantic installer duplicates for Chrome, Edge, AnyDesk, and Visual Studio while preserving unrelated unmanaged shortcuts, and updated the tracked health snapshot, `.env.example`, README, AGENTS contract, changelog, release notes, and smoke coverage to enforce the new contract. The non-live gate passed with `tests/code-quality-check.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, and `tests/prodicloud-smoke-tests.ps1`.
 
 ### 2026-03-12 00:42 UTC
 **User Prompt**
 
 ````text
-As a small follow-up task, move `clagnos-interactive-session-helper.ps1` into the `..\scripts` folder and update the necessary references.
+As a small follow-up task, move `prodicloud-interactive-session-helper.ps1` into the `..\scripts` folder and update the necessary references.
 ````
 
 **Assistant Summary**
 
-Moved `clagnos-interactive-session-helper.ps1` from `tools/windows/` to `tools/scripts/` and updated the runtime Run Command asset-resolution path so the helper is loaded from the new repo location while the guest-side remote helper path remains unchanged. I then reran the non-live gate and confirmed that code-quality, documentation-contract, PowerShell compatibility, and smoke validation all still pass with the helper in its new path.
+Moved `prodicloud-interactive-session-helper.ps1` from `tools/windows/` to `tools/scripts/` and updated the runtime Run Command asset-resolution path so the helper is loaded from the new repo location while the guest-side remote helper path remains unchanged. I then reran the non-live gate and confirmed that code-quality, documentation-contract, PowerShell compatibility, and smoke validation all still pass with the helper in its new path.
 
 ### 2026-03-12 15:35 UTC
 **User Prompt**
@@ -4457,7 +4457,7 @@ Fine-tuned the slowest Windows `vm-update` paths end to end. `114-install-docker
 **User Prompt**
 
 ````text
-Please add one more command parameter: rename `clagnos do --vm-action=hibernate` to `--vm-action=hibernate-deallocate`, then add `--vm-action=hibernate-stop` so that, when the target VM is running and accepting SSH, it connects through pyssh, runs `shutdown /h /f`, and waits until the VM is down without deallocating.
+Please add one more command parameter: rename `prodicloud do --vm-action=hibernate` to `--vm-action=hibernate-deallocate`, then add `--vm-action=hibernate-stop` so that, when the target VM is running and accepting SSH, it connects through pyssh, runs `shutdown /h /f`, and waits until the VM is down without deallocating.
 ````
 
 **Assistant Summary**
@@ -4473,7 +4473,7 @@ Please run `--vm-action=hibernate-stop` now and make sure it works. Then record 
 
 **Assistant Summary**
 
-Ran a live end-to-end validation of `clagnos do --vm-action=hibernate-stop` against `rg-examplevm-sec1-g1/examplevm`. I first confirmed that the VM was running and that `clagnos ssh --test` passed, then executed `hibernate-stop` successfully through the repo-managed pyssh path. The guest accepted `shutdown /h /f`, SSH closed, and the VM moved from `started` through `VM stopping` into `stopped` without Azure deallocation. I then started the VM again, confirmed that final VM status returned to `started`, revalidated SSH test access, and pulled recent guest `Kernel-Power` events showing that the system entered sleep and later resumed. This prompt-history entry was added as a documentation-only exception record for the live validation turn.
+Ran a live end-to-end validation of `prodicloud do --vm-action=hibernate-stop` against `rg-examplevm-sec1-g1/examplevm`. I first confirmed that the VM was running and that `prodicloud ssh --test` passed, then executed `hibernate-stop` successfully through the repo-managed pyssh path. The guest accepted `shutdown /h /f`, SSH closed, and the VM moved from `started` through `VM stopping` into `stopped` without Azure deallocation. I then started the VM again, confirmed that final VM status returned to `started`, revalidated SSH test access, and pulled recent guest `Kernel-Power` events showing that the system entered sleep and later resumed. This prompt-history entry was added as a documentation-only exception record for the live validation turn.
 
 ### 2026-03-12 14:44 UTC
 **User Prompt**
@@ -4495,7 +4495,7 @@ Please refresh the repo before publication by scanning the recent development wo
 
 **Assistant Summary**
 
-Applied the safe static subset of the publish-readiness sync in the tracked repo. I updated the README, contributing guide, support guide, GitHub issue templates, pull-request template, and GitHub Actions quality gate so the current release-readiness and live Azure acceptance contract is documented consistently. I also hardened the VM create path in `Invoke-ClagnosVmCreateStep` so transient non-zero `az vm create` results now trigger a bounded VM-presence probe before failing, reducing false negatives when Azure completes the deployment moments later. The destructive live recreate cycle and final branch cleanup were intentionally left out of this commit slice.
+Applied the safe static subset of the publish-readiness sync in the tracked repo. I updated the README, contributing guide, support guide, GitHub issue templates, pull-request template, and GitHub Actions quality gate so the current release-readiness and live Azure acceptance contract is documented consistently. I also hardened the VM create path in `Invoke-ProdicloudVmCreateStep` so transient non-zero `az vm create` results now trigger a bounded VM-presence probe before failing, reducing false negatives when Azure completes the deployment moments later. The destructive live recreate cycle and final branch cleanup were intentionally left out of this commit slice.
 
 ### 2026-03-12 15:49 UTC
 **User Prompt**
@@ -4528,7 +4528,7 @@ Yes, continue exactly as planned. Until these tasks are complete, you do not nee
 
 **Assistant Summary**
 
-Resumed the live release-readiness phase without further approval prompts. I first restated the current plan stage and the unfinished items, then fixed the three remaining Windows `vm-update` blockers from the live acceptance cycle: `104-install-node-system` and `111-install-edge-browser` now have realistic timeout budgets plus bounded post-install verification, and `10005-copy-settings-user` now excludes `AppData\Local\Microsoft\Windows\WebCacheLock.dat` consistently while tolerating the same live lock signature across the observed robocopy return codes. After revalidating the local non-live gate, I reran the live Windows tasks individually on `rg-examplevm-sec1-g1/examplevm`, reran the full `clagnos update --auto --windows --perf` flow to a clean `success=45, failed=0, warning=0, error=0, reboot=0`, and finished with passing `show`, VM status, SSH test, and RDP test checks against the live VM.
+Resumed the live release-readiness phase without further approval prompts. I first restated the current plan stage and the unfinished items, then fixed the three remaining Windows `vm-update` blockers from the live acceptance cycle: `104-install-node-system` and `111-install-edge-browser` now have realistic timeout budgets plus bounded post-install verification, and `10005-copy-settings-user` now excludes `AppData\Local\Microsoft\Windows\WebCacheLock.dat` consistently while tolerating the same live lock signature across the observed robocopy return codes. After revalidating the local non-live gate, I reran the live Windows tasks individually on `rg-examplevm-sec1-g1/examplevm`, reran the full `prodicloud update --auto --windows --perf` flow to a clean `success=45, failed=0, warning=0, error=0, reboot=0`, and finished with passing `show`, VM status, SSH test, and RDP test checks against the live VM.
 
 ### 2026-03-12 19:28 UTC
 **User Prompt**
@@ -4539,7 +4539,7 @@ Continue exactly from the last operation flow. I interrupted it. You were tracki
 
 **Assistant Summary**
 
-Resumed the interrupted GitHub publish phase, verified that the new public repository `the public clagnos repository` already existed with aligned `main` and `dev`, and confirmed that all extra local branches had been cleaned up. I then retrieved the failing `main` GitHub Actions run details and traced both failed Windows jobs to the same root cause: `.github/workflows/quality-gate.yml` was checking out the repo with shallow history, so the commit-count-based documentation contract saw `HEAD` as `1` instead of the real repository count. I fixed the workflow by switching every `actions/checkout@v6` step to `fetch-depth: 0`, updated the release metadata to the new `2026.3.12.295` version, and prepared the repo for a clean follow-up push so the authoritative `main` workflow run can complete against full history.
+Resumed the interrupted GitHub publish phase, verified that the new public repository `the public prodicloud repository` already existed with aligned `main` and `dev`, and confirmed that all extra local branches had been cleaned up. I then retrieved the failing `main` GitHub Actions run details and traced both failed Windows jobs to the same root cause: `.github/workflows/quality-gate.yml` was checking out the repo with shallow history, so the commit-count-based documentation contract saw `HEAD` as `1` instead of the real repository count. I fixed the workflow by switching every `actions/checkout@v6` step to `fetch-depth: 0`, updated the release metadata to the new `2026.3.12.295` version, and prepared the repo for a clean follow-up push so the authoritative `main` workflow run can complete against full history.
 
 ### 2026-03-12 19:58 UTC
 **User Prompt**
@@ -4550,7 +4550,7 @@ Fix: these gates were passing much faster on my local machine, and the smoke tes
 
 **Assistant Summary**
 
-Investigated the slow GitHub Actions `smoke-contracts` gate and confirmed that the runner was not deadlocked. The real problem was that several smoke tests in `tests/clagnos-smoke-tests.ps1` were declaring their doubles with `global:` scope, so the runtime kept calling the original `.env` and Azure CLI backed implementations on CI instead of the intended test stubs. I fixed those smoke doubles to shadow the runtime functions in the active test scope, reran the full smoke suite successfully, refreshed `CHANGELOG.md` and `release-notes.md` to `2026.3.12.296`, and prepared the repo for a fresh aligned push so the remote `main` workflow can finish against the corrected non-live gate.
+Investigated the slow GitHub Actions `smoke-contracts` gate and confirmed that the runner was not deadlocked. The real problem was that several smoke tests in `tests/prodicloud-smoke-tests.ps1` were declaring their doubles with `global:` scope, so the runtime kept calling the original `.env` and Azure CLI backed implementations on CI instead of the intended test stubs. I fixed those smoke doubles to shadow the runtime functions in the active test scope, reran the full smoke suite successfully, refreshed `CHANGELOG.md` and `release-notes.md` to `2026.3.12.296`, and prepared the repo for a fresh aligned push so the remote `main` workflow can finish against the corrected non-live gate.
 
 ### 2026-03-13 01:35 UTC
 **User Prompt**
@@ -4559,13 +4559,13 @@ Investigated the slow GitHub Actions `smoke-contracts` gate and confirmed that t
 You are responsible only for help/docs/tests alignment. Do not edit runtime/orchestration code outside the files below. You are not alone in the codebase; do not revert others' edits, and adapt around concurrent changes.
 
 Ownership / allowed write set:
-- modules/core/cli/clagnos-help.ps1
-- README.md
+- modules/core/cli/prodicloud-help.ps1
+- PRODICLOUD.md
 - CHANGELOG.md
 - release-notes.md
 - AGENTS.md
 - docs/prompt-history.md
-- tests/clagnos-smoke-tests.ps1
+- tests/prodicloud-smoke-tests.ps1
 - tests/documentation-contract-check.ps1
 - tests/code-quality-check.ps1 (only if needed for new contracts)
 
@@ -4586,13 +4586,13 @@ Use apply_patch for edits. Run targeted local validation on your changed docs/te
 
 **Assistant Summary**
 
-Aligned the owned help/docs/tests surface with the in-progress fresh-only `create`, existing-only `update`, strict auto-mode, review-first UX, global `gX`/`nX`, and `resize --disk-size ... --expand|--shrink` contract without touching runtime/orchestration files outside the allowed write set. I updated `modules/core/cli/clagnos-help.ps1`, `README.md`, `AGENTS.md`, `CHANGELOG.md`, `release-notes.md`, `tests/clagnos-smoke-tests.ps1`, and `tests/documentation-contract-check.ps1`, tightened the smoke and documentation assertions around the new wording, and corrected the remaining public-shortcut/autologon smoke expectations so they match the current in-progress implementation. I then revalidated the owned surface with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/code-quality-check.ps1`, and `tests/powershell-compatibility-check.ps1`, all passing.
+Aligned the owned help/docs/tests surface with the in-progress fresh-only `create`, existing-only `update`, strict auto-mode, review-first UX, global `gX`/`nX`, and `resize --disk-size ... --expand|--shrink` contract without touching runtime/orchestration files outside the allowed write set. I updated `modules/core/cli/prodicloud-help.ps1`, `PRODICLOUD.md`, `AGENTS.md`, `CHANGELOG.md`, `release-notes.md`, `tests/prodicloud-smoke-tests.ps1`, and `tests/documentation-contract-check.ps1`, tightened the smoke and documentation assertions around the new wording, and corrected the remaining public-shortcut/autologon smoke expectations so they match the current in-progress implementation. I then revalidated the owned surface with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/code-quality-check.ps1`, and `tests/powershell-compatibility-check.ps1`, all passing.
 
 ### 2026-03-13 09:10 UTC
 **User Prompt**
 
 ````text
-Feature updates with UI/UX improvements, general fixes, and tests: improve the behavior of `clagnos create` and `clagnos update`; make `create` fresh-only and `update` existing-target-only; redesign the interactive UX so only four review checkpoints ask `yes/no/cancel` while configuration and VM summary always render; harden public desktop shortcut creation so orphan targets are skipped and Store/MSIX apps resolve through real executable paths or AppsFolder IDs; verify installed applications such as Ollama and Docker Desktop more reliably; analyze the live VM to learn from the current installed apps, shortcuts, startup settings, WSL, Docker, Ollama, and profile-copy behavior; then use those findings to harden the Windows `vm-update` tasks. Also update the managed resource naming model so every generated managed resource uses a globally unique `nX` id across all resource types, not a per-type counter.
+Feature updates with UI/UX improvements, general fixes, and tests: improve the behavior of `prodicloud create` and `prodicloud update`; make `create` fresh-only and `update` existing-target-only; redesign the interactive UX so only four review checkpoints ask `yes/no/cancel` while configuration and VM summary always render; harden public desktop shortcut creation so orphan targets are skipped and Store/MSIX apps resolve through real executable paths or AppsFolder IDs; verify installed applications such as Ollama and Docker Desktop more reliably; analyze the live VM to learn from the current installed apps, shortcuts, startup settings, WSL, Docker, Ollama, and profile-copy behavior; then use those findings to harden the Windows `vm-update` tasks. Also update the managed resource naming model so every generated managed resource uses a globally unique `nX` id across all resource types, not a per-type counter.
 ````
 
 **Assistant Summary**
@@ -4607,16 +4607,16 @@ For `10005-copy-settings-user`, I fixed the rerun-safety gap exposed on the live
 **User Prompt**
 
 ````text
-Feature update: make `configure` select an clagnos-managed resource group and VM, then sync the selected target into `.env`; if parameters are omitted, it should do that interactively. Also, interactive `create` must ask for the VM OS type first when `--windows` or `--linux` is omitted, and that choice must drive the VM image, size, and disk defaults. Finally, remove the public `group` command and replace it with `clagnos list`, where `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule` exposes managed inventory and `--group=<resource-group>` acts as an exact managed-group filter. Implement the plan.
+Feature update: make `configure` select an prodicloud-managed resource group and VM, then sync the selected target into `.env`; if parameters are omitted, it should do that interactively. Also, interactive `create` must ask for the VM OS type first when `--windows` or `--linux` is omitted, and that choice must drive the VM image, size, and disk defaults. Finally, remove the public `group` command and replace it with `prodicloud list`, where `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule` exposes managed inventory and `--group=<resource-group>` acts as an exact managed-group filter. Implement the plan.
 ````
 
 **Assistant Summary**
 
-Implemented the command-surface refresh across runtime, help, README, AGENTS, and test contracts. `configure` now selects one clagnos-managed target VM, reads actual Azure VM, disk, and network state, validates optional `--windows` or `--linux` flags against the real VM OS type, and writes only target-derived `.env` values back to the local environment file. The command now supports `--vm-name`, auto-selects the only VM in a selected managed resource group when that path is unambiguous, and fails fast when an explicit group contains multiple VMs but no `--vm-name` was provided.
+Implemented the command-surface refresh across runtime, help, README, AGENTS, and test contracts. `configure` now selects one prodicloud-managed target VM, reads actual Azure VM, disk, and network state, validates optional `--windows` or `--linux` flags against the real VM OS type, and writes only target-derived `.env` values back to the local environment file. The command now supports `--vm-name`, auto-selects the only VM in a selected managed resource group when that path is unambiguous, and fails fast when an explicit group contains multiple VMs but no `--vm-name` was provided.
 
-I also changed interactive `create` so the first prompt becomes the VM OS choice whenever platform flags are missing. That prompt now ignores persisted `.env VM_OS_TYPE` for interactive create, defaults blank input to Windows, and then scopes image, size, and disk defaults from the selected platform. On the public inventory side, I removed the `group` command and replaced it with the new read-only `list` command. `clagnos list` now prints managed inventory by section, supports `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule`, and accepts optional exact `--group` filtering without writing `.env`.
+I also changed interactive `create` so the first prompt becomes the VM OS choice whenever platform flags are missing. That prompt now ignores persisted `.env VM_OS_TYPE` for interactive create, defaults blank input to Windows, and then scopes image, size, and disk defaults from the selected platform. On the public inventory side, I removed the `group` command and replaced it with the new read-only `list` command. `prodicloud list` now prints managed inventory by section, supports `--type=group,vm,disk,vnet,subnet,nic,ip,nsg,nsg-rule`, and accepts optional exact `--group` filtering without writing `.env`.
 
-To keep the repo contract coherent, I removed the retired `group` command modules and the unused shared `select` option module, updated the runtime manifest, parser hints, dispatcher wiring, and CLI help, and refreshed `README.md`, `AGENTS.md`, `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, and `tests/code-quality-check.ps1` to the new surface. I revalidated the non-live gate with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`, all passing.
+To keep the repo contract coherent, I removed the retired `group` command modules and the unused shared `select` option module, updated the runtime manifest, parser hints, dispatcher wiring, and CLI help, and refreshed `PRODICLOUD.md`, `AGENTS.md`, `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, and `tests/code-quality-check.ps1` to the new surface. I revalidated the non-live gate with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`, all passing.
 
 ### 2026-03-13 04:16 UTC
 **User Prompt**
@@ -4629,7 +4629,7 @@ Add Azure subscription targeting across the Azure-touching command surface. All 
 
 Implemented Azure subscription targeting across the full Azure-touching command surface: `create`, `update`, `configure`, `list`, `show`, `do`, `move`, `resize`, `set`, `exec`, `ssh`, `rdp`, and `delete` now accept `--subscription-id=<subscription-guid>` plus `-s <subscription-guid>` / `-s=<subscription-guid>`, while `task` and `help` remain intentionally local-only and reject the option. I added a shared subscription option module, short-option parsing for `-s`, a shared subscription resolver with the committed precedence `CLI -> .env azure_subscription_id -> active Azure CLI subscription`, and a central Azure CLI injection path so normal `az` commands automatically inherit the resolved subscription while account-discovery helpers can still bypass that injection when needed.
 
-I also updated interactive `create` and `update` so they prompt for Azure subscription selection before Azure-backed discovery when `--subscription-id` is omitted, and I wired the resolved subscription into runtime summaries, diagnostics, `configure`, and `list`. Successful CLI `-s` usage now persists `azure_subscription_id` into `.env`, `.env.example` documents that key, and the shared help/README/AGENTS text now states explicitly that `az login` is required for Azure-touching commands. After fixing the two edge cases exposed by smoke testing, I revalidated the change with `tests/clagnos-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`, all passing.
+I also updated interactive `create` and `update` so they prompt for Azure subscription selection before Azure-backed discovery when `--subscription-id` is omitted, and I wired the resolved subscription into runtime summaries, diagnostics, `configure`, and `list`. Successful CLI `-s` usage now persists `azure_subscription_id` into `.env`, `.env.example` documents that key, and the shared help/README/AGENTS text now states explicitly that `az login` is required for Azure-touching commands. After fixing the two edge cases exposed by smoke testing, I revalidated the change with `tests/prodicloud-smoke-tests.ps1`, `tests/documentation-contract-check.ps1`, `tests/powershell-compatibility-check.ps1`, `tests/code-quality-check.ps1`, and `tests/bash-syntax-check.ps1`, all passing.
 
 ### 2026-03-13 10:16 UTC
 **User Prompt**
@@ -4659,12 +4659,12 @@ Narrowed `10005-copy-settings-user.ps1` to an explicit, durable allowlist instea
 **User Prompt**
 
 ````text
-Update docs: reorganize `README.md` so the content starts with a merged quick-start guide, then `Customer Business Value`, then `Executive Summary`, and then a richer, more effective sequence of the remaining topics. The README should stay content-rich, become more presentable, and explain the value proposition clearly for executives, developers, customers, users, visitors, sponsors, and regular operators. Also include one strong table-driven section that explains all commands, parameters, and practical variations in an operational and pragmatic way. Then implement the plan.
+Update docs: reorganize `PRODICLOUD.md` so the content starts with a merged quick-start guide, then `Customer Business Value`, then `Executive Summary`, and then a richer, more effective sequence of the remaining topics. The README should stay content-rich, become more presentable, and explain the value proposition clearly for executives, developers, customers, users, visitors, sponsors, and regular operators. Also include one strong table-driven section that explains all commands, parameters, and practical variations in an operational and pragmatic way. Then implement the plan.
 ````
 
 **Assistant Summary**
 
-Rebuilt `README.md` into a more audience-first and presentation-ready document without thinning out the technical depth. The new README now opens with a stronger at-a-glance framing, a merged `Quick Start Guide`, `Customer Business Value`, a standalone `Executive Summary`, `Value By Audience`, and a richer delivered-outcome matrix before moving into the deeper technical guidance. I also added a new top-level `Operational Command Matrix` so every public command, shared option, and practical usage variation can be scanned quickly from tables before the reader moves into the narrative command guide and the deeper architecture and workflow sections.
+Rebuilt `PRODICLOUD.md` into a more audience-first and presentation-ready document without thinning out the technical depth. The new README now opens with a stronger at-a-glance framing, a merged `Quick Start Guide`, `Customer Business Value`, a standalone `Executive Summary`, `Value By Audience`, and a richer delivered-outcome matrix before moving into the deeper technical guidance. I also added a new top-level `Operational Command Matrix` so every public command, shared option, and practical usage variation can be scanned quickly from tables before the reader moves into the narrative command guide and the deeper architecture and workflow sections.
 
 To keep the repo contract tight, I updated `tests/documentation-contract-check.ps1` so the new README heading order, the merged quick-start structure, and the new command-matrix sections are enforced explicitly. I also updated `CHANGELOG.md` and `release-notes.md` to the new documented release `2026.3.13.302`, preserving the repo's release-document discipline while making the main README more useful for customers, executives, developers, operators, visitors, and potential sponsors.
 
@@ -4701,7 +4701,7 @@ First, tell me whether the cleanup task really finished exactly as planned and w
 
 **Assistant Summary**
 
-Confirmed that the accepted cleanup plan was completed as implemented, with the intentional exception that git author and committer metadata still follows the previously approved maintainer-identity rule. I then turned the cleanup discipline into a standing repo control by adding a dedicated sensitive-content audit, wiring it into local hooks and the non-live quality gate, documenting the rule in AGENTS.md and README.md, and revalidating the repo with the standard non-live checks.
+Confirmed that the accepted cleanup plan was completed as implemented, with the intentional exception that git author and committer metadata still follows the previously approved maintainer-identity rule. I then turned the cleanup discipline into a standing repo control by adding a dedicated sensitive-content audit, wiring it into local hooks and the non-live quality gate, documenting the rule in AGENTS.md and PRODICLOUD.md, and revalidating the repo with the standard non-live checks.
 
 ### 2026-03-13 14:05 UTC
 **User Prompt**
@@ -4716,18 +4716,18 @@ Under the prompt-history rules I just defined, should that tiny instruction be r
 
 **Assistant Summary**
 
-Refined the prompt-history contract so very short approval or follow-up prompts and non-mutating question or analysis turns are no longer auto-recorded, while every other substantive prompt remains a mandatory English-normalized prompt-history entry. I aligned AGENTS.md, README.md, the documentation contract, changelog, and release notes to that narrower rule, confirmed that a tiny instruction like `git push to main` would not be recorded by itself, confirmed that this full substantive prompt should be recorded, and then pushed `main` after re-running the relevant non-live checks.
+Refined the prompt-history contract so very short approval or follow-up prompts and non-mutating question or analysis turns are no longer auto-recorded, while every other substantive prompt remains a mandatory English-normalized prompt-history entry. I aligned AGENTS.md, PRODICLOUD.md, the documentation contract, changelog, and release notes to that narrower rule, confirmed that a tiny instruction like `git push to main` would not be recorded by itself, confirmed that this full substantive prompt should be recorded, and then pushed `main` after re-running the relevant non-live checks.
 
 ### 2026-03-13 15:05 UTC
 **User Prompt**
 
 ````text
-Update the README for this repo so that its first four major sections make it absolutely clear that `clagnos` delivers an end-to-end operating-system user experience for employees, developers, administrative teams, workers, customers, general users, and anyone else who needs it. It should communicate, in a practical and striking way, that one command can produce a nearly zero-touch machine with the needed applications installed, the relevant configuration and fine-tuning already applied, desktop shortcuts created and organized, and the system prepared from top to bottom so the user can connect remotely and use it almost like their own computer at home. Re-check the current repo capabilities and express this with strong PoC / PoE-style scenarios in the README, then sync `dev` and `main` and push `main`.
+Update the README for this repo so that its first four major sections make it absolutely clear that `prodicloud` delivers an end-to-end operating-system user experience for employees, developers, administrative teams, workers, customers, general users, and anyone else who needs it. It should communicate, in a practical and striking way, that one command can produce a nearly zero-touch machine with the needed applications installed, the relevant configuration and fine-tuning already applied, desktop shortcuts created and organized, and the system prepared from top to bottom so the user can connect remotely and use it almost like their own computer at home. Re-check the current repo capabilities and express this with strong PoC / PoE-style scenarios in the README, then sync `dev` and `main` and push `main`.
 ````
 
 **Assistant Summary**
 
-Reworked the opening README narrative so the first four sections now present `clagnos` as a Windows-first, near-zero-touch remote workstation delivery path backed by the current task catalogs, while still positioning Linux honestly as a lighter but fully extensible platform. I added stronger customer and executive framing, expanded the audience-value table, introduced proof-oriented PoC / PoE scenarios, enriched the delivered-outcome matrix with desktop and personalization evidence, revalidated the full non-live gate, fast-forwarded `dev` to the tested `main` commit, and pushed both `dev` and `main`.
+Reworked the opening README narrative so the first four sections now present `prodicloud` as a Windows-first, near-zero-touch remote workstation delivery path backed by the current task catalogs, while still positioning Linux honestly as a lighter but fully extensible platform. I added stronger customer and executive framing, expanded the audience-value table, introduced proof-oriented PoC / PoE scenarios, enriched the delivered-outcome matrix with desktop and personalization evidence, revalidated the full non-live gate, fast-forwarded `dev` to the tested `main` commit, and pushed both `dev` and `main`.
 
 ### 2026-03-13 20:22 UTC
 **User Prompt**
@@ -4786,14 +4786,14 @@ I then revalidated the change set non-live and live. The non-live gate passed ag
 **User Prompt**
 
 ````text
-Implement the plan to relocate the retro-log audit helper out of the automatic test surface, merge the local screen-reader tasks into one self-contained local task, fix overlong public desktop shortcuts with a shorter launcher strategy that keeps the same behavior, and remove the current `clagnos-log-*.txt` files from the repo working tree. Keep the current transcript path unchanged for now, make the retro audit helper manual-only under `tools/scripts/`, and keep validating the result with isolated task runs.
+Implement the plan to relocate the retro-log audit helper out of the automatic test surface, merge the local screen-reader tasks into one self-contained local task, fix overlong public desktop shortcuts with a shorter launcher strategy that keeps the same behavior, and remove the current `prodicloud-log-*.txt` files from the repo working tree. Keep the current transcript path unchanged for now, make the retro audit helper manual-only under `tools/scripts/`, and keep validating the result with isolated task runs.
 ````
 
 **Assistant Summary**
 
-Moved the retro-log audit helper to `tools/scripts/retro-log-audit.ps1`, removed it from the automatic non-live gate, and updated the smoke/docs/release surface to match the new manual-only maintenance role. I added the shared tracked shortcut launcher module `modules/core/tasks/clagnos-shortcut-launcher.psm1`, rewired `10002-create-shortcuts-public-desktop.ps1` to route overlong shortcut invocations through short managed launcher files under `C:\ProgramData\clagnos\shortcut-launchers\public-desktop`, and taught `10099-capture-snapshot-health.ps1` to validate those wrapper-backed shortcuts through their effective target and argument contract instead of the raw `cmd.exe` wrapper path.
+Moved the retro-log audit helper to `tools/scripts/retro-log-audit.ps1`, removed it from the automatic non-live gate, and updated the smoke/docs/release surface to match the new manual-only maintenance role. I added the shared tracked shortcut launcher module `modules/core/tasks/prodicloud-shortcut-launcher.psm1`, rewired `10002-create-shortcuts-public-desktop.ps1` to route overlong shortcut invocations through short managed launcher files under `C:\ProgramData\prodicloud\shortcut-launchers\public-desktop`, and taught `10099-capture-snapshot-health.ps1` to validate those wrapper-backed shortcuts through their effective target and argument contract instead of the raw `cmd.exe` wrapper path.
 
-On the local-only side, I merged the old screen-reader tasks into one self-contained local task, renamed the local helper to a matching contextual common module, and aligned the local app-state plugin path to the same per-task app-state zip contract. I then deleted the current `clagnos-log-*.txt` files from the repo working tree, verified that `.gitignore` still protects that pattern, manually confirmed that `tools/scripts/retro-log-audit.ps1` now reports “no logs found” when the transcript set is absent, reran the standard non-live gate, and reran isolated live validation on the active Windows VM with `exec --update-task=1001`, `10002`, and `10099`. The final live result showed zero managed orphan shortcuts, healthy managed launcher readback including the wrapped `a11MS Edge` contract, and a clean one-shot local screen-reader task summary with `signal-warning=0` in the noninteractive SSH session.
+On the local-only side, I merged the old screen-reader tasks into one self-contained local task, renamed the local helper to a matching contextual common module, and aligned the local app-state plugin path to the same per-task app-state zip contract. I then deleted the current `prodicloud-log-*.txt` files from the repo working tree, verified that `.gitignore` still protects that pattern, manually confirmed that `tools/scripts/retro-log-audit.ps1` now reports “no logs found” when the transcript set is absent, reran the standard non-live gate, and reran isolated live validation on the active Windows VM with `exec --update-task=1001`, `10002`, and `10099`. The final live result showed zero managed orphan shortcuts, healthy managed launcher readback including the wrapped `a11MS Edge` contract, and a clean one-shot local screen-reader task summary with `signal-warning=0` in the noninteractive SSH session.
 
 ### 2026-03-15 08:20 UTC
 **User Prompt**
@@ -4804,7 +4804,7 @@ Implement the approved update-first app-state maintenance plan. Add `task --save
 
 **Assistant Summary**
 
-Implemented the new live task-maintenance surface so `clagnos task` can now save and restore per-task app-state payloads for init/update tasks, using one shared capture/replay engine and the existing stage-local `app-state.zip` contract. I added the tracked task parameter modules, the shared capture-spec registry, the shared save engine, pyssh fetch support, help and README coverage, the derived default VM-name contract, the new `.env.example` keys for `company_web_address` and `company_email_address`, and the shortcut contract updates for `i1Internet Business`, `k1Codex CLI`, and `d4ICloud`. I also refreshed the tracked banned-string cleanup in source/docs/tests, and moved the active Windows update payloads toward operator-refreshed live captures instead of keeping stale local-machine-derived replay data.
+Implemented the new live task-maintenance surface so `prodicloud task` can now save and restore per-task app-state payloads for init/update tasks, using one shared capture/replay engine and the existing stage-local `app-state.zip` contract. I added the tracked task parameter modules, the shared capture-spec registry, the shared save engine, pyssh fetch support, help and README coverage, the derived default VM-name contract, the new `.env.example` keys for `company_web_address` and `company_email_address`, and the shortcut contract updates for `i1Internet Business`, `k1Codex CLI`, and `d4ICloud`. I also refreshed the tracked banned-string cleanup in source/docs/tests, and moved the active Windows update payloads toward operator-refreshed live captures instead of keeping stale local-machine-derived replay data.
 
 On the live side, I used the new task surface against the active managed Windows VM, fixed the task capture-plan merge bug that was dropping ordered-hashtable capture specs, shortened the Windows capture scratch paths so deep `.codex` trees can be zipped successfully, fixed registry export directory creation, narrowed legacy registry carry-forward so stale mounted-hive paths stop polluting new payloads, and verified the new save/restore flow in isolation for task `115-install-npm-packages-global`. The refreshed task-115 payload now captures the expected per-user CLI state, including the full `.codex` and `.gemini` trees from the live VM, and the matching restore path replays that payload through the same shared app-state engine.
 
@@ -4849,7 +4849,7 @@ I also sanitized the current ignored `windows/update/app-states/*/app-state.zip`
 **User Prompt**
 
 ````text
-I updated the local `.env` carefully. Analyze that new configuration deeply and refactor the application in a planned way so the change becomes the real contract. Update `.env.example`, the documentation, and the help text too. The settings that start with `SELECTED_*` in `.env` must be sufficient for `clagnos create --auto` to run end-to-end and bring up a virtual machine.
+I updated the local `.env` carefully. Analyze that new configuration deeply and refactor the application in a planned way so the change becomes the real contract. Update `.env.example`, the documentation, and the help text too. The settings that start with `SELECTED_*` in `.env` must be sufficient for `prodicloud create --auto` to run end-to-end and bring up a virtual machine.
 
 Implement the plan.
 ````
@@ -4864,7 +4864,7 @@ In the runtime, I added alias resolution so the internal orchestration fields st
 **User Prompt**
 
 ````text
-Please add this command option too, test it in isolation, and commit it: `clagnos do --vm-action=redeploy --vm-name=<example-vm-name>`.
+Please add this command option too, test it in isolation, and commit it: `prodicloud do --vm-action=redeploy --vm-name=<example-vm-name>`.
 ````
 
 **Assistant Summary**
@@ -4879,8 +4879,8 @@ I revalidated the change in isolation through non-live smoke coverage instead of
 ````text
 Question: 1. Does `--restore-app-state` run as a post-task step after every vm-init and vm-update task? 2. Is the restore flow executed there the same code used by `task --restore-app-state`? If not, make the whole system work that way.
 
-After the current task is complete, update the UI too: every `clagnos` invocation must print a welcome message:
-CLAGNOS CLI V{version info}
+After the current task is complete, update the UI too: every `prodicloud` invocation must print a welcome message:
+PRODICLOUD CLI V{version info}
 {two-line description with all popular features}
 This greeting must appear in all cases, including valid commands, invalid commands, parameterized invocations, and parameterless invocations.
 ````
@@ -4889,19 +4889,19 @@ This greeting must appear in all cases, including valid commands, invalid comman
 
 Verified that vm-update already used the shared app-state restore helper after each task and that `task --restore-app-state` already reused that same helper, but vm-init still differed: it ran init tasks through Azure Run Command without the shared post-task restore path. I refactored the init runner so vm-init now executes one task at a time over Azure Run Command and invokes the same shared task app-state restore helper after each successful init task when a matching stage-local plugin zip exists. I also routed `task --restore-app-state --vm-init-task ...` through that same shared helper by adding a run-command transport to the app-state restore runtime, so init post-task replay and direct vm-init restore now share the same plugin resolution and replay core instead of splitting between unrelated paths.
 
-In the same change, I added an unconditional CLI welcome banner at `clagnos.ps1`. Every invocation now starts with `CLAGNOS CLI V<version>` and a two-line feature summary before command parsing and dispatch, so the same banner appears for valid commands, invalid commands, parameterized runs, and parameterless runs alike. I updated README, AGENTS, changelog, release notes, and smoke coverage to match the new behavior, and revalidated the change set with the non-live validation chain.
+In the same change, I added an unconditional CLI welcome banner at `prodicloud.ps1`. Every invocation now starts with `PRODICLOUD CLI V<version>` and a two-line feature summary before command parsing and dispatch, so the same banner appears for valid commands, invalid commands, parameterized runs, and parameterless runs alike. I updated README, AGENTS, changelog, release notes, and smoke coverage to match the new behavior, and revalidated the change set with the non-live validation chain.
 
 ### 2026-03-15 17:28 UTC
 
 **User Prompt**
 
 ````text
-publish to production: first, delete all resource groups tagged to be managed by clagnos; then run the `clagnos create --auto --windows --perf` command to bring up a virtual machine; if any problem occurs during this command, stop, fix the code, and run the same command again; at the end of this work, let our new virtual machine go live...
+publish to production: first, delete all resource groups tagged to be managed by prodicloud; then run the `prodicloud create --auto --windows --perf` command to bring up a virtual machine; if any problem occurs during this command, stop, fix the code, and run the same command again; at the end of this work, let our new virtual machine go live...
 ````
 
 **Assistant Summary**
 
-Completed: I deleted the existing clagnos-managed resource groups, traced the Windows live-create failure to the SSH asset-transfer path, fixed the repo to fall back from broken Windows SFTP negotiation to chunked PowerShell `exec` uploads, and reran the production workflow until a new managed VM was online. I then synchronized the resulting target into `.env` with `configure`, verified the VM was in `Provisioning succeeded` / `VM running` state, and confirmed both `connect --ssh --test` and `connect --rdp --test` passed for the active managed target. The final long `create` transcript hit the local tool timeout late in the Windows `vm-update` task list, but the VM itself was created successfully, remains reachable over both transports, and is now the active managed target.
+Completed: I deleted the existing prodicloud-managed resource groups, traced the Windows live-create failure to the SSH asset-transfer path, fixed the repo to fall back from broken Windows SFTP negotiation to chunked PowerShell `exec` uploads, and reran the production workflow until a new managed VM was online. I then synchronized the resulting target into `.env` with `configure`, verified the VM was in `Provisioning succeeded` / `VM running` state, and confirmed both `connect --ssh --test` and `connect --rdp --test` passed for the active managed target. The final long `create` transcript hit the local tool timeout late in the Windows `vm-update` task list, but the VM itself was created successfully, remains reachable over both transports, and is now the active managed target.
 
 ### 2026-03-16 00:41 UTC
 
@@ -4929,7 +4929,7 @@ Plan and implement two major feature sets sequentially, not in parallel: first m
 
 Completed the full three-phase pass non-live. Vm-init and vm-update now use portable task folders plus `task.json` manifests across the tracked Windows and Linux stages, the stage inventories were renumbered within their priority bands without gaps, task-local app-state ownership moved to `<task-folder>/app-state/app-state.zip`, and the runtime now treats missing portable task folders as absent instead of as a stage failure. The task command also gained the new local/VM app-state surface: `--save-app-state` now supports `--source=vm|lm`, `--restore-app-state` now supports `--target=vm|lm`, VM behavior remains the default, `.all.` / `.current.` / explicit / comma-separated `--user` selectors are supported, and local-machine restore now validates the current task allow-list, writes a lightweight backup plus restore journal, and rolls back safely per target user on failure.
 
-I also standardized maintained documentation timestamps on UTC by updating the repo rules, README guidance, release docs, and the existing prompt-history headings, while preserving the user's AGENTS.md edit in the same final change set. Because the managed VM had already been deleted during the prompt, validation stayed non-live only: `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1` were used to verify the finished state, and the staged release-doc gate was rerun before the final commit.
+I also standardized maintained documentation timestamps on UTC by updating the repo rules, README guidance, release docs, and the existing prompt-history headings, while preserving the user's AGENTS.md edit in the same final change set. Because the managed VM had already been deleted during the prompt, validation stayed non-live only: `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, `tests\code-quality-check.ps1`, `tests\powershell-compatibility-check.ps1`, and `tests\pre-commit-release-doc-check.ps1` were used to verify the finished state, and the staged release-doc gate was rerun before the final commit.
 
 ### 2026-03-16 03:32 UTC
 
@@ -4957,7 +4957,7 @@ Update and implement the task app-state restore safety plan: when `task --restor
 
 Reworked task-scoped app-state restore so local-machine replay now writes task-adjacent `backup-app-states/<task-name>/` snapshots instead of temp-only backup roots, and each restore keeps both `restore-journal.json` and `verify-report.json` beside the active snapshot. The local restore path now validates the payload, backs up the touched files and registry, verifies every restored file, directory, and declared registry subtree after replay, and automatically rolls back from the task-adjacent backup root if replay or verification fails.
 
-I also extended the shared Windows guest VM restore helper with the same safety model using guest-side temporary backup staging, post-restore verification, and automatic rollback on mismatch. I updated `.gitignore`, AGENTS, README, changelog, release notes, and the smoke/documentation contract checks to document the new `backup-app-states` plus verify-report contract, then revalidated the change non-live with `tests\clagnos-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1` before the final release-doc and quality gates.
+I also extended the shared Windows guest VM restore helper with the same safety model using guest-side temporary backup staging, post-restore verification, and automatic rollback on mismatch. I updated `.gitignore`, AGENTS, README, changelog, release notes, and the smoke/documentation contract checks to document the new `backup-app-states` plus verify-report contract, then revalidated the change non-live with `tests\prodicloud-smoke-tests.ps1`, `tests\documentation-contract-check.ps1`, and `tests\powershell-compatibility-check.ps1` before the final release-doc and quality gates.
 
 ### 2026-03-16 04:18 UTC
 
@@ -4978,7 +4978,7 @@ I revalidated the result non-live by checking the disabled task inventory across
 **User Prompt**
 
 ````text
-Publish to production: first delete all resource groups tagged as clagnos-managed; then bring up a VM with `clagnos create --auto --windows --perf`; if any issue appears while that command is running, stop there, fix the code, return to the beginning, and rerun the same `create` command with the same parameters until the new VM is successfully live.
+Publish to production: first delete all resource groups tagged as prodicloud-managed; then bring up a VM with `prodicloud create --auto --windows --perf`; if any issue appears while that command is running, stop there, fix the code, return to the beginning, and rerun the same `create` command with the same parameters until the new VM is successfully live.
 ````
 
 **Assistant Summary**
@@ -5013,7 +5013,7 @@ Implement the plan to scan every task-local `app-state.zip`, normalize foreign l
 
 Added a dedicated repo maintenance helper, `tools/scripts/normalize-app-state-zips.ps1`, that expands every task-local `app-state.zip`, detects foreign source-profile tokens and embedded user-profile registry literals, rewrites those foreign tokens to `manager`, merges duplicate profile trees deterministically by `newer timestamp -> larger size -> lexical token`, and rewrites embedded `C:\Users\<name>` registry paths to `C:\Users\manager`. I also extended `tools/scripts/app-state-audit.ps1` so it now reports foreign source-profile and embedded registry-user drift directly instead of only showing foreign manifest `targetProfiles`.
 
-I ran the normalization helper on the real repository payload set and cleared the remaining foreign-user residue from `10005-copy-settings-user`, `116-install-codex-app`, `117-install-teams-system`, `120-install-whatsapp-system`, and `125-install-be-my-eyes`; a follow-up audit confirmed that no current `app-state.zip` payload still reports foreign source or embedded user tokens. On the shortcut side, I made the Public Desktop launcher threshold explicit and testable by exposing the combined invocation-length helper, exporting it from the shortcut-launcher module, and pinning the task to the `259` combined `TargetPath + Arguments` contract. I revalidated the full change non-live with `tests\clagnos-smoke-tests.ps1`.
+I ran the normalization helper on the real repository payload set and cleared the remaining foreign-user residue from `10005-copy-settings-user`, `116-install-codex-app`, `117-install-teams-system`, `120-install-whatsapp-system`, and `125-install-be-my-eyes`; a follow-up audit confirmed that no current `app-state.zip` payload still reports foreign source or embedded user tokens. On the shortcut side, I made the Public Desktop launcher threshold explicit and testable by exposing the combined invocation-length helper, exporting it from the shortcut-launcher module, and pinning the task to the `259` combined `TargetPath + Arguments` contract. I revalidated the full change non-live with `tests\prodicloud-smoke-tests.ps1`.
 
 ### 2026-03-16 14:35 UTC
 
@@ -5034,14 +5034,14 @@ I revalidated the task non-live with the smoke, documentation, code-quality, Pow
 **User Prompt**
 
 ````text
-As an additional update to the last task, make every Public Desktop shortcut that needs a launcher `.cmd` use `call` in the shortcut target command line. Apply this to every launcher-backed shortcut target, for example: `C:\Windows\System32\cmd.exe /c call "C:\ProgramData\clagnos\shortcut-launchers\public-desktop\r20ozon-personal.cmd"`.
+As an additional update to the last task, make every Public Desktop shortcut that needs a launcher `.cmd` use `call` in the shortcut target command line. Apply this to every launcher-backed shortcut target, for example: `C:\Windows\System32\cmd.exe /c call "C:\ProgramData\prodicloud\shortcut-launchers\public-desktop\r20ozon-personal.cmd"`.
 ````
 
 **Assistant Summary**
 
 Updated the shared managed shortcut-launcher helper so launcher-backed Public Desktop shortcuts now invoke their generated `.cmd` files through `cmd.exe /c call "<launcher-path>"` instead of the previous direct launcher invocation. The 259-character direct-vs-launcher threshold stayed unchanged, so only over-limit shortcuts picked up the new `call` form while direct-safe entries remained direct browser shortcuts.
 
-I revalidated the change non-live with the smoke and PowerShell compatibility suites, reran `task --run-vm-update 10002 --windows --perf` live in isolation on the active managed Windows VM, and finished with direct `exec` readbacks that confirmed `q2Spotify` now uses `cmd.exe /c call "C:\ProgramData\clagnos\shortcut-launchers\public-desktop\q2spotify.cmd"` while `z1Google Account Setup` still points directly to `chrome.exe`.
+I revalidated the change non-live with the smoke and PowerShell compatibility suites, reran `task --run-vm-update 10002 --windows --perf` live in isolation on the active managed Windows VM, and finished with direct `exec` readbacks that confirmed `q2Spotify` now uses `cmd.exe /c call "C:\ProgramData\prodicloud\shortcut-launchers\public-desktop\q2spotify.cmd"` while `z1Google Account Setup` still points directly to `chrome.exe`.
 
 ### 2026-03-16 17:50 UTC
 
@@ -5062,7 +5062,7 @@ On the language side, I added the new tracked Windows task `132-configure-langua
 **User Prompt**
 
 ````text
-Publish to production again: first delete all clagnos-managed resource groups, then run `clagnos create --auto --windows --perf`, and if the command fails at any point stop there, fix the code, return to the beginning, and rerun the exact same create command with the same parameters until the new VM is successfully live.
+Publish to production again: first delete all prodicloud-managed resource groups, then run `prodicloud create --auto --windows --perf`, and if the command fails at any point stop there, fix the code, return to the beginning, and rerun the exact same create command with the same parameters until the new VM is successfully live.
 ````
 
 **Assistant Summary**
@@ -5104,12 +5104,12 @@ I also prepared the repository for handoff by keeping the release work on `dev`,
 **User Prompt**
 
 ````text
-Add and ship these feature updates non-live: introduce a global `clagnos --version` fast path, make `create` and `update` restart automatically after `vm-update` when any update task requests reboot, require the pushed `main` branch GitHub Actions workflow to pass cleanly, clean up the create/update and nested-virtualization UI messaging, and relay guest console output from `vm-init` and `vm-update` tasks back into the local clagnos console and logs.
+Add and ship these feature updates non-live: introduce a global `prodicloud --version` fast path, make `create` and `update` restart automatically after `vm-update` when any update task requests reboot, require the pushed `main` branch GitHub Actions workflow to pass cleanly, clean up the create/update and nested-virtualization UI messaging, and relay guest console output from `vm-init` and `vm-update` tasks back into the local prodicloud console and logs.
 ````
 
 **Assistant Summary**
 
-I implemented the new commandless `clagnos --version` path so the launcher can print only `clagnos version <current-release>` without the normal banner or runtime dispatch. I also wrapped the Windows `vm-update` stage with one planned restart at the start of Step 6 plus one workflow-owned restart before `vm-summary` whenever any update task records a reboot request, and I tightened the create/update plus nested-virtualization feature messaging so the operator sees clearer current-operation start/result lines instead of future-tense or ambiguous phrasing.
+I implemented the new commandless `prodicloud --version` path so the launcher can print only `prodicloud version <current-release>` without the normal banner or runtime dispatch. I also wrapped the Windows `vm-update` stage with one planned restart at the start of Step 6 plus one workflow-owned restart before `vm-summary` whenever any update task records a reboot request, and I tightened the create/update plus nested-virtualization feature messaging so the operator sees clearer current-operation start/result lines instead of future-tense or ambiguous phrasing.
 
 I made guest task output visible as part of the normal operator transcript: Windows `vm-update` now streams guest stdout and stderr live over SSH, and `vm-init` now relays the full guest transcript immediately after each Azure Run Command task completes, including clearer failure framing for run-command errors. I updated CLI help, README, smoke and documentation-contract tests, corrected the Windows-friendly UTC heading regex in the documentation contract check, and revalidated the shipped behavior non-live with the smoke, documentation-contract, code-quality, PowerShell compatibility, and release-doc gates before preparing the release documents for the new version.
 
@@ -5132,7 +5132,7 @@ I finished by relisting the remaining Actions history and verifying that only th
 **User Prompt**
 
 ````text
-Investigate the last two `clagnos create` logs, fix only the warning-producing Windows `vm-update` tasks `132` and `123`, make `132-configure-language-settings` run in clearer visible phases instead of acting like a black box, move the lightweight locale/keyboard/time/regional work out of `132` and into `10003-configure-ux-windows`, and explain and eliminate the warning source in `123-install-vlc-system`.
+Investigate the last two `prodicloud create` logs, fix only the warning-producing Windows `vm-update` tasks `132` and `123`, make `132-configure-language-settings` run in clearer visible phases instead of acting like a black box, move the lightweight locale/keyboard/time/regional work out of `132` and into `10003-configure-ux-windows`, and explain and eliminate the warning source in `123-install-vlc-system`.
 ````
 
 **Assistant Summary**
@@ -5174,12 +5174,12 @@ I revalidated the change non-live with the smoke, documentation-contract, code-q
 **User Prompt**
 
 ````text
-Fix the remaining `metadata unavailable` style log messages, explain why the last end-to-end `clagnos create` run stopped halfway, tell me whether we solved that problem, and inspect the latest logs and screen output for any other likely issues before we decide whether to continue with another full create run.
+Fix the remaining `metadata unavailable` style log messages, explain why the last end-to-end `prodicloud create` run stopped halfway, tell me whether we solved that problem, and inspect the latest logs and screen output for any other likely issues before we decide whether to continue with another full create run.
 ````
 
 **Assistant Summary**
 
-I traced the last interrupted end-to-end `clagnos create` attempt to one concrete runtime problem: `101-install-powershell-core` timed out on the fresh VM while Chocolatey was still installing PowerShell 7, so the create transcript reached `Task completed: 101-install-powershell-core ... - warning` and I stopped the workflow there instead of letting the run continue with a known task-warning state. I then hardened that task by raising its timeout to `120` seconds, accepting reboot-style Chocolatey success, and short-circuiting healthy installs by checking the real `pwsh.exe` path directly; an isolated live rerun of task `101` completed successfully on the partially created VM, so that specific create blocker is now fixed.
+I traced the last interrupted end-to-end `prodicloud create` attempt to one concrete runtime problem: `101-install-powershell-core` timed out on the fresh VM while Chocolatey was still installing PowerShell 7, so the create transcript reached `Task completed: 101-install-powershell-core ... - warning` and I stopped the workflow there instead of letting the run continue with a known task-warning state. I then hardened that task by raising its timeout to `120` seconds, accepting reboot-style Chocolatey success, and short-circuiting healthy installs by checking the real `pwsh.exe` path directly; an isolated live rerun of task `101` completed successfully on the partially created VM, so that specific create blocker is now fixed.
 
 I also cleaned up the remaining operator-facing metadata wording that was still visible in logs. The language readback surfaces in `132-configure-language-settings` and `10006-capture-snapshot-health` no longer emit the raw `metadata-unavailable` token, and the nested-virtualization feature path now says Azure did not report the capability clearly and that guest validation will be used instead of using the older metadata-centric phrasing. After the cleanup, I revalidated the repo non-live with the smoke, documentation-contract, code-quality, and PowerShell compatibility gates, and I confirmed that the managed Azure inventory was back to an empty clean state so the next end-to-end create retry can start from zero when requested.
 
@@ -5188,12 +5188,12 @@ I also cleaned up the remaining operator-facing metadata wording that was still 
 **User Prompt**
 
 ````text
-Turn `clagnos configure` into an interactive-only frontend for `.env`: show every supported setting with its current value, let me review and update the full configuration safely, use picker-style selection for every finite or discoverable multi-option field such as VM image, VM size, Azure region, and managed resource group, validate everything before save, preview the next managed resource names for the next VM, and keep `configure` focused only on `.env` editing instead of any other job.
+Turn `prodicloud configure` into an interactive-only frontend for `.env`: show every supported setting with its current value, let me review and update the full configuration safely, use picker-style selection for every finite or discoverable multi-option field such as VM image, VM size, Azure region, and managed resource group, validate everything before save, preview the next managed resource names for the next VM, and keep `configure` focused only on `.env` editing instead of any other job.
 ````
 
 **Assistant Summary**
 
-I completed the `configure` command conversion as a full interactive `.env` frontend. `clagnos configure` now opens a sectioned editor built from the supported dotenv key list, shows the current values, uses pickers for every finite or discoverable multi-option field, validates edits before save, stages changes in memory until final confirmation, and renders a next-create preview with effective platform inputs plus next managed resource names when Azure validation is available. The editor can open without `az login`, but Azure-backed fields stay read-only until Azure validation becomes available.
+I completed the `configure` command conversion as a full interactive `.env` frontend. `prodicloud configure` now opens a sectioned editor built from the supported dotenv key list, shows the current values, uses pickers for every finite or discoverable multi-option field, validates edits before save, stages changes in memory until final confirmation, and renders a next-create preview with effective platform inputs plus next managed resource names when Azure validation is available. The editor can open without `az login`, but Azure-backed fields stay read-only until Azure validation becomes available.
 
 I also moved the old live target-sync responsibility out of `configure` and into `show`, which now accepts `--vm-name` and can render a read-only target-derived configuration section for one managed VM without writing `.env`. I updated AGENTS, README, help text, smoke tests, and documentation-contract checks to match the new contract, then revalidated the full change non-live with the smoke, documentation-contract, code-quality, PowerShell compatibility, and release-doc gates.
 
@@ -5216,7 +5216,7 @@ I also added create-critical save gating and soft recovery behavior across the e
 **User Prompt**
 
 ````text
-Publish to production: first align and push dev and main, then delete every clagnos-managed resource group, then run "clagnos create --auto --windows --perf" to bring up a new VM; if an error occurs during that create run, stop there, fix the code, go back to the beginning, and rerun the same create command with the same parameters. Warnings should not break the flow; instead, summarize them with possible remedies afterward. The goal is to finish with the new VM successfully published.
+Publish to production: first align and push dev and main, then delete every prodicloud-managed resource group, then run "prodicloud create --auto --windows --perf" to bring up a new VM; if an error occurs during that create run, stop there, fix the code, go back to the beginning, and rerun the same create command with the same parameters. Warnings should not break the flow; instead, summarize them with possible remedies afterward. The goal is to finish with the new VM successfully published.
 ````
 
 **Assistant Summary**
@@ -5405,7 +5405,7 @@ Check and analyze whether the `10003-create-public-desktop-shortcuts` vm-update 
 
 I audited the current Windows Public Desktop shortcut contract against the actual `10003-create-public-desktop-shortcuts` task, the smoke suite, and the recent shortcut logs. The intended Store-backed shortcuts were already covered for Teams, Be My Eyes, Codex, WhatsApp Business, and iCloud, and the Chrome/Edge browser contract was already explicit: Chrome is the launcher behind the managed web/setup shortcuts and Edge has its dedicated managed app shortcut. The review did uncover one real drift, though: the shortcut task was still resolving `VS2022` and `JAWS` through simpler hard-coded assumptions even after the installer tasks `132-install-vs2022community-application` and `133-install-jaws-application` had been hardened to discover those applications more realistically.
 
-I fixed that drift directly in `10003-create-public-desktop-shortcuts`. The task now resolves `devenv.exe` through `vswhere.exe` plus canonical Community fallback paths, and resolves `jfw.exe` through the Freedom Scientific registry roots before falling back to the canonical JAWS install paths. I also tightened the smoke contract so it now pins those richer resolver fragments explicitly. After the change, I reran `tests\clagnos-smoke-tests.ps1`; the `10003` shortcut coverage checks passed with the new logic, and the only remaining failure was the unrelated pre-existing `130-install-azure-cli-tool.ps1` `--force` assertion.
+I fixed that drift directly in `10003-create-public-desktop-shortcuts`. The task now resolves `devenv.exe` through `vswhere.exe` plus canonical Community fallback paths, and resolves `jfw.exe` through the Freedom Scientific registry roots before falling back to the canonical JAWS install paths. I also tightened the smoke contract so it now pins those richer resolver fragments explicitly. After the change, I reran `tests\prodicloud-smoke-tests.ps1`; the `10003` shortcut coverage checks passed with the new logic, and the only remaining failure was the unrelated pre-existing `130-install-azure-cli-tool.ps1` `--force` assertion.
 
 ### 2026-03-18 18:32 UTC
 
@@ -5419,7 +5419,7 @@ Investigate the failing main GitHub Actions workflow in this repo and fix it if 
 
 I inspected the latest failing `quality-gate` run on `main` and found the workflow itself was not the problem. The failure was in the committed contract surface that the workflow already runs: the non-live smoke matrix and the PowerShell compatibility matrix were failing because `106-install-7zip-tool` still had the old 30-second timeout, `121-install-wsl-feature` lacked an explicit bootstrap-satisfied readiness check, and `135-install-ollama-tool` still used an overly broad stale-installer filter. I updated those task contracts so they match the intended behavior, then revalidated locally.
 
-The result is that `tests\clagnos-smoke-tests.ps1` now passes fully and `tests\powershell-compatibility-check.ps1` now passes on both Windows PowerShell 5.1 and PowerShell 7+. I did not need to change `.github/workflows/quality-gate.yml` itself because the workflow was already correct; the committed task contracts were the stale part. The exact files changed in this fix are [windows/update/106-install-7zip-tool/task.json](windows/update/106-install-7zip-tool/task.json), [windows/update/121-install-wsl-feature/121-install-wsl-feature.ps1](windows/update/121-install-wsl-feature/121-install-wsl-feature.ps1), [windows/update/135-install-ollama-tool/135-install-ollama-tool.ps1](windows/update/135-install-ollama-tool/135-install-ollama-tool.ps1), [CHANGELOG.md](CHANGELOG.md), and [release-notes.md](release-notes.md).
+The result is that `tests\prodicloud-smoke-tests.ps1` now passes fully and `tests\powershell-compatibility-check.ps1` now passes on both Windows PowerShell 5.1 and PowerShell 7+. I did not need to change `.github/workflows/quality-gate.yml` itself because the workflow was already correct; the committed task contracts were the stale part. The exact files changed in this fix are [windows/update/106-install-7zip-tool/task.json](windows/update/106-install-7zip-tool/task.json), [windows/update/121-install-wsl-feature/121-install-wsl-feature.ps1](windows/update/121-install-wsl-feature/121-install-wsl-feature.ps1), [windows/update/135-install-ollama-tool/135-install-ollama-tool.ps1](windows/update/135-install-ollama-tool/135-install-ollama-tool.ps1), [CHANGELOG.md](CHANGELOG.md), and [release-notes.md](release-notes.md).
 
 ### 2026-03-18 19:28 UTC
 
@@ -5445,7 +5445,7 @@ Fix and update: do not use `--force` anywhere in the tracked Windows update task
 
 I removed the remaining tracked Windows `vm-update` `--force` usage from the Azure CLI and Docker Desktop paths. In `130-install-azure-cli-tool`, the unhealthy reinstall path now uninstalls Chocolatey Azure CLI without `--force`, verifies the uninstall outcome from Chocolatey package state, and then ensures the resolved Azure CLI command directory is present in machine PATH even when the task short-circuits on an already-healthy install. I also added one bounded `winget install Microsoft.AzureCLI` fallback for the observed live case where the Chocolatey path did not leave a fresh shell with a resolvable `az` command. In `134-install-docker-desktop-application`, the bounded winget source repair now uses `winget source reset` without `--force`.
 
-I revalidated the maintained non-live contract with `tests\clagnos-smoke-tests.ps1` and `tests\code-quality-check.ps1`; both passed. Then I revalidated task `130` live in isolation on the active managed Windows VM by uninstalling Azure CLI to clean state, rerunning `task --run-vm-update 130`, and confirming that a fresh later `cmd /c az version` succeeds. The final isolated task summary reached `warning=0`, `signal-warning=0`, and `error=0`. During the first install rerun, Chocolatey printed one non-blocking package-manager line about an ignored pending reboot request, but the repo task itself still completed without a tracked warning.
+I revalidated the maintained non-live contract with `tests\prodicloud-smoke-tests.ps1` and `tests\code-quality-check.ps1`; both passed. Then I revalidated task `130` live in isolation on the active managed Windows VM by uninstalling Azure CLI to clean state, rerunning `task --run-vm-update 130`, and confirming that a fresh later `cmd /c az version` succeeds. The final isolated task summary reached `warning=0`, `signal-warning=0`, and `error=0`. During the first install rerun, Chocolatey printed one non-blocking package-manager line about an ignored pending reboot request, but the repo task itself still completed without a tracked warning.
 
 ### 2026-03-19 01:23 UTC
 
@@ -5459,9 +5459,9 @@ Update: in the s1-s18 shortcut targets I had added URLs to our social-media acco
 
 **Assistant Summary**
 
-I fixed the tracked Windows Public Desktop shortcut flow so Turkish labels now survive both Windows PowerShell 5.1 and PowerShell 7+ without mojibake. The shared shortcut launcher helper in `modules/core/tasks/clagnos-shortcut-launcher.psm1` now repairs common mojibake forms, normalizes Turkish shortcut names, and generates stable ASCII-safe launcher filenames from PowerShell-safe Unicode code points. In `windows/update/10003-create-public-desktop-shortcuts/10003-create-public-desktop-shortcuts.ps1` I switched the managed Turkish labels to code-point-backed values, renamed `q1SourTimes` to `q1EkşiSözlük`, kept cleanup aliases for the old English and ASCII spellings, and made the `ÇiçekSepeti` shortcuts clean up the older mojibake and ASCII variants correctly. I also updated `tools/scripts/clagnos-summary-readback-windows.ps1` and the smoke coverage so the summary inventory and non-live contract follow the same corrected names.
+I fixed the tracked Windows Public Desktop shortcut flow so Turkish labels now survive both Windows PowerShell 5.1 and PowerShell 7+ without mojibake. The shared shortcut launcher helper in `modules/core/tasks/prodicloud-shortcut-launcher.psm1` now repairs common mojibake forms, normalizes Turkish shortcut names, and generates stable ASCII-safe launcher filenames from PowerShell-safe Unicode code points. In `windows/update/10003-create-public-desktop-shortcuts/10003-create-public-desktop-shortcuts.ps1` I switched the managed Turkish labels to code-point-backed values, renamed `q1SourTimes` to `q1EkşiSözlük`, kept cleanup aliases for the old English and ASCII spellings, and made the `ÇiçekSepeti` shortcuts clean up the older mojibake and ASCII variants correctly. I also updated `tools/scripts/prodicloud-summary-readback-windows.ps1` and the smoke coverage so the summary inventory and non-live contract follow the same corrected names.
 
-I revalidated the change with `tests\code-quality-check.ps1`, reran `tests\clagnos-smoke-tests.ps1`, and isolated the remaining smoke failures to two pre-existing unrelated issues: the `exec --file` parse assertion and one timeout-contract drift for `102-configure-autologon-settings`. Then I reran `task --run-vm-update 10003 --perf` live in isolation on the active managed Windows target; it completed with `warning=0`, `signal-warning=0`, and `error=0`. A direct `exec` readback from `C:\Users\Public\Desktop` confirmed that `q1EkşiSözlük`, `r13ÇiçekSepeti Business`, and `r14ÇiçekSepeti Personal` now exist with the expected Chrome targets and arguments, and the task also removed the stale `q1SourTimes` and mojibake `ÇiçekSepeti` aliases on the managed VM.
+I revalidated the change with `tests\code-quality-check.ps1`, reran `tests\prodicloud-smoke-tests.ps1`, and isolated the remaining smoke failures to two pre-existing unrelated issues: the `exec --file` parse assertion and one timeout-contract drift for `102-configure-autologon-settings`. Then I reran `task --run-vm-update 10003 --perf` live in isolation on the active managed Windows target; it completed with `warning=0`, `signal-warning=0`, and `error=0`. A direct `exec` readback from `C:\Users\Public\Desktop` confirmed that `q1EkşiSözlük`, `r13ÇiçekSepeti Business`, and `r14ÇiçekSepeti Personal` now exist with the expected Chrome targets and arguments, and the task also removed the stale `q1SourTimes` and mojibake `ÇiçekSepeti` aliases on the managed VM.
 
 I also audited the available git history for the social-media shortcut URLs. The current local history still shows only the sanitized/genericized tracked variants, so I did not recommit any account-specific social handles into the tracked repo because the repository contract forbids introducing personal identifiers back into committed code or docs. If you want, the next safe step is to move those social URLs into local `.env`-backed overrides so your exact handles can be restored for runtime use without breaking the tracked sensitive-content contract.
 
@@ -5479,7 +5479,7 @@ Update: please also write the available personal and business social-account val
 
 I added a tracked `.env` contract for optional Windows Public Desktop social and business-web shortcut URL overrides, carried those values through the runtime context and task materialization pipeline, and updated `10003-create-public-desktop-shortcuts` so the managed `s1-s18` shortcuts use the local override values when present but still fall back to generic non-broken URLs when the local values are blank. I also extended the interactive `configure` editor so every new shortcut URL key is exposed and validated as an optional HTTP/HTTPS field instead of leaving the supported-key contract out of sync.
 
-On the local machine only, I populated the `.env` file with the business and personal shortcut URLs that were safely recoverable from the available git history plus the current local company identity settings. I did not reintroduce those account-specific values into tracked code or tracked documentation because the repository contract forbids committing personal identifiers. I revalidated the tracked surface with `tests\clagnos-smoke-tests.ps1` and `tests\documentation-contract-check.ps1`; the new shortcut URL contract passed, and only the two pre-existing unrelated smoke failures remained (`exec --file` parsing and the tracked timeout drift for `102-configure-autologon-settings`). I also reran `task --run-vm-update 10003 --perf` live in isolation on the active managed Windows target and confirmed `warning=0`, `signal-warning=0`, and `error=0`, then verified that representative social/web shortcuts on `C:\Users\Public\Desktop` now resolve from the local override URLs.
+On the local machine only, I populated the `.env` file with the business and personal shortcut URLs that were safely recoverable from the available git history plus the current local company identity settings. I did not reintroduce those account-specific values into tracked code or tracked documentation because the repository contract forbids committing personal identifiers. I revalidated the tracked surface with `tests\prodicloud-smoke-tests.ps1` and `tests\documentation-contract-check.ps1`; the new shortcut URL contract passed, and only the two pre-existing unrelated smoke failures remained (`exec --file` parsing and the tracked timeout drift for `102-configure-autologon-settings`). I also reran `task --run-vm-update 10003 --perf` live in isolation on the active managed Windows target and confirmed `warning=0`, `signal-warning=0`, and `error=0`, then verified that representative social/web shortcuts on `C:\Users\Public\Desktop` now resolve from the local override URLs.
 
 ### 2026-03-19 02:34 UTC
 
@@ -5499,7 +5499,7 @@ Update: the updates for vm-update tasks #134, #136, #10005 are also ours and wer
 
 I split the safe pending work into selective commits instead of one large snapshot. First I committed the approved Windows init/update task manifest budget changes together with the smoke timeout expectations. Then I committed the `exec --file` feature as its own topic, including the new `--file` parameter module, runtime resolution logic, and help/README coverage. After that I committed the Docker Desktop recovery refinements as a dedicated topic, and I committed the language plus user-settings task refinements as another dedicated topic.
 
-I re-ran `tests\clagnos-smoke-tests.ps1` against the updated worktree and confirmed the maintained smoke suite now passes cleanly with `Passed: 156, Failed: 0`. I also recorded the selective-commit batch in the changelog and release notes so the tracked documentation reflects the now-committed runtime and task-surface changes.
+I re-ran `tests\prodicloud-smoke-tests.ps1` against the updated worktree and confirmed the maintained smoke suite now passes cleanly with `Passed: 156, Failed: 0`. I also recorded the selective-commit batch in the changelog and release notes so the tracked documentation reflects the now-committed runtime and task-surface changes.
 
 ### 2026-03-19 04:34 UTC
 
@@ -5513,7 +5513,7 @@ Plan and implement the Windows `10002-configure-startup-settings` auto-start pro
 
 I implemented an app-state-driven startup-profile contract for `10002-configure-startup-settings` instead of keeping the approved startup set hardcoded in the task script. The task catalog now preserves task `extensions`, task materialization injects the task-local startup profile from `app-state/app-state.zip`, and local `task --save-app-state --source=lm --vm-update-task=10002 --windows` now generates the startup-profile plugin zip with `extensions/startup-profile.json`. The `10002` task itself was refactored into a generic startup-profile applicator: it decodes the startup profile from the task-local plugin, applies the managed entries additively, seeds and materializes the `assistant` profile when needed, keeps missing-target handling as info-only, and uses a portable Startup folder surface for assistant-side current-user apps so the artifacts remain durable across reboots.
 
-I revalidated the tracked surface with `tests\clagnos-smoke-tests.ps1`, which passed with `Passed: 157, Failed: 0`. Then I regenerated the task-local startup-profile plugin with `task --save-app-state --source=lm --user=.current. --vm-update-task=10002 --windows`, reran `task --run-vm-update 10002 --perf` live in isolation on the active managed Windows target, and brought the task to `warning=0`, `signal-warning=0`, and `error=0`. I verified the machine startup entries plus the `manager` and `assistant` startup artifacts before reboot, restarted the managed VM, rechecked SSH reachability, and verified the same startup artifacts still persisted after reboot. Post-reboot process evidence improved after a short settle window: `OneDrive`, `AnyDesk`, `GoogleDriveFS`, and `ms-teams` were running, while `JAWS` and `ollama` were still absent as running processes and were reported as informational follow-up rather than task failure.
+I revalidated the tracked surface with `tests\prodicloud-smoke-tests.ps1`, which passed with `Passed: 157, Failed: 0`. Then I regenerated the task-local startup-profile plugin with `task --save-app-state --source=lm --user=.current. --vm-update-task=10002 --windows`, reran `task --run-vm-update 10002 --perf` live in isolation on the active managed Windows target, and brought the task to `warning=0`, `signal-warning=0`, and `error=0`. I verified the machine startup entries plus the `manager` and `assistant` startup artifacts before reboot, restarted the managed VM, rechecked SSH reachability, and verified the same startup artifacts still persisted after reboot. Post-reboot process evidence improved after a short settle window: `OneDrive`, `AnyDesk`, `GoogleDriveFS`, and `ms-teams` were running, while `JAWS` and `ollama` were still absent as running processes and were reported as informational follow-up rather than task failure.
 
 ### 2026-03-19 19:57 UTC
 
@@ -5537,20 +5537,20 @@ Fix the remaining tiny warning in the public-desktop-icons task, ensuring no reg
 I patched `windows/update/10003-create-public-desktop-shortcuts/10003-create-public-desktop-shortcuts.ps1` to remove the non-regressing PowerShell warning triggered during the final read-permission repair pass. The warning was caused by iterating `System.Collections.Generic.List[object]` through array-subexpression syntax (`@($shortcutSpecs)`). I changed that loop to enumerate `foreach ($spec in $shortcutSpecs)` directly.
 
 I then re-ran the isolated live task update as requested:
-- `.\cg.cmd task --run-vm-update 10003 --group <resource-group> --vm-name <vm-name> --subscription-id <subscription-guid> --windows`
+- `.\pd.cmd task --run-vm-update 10003 --group <resource-group> --vm-name <vm-name> --subscription-id <subscription-guid> --windows`
 
 Result: the task completed successfully with `success=1`, `warning=0`, `error=0`, `user-desktop-entry-removed` only as a valid clean-up message, and no `Argument types do not match` warning.
 
 I hardened the shared Windows app-state replay and capture runtime so optional locked files, in-use content, unavailable hives, missing registry parents, and other non-portable restore surfaces are now handled as explicit info-only skips instead of warning-producing failures. The replay engine now tracks skipped operations and backup records, skip-aware verification, and backup-aware rollback. I also refreshed the live app-state capture flow so stale local plugin zips are removed before and after VM-side saves, and I aligned the maintained Windows task-local plugin manifests for the warning-producing update tasks with the current portable replay model. On the Windows task side, I softened `10004-configure-windows-experience` mounted-hive handling to info-only for optional inaccessible hives, updated the Windows summary readback so missing assistant JAWS hives are reported as unavailable instead of warning, and removed the stray `reg unload` noise from `10002-configure-startup-settings`. For the Windows summary and init contract, I added `06-configure-powershell-remoting`, enabled WinRM over TCP `5985` for the managed `manager` account, extended the default Windows TCP port set to include `5985`, and added ready-to-run PowerShell remoting commands beside the existing SSH and RDP summary output. I also updated `10001-configure-advanced-settings` to apply a Store-safe silent UAC policy (`EnableLUA=1`, `ConsentPromptBehaviorAdmin=0`, `PromptOnSecureDesktop=0`) instead of disabling UAC in a way that would break Store apps.
 
-I revalidated the tracked surface with `tests\clagnos-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, and `tests\documentation-contract-check.ps1`; all passed, with the maintained smoke suite finishing at `Passed: 160, Failed: 0`. Live validation also passed: I reran `vm-init` tasks `05` and `06`, refreshed the maintained app-state payloads, reran the warning-producing Windows update tasks (`104`, `109`, `114`, `119`, `129`, `133`, `10001`, `10002`, `10003`, and `10004`) in isolation, and brought each to `warning=0`, `signal-warning=0`, and `error=0`. Finally, I reran `update --auto --windows --perf --step-from=vm-update --step-to=vm-summary` end to end on the active managed Windows target and reached `VM update stage summary: success=45, failed=0, warning=0, signal-warning=0, error=0, reboot=2, final-restart=1`. The final Windows summary now prints PowerShell remoting commands, and a real post-run `Invoke-Command` to the managed VM over WinRM `5985` succeeded with the `manager` credential. Remaining summary-only follow-up items are informational rather than warnings: the assistant JAWS hive is still unavailable until that profile is materialized, and the Ollama API was not yet listening on `11434` at summary time even though the update stage itself completed cleanly.
+I revalidated the tracked surface with `tests\prodicloud-smoke-tests.ps1`, `tests\powershell-compatibility-check.ps1`, `tests\code-quality-check.ps1`, and `tests\documentation-contract-check.ps1`; all passed, with the maintained smoke suite finishing at `Passed: 160, Failed: 0`. Live validation also passed: I reran `vm-init` tasks `05` and `06`, refreshed the maintained app-state payloads, reran the warning-producing Windows update tasks (`104`, `109`, `114`, `119`, `129`, `133`, `10001`, `10002`, `10003`, and `10004`) in isolation, and brought each to `warning=0`, `signal-warning=0`, and `error=0`. Finally, I reran `update --auto --windows --perf --step-from=vm-update --step-to=vm-summary` end to end on the active managed Windows target and reached `VM update stage summary: success=45, failed=0, warning=0, signal-warning=0, error=0, reboot=2, final-restart=1`. The final Windows summary now prints PowerShell remoting commands, and a real post-run `Invoke-Command` to the managed VM over WinRM `5985` succeeded with the `manager` credential. Remaining summary-only follow-up items are informational rather than warnings: the assistant JAWS hive is still unavailable until that profile is materialized, and the Ollama API was not yet listening on `11434` at summary time even though the update stage itself completed cleanly.
 
 ### 2026-03-20 09:43 UTC
 
 **User Prompt**
 
 ````text
-Publish to production in sequence: align `dev` and `main`, push them, make sure the remote `main` GitHub Actions workflows pass, delete and purge every managed resource group, run `clagnos create --auto --windows --perf`, and if any errors appear fix them and continue with `update --auto --windows --perf --from-step=vm-init` until the flow is clean. Do not stop for warnings; note them, fix them after the main steps complete, and then report what succeeded and what still remains. Continue from the interrupted state if needed and complete the production publish successfully.
+Publish to production in sequence: align `dev` and `main`, push them, make sure the remote `main` GitHub Actions workflows pass, delete and purge every managed resource group, run `prodicloud create --auto --windows --perf`, and if any errors appear fix them and continue with `update --auto --windows --perf --from-step=vm-init` until the flow is clean. Do not stop for warnings; note them, fix them after the main steps complete, and then report what succeeded and what still remains. Continue from the interrupted state if needed and complete the production publish successfully.
 ````
 
 **Assistant Summary**
@@ -5564,12 +5564,12 @@ After that, I ran the full natural-order live acceptance flow required by the re
 **User Prompt**
 
 ````text
-Add a Windows `vm-init` task named `configure-all-users` that materializes all existing local users so their profile files and registry hives exist before later tasks touch them. Use the easiest low-overhead approach, keep the wait cost low, and validate the task live in isolation on the managed VM. Also inspect the latest root `clagnos-log*` files, focus on the JAWS warning caused by the `assistant` user not being materialized, rerun the offending `vm-update` task in isolation on the live VM, and verify that the new init task removes that warning.
+Add a Windows `vm-init` task named `configure-all-users` that materializes all existing local users so their profile files and registry hives exist before later tasks touch them. Use the easiest low-overhead approach, keep the wait cost low, and validate the task live in isolation on the managed VM. Also inspect the latest root `prodicloud-log*` files, focus on the JAWS warning caused by the `assistant` user not being materialized, rerun the offending `vm-update` task in isolation on the live VM, and verify that the new init task removes that warning.
 ````
 
 **Assistant Summary**
 
-I added a new tracked Windows init task, `07-configure-all-users`, plus its `task.json`, and shifted the existing Windows init priorities so the new task runs immediately after local-account creation and before the rest of the init stack. The task enumerates enabled local users, short-circuits when a durable profile hive already exists, materializes managed users through an interactive scheduled-task fallback plus `LoadUserProfile`, and repairs temporary-profile drift by exporting the loaded hives into the intended profile root, copying the durable registry values back into the live SID registration, and treating locked transaction-log artifacts as explicit info-only skips. I also extended the maintained smoke suite so the Windows init catalog now expects the new task and its contract; `tests\clagnos-smoke-tests.ps1` passed with `Passed: 161, Failed: 0`.
+I added a new tracked Windows init task, `07-configure-all-users`, plus its `task.json`, and shifted the existing Windows init priorities so the new task runs immediately after local-account creation and before the rest of the init stack. The task enumerates enabled local users, short-circuits when a durable profile hive already exists, materializes managed users through an interactive scheduled-task fallback plus `LoadUserProfile`, and repairs temporary-profile drift by exporting the loaded hives into the intended profile root, copying the durable registry values back into the live SID registration, and treating locked transaction-log artifacts as explicit info-only skips. I also extended the maintained smoke suite so the Windows init catalog now expects the new task and its contract; `tests\prodicloud-smoke-tests.ps1` passed with `Passed: 161, Failed: 0`.
 
 For live validation, I inspected the latest root production logs and confirmed that the March 20 JAWS rerun still showed `app-state-user-registry-skip => assistant => no-hive-file` for `133-install-jaws-application`. I then iterated on the new init task against the active managed Windows target until the isolated live run completed cleanly: the final `task --run-vm-init 07 --windows --perf` rerun reported `assistant => C:\Users\assistant` and `manager => C:\Users\manager` with zero warnings. A direct post-run SSH readback confirmed that the live assistant SID now resolves to `C:\Users\assistant`, `State=0`, `RefCount=0`, `.bak` is gone, and `C:\Users\assistant\NTUSER.DAT` exists. Finally, I reran the offending `task --run-vm-update 133 --windows --perf` task live in isolation; `133-install-jaws-application` completed successfully and its app-state replay finished with `profiles=2`, `user-registry=2`, `skipped=0`, and no assistant hive warning.
 
@@ -5578,7 +5578,7 @@ For live validation, I inspected the latest root production logs and confirmed t
 **User Prompt**
 
 ````text
-Fix, test, and update the remaining Ollama-related Windows vm-update warning seen in the clagnos logs. On the live VM, first uninstall Ollama completely through exec. Then update the install-ollama vm-update task so it performs a clean `choco install ollama`, bootstraps Ollama with `cmd.exe /c start ... ollama ls`, verifies that `ollama ls` works, confirms a running process, and validates that the local Ollama server responds on `localhost:11434` / `127.0.0.1:11434`. Run the live validation in isolation on the VM and drive the flow to zero warnings.
+Fix, test, and update the remaining Ollama-related Windows vm-update warning seen in the prodicloud logs. On the live VM, first uninstall Ollama completely through exec. Then update the install-ollama vm-update task so it performs a clean `choco install ollama`, bootstraps Ollama with `cmd.exe /c start ... ollama ls`, verifies that `ollama ls` works, confirms a running process, and validates that the local Ollama server responds on `localhost:11434` / `127.0.0.1:11434`. Run the live validation in isolation on the VM and drive the flow to zero warnings.
 
 Update: if needed, you may delete and recreate the Ollama task's `app-state.zip`. Try every method needed to get the install-ollama path to zero warnings.
 ````
@@ -5587,14 +5587,14 @@ Update: if needed, you may delete and recreate the Ollama task's `app-state.zip`
 
 I changed the Windows `135-install-ollama-tool` task to use a clean Chocolatey install path with bounded runtime validation instead of the older winget-first flow. The task now resolves `choco`, removes stale Ollama footprints when a reinstall is needed, runs `choco install ollama -y --no-progress --ignore-detected-reboot`, bootstraps Ollama through detached `cmd.exe /c start "" "<ollama.exe>" ls`, verifies `ollama ls`, confirms a running `ollama.exe` process, checks the `11434` TCP listener on both `127.0.0.1` and `localhost`, and validates `/api/version`. Because the live Windows host still showed the known headless cold-start quirk where `ls` alone does not always leave a durable background runtime, I kept a bounded fallback to hidden `Start-Process "<ollama.exe>" serve` when the detached `ls` bootstrap does not leave the process and API ready. I also narrowed `135-install-ollama-tool/task.json` to a settings-first Ollama app-state contract that keeps only the three small managed `config.json` files, and I rebuilt the local task plugin zip to an empty manifest so the stale local database, WAL, and PID artifacts are no longer replayed during live validation.
 
-I extended the maintained smoke coverage for the new Ollama install/app-state/readback contract and updated the Windows vm-summary readback to run a quiet bounded `ollama ls` probe plus a short API wait before it reports Ollama health. Static validation passed with `tests\clagnos-smoke-tests.ps1` (`Passed: 161, Failed: 0`), `tests\sensitive-content-check.ps1`, `tests\documentation-contract-check.ps1`, and `tools\scripts\app-state-audit.ps1`. Live validation also passed: I first removed Ollama completely on the active managed Windows VM (`wingetExit=0`, `chocoExit=0`, `ollamaExeExists=False`, `processCount=0`, `port11434=False`), then reran `task --run-vm-update 135 --windows --perf`, which completed with `success=1`, `warning=0`, `signal-warning=0`, `error=0` and reported `ollama-ls-ready`, `ollama-process-ready`, `ollama-port-ready`, and `ollama-api-ready`. After that I reran `task --run-vm-update 10002 --windows --perf`, restarted the VM, and finished with `update --step vm-summary --windows --perf`; the resulting `clagnos-log-22mar26-111959.txt` transcript now records `ollama-ls-probe => success=True`, `ollama-process-count => 2`, `ollama-port-11434-open => True`, `ollama-api-version => 0.18.2`, and `ollama-api-probe => success=True; timed-out=False`, which closes the remaining Ollama readback warning.
+I extended the maintained smoke coverage for the new Ollama install/app-state/readback contract and updated the Windows vm-summary readback to run a quiet bounded `ollama ls` probe plus a short API wait before it reports Ollama health. Static validation passed with `tests\prodicloud-smoke-tests.ps1` (`Passed: 161, Failed: 0`), `tests\sensitive-content-check.ps1`, `tests\documentation-contract-check.ps1`, and `tools\scripts\app-state-audit.ps1`. Live validation also passed: I first removed Ollama completely on the active managed Windows VM (`wingetExit=0`, `chocoExit=0`, `ollamaExeExists=False`, `processCount=0`, `port11434=False`), then reran `task --run-vm-update 135 --windows --perf`, which completed with `success=1`, `warning=0`, `signal-warning=0`, `error=0` and reported `ollama-ls-ready`, `ollama-process-ready`, `ollama-port-ready`, and `ollama-api-ready`. After that I reran `task --run-vm-update 10002 --windows --perf`, restarted the VM, and finished with `update --step vm-summary --windows --perf`; the resulting `prodicloud-log-22mar26-111959.txt` transcript now records `ollama-ls-probe => success=True`, `ollama-process-count => 2`, `ollama-port-11434-open => True`, `ollama-api-version => 0.18.2`, and `ollama-api-probe => success=True; timed-out=False`, which closes the remaining Ollama readback warning.
 
 ### 2026-03-23 07:47 UTC
 
 **User Prompt**
 
 ````text
-Publish to production with a zero-warning goal, in strict sequence and not in parallel: align `dev` and `main` and push them; make sure the remote `main` GitHub Actions workflows run cleanly; delete and purge every managed resource group managed by this app; run `clagnos create --auto --windows --perf`; if any errors appear stop, fix the code, go back to the beginning, delete all app-tagged managed resource groups, and rerun `create`; if any warnings appear during the main steps or during `vm-init` / `vm-update`, stop, analyze them, apply fixes, and restart the recreate/rerun loop; at the end report exactly what was done, what succeeded, and which errors or warnings still remain. The goal is a zero-warning live end-to-end VM test and a successful production publish.
+Publish to production with a zero-warning goal, in strict sequence and not in parallel: align `dev` and `main` and push them; make sure the remote `main` GitHub Actions workflows run cleanly; delete and purge every managed resource group managed by this app; run `prodicloud create --auto --windows --perf`; if any errors appear stop, fix the code, go back to the beginning, delete all app-tagged managed resource groups, and rerun `create`; if any warnings appear during the main steps or during `vm-init` / `vm-update`, stop, analyze them, apply fixes, and restart the recreate/rerun loop; at the end report exactly what was done, what succeeded, and which errors or warnings still remain. The goal is a zero-warning live end-to-end VM test and a successful production publish.
 
 Update: also test vm-update task `#10005` in isolation and guarantee that it works.
 ````
@@ -5618,7 +5618,7 @@ On the live Windows VM, assistant user cannot use public desktop shortcuts creat
 I updated the Windows public desktop shortcut task at `windows/update/10003-create-public-desktop-shortcuts/10003-create-public-desktop-shortcuts.ps1` to harden shortcut artifacts for shared-user visibility. The task now applies explicit `ReadAndExecute` ACL repair to each generated `.lnk` (through `Add-ShortcutUserReadAccess` / `Set-PublicShortcutReadPermissions`) immediately after creation, and applies the same read-permission repair pass over managed public shortcuts even when the public desktop is already normalized (`public-desktop-normalized: no changes required` path). The fast-path now still avoids recreation when metadata is already correct, but it no longer skips post-step user access remediation.
 
 Recommended execution flow remains isolated:
-- `.\cg.cmd task --run-vm-update 10003-create-public-desktop-shortcuts --group <resource-group> --vm-name <vm-name> --windows`
+- `.\pd.cmd task --run-vm-update 10003-create-public-desktop-shortcuts --group <resource-group> --vm-name <vm-name> --windows`
 - verify manager + assistant public desktop shortcuts after the task run
 
 ### 2026-07-16 14:06 UTC
@@ -5626,12 +5626,12 @@ Recommended execution flow remains isolated:
 **User Prompt**
 
 ```text
-Change the currently running managed Azure VM from the Standard_B2as_v2 SKU to Standard_B2als_v2 using the clagnos VM SKU change command, then fully reboot the computer.
+Change the currently running managed Azure VM from the Standard_B2as_v2 SKU to Standard_B2als_v2 using the prodicloud VM SKU change command, then fully reboot the computer.
 ```
 
 **Assistant Summary**
 
-I verified that the managed Windows VM was running with `Standard_B2as_v2`, then ran the repository's `clagnos resize --vm-size Standard_B2als_v2 --windows` flow. The resize completed successfully, and the local `.env` value was updated to `WIN_VM_SIZE=Standard_B2als_v2`. I then ran `clagnos do --vm-action=restart` and verified the final live state: `Standard_B2als_v2`, `VM running`, `Provisioning succeeded`, and VM agent `Ready`.
+I verified that the managed Windows VM was running with `Standard_B2as_v2`, then ran the repository's `prodicloud resize --vm-size Standard_B2als_v2 --windows` flow. The resize completed successfully, and the local `.env` value was updated to `WIN_VM_SIZE=Standard_B2als_v2`. I then ran `prodicloud do --vm-action=restart` and verified the final live state: `Standard_B2als_v2`, `VM running`, `Provisioning succeeded`, and VM agent `Ready`.
 
 ### 2026-10-12 13:14 UTC
 **User Prompt**
@@ -5642,12 +5642,12 @@ Implement the plan.
 
 **Assistant Summary**
 
-Implemented the approved Clagnos rebrand and interactive CLI plan. Renamed the public app/runtime paths and repository references, added `cg.cmd` -> `scripts/clagnos-cli.ps1`, and wired the nested menus to existing orchestration plus new `initialize`, program-management, and Azure-component CRUD commands. Separated fresh create, VM initialization, and maintenance; added managed-tag migration support and dependency-aware component deletion. Updated operator contracts, tests, release notes, and prompt-history safety checks. Local static and compatibility checks passed; no live Azure operations were run.
+Implemented the approved Prodicloud rebrand and interactive CLI plan. Renamed the public app/runtime paths and repository references, added `pd.cmd` -> `scripts/prodicloud-cli.ps1`, and wired the nested menus to existing orchestration plus new `initialize`, program-management, and Azure-component CRUD commands. Separated fresh create, VM initialization, and maintenance; added managed-tag migration support and dependency-aware component deletion. Updated operator contracts, tests, release notes, and prompt-history safety checks. Local static and compatibility checks passed; no live Azure operations were run.
 ### 2026-10-12 13:36 UTC
 **User Prompt**
 
 ````text
-Continue the remaining tasks and operations in the approved plan, implement its basic, intermediate, and advanced operations end to end, and perform the authorized one-time update of this app's resource-group tags to managed-by=clagnos.
+Continue the remaining tasks and operations in the approved plan, implement its basic, intermediate, and advanced operations end to end, and perform the authorized one-time update of this app's resource-group tags to managed-by=prodicloud.
 ````
 
 **Assistant Summary**
@@ -5663,7 +5663,7 @@ Plan update: set the target Azure subscription for this app to the subscription 
 
 **Assistant Summary**
 
-Added the numbered Cloud subscriptions menu with a refreshed Azure CLI subscription inventory, separate Clagnos-selected and CLI-active markers, disabled-subscription protection, and selection that updates both the Azure CLI default and persisted Clagnos subscription. Set the Azure CLI default to the configured app subscription. No legacy-tag resource groups were present, so the one-time group-tag migration had no eligible targets.
+Added the numbered Cloud subscriptions menu with a refreshed Azure CLI subscription inventory, separate Prodicloud-selected and CLI-active markers, disabled-subscription protection, and selection that updates both the Azure CLI default and persisted Prodicloud subscription. Set the Azure CLI default to the configured app subscription. No legacy-tag resource groups were present, so the one-time group-tag migration had no eligible targets.
 ### 2026-10-12 14:48 UTC
 **User Prompt**
 
@@ -5778,12 +5778,12 @@ Added a fixture-backed TUI suite that exercises all displayed menu categories an
 **User Prompt**
 
 ````text
-Test clarification: I wanted the tests to run against the real `cg.cmd` and verify the actual output shown on screen. Can they run that way?
+Test clarification: I wanted the tests to run against the real `pd.cmd` and verify the actual output shown on screen. Can they run that way?
 ````
 
 **Assistant Summary**
 
-Added a process-level TUI scenario that launches the real `cg.cmd` and copied Clagnos UI/runtime source in an isolated temporary workspace, sends scripted stdin choices, and asserts captured console output across the home menu, VC details, package catalog, components, operations, inventory, and subscriptions. A fixture `az.cmd` supplies read-only responses and rejects mutations; a fixture `net.exe` satisfies the launcher elevation check. The operator `.env` and real Azure CLI are not used. The expanded suite passed 154/154 under Windows PowerShell 5.1 and PowerShell 7+ with no Azure mutations.
+Added a process-level TUI scenario that launches the real `pd.cmd` and copied Prodicloud UI/runtime source in an isolated temporary workspace, sends scripted stdin choices, and asserts captured console output across the home menu, VC details, package catalog, components, operations, inventory, and subscriptions. A fixture `az.cmd` supplies read-only responses and rejects mutations; a fixture `net.exe` satisfies the launcher elevation check. The operator `.env` and real Azure CLI are not used. The expanded suite passed 154/154 under Windows PowerShell 5.1 and PowerShell 7+ with no Azure mutations.
 
 ### 2026-10-13 00:24 UTC
 **User Prompt**
@@ -5816,18 +5816,18 @@ Important task: Use the `cg` CLI to resize the machine size of the `vc1` compute
 
 **Assistant Summary**
 
-Fixed `cg.cmd` command mode losing forwarded arguments while loading the shared runtime and added a real-launcher regression check. Extended SKU preflight to check availability in Clagnos's selected subscription before resize. PowerShell 5.1 and PowerShell 7+ passed 188 smoke checks and 160 TUI scenarios each. An initial standalone `az vm list-skus` query used the native Azure CLI default context rather than Clagnos's selected subscription, so its restriction result did not apply to this operation. Through `cg.cmd resize`, Clagnos confirmed `Standard_B2ls_v2` in its active subscription, deallocated `vc1`, resized it, started it, then read back the requested SKU and `VM running`. No disk or network resource was changed.
+Fixed `pd.cmd` command mode losing forwarded arguments while loading the shared runtime and added a real-launcher regression check. Extended SKU preflight to check availability in Prodicloud's selected subscription before resize. PowerShell 5.1 and PowerShell 7+ passed 188 smoke checks and 160 TUI scenarios each. An initial standalone `az vm list-skus` query used the native Azure CLI default context rather than Prodicloud's selected subscription, so its restriction result did not apply to this operation. Through `pd.cmd resize`, Prodicloud confirmed `Standard_B2ls_v2` in its active subscription, deallocated `vc1`, resized it, started it, then read back the requested SKU and `VM running`. No disk or network resource was changed.
 
 ### 2026-10-13 12:52 UTC
 **User Prompt**
 
 ````text
-New task: Please use the Clagnos CLI interactively, without command-line parameters, and select the relevant menus as I would to change the size of the existing virtual computer named `vc1` to `Standard_B2s_v2`. This should both reach the desired VM size and confirm I can complete the task through the fully interactive `cg.cmd` menus.
+New task: Please use the Prodicloud CLI interactively, without command-line parameters, and select the relevant menus as I would to change the size of the existing virtual computer named `vc1` to `Standard_B2s_v2`. This should both reach the desired VM size and confirm I can complete the task through the fully interactive `pd.cmd` menus.
 ````
 
 **Assistant Summary**
 
-Launched `cg.cmd` with no arguments and navigated the numbered menus to `vc1` → Operations → Resize VM or disk → Change VM size. Selected `Standard_B2s_v2` from the East US SKU picker and confirmed the resize. Clagnos deallocated the VM, resized it, started it, read back `Standard_B2s_v2`, and confirmed `VM running` with provisioning succeeded through the interactive status menu. No disk or network resource was changed. Fixed the TUI status action so it no longer passes unsupported Windows/Linux flags to `do`; PowerShell compatibility and quality checks passed.
+Launched `pd.cmd` with no arguments and navigated the numbered menus to `vc1` → Operations → Resize VM or disk → Change VM size. Selected `Standard_B2s_v2` from the East US SKU picker and confirmed the resize. Prodicloud deallocated the VM, resized it, started it, read back `Standard_B2s_v2`, and confirmed `VM running` with provisioning succeeded through the interactive status menu. No disk or network resource was changed. Fixed the TUI status action so it no longer passes unsupported Windows/Linux flags to `do`; PowerShell compatibility and quality checks passed.
 
 ### 2026-10-13 13:00 UTC
 **User Prompt**
@@ -5838,14 +5838,14 @@ New task: On screens displaying virtual computer details, the VC status is shown
 
 **Assistant Summary**
 
-Microsoft's Azure CLI guide shows `az vm get-instance-view` power-state data under `instanceView.statuses`; the Compute REST instance-view response puts `statuses` at its root. Clagnos checked only the root field, so it missed the documented Azure CLI response. Updated the shared TUI status resolver to support both shapes and to derive a readable label from `PowerState/*` when `displayStatus` is missing. Opened the real parameterless `cg.cmd`; the `vc1` row then displayed `VM running`. The query was read-only and no Azure resources were changed.
+Microsoft's Azure CLI guide shows `az vm get-instance-view` power-state data under `instanceView.statuses`; the Compute REST instance-view response puts `statuses` at its root. Prodicloud checked only the root field, so it missed the documented Azure CLI response. Updated the shared TUI status resolver to support both shapes and to derive a readable label from `PowerState/*` when `displayStatus` is missing. Opened the real parameterless `pd.cmd`; the `vc1` row then displayed `VM running`. The query was read-only and no Azure resources were changed.
 
 ### 2026-10-14 12:55 UTC
 **User Prompt**
 
 ````text
 Feature updates:
-1. On first opening the cg CLI, scan resource groups and resources and cache all Clagnos-owned items. Avoid unnecessary `az` commands on every screen; detect changes to groups, resources, and their properties quickly, and synchronize, validate, invalidate, or revalidate the cache only when appropriate. The goal is to call Azure CLI only when needed and avoid false positives.
+1. On first opening the cg CLI, scan resource groups and resources and cache all Prodicloud-owned items. Avoid unnecessary `az` commands on every screen; detect changes to groups, resources, and their properties quickly, and synchronize, validate, invalidate, or revalidate the cache only when appropriate. The goal is to call Azure CLI only when needed and avoid false positives.
 2. Make new virtual-computer creation a step-by-step wizard. Show all options, mark defaults with `>`, and offer `s: skip`, `k: skip all`, `a: apply`, `l: apply all`, and `c: close`. Page long option lists with `p: previous`, `n: next`, `g: go to page`, `f: first page`, and `t: last page`; selections must be numeric, with no arrow-key navigation. Ports should be validated text supporting comma-separated values and ranges such as `3000-3300`. Disk size should be validated text supporting `1MB`, `1GB`, and `1TB` forms within allowed limits. Audit other text, multi-select, and formatted inputs across the TUI and make them consistent, validated, and safe.
 ````
 
@@ -5873,7 +5873,7 @@ Correction task: Please inspect the virtual-computer creation process below, det
 
 **Assistant Summary**
 
-Microsoft's Bsv2 VM size table lists `Standard_B2s_v2` as not supporting nested virtualization. Azure's Compute SKU response omitted a nested capability row, so Clagnos treated support as inconclusive and deferred validation until after VM creation. Added a family-metadata fallback for documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families. With nested virtualization requested, configuration review now stops before resource-group, network, or VM creation and reports the affected SKU/family; undocumented families remain inconclusive rather than being rejected. Added regression coverage for all four unsupported families and the inconclusive fallback. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure operations were run during this fix. The submitted transcript shows that resources for the failed attempt had already been created; this task did not modify or delete them.
+Microsoft's Bsv2 VM size table lists `Standard_B2s_v2` as not supporting nested virtualization. Azure's Compute SKU response omitted a nested capability row, so Prodicloud treated support as inconclusive and deferred validation until after VM creation. Added a family-metadata fallback for documented unsupported Bv1, Bsv2, Basv2, and Bpsv2 families. With nested virtualization requested, configuration review now stops before resource-group, network, or VM creation and reports the affected SKU/family; undocumented families remain inconclusive rather than being rejected. Added regression coverage for all four unsupported families and the inconclusive fallback. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure operations were run during this fix. The submitted transcript shows that resources for the failed attempt had already been created; this task did not modify or delete them.
 
 ### 2026-10-14 20:42 UTC
 **User Prompt**
@@ -5884,7 +5884,7 @@ Cross-check task: Please inspect the nested-virtualization status of the existin
 
 **Assistant Summary**
 
-Read the existing Bsv2 VM's size and power state from the selected subscription, then used Azure Run Command only for guest reads. Its Windows CPU reported `VMMonitorModeExtensions=false`, `VirtualizationFirmwareEnabled=false`, and `SecondLevelAddressTranslationExtensions=false`; `HyperVisorPresent=true` and `VirtualMachinePlatform=Enabled` were also observed. Microsoft's Bsv2 size table marks nested virtualization unsupported. This uncovered a Clagnos false-positive path: the Windows validator treated outer-hypervisor presence plus an enabled guest feature as success despite missing CPU extensions. Updated validation to require all three CPU virtualization flags and added regression coverage for positive and negative cases. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure configuration or resources were changed.
+Read the existing Bsv2 VM's size and power state from the selected subscription, then used Azure Run Command only for guest reads. Its Windows CPU reported `VMMonitorModeExtensions=false`, `VirtualizationFirmwareEnabled=false`, and `SecondLevelAddressTranslationExtensions=false`; `HyperVisorPresent=true` and `VirtualMachinePlatform=Enabled` were also observed. Microsoft's Bsv2 size table marks nested virtualization unsupported. This uncovered a Prodicloud false-positive path: the Windows validator treated outer-hypervisor presence plus an enabled guest feature as success despite missing CPU extensions. Updated validation to require all three CPU virtualization flags and added regression coverage for positive and negative cases. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 fixture-backed TUI scenarios; repository quality checks passed. No Azure configuration or resources were changed.
 
 ### 2026-10-14 21:17 UTC
 **User Prompt**
@@ -5895,7 +5895,7 @@ Correction task: Please make nested-virtualization management more consistent in
 
 **Assistant Summary**
 
-Separated the Clagnos nested-virtualization request from Azure-reported VM settings and CPU virtualization extensions available to the guest. Create review, `set`, selected-VC details, and the full `show` report now use consistent labels; `show` exports `NestedVirtualizationAvailableToGuest` separately from the optional Azure property. Missing or malformed CPU evidence remains unknown instead of becoming a false disabled result. Updated success messages to describe validation rather than implying Clagnos changed Azure hardware exposure or installed Hyper-V in the guest. The real `cg.cmd` TUI process now uses an isolated, read-only Azure fixture that validates the guest probe AST. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 TUI scenarios; repository quality checks passed. No Azure resources or settings were changed.
+Separated the Prodicloud nested-virtualization request from Azure-reported VM settings and CPU virtualization extensions available to the guest. Create review, `set`, selected-VC details, and the full `show` report now use consistent labels; `show` exports `NestedVirtualizationAvailableToGuest` separately from the optional Azure property. Missing or malformed CPU evidence remains unknown instead of becoming a false disabled result. Updated success messages to describe validation rather than implying Prodicloud changed Azure hardware exposure or installed Hyper-V in the guest. The real `pd.cmd` TUI process now uses an isolated, read-only Azure fixture that validates the guest probe AST. Windows PowerShell 5.1 and PowerShell 7+ each passed 191 smoke checks and 173 TUI scenarios; repository quality checks passed. No Azure resources or settings were changed.
 
 ### 2026-10-15 00:19 UTC
 **User Prompt**
@@ -5916,7 +5916,7 @@ New task plan: Make the VC screen's i:init and u:update operations idempotent an
 
 **Assistant Summary**
 
-Updated the VC menu so `p` opens a review-first setup plan across builtin and custom catalogs, while `m` opens the package manager. Setup orders packages by dependency, installs missing packages, repairs detectable Clagnos-managed startup drift, skips disabled or unknown states, and continues independent work with a final summary. Package `install` now installs when absent and uses a pinned same-version repair when installed; explicit `repair` does not upgrade vendor versions. App-state-backed repair captures current target state, restores and verifies it, removes temporary backup files on success, and leaves one emergency archive on the VC if verification fails. Default init preserves existing managed-user passwords; a separate interactive, typed-confirmation reset flag and VC `k` shortcut apply `.env` values. RDP and SSH services restart only after effective configuration changes, update no longer forces an unsignaled final reboot, and profile sync preserves target files, registry values, excluded data, and active sessions. Escape/`b` return one level and `c` closes current menu flows where available. Compatibility smoke checks passed 193/193; fixture-backed TUI coverage passed 179/179 using the real `cg.cmd` process and an isolated Azure fixture. Package lifecycle, app-state, documentation, and release checks passed. No live Azure resource or VM was changed.
+Updated the VC menu so `p` opens a review-first setup plan across builtin and custom catalogs, while `m` opens the package manager. Setup orders packages by dependency, installs missing packages, repairs detectable Prodicloud-managed startup drift, skips disabled or unknown states, and continues independent work with a final summary. Package `install` now installs when absent and uses a pinned same-version repair when installed; explicit `repair` does not upgrade vendor versions. App-state-backed repair captures current target state, restores and verifies it, removes temporary backup files on success, and leaves one emergency archive on the VC if verification fails. Default init preserves existing managed-user passwords; a separate interactive, typed-confirmation reset flag and VC `k` shortcut apply `.env` values. RDP and SSH services restart only after effective configuration changes, update no longer forces an unsignaled final reboot, and profile sync preserves target files, registry values, excluded data, and active sessions. Escape/`b` return one level and `c` closes current menu flows where available. Compatibility smoke checks passed 193/193; fixture-backed TUI coverage passed 179/179 using the real `pd.cmd` process and an isolated Azure fixture. Package lifecycle, app-state, documentation, and release checks passed. No live Azure resource or VM was changed.
 
 ### 2026-10-15 18:36 UTC
 **User Prompt**
@@ -5942,12 +5942,12 @@ Moved task roots to vm-init/<platform> and vm-update/<platform>, and package cat
 **User Prompt**
 
 ````text
-Feature update: Store all VC-specific settings for every virtual computer created by this application in a git-ignored `{vc-name}.env` file, such as `vc1.env` or `vc2.env`. Migrate existing VCs and their settings to this structure. Move global Clagnos infrastructure, Azure CLI selection, and app-wide settings into `clagnos.env`. Aggressively cut over from the former `.env` behavior, remove its runtime path and artifacts, and make the new files the sole primary configuration structure. Do not add presence/absence tests for the former structure.
+Feature update: Store all VC-specific settings for every virtual computer created by this application in a git-ignored `{vc-name}.env` file, such as `vc1.env` or `vc2.env`. Migrate existing VCs and their settings to this structure. Move global Prodicloud infrastructure, Azure CLI selection, and app-wide settings into `prodicloud.env`. Aggressively cut over from the former `.env` behavior, remove its runtime path and artifacts, and make the new files the sole primary configuration structure. Do not add presence/absence tests for the former structure.
 ````
 
 **Assistant Summary**
 
-Separated global settings from per-VC configuration. `clagnos.env` now owns the active VC pointer, Azure subscription, operator identity, naming templates, timeouts, task paths, and non-secret create defaults; each `<vm-name>.env` owns its target identity, group, OS, region, image/SKU/disk, VM features, credentials, ports, and package transport. Added `vc.env.example`, made the configure editor global-only, routed VM settings through the selected profile, and updated the TUI, setup runner, benchmarks, release packaging, live acceptance script, and contract checks. Migrated the local configuration and existing managed VC profiles using read-only Azure inventory, verified identity and key VM properties, and removed the prior local settings file. No Azure resources were changed. PowerShell parsing passed for 49 changed scripts and `git diff --check` passed; automated tests were updated but not run.
+Separated global settings from per-VC configuration. `prodicloud.env` now owns the active VC pointer, Azure subscription, operator identity, naming templates, timeouts, task paths, and non-secret create defaults; each `<vm-name>.env` owns its target identity, group, OS, region, image/SKU/disk, VM features, credentials, ports, and package transport. Added `vc.env.example`, made the configure editor global-only, routed VM settings through the selected profile, and updated the TUI, setup runner, benchmarks, release packaging, live acceptance script, and contract checks. Migrated the local configuration and existing managed VC profiles using read-only Azure inventory, verified identity and key VM properties, and removed the prior local settings file. No Azure resources were changed. PowerShell parsing passed for 49 changed scripts and `git diff --check` passed; automated tests were updated but not run.
 
 ### 2026-10-16 00:32 UTC
 **User Prompt**
@@ -5970,11 +5970,11 @@ Removed the changing age counter from the Ready state and made the status render
 ### 2026-10-16 01:02 UTC
 **User Prompt**
 
-Feature update: Add a top_status_lines true/false setting to the global Clagnos environment file. Default it to false so the recently added two-row status display is disabled by default; allow setting it to true to enable it again.
+Feature update: Add a top_status_lines true/false setting to the global Prodicloud environment file. Default it to false so the recently added two-row status display is disabled by default; allow setting it to true to enable it again.
 
 **Assistant Summary**
 
-Added the TOP_STATUS_LINES boolean to the global environment contract and example, set the local clagnos.env value to false, and added a true/false picker under Configure > Advanced. The TUI now reads the preference on screen entry: false restores the compact header and disables status-row redraws; true enables the persistent two-row screen, VC, subscription, action, and cache display. PowerShell parsing and git diff check passed. TUI and live Azure tests were not run.
+Added the TOP_STATUS_LINES boolean to the global environment contract and example, set the local prodicloud.env value to false, and added a true/false picker under Configure > Advanced. The TUI now reads the preference on screen entry: false restores the compact header and disables status-row redraws; true enables the persistent two-row screen, VC, subscription, action, and cache display. PowerShell parsing and git diff check passed. TUI and live Azure tests were not run.
 
 ### 2026-10-18 08:30 UTC
 **User Prompt**
@@ -6020,7 +6020,7 @@ The live VC2 WinRM matrix passed install (170.2s), repair (217.3s), update (63.0
 **User Prompt**
 
 ````text
-Plan update: preserve the existing plan and add a full audit of Clagnos infrastructure. Ensure setup-vc*.cmd and their scripts create, repair, configure, update, and prepare a VC idempotently. Ensure remove-vc*.cmd and their scripts resume cleanup of incomplete stages and verify hard-purge completion. Repeated runs should create or reconcile only when needed, and remove or clean up only when required.
+Plan update: preserve the existing plan and add a full audit of Prodicloud infrastructure. Ensure setup-vc*.cmd and their scripts create, repair, configure, update, and prepare a VC idempotently. Ensure remove-vc*.cmd and their scripts resume cleanup of incomplete stages and verify hard-purge completion. Repeated runs should create or reconcile only when needed, and remove or clean up only when required.
 ````
 
 **Assistant Summary**
@@ -6036,14 +6036,14 @@ Made queued Windows language capabilities safe across repeated runs, and made Do
 
 ````text
 Plan update: preserve the current work and add these tasks:
-1. Move every Clagnos log file beneath the repository-root `.logs` directory and write all application activity there.
+1. Move every Prodicloud log file beneath the repository-root `.logs` directory and write all application activity there.
 2. Deeply review and enrich the schema for `vc1.env`, `vc2.env`, and future VC profiles. Keep the schemas consistent, reuse common variable names, and include as many per-VC settings as can safely be displayed or managed. Re-running the matching `setup-vc*.cmd` should apply supported profile changes to that VC. Ask me about any part of the requested schema that is unclear.
 3. Isolate and fix installation of the Turkish Windows language components on the existing VC. Repair the relevant vm-update task and run it on the target instead of rebuilding the VM. Install Turkish OS-level language support while keeping all current UI/default language settings in English so I can switch later.
 ````
 
 **Assistant Summary**
 
-Moved Clagnos transcripts, task history, setup/remove output, and verified guest logs under ignored `.logs/`; remote Clagnos logs are removed only after their copied hashes verify. Expanded the shared VC profile schema, preserved global fallbacks through `@global`, kept unknown secrets marked rather than guessed, added profile population and Azure-observed component synchronization, and verified both existing VC profiles have no blank values. Reworked the Turkish language task and ran it against VC1 without rebuilding. The VM's language and English-default state were verified during the live run. Code and contract tests passed as recorded in release 2026.10.18.430.
+Moved Prodicloud transcripts, task history, setup/remove output, and verified guest logs under ignored `.logs/`; remote Prodicloud logs are removed only after their copied hashes verify. Expanded the shared VC profile schema, preserved global fallbacks through `@global`, kept unknown secrets marked rather than guessed, added profile population and Azure-observed component synchronization, and verified both existing VC profiles have no blank values. Reworked the Turkish language task and ran it against VC1 without rebuilding. The VM's language and English-default state were verified during the live run. Code and contract tests passed as recorded in release 2026.10.18.430.
 
 ### 2026-10-18 20:34 UTC
 **User Prompt**
@@ -6076,7 +6076,7 @@ Important plan update: preserve all existing plan work and apply the requested D
 
 **Assistant Summary**
 
-Continued the same DNS-label migration plan. The code and safety checks remained the same; only the two verified active Public IP labels were changed, once each, through Clagnos component menus.
+Continued the same DNS-label migration plan. The code and safety checks remained the same; only the two verified active Public IP labels were changed, once each, through Prodicloud component menus.
 
 ### 2026-10-18 22:28 UTC
 **User Prompt**
@@ -6087,7 +6087,7 @@ Important plan update: preserve all plan work and fix the Turkish Windows langua
 
 **Assistant Summary**
 
-Replaced the slow Windows Update language scan with a bounded DISM path using Microsoft's matching Windows 11 24H2/25H2 Languages and Optional Features ISO. The task downloads the source with resume and a 600-second limit, installs only the Turkish display-language CAB and required Basic capability, skips optional OCR/speech/handwriting features, preserves the configured English default, and has a 900-second hard task timeout. Live inspection found Turkish and Basic already installed on VC1 after the earlier servicing attempt completed asynchronously; the updated Clagnos task then completed idempotently in about 36 seconds without a restart or another ISO download. VC1 and VC2 DNS labels were updated through Clagnos and verified to resolve to the same public IPs; VM size, disks, NICs, allocation, and Public IP SKU were unchanged. Windows PowerShell 5.1 and PowerShell 7 passed smoke 195/195 and TUI 180/180 on each host; code quality and documentation checks passed.
+Replaced the slow Windows Update language scan with a bounded DISM path using Microsoft's matching Windows 11 24H2/25H2 Languages and Optional Features ISO. The task downloads the source with resume and a 600-second limit, installs only the Turkish display-language CAB and required Basic capability, skips optional OCR/speech/handwriting features, preserves the configured English default, and has a 900-second hard task timeout. Live inspection found Turkish and Basic already installed on VC1 after the earlier servicing attempt completed asynchronously; the updated Prodicloud task then completed idempotently in about 36 seconds without a restart or another ISO download. VC1 and VC2 DNS labels were updated through Prodicloud and verified to resolve to the same public IPs; VM size, disks, NICs, allocation, and Public IP SKU were unchanged. Windows PowerShell 5.1 and PowerShell 7 passed smoke 195/195 and TUI 180/180 on each host; code quality and documentation checks passed.
 
 ### 2026-10-18 23:31 UTC
 **User Prompt**
@@ -6100,13 +6100,13 @@ Plan update: Update the vm-update task for Turkish language installation so it i
 
 Renamed the active task folder and script to `136-install-turkish-language-features`, removed the retired task-name alias, and replaced its old optional-feature-skip contract. The task now installs the Turkish display pack plus every capability exposed by the target edition: Basic, text-to-speech, speech recognition, OCR, handwriting, and Pan-European supplemental fonts. It checks ISO CAB presence and submits missing capabilities in a single DISM call with Basic and TTS ahead of dependent features. Edition-unavailable capabilities are reported; Retail Demo content is excluded. English remains the system UI default.
 
-Ran the new task through Clagnos over WinRM on VC1. The first run completed in 225 seconds after downloading the 5.96 GiB Microsoft ISO; Basic and OCR were already installed, and TTS, handwriting, and supplemental fonts were installed. Windows reported Turkish speech recognition as unavailable. The display-language default remained `en-US`, no restart was required, and a second run short-circuited in about 30 seconds without another ISO download. PowerShell 5.1/7 smoke checks passed 195/195 and TUI checks passed 180/180 on both hosts; code-quality, documentation, app-state, package-lifecycle, and sensitive-content checks passed.
+Ran the new task through Prodicloud over WinRM on VC1. The first run completed in 225 seconds after downloading the 5.96 GiB Microsoft ISO; Basic and OCR were already installed, and TTS, handwriting, and supplemental fonts were installed. Windows reported Turkish speech recognition as unavailable. The display-language default remained `en-US`, no restart was required, and a second run short-circuited in about 30 seconds without another ISO download. PowerShell 5.1/7 smoke checks passed 195/195 and TUI checks passed 180/180 on both hosts; code-quality, documentation, app-state, package-lifecycle, and sensitive-content checks passed.
 
 ### 2026-10-19 10:56 UTC
 **User Prompt**
 
 ````text
-Fix and improve the Clagnos CLI:
+Fix and improve the Prodicloud CLI:
 1. Keep VC details and one-shot result screens, including status results, visible with a “Press Enter to continue” pause.
 2. Rename the selected-VC operations menu to “VC Operations” and expose supported VM actions, including start, shutdown, restart, hibernate/resume, force power-off/reset, deallocation, and graceful/forceful shutdown-and-deallocate combinations.
 3. Fix the FFmpeg install failure after uninstall, audit all packages for the same class of false post-install failures, and ensure install, uninstall, repair, update, and status behave correctly.
@@ -6116,4 +6116,135 @@ Fix and improve the Clagnos CLI:
 
 Changed result screens to display an explicit Enter prompt; package status now waits for its background refresh with bounded progress and renders the result before returning. Renamed the submenu to `VC Operations`, added retryable state-checked shutdown/power-off deallocation actions, and restricted Windows guest hibernate to Windows targets. Documented force reset as Azure redeploy and force power-off as skipping guest shutdown.
 
-The package audit found PATH-only post-install checks in FFmpeg and GitHub CLI; both now verify Chocolatey registration and a runnable executable through the package/shim or manifest-declared vendor paths, using each executable's correct version flag. Azure Developer CLI and Docker Desktop also resolve their executable before version validation. On an existing Windows VM, `cg.cmd` completed FFmpeg uninstall, install-after-uninstall, update, same-version repair, reinstall, and final status; FFmpeg is installed and runnable at 9.0.2. GitHub CLI status passed at 2.102.0. The VM remained running; no Azure infrastructure mutations were run. TUI passed 185/185, smoke passed 195/195, and the package lifecycle contract passed for all 36 Windows builtin packages.
+The package audit found PATH-only post-install checks in FFmpeg and GitHub CLI; both now verify Chocolatey registration and a runnable executable through the package/shim or manifest-declared vendor paths, using each executable's correct version flag. Azure Developer CLI and Docker Desktop also resolve their executable before version validation. On an existing Windows VM, `pd.cmd` completed FFmpeg uninstall, install-after-uninstall, update, same-version repair, reinstall, and final status; FFmpeg is installed and runnable at 9.0.2. GitHub CLI status passed at 2.102.0. The VM remained running; no Azure infrastructure mutations were run. TUI passed 185/185, smoke passed 195/195, and the package lifecycle contract passed for all 36 Windows builtin packages.
+
+### 2026-10-20 11:10 UTC
+**User Prompt**
+
+````text
+Plan and implement the first three recommended disk-resize quick wins, then complete the work.
+````
+
+**Assistant Summary**
+
+Added layered before/after disk inventories for Azure capacity, guest raw capacity, partitioned and unallocated bytes, non-filesystem partitions, and per-volume filesystem size/used/free space on Windows and Linux. Disk shrink now remeasures the isolated source clone before copying, reports the delta from the initial guest measurement, and rejects a target that no longer fits with the 10 GiB headroom. Both Windows and Linux helpers measure the copied replacement disk and require the same headroom before cutover; post-cutover guest capacity and usage are read back and reported. Documentation was updated. Automated tests and live Azure resize operations were not run.
+
+### 2026-10-20 11:27 UTC
+**User Prompt**
+
+````text
+Task: With the latest updates in place, perform a live VM disk shrink attempt on VC2 and verify the updated workflow.
+````
+
+**Assistant Summary**
+
+Ran the Prodicloud disk-shrink command against VC2 with a 127 GiB target, the smallest size allowed by its exact Marketplace image metadata. The new live inventory reported 87.26 GiB of filesystem use and 39.74 GiB of estimated headroom, but correctly rejected the operation before Azure disk changes because the Windows OS disk has five GPT partitions, including two Reserved/MSR partitions, outside the supported four-partition layout. Post-readback confirmed VC2 is still running, the same 128 GiB OS disk remains attached, and `vc2.env` remains at 128 GiB. No helper, candidate, or source disk was created or deleted; this run validated the inventory and safe preflight rejection, but did not reach source-clone remeasurement or candidate verification.
+
+### 2026-10-20 13:02 UTC
+**User Prompt**
+
+````text
+Task update: Perform a live two-stage disk resize on an existing managed Windows VM: extend its OS disk to 180 GiB, then shrink it to 130 GiB, and verify both operations.
+````
+
+**Assistant Summary**
+
+Added narrow support for the observed five-partition GPT layout only when the extra leading MSR is small, unformatted, and not boot/system. The source MSR is omitted from file-copy mapping; candidate and post-boot layouts are verified because a platform-created empty leading MSR may remain on the replacement. Fixed Windows expansion to validate the selected NTFS OS volume instead of rejecting the normal FAT32 EFI volume, and made a Windows retry finish guest expansion when Azure already has the requested disk size. Large asynchronous Windows Run Command scripts are now staged with `@file` to avoid the Windows argument-length limit. Fixture smoke passed 204/204 and the documentation contract and PowerShell syntax checks passed. The live extension reached the requested Azure capacity but first exposed the FAT32 validation bug; an idempotent rerun expanded the guest partition and synchronized the VC profile.
+
+### 2026-10-20 13:03 UTC
+**User Prompt**
+
+````text
+Task update: Make the requested disk-resize operation finish faster by removing checks and waits that add no direct safety or result value.
+````
+
+**Assistant Summary**
+
+Kept the active file-copy and capacity/boot checks intact while correcting the script transport failure and the extra-MSR recognition issue. The ~87 GiB offline OS copy was the dominant 3,127-second phase; it is required to build a bootable smaller disk, so removing it or skipping boot/recovery checks would weaken the result without a safe shortcut. Added candidate and post-boot layout readback without extra Azure calls; the live replacement's five-partition layout passed the supported policy with one empty leading MSR. The Prodicloud shrink completed and verified the 130 GiB Azure/guest disk, running VM, hibernation support, WinRE Enabled, synchronized VC profile, deletion of the original disk only after post-cutover verification, and removal of temporary helper resources. The successful shrink command completed below the one-hour guest-step bound. The 180-to-130 GiB `StandardSSD_LRS` path remains in Azure's E15/256 GiB performance/billing tier.
+
+### 2026-10-20 13:34 UTC
+**User Prompt**
+
+````text
+Optimize the disk-resize workflow to finish sooner without high cost. Increase temporary VM capacity where it helps, run quick trials on other steps, remove unnecessary waits and time-consuming work, research online optimizations, and implement them.
+````
+
+**Assistant Summary**
+
+Reviewed the prior live resize telemetry: Robocopy CPU used 392.7 seconds during a 2,016-second measured copy interval, while aggregate physical reads/writes averaged about 43.3/42.8 MiB/s. The `Standard_D8ds_v5` helper has more uncached disk bandwidth than the two Standard SSD disks need, so moving to D16 would add compute cost without addressing the measured limit. Started helper VM creation with Azure CLI `--no-wait`, overlapping provisioning with snapshot and candidate-disk setup, and moved the provisioning/Guest Agent waits to immediately before attachment. Removed the extra blocking `az vm run-command delete`; the disposable helper resource group owns that child resource and deletes it with the VM.
+
+For large Windows OS shrink copies from `StandardSSD_LRS` with at least 64 GiB used, the workflow now uses temporary `Premium_LRS` P15 source/candidate disks and restores the original disk SKU before cutover. A disposable image-based 130 GiB candidate test verified Premium-to-Standard SKU conversion retained `supportsHibernation=true`; the test disk was deleted and cleanup verified. A further end-to-end shrink was not repeated because the current target is already at 130 GiB. The throughput gain from P15 is expected to depend on the file mix and requires measurement in a future copy; P15 offers a higher published IOPS baseline than E15. Compatibility smoke passed 204/204, the documentation contract and PowerShell syntax checks passed, and `git diff --check` passed.
+### 2026-10-20 14:45 UTC
+**User Prompt**
+
+````text
+Repeat the live Prodicloud disk-extension and shrink workflow against the existing VM with the latest optimizations, then report the measured result.
+````
+
+**Assistant Summary**
+
+Through the real `pd.cmd` command, extended the live 130 GiB Windows OS disk to 180 GiB and the guest C: partition to about 179.43 GiB in 338 seconds. Then shrank it back to 130 GiB in 1,714.8 seconds using asynchronous helper provisioning and temporary Premium SSD P15 source/candidate disks. The helper's managed Run Command copy/verification phase completed in 989 seconds. Azure readback confirmed the candidate was restored to `StandardSSD_LRS` before cutover and retained hibernation support. The replacement booted, WinRE was Enabled, the VC profile synchronized to 130 GiB, the prior source disk was absent, and the temporary helper group was deleted. Compared with the previous 3,127-second shrink, this run was about 45% shorter across the combined optimizations; no single optimization's contribution was isolated. The VM remained `Standard_B2s_v2` and running.
+
+### 2026-10-20 18:01 UTC
+**User Prompt**
+
+````text
+Use P30 temporary transfer disks and a D8 helper VM for a live extend-and-shrink trial, maximizing the available hardware without a software bottleneck.
+````
+
+**Assistant Summary**
+
+Updated the shrink workflow to create and verify both temporary Premium SSD disks at the P30 performance tier while keeping the helper at `Standard_D8ds_v5`; the final candidate returns to the original Standard SSD tier before cutover. Through the real `pd.cmd`, expanded an existing Windows VM OS disk and C: volume from 130 to 180 GiB, then shrank them to 130 GiB. The helper copy-and-verification command finished in 1,018 seconds without retry. Telemetry showed active disk I/O, up to 18% helper CPU, zero network traffic, and at least 26 GiB free RAM. Final readback verified the VM running at its original size with unchanged NIC/public IP, a 130 GiB `StandardSSD_LRS` OS disk, hibernation support, WinRE Enabled, updated VC profile, removed old source disk, and deleted helper resource group. The first expansion attempt timed out before WinRM returned after VM restart; an idempotent rerun completed the guest expansion, and the post-restart readiness bound was extended to 120 seconds. This trial confirms the P30 path and health, but does not isolate P30's speed gain against P15/P20.
+
+### 2026-10-20 18:32 UTC
+**User Prompt**
+
+````text
+Replace blind waits throughout VM disk resize with periodic health, progress, and stabilization checks for VM power, SSH/WinRM, Azure resource creation, helper and disk hard purge, and post-resize guest capacity.
+````
+
+**Assistant Summary**
+
+Refactored disk resize to submit supported Azure lifecycle, disk, snapshot, and OS-disk cutover operations with `--no-wait`, then poll power/provisioning, resource readiness, VM disk attachment/LUN ownership, transport stability, and guest filesystem capacity. VM and guest checks poll every five seconds; resource-group and managed-disk purge checks poll every ten seconds with bounded retries and absence verification. Restarted guest transports must pass consecutive connectivity probes; Linux partition discovery now waits on device readback after udev settling, and the Windows helper polls attached LUNs and Robocopy progress every five seconds. Shrink verifies helper-group and detached-disk cleanup before declaring cleanup complete; retained resources are reported explicitly. Updated resize documentation, engineering rules, prompt history, and the existing smoke-test contract. No Azure resources were changed, and the test suite was not run.
+
+### 2026-10-20 19:18 UTC
+**User Prompt**
+
+````text
+Apply the proposed VM disk-resize performance profile throughout the helper and shrink-copy flow: use D16ds_v5, same-capacity P40 source clones and target-sized P40 candidates, with the helper OS disk as 128 GiB P15.
+````
+
+**Assistant Summary**
+
+Updated the resize profile to use a `Standard_D16ds_v5` helper with a 128 GiB `Premium_LRS` OS disk whose P15 tier is applied and verified before copy disks attach. Standard SSD shrink copies now use a P40 source clone at the original disk capacity and a P40 replacement at the requested target capacity, restoring the replacement's original SKU before cutover. The runtime reports the conservative two-disk payload ceiling from `min(source 250 MB/s, target 250 MB/s, D16 aggregate 600 MB/s ÷ 2) = 250 MB/s`, while noting that guest and file-copy limits may be lower. Normal expansion and the target VM's size/network remain unchanged. Corrected disk-readback casing/shape checks and updated the existing smoke contract and docs. No live Azure resources were changed; automated tests were not run for this update.
+
+### 2026-10-20 22:57 UTC
+**User Prompt**
+
+````text
+Run a live extend-and-shrink cycle against the existing managed VM with the latest code. Research whether a substantially faster, safe disk-copy method applies; use it instead of Robocopy if it does.
+````
+
+**Assistant Summary**
+
+Through the real `pd.cmd` resize command, expanded the existing Windows VM disk from 130 to 180 GiB, then shrank it back to 130 GiB without rebuilding the VM. Expansion completed in 396.6 seconds. The D16ds_v5 helper, 128 GiB P15 helper OS disk, and temporary P40 copy disks completed shrink copy-and-verification in 778 seconds, 23.6% below the earlier 1,018-second D8/P30 copy phase; this is an observational comparison, not a controlled benchmark. Azure and guest checks confirmed the VM running at its original size, a 130 GiB Standard SSD disk, C: at 129.43 GiB with 41.31 GiB free, hibernation and WinRE enabled, synchronized VC profile, removed source disk, deleted helper group, and successful WinRM remoting. Research found no directly applicable faster clone: Azure managed disks do not shrink in place, and ReFS block cloning requires source and destination files on the same ReFS volume. Robocopy remains the compatible cross-disk path. Corrected the Azure CLI P15 tier update syntax and cleanup collection count issue encountered during earlier attempts; a subsequent complete live run verified cutover and cleanup. Automated suites were not run.
+
+### 2026-10-21 07:56 UTC
+**User Prompt**
+
+````text
+Set the resize helper to D8ds_v5 with a directly provisioned Standard SSD OS disk and no helper OS-disk tier update. Keep the temporary source and candidate disks at P40, minimize helper startup latency using prior benchmarks, and run a fresh live extend/shrink cycle.
+````
+
+**Assistant Summary**
+
+Changed the helper profile to `Standard_D8ds_v5` with a 128 GiB `StandardSSD_LRS` OS disk created directly, removed the helper OS-disk tier update and redundant resource-group readiness read, and moved Guest Agent readiness checking until after source/candidate disk attachments so startup overlaps that work. Kept temporary copy disks at P40. The D8ds_v5 published uncached remote-storage limit is 290 MB/s; concurrent source reads and candidate writes yield a conservative 145 MB/s payload ceiling before file-copy limits. Updated help, engineering rules, smoke-test contract, README, changelog, and release notes. PowerShell parsing, help output, and `git diff --check` passed; automated suites were not run. The first live attempt was blocked by Azure `ReadOnlyDisabledSubscription`; after the user restored Azure write access, the real `pd.cmd` completed a 130→180→130 GiB cycle. Expansion took 616.5 seconds; shrink took 1,856.4 seconds and copy/verification took 908 seconds. The helper VM create request returned in 11 seconds; no OS-disk tier update ran. Compared with prior live copy/verification, D8/P40 was 10.8% shorter than D8/P30 (1,018 seconds) and 16.7% longer than D16/P40 (778 seconds), an observational rather than controlled comparison. Final Azure and guest readback confirmed a 130 GiB Standard SSD disk, C: at 129.43 GiB with 41.54 GiB free, hibernation and WinRE enabled, original VM size/network and deallocated power state, synchronized VC profile, old source removed, and helper group purged.
+### 2026-10-28 20:00 UTC
+
+**User prompt**
+
+Rename the `clagnos` folder, repository, product and CLI application to `prodicloud` end to end. Find and fix runtime paths affected by the rename, run static/syntax/quality/type/lint checks rather than live tests, and deallocate and remove the Azure resources and resource groups created by this application before the rename.
+
+**Assistant summary**
+
+Renamed the local repository directory, `pd.cmd` launcher, and product-facing config, runtime-module, documentation and test paths to Prodicloud; renamed the GitHub repository to the Prodicloud GitHub repository and updated `origin`. Kept compatibility with legacy `managed-by=az-vm` groups and corrected the inventory worker and TUI fixture contracts. Deallocated and deleted the confirmed Prodicloud-managed resource group, cleared its deleted VM from the local active target, passed the static quality gate and all 187 non-live TUI scenarios, 204/204 Windows PowerShell 5.1 smoke checks, and verified that all 249 runtime manifest paths exist.

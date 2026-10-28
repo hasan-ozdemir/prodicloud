@@ -1,40 +1,40 @@
 # Exec command entry.
 
-# Handles Invoke-ClagnosExecCommand.
-function Invoke-ClagnosExecCommand {
+# Handles Invoke-ProdicloudExecCommand.
+function Invoke-ProdicloudExecCommand {
     param(
         [hashtable]$Options
     )
 
-    $runtime = Initialize-ClagnosExecCommandRuntimeContext
-    $commandSource = Resolve-ClagnosExecCommandTextFromOptions -Options $Options -RepoRoot ([string]$runtime.RepoRoot)
+    $runtime = Initialize-ProdicloudExecCommandRuntimeContext
+    $commandSource = Resolve-ProdicloudExecCommandTextFromOptions -Options $Options -RepoRoot ([string]$runtime.RepoRoot)
     $commandText = [string]$commandSource.CommandText
     $scriptFilePath = [string]$commandSource.ScriptFilePath
-    $quietRequested = (Test-ClagnosCliOptionPresent -Options $Options -Name 'quiet')
+    $quietRequested = (Test-ProdicloudCliOptionPresent -Options $Options -Name 'quiet')
     if ($quietRequested -and [string]::IsNullOrWhiteSpace([string]$commandText)) {
         Throw-FriendlyError `
             -Detail "exec --quiet requires --command, -c, or --file." `
             -Code 61 `
             -Summary "Quiet exec requires one remote command." `
-            -Hint 'Use clagnos exec --quiet --command "<remote-command>" or clagnos exec --quiet --file <script-file>.'
+            -Hint 'Use prodicloud exec --quiet --command "<remote-command>" or prodicloud exec --quiet --file <script-file>.'
     }
     if ($quietRequested) {
-        $script:ClagnosQuietOutput = $true
+        $script:ProdicloudQuietOutput = $true
     }
 
-    Write-ClagnosActionProgress -Action 'open remote SSH command session'
+    Write-ProdicloudActionProgress -Action 'open remote SSH command session'
 
-    $target = Resolve-ClagnosManagedVmTarget -Options $Options -ConfigMap $runtime.ConfigMap -OperationName 'exec'
+    $target = Resolve-ProdicloudManagedVmTarget -Options $Options -ConfigMap $runtime.ConfigMap -OperationName 'exec'
     $selectedResourceGroup = [string]$target.ResourceGroup
     $selectedVmName = [string]$target.VmName
     $vmDetailContext = [ordered]@{
         ResourceGroup = $selectedResourceGroup
         VmName = $selectedVmName
         AzLocation = ''
-        SshPort = [string](Get-ConfigValue -Config $runtime.ConfigMap -Key 'VM_SSH_PORT' -DefaultValue (Get-ClagnosDefaultSshPortText))
+        SshPort = [string](Get-ConfigValue -Config $runtime.ConfigMap -Key 'VM_SSH_PORT' -DefaultValue (Get-ProdicloudDefaultSshPortText))
     }
 
-    $vmRuntimeDetails = Get-ClagnosVmDetails -Context $vmDetailContext
+    $vmRuntimeDetails = Get-ProdicloudVmDetails -Context $vmDetailContext
     $sshHost = [string]$vmRuntimeDetails.VmFqdn
     if ([string]::IsNullOrWhiteSpace($sshHost)) {
         $sshHost = [string]$vmRuntimeDetails.PublicIP
@@ -67,8 +67,8 @@ function Invoke-ClagnosExecCommand {
     $replPlatform = if ([string]::Equals($osType, 'Linux', [System.StringComparison]::OrdinalIgnoreCase)) { 'linux' } else { 'windows' }
     $shell = if ($replPlatform -eq 'linux') { 'bash' } else { 'powershell' }
 
-    $pySsh = Ensure-ClagnosPySshTools -RepoRoot (Get-ClagnosRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
-    $bootstrap = Initialize-ClagnosSshHostKey `
+    $pySsh = Ensure-ProdicloudPySshTools -RepoRoot (Get-ProdicloudRepoRoot) -ConfiguredPySshClientPath ([string]$runtime.ConfiguredPySshClientPath)
+    $bootstrap = Initialize-ProdicloudSshHostKey `
         -PySshPythonPath ([string]$pySsh.PythonPath) `
         -PySshClientPath ([string]$pySsh.ClientPath) `
         -HostName $sshHost `
@@ -90,7 +90,7 @@ function Invoke-ClagnosExecCommand {
         if (-not $quietRequested -and -not [string]::IsNullOrWhiteSpace([string]$scriptFilePath)) {
             Write-Host ("Exec remote command source file: {0}" -f [string]$scriptFilePath) -ForegroundColor DarkCyan
         }
-        $remoteCommandText = ConvertTo-ClagnosExecRemoteCommandText -CommandText $commandText -Platform $replPlatform -Quiet:$quietRequested
+        $remoteCommandText = ConvertTo-ProdicloudExecRemoteCommandText -CommandText $commandText -Platform $replPlatform -Quiet:$quietRequested
 
         $execArgs = @(
             [string]$pySsh.ClientPath,
@@ -108,7 +108,7 @@ function Invoke-ClagnosExecCommand {
 
         if ($null -ne $commandWatch -and $commandWatch.IsRunning) {
             $commandWatch.Stop()
-            Write-ClagnosPerfTiming -Category "exec" -Label "remote command" -Seconds $commandWatch.Elapsed.TotalSeconds
+            Write-ProdicloudPerfTiming -Category "exec" -Label "remote command" -Seconds $commandWatch.Elapsed.TotalSeconds
         }
 
         if ($commandExitCode -ne 0) {
@@ -151,7 +151,7 @@ function Invoke-ClagnosExecCommand {
 
     if ($null -ne $shellWatch -and $shellWatch.IsRunning) {
         $shellWatch.Stop()
-        Write-ClagnosPerfTiming -Category "exec" -Label "interactive shell session" -Seconds $shellWatch.Elapsed.TotalSeconds
+        Write-ProdicloudPerfTiming -Category "exec" -Label "interactive shell session" -Seconds $shellWatch.Elapsed.TotalSeconds
     }
 
     if ($shellExitCode -ne 0) {

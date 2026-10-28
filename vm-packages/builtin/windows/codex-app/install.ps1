@@ -1,15 +1,15 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-codex-application"
 
-Import-Module 'C:\Windows\Temp\clagnos-store-install-state.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-store-install-state.psm1' -Force -DisableNameChecking
 
 $managerUser = '__VM_ADMIN_USER__'
 $managerPassword = '__VM_ADMIN_PASS__'
-$helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+$helperPath = 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
 $taskName = '120-install-codex-application'
 $packageId = '9PLM9XGG6VKS'
-$legacyRunOnceName = 'ClagnosInstallCodexApp'
-$portableWingetPath = 'C:\ProgramData\clagnos\tools\winget-x64\winget.exe'
+$legacyRunOnceName = 'ProdicloudInstallCodexApp'
+$portableWingetPath = 'C:\ProgramData\prodicloud\tools\winget-x64\winget.exe'
 $interactiveTaskSuffix = 'interactive-install'
 $waitTimeoutSeconds = 240
 
@@ -156,8 +156,8 @@ function Get-CodexInstallState {
     }
 }
 
-Invoke-ClagnosRefreshSessionPath
-$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate $portableWingetPath
+Invoke-ProdicloudRefreshSessionPath
+$wingetExe = Resolve-ProdicloudWingetExe -PortableCandidate $portableWingetPath
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
     throw 'winget command is not available.'
 }
@@ -165,22 +165,22 @@ if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
 Write-Host "Resolved winget executable: $wingetExe"
 $existingState = Get-CodexInstallState -WingetExe $wingetExe
 if ([bool]$existingState.Healthy) {
-    Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    Remove-ProdicloudRunOnceEntry -Name $legacyRunOnceName
+    $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$existingState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$existingState.LaunchKind) -LaunchTarget ([string]$existingState.LaunchTarget)
+    Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     Write-Host 'Existing Codex app installation is already healthy. Skipping winget install.'
     Write-Host 'install-codex-application-completed'
     Write-Host 'Update task completed: install-codex-application'
     return
 }
 
-if (Test-ClagnosRunOnceEntryPresent -Name $legacyRunOnceName) {
-    Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
+if (Test-ProdicloudRunOnceEntryPresent -Name $legacyRunOnceName) {
+    Remove-ProdicloudRunOnceEntry -Name $legacyRunOnceName
     Write-Host 'store-install-cleanup => task=120-install-codex-application; removed-stale-run-once=True'
 }
 
 $workerTaskName = "{0}-{1}" -f $taskName, $interactiveTaskSuffix
-$paths = Get-ClagnosInteractivePaths -TaskName $workerTaskName
+$paths = Get-ProdicloudInteractivePaths -TaskName $workerTaskName
 $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -253,10 +253,10 @@ function Test-CodexInstalled {
     return (-not [string]::IsNullOrWhiteSpace([string](Resolve-CodexExecutable)))
 }
 
-Invoke-ClagnosRefreshSessionPath
-$wingetExe = Resolve-ClagnosWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
+Invoke-ProdicloudRefreshSessionPath
+$wingetExe = Resolve-ProdicloudWingetExe -PortableCandidate "__PORTABLE_WINGET_PATH__"
 if ([string]::IsNullOrWhiteSpace([string]$wingetExe)) {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'winget command is not available.'
     exit 1
 }
 
@@ -265,28 +265,28 @@ if (-not (Test-CodexInstalled)) {
     $installExit = [int]$LASTEXITCODE
     $installText = [string]($installOutput | Out-String)
     if ($installExit -ne 0 -and $installExit -ne -1978335189) {
-        Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
+        Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ("winget install failed with exit code {0}." -f $installExit) -Details @($installText)
         exit 1
     }
 }
 
 if (-not (Test-CodexInstalled)) {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Codex app install could not be verified after interactive winget install.'
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Codex app install could not be verified after interactive winget install.'
     exit 1
 }
 
-Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Codex app is installed.'
+Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Codex app is installed.'
 '@
 
 $workerScript = $workerScript.Replace('__HELPER_PATH__', $helperPath)
-$workerScript = $workerScript.Replace('__STORE_HELPER_PATH__', 'C:\Windows\Temp\clagnos-store-install-state.psm1')
+$workerScript = $workerScript.Replace('__STORE_HELPER_PATH__', 'C:\Windows\Temp\prodicloud-store-install-state.psm1')
 $workerScript = $workerScript.Replace('__RESULT_PATH__', [string]$paths.ResultPath)
 $workerScript = $workerScript.Replace('__TASK_NAME__', $workerTaskName)
 $workerScript = $workerScript.Replace('__PACKAGE_ID__', $packageId)
 $workerScript = $workerScript.Replace('__PORTABLE_WINGET_PATH__', $portableWingetPath)
 
 try {
-    $null = Invoke-ClagnosInteractiveDesktopAutomation `
+    $null = Invoke-ProdicloudInteractiveDesktopAutomation `
         -TaskName $workerTaskName `
         -RunAsUser $managerUser `
         -RunAsPassword $managerPassword `
@@ -295,34 +295,34 @@ try {
         -RunAsMode 'password'
 }
 catch {
-    Invoke-ClagnosRefreshSessionPath
+    Invoke-ProdicloudRefreshSessionPath
     $catchState = Get-CodexInstallState -WingetExe $wingetExe
     if ([bool]$catchState.Healthy) {
-        Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
-        $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-        Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+        Remove-ProdicloudRunOnceEntry -Name $legacyRunOnceName
+        $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$catchState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+        Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
         Write-Host 'install-codex-application-completed'
         Write-Host 'Update task completed: install-codex-application'
         return
     }
 
     $installError = [string]$_.Exception.Message
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended Codex app install failed: {0}' -f $installError) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State degraded -Summary ('Unattended Codex app install failed: {0}' -f $installError) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$catchState.LaunchKind) -LaunchTarget ([string]$catchState.LaunchTarget)
+    Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw
 }
 
-Invoke-ClagnosRefreshSessionPath
+Invoke-ProdicloudRefreshSessionPath
 $finalState = Get-CodexInstallState -WingetExe $wingetExe
 if (-not [bool]$finalState.Healthy) {
-    $stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-    Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+    $stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State degraded -Summary ('Codex app is present but not yet launch-ready via a stable executable or AppID ({0}).' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+    Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
     throw 'Codex app install could not be verified.'
 }
 
-Remove-ClagnosRunOnceEntry -Name $legacyRunOnceName
-$stateRecord = Write-ClagnosStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
-Write-ClagnosStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
+Remove-ProdicloudRunOnceEntry -Name $legacyRunOnceName
+$stateRecord = Write-ProdicloudStoreInstallState -TaskName $taskName -State installed -Summary ('Codex app is launch-ready via {0}.' -f [string]$finalState.DetectionSource) -PackageId $packageId -RunOnceName $legacyRunOnceName -LaunchKind ([string]$finalState.LaunchKind) -LaunchTarget ([string]$finalState.LaunchTarget)
+Write-ProdicloudStoreInstallStateStatusLine -TaskName $taskName -StateRecord $stateRecord
 Write-Host 'install-codex-application-completed'
 Write-Host 'Update task completed: install-codex-application'
 

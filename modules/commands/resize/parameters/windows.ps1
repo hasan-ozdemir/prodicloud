@@ -1,5 +1,5 @@
 # 'windows' option binding for 'resize'.
 
-function Get-ClagnosResizeWindowsOptionSpecification {
-    return (Get-ClagnosSharedWindowsOptionSpecification)
+function Get-ProdicloudResizeWindowsOptionSpecification {
+    return (Get-ProdicloudSharedWindowsOptionSpecification)
 }

@@ -1,6 +1,6 @@
 # Run-command task runner.
 
-function New-ClagnosRunCommandTaskWrapperScript {
+function New-ProdicloudRunCommandTaskWrapperScript {
     param(
         [Parameter(Mandatory = $true)]
         [string]$TaskName,
@@ -86,8 +86,8 @@ function New-ClagnosRunCommandTaskWrapperScript {
     [void]$builder.AppendLine('    $nestedResult = ""')
     [void]$builder.AppendLine('    try {')
     [void]$builder.AppendLine('        $decodedScript = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($ScriptBase64))')
-    [void]$builder.AppendLine('        $nestedScript = ''param([string]$TaskScriptPath)'' + [Environment]::NewLine + ''$ErrorActionPreference = "Stop"'' + [Environment]::NewLine + ''$ProgressPreference = "SilentlyContinue"'' + [Environment]::NewLine + ''$InformationPreference = "Continue"'' + [Environment]::NewLine + ''try {'' + [Environment]::NewLine + ''    $decodedScript = [string](Get-Content -LiteralPath $TaskScriptPath -Raw -ErrorAction Stop)'' + [Environment]::NewLine + ''    $taskScriptBlock = [scriptblock]::Create($decodedScript)'' + [Environment]::NewLine + ''    & $taskScriptBlock *>&1 | ForEach-Object { if ($null -ne $_) { [Console]::Out.WriteLine([string]$_) } }'' + [Environment]::NewLine + ''    [Console]::Out.WriteLine("CLAGNOS_NESTED_RESULT:success")'' + [Environment]::NewLine + ''    exit 0'' + [Environment]::NewLine + ''} catch {'' + [Environment]::NewLine + ''    $nestedFailure = [string]$_.Exception.Message'' + [Environment]::NewLine + ''    if (-not [string]::IsNullOrWhiteSpace([string]$nestedFailure)) { [Console]::Error.WriteLine($nestedFailure) }'' + [Environment]::NewLine + ''    [Console]::Out.WriteLine("CLAGNOS_NESTED_RESULT:error")'' + [Environment]::NewLine + ''    exit 1'' + [Environment]::NewLine + ''}''')
-    [void]$builder.AppendLine('        $artifactBaseName = "clagnos-run-command-" + [System.Guid]::NewGuid().ToString("N")')
+    [void]$builder.AppendLine('        $nestedScript = ''param([string]$TaskScriptPath)'' + [Environment]::NewLine + ''$ErrorActionPreference = "Stop"'' + [Environment]::NewLine + ''$ProgressPreference = "SilentlyContinue"'' + [Environment]::NewLine + ''$InformationPreference = "Continue"'' + [Environment]::NewLine + ''try {'' + [Environment]::NewLine + ''    $decodedScript = [string](Get-Content -LiteralPath $TaskScriptPath -Raw -ErrorAction Stop)'' + [Environment]::NewLine + ''    $taskScriptBlock = [scriptblock]::Create($decodedScript)'' + [Environment]::NewLine + ''    & $taskScriptBlock *>&1 | ForEach-Object { if ($null -ne $_) { [Console]::Out.WriteLine([string]$_) } }'' + [Environment]::NewLine + ''    [Console]::Out.WriteLine("PRODICLOUD_NESTED_RESULT:success")'' + [Environment]::NewLine + ''    exit 0'' + [Environment]::NewLine + ''} catch {'' + [Environment]::NewLine + ''    $nestedFailure = [string]$_.Exception.Message'' + [Environment]::NewLine + ''    if (-not [string]::IsNullOrWhiteSpace([string]$nestedFailure)) { [Console]::Error.WriteLine($nestedFailure) }'' + [Environment]::NewLine + ''    [Console]::Out.WriteLine("PRODICLOUD_NESTED_RESULT:error")'' + [Environment]::NewLine + ''    exit 1'' + [Environment]::NewLine + ''}''')
+    [void]$builder.AppendLine('        $artifactBaseName = "prodicloud-run-command-" + [System.Guid]::NewGuid().ToString("N")')
     [void]$builder.AppendLine('        $nestedScriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ($artifactBaseName + ".task.ps1")')
     [void]$builder.AppendLine('        $taskScriptPath = Join-Path ([System.IO.Path]::GetTempPath()) ($artifactBaseName + ".payload.ps1")')
     [void]$builder.AppendLine('        $stdoutPath = Join-Path ([System.IO.Path]::GetTempPath()) ($artifactBaseName + ".stdout.log")')
@@ -105,7 +105,7 @@ function New-ClagnosRunCommandTaskWrapperScript {
     [void]$builder.AppendLine('            if (-not [string]::IsNullOrWhiteSpace([string]$candidatePath) -and (Test-Path -LiteralPath $candidatePath)) {')
     [void]$builder.AppendLine('                $rawOutput = [string](Get-Content -LiteralPath $candidatePath -Raw -ErrorAction SilentlyContinue)')
     [void]$builder.AppendLine('                foreach ($line in @($rawOutput -split "`r?`n")) {')
-    [void]$builder.AppendLine('                    if ($line -match ''^CLAGNOS_NESTED_RESULT:(success|error)$'') {')
+    [void]$builder.AppendLine('                    if ($line -match ''^PRODICLOUD_NESTED_RESULT:(success|error)$'') {')
     [void]$builder.AppendLine('                        $nestedResult = [string]$Matches[1]')
     [void]$builder.AppendLine('                        continue')
     [void]$builder.AppendLine('                    }')
@@ -166,7 +166,7 @@ function New-ClagnosRunCommandTaskWrapperScript {
     return $builder.ToString()
 }
 
-function Invoke-ClagnosSingleRunCommandTask {
+function Invoke-ProdicloudSingleRunCommandTask {
     param(
         [Parameter(Mandatory = $true)]
         [string]$ResourceGroup,
@@ -185,10 +185,10 @@ function Invoke-ClagnosSingleRunCommandTask {
     )
 
     $taskName = [string]$TaskBlock.Name
-    $taskScript = Resolve-ClagnosRunCommandScriptText -ScriptText ([string]$TaskBlock.Script)
-    $taskTimeoutSeconds = Get-ClagnosTaskTimeoutSeconds -TaskBlock $TaskBlock -DefaultTimeoutSeconds 180
-    $wrappedScript = New-ClagnosRunCommandTaskWrapperScript -TaskName $taskName -TaskScript $taskScript -TimeoutSeconds $taskTimeoutSeconds -CombinedShell $CombinedShell
-    $scriptArgs = Get-ClagnosRunCommandScriptArgs -ScriptText $wrappedScript -CommandId $CommandId
+    $taskScript = Resolve-ProdicloudRunCommandScriptText -ScriptText ([string]$TaskBlock.Script)
+    $taskTimeoutSeconds = Get-ProdicloudTaskTimeoutSeconds -TaskBlock $TaskBlock -DefaultTimeoutSeconds 180
+    $wrappedScript = New-ProdicloudRunCommandTaskWrapperScript -TaskName $taskName -TaskScript $taskScript -TimeoutSeconds $taskTimeoutSeconds -CombinedShell $CombinedShell
+    $scriptArgs = Get-ProdicloudRunCommandScriptArgs -ScriptText $wrappedScript -CommandId $CommandId
     $azArgs = @(
         'vm', 'run-command', 'invoke',
         '--resource-group', $ResourceGroup,
@@ -200,9 +200,9 @@ function Invoke-ClagnosSingleRunCommandTask {
     $azArgs += @('-o', 'json')
     $invokeLabel = ("az vm run-command invoke ({0})" -f [string]$taskName)
     $azTimeoutSeconds = [Math]::Max([int]$taskTimeoutSeconds + 120, [int]$script:AzCommandTimeoutSeconds)
-    Write-ClagnosActionProgress -Action ("run guest task '{0}' with Azure Run Command (max {1}s)" -f [string]$taskName, [int]$taskTimeoutSeconds)
+    Write-ProdicloudActionProgress -Action ("run guest task '{0}' with Azure Run Command (max {1}s)" -f [string]$taskName, [int]$taskTimeoutSeconds)
     $taskWatch = [System.Diagnostics.Stopwatch]::StartNew()
-    $rawJson = Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds $azTimeoutSeconds -Action {
+    $rawJson = Invoke-ProdicloudWithAzCliTimeoutSeconds -TimeoutSeconds $azTimeoutSeconds -Action {
         Invoke-TrackedAction -Label $invokeLabel -Action {
             $invokeResult = az @azArgs
             Assert-LastExitCode $invokeLabel
@@ -210,9 +210,9 @@ function Invoke-ClagnosSingleRunCommandTask {
         }
     }
 
-    $parsedResult = Get-ClagnosRunCommandResultEnvelope -TaskName $taskName -RawJson $rawJson -ModeLabel 'task-run'
+    $parsedResult = Get-ProdicloudRunCommandResultEnvelope -TaskName $taskName -RawJson $rawJson -ModeLabel 'task-run'
     $messageText = [string]$parsedResult.MessageText
-    $marker = Parse-ClagnosRunCommandBatchMarkers -MessageText $messageText
+    $marker = Parse-ProdicloudRunCommandBatchMarkers -MessageText $messageText
     $displayLines = @()
     foreach ($lineRaw in @([string]$messageText -split "`r?`n")) {
         $line = [string]$lineRaw
@@ -243,16 +243,16 @@ function Invoke-ClagnosSingleRunCommandTask {
         SuccessCount = [int]$marker.SuccessCount
         WarningCount = [int]$marker.WarningCount
         ErrorCount = [int]$marker.ErrorCount
-        RebootRequired = ([bool]$marker.RebootRequired -or (Test-ClagnosOutputIndicatesRebootRequired -MessageText $messageText))
+        RebootRequired = ([bool]$marker.RebootRequired -or (Test-ProdicloudOutputIndicatesRebootRequired -MessageText $messageText))
         TaskDurations = @()
         DurationSeconds = [double]$taskWatch.Elapsed.TotalSeconds
     }
 }
 
-function Get-ClagnosRunCommandTaskAppStateDisposition {
+function Get-ProdicloudRunCommandTaskAppStateDisposition {
     param([psobject]$TaskBlock)
 
-    $pluginInfo = Get-ClagnosTaskAppStatePluginInfo -TaskBlock $TaskBlock
+    $pluginInfo = Get-ProdicloudTaskAppStatePluginInfo -TaskBlock $TaskBlock
     $taskName = if ($null -ne $TaskBlock -and $TaskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$TaskBlock.Name } else { '' }
 
     switch ([string]$pluginInfo.Status) {
@@ -294,7 +294,7 @@ function Get-ClagnosRunCommandTaskAppStateDisposition {
     }
 }
 
-function Test-ClagnosRunCommandAppStateSshReady {
+function Test-ProdicloudRunCommandAppStateSshReady {
     param(
         [string]$SshHost,
         [string]$SshPort,
@@ -321,10 +321,10 @@ function Test-ClagnosRunCommandAppStateSshReady {
     $maxAttempts = if ($AllowWait) { 3 } else { 1 }
     $delaySeconds = if ($AllowWait) { 5 } else { 0 }
 
-    return [bool](Wait-ClagnosTcpPortReachable -HostName $SshHost -Port $portNumber -MaxAttempts $maxAttempts -DelaySeconds $delaySeconds -TimeoutSeconds $timeoutSeconds -Label 'ssh')
+    return [bool](Wait-ProdicloudTcpPortReachable -HostName $SshHost -Port $portNumber -MaxAttempts $maxAttempts -DelaySeconds $delaySeconds -TimeoutSeconds $timeoutSeconds -Label 'ssh')
 }
 
-function Invoke-ClagnosRunCommandDeferredAppStateFlush {
+function Invoke-ProdicloudRunCommandDeferredAppStateFlush {
     param(
         [ValidateSet('windows','linux')]
         [string]$Platform,
@@ -349,15 +349,15 @@ function Invoke-ClagnosRunCommandDeferredAppStateFlush {
         }
     }
 
-    if (-not (Test-ClagnosRunCommandAppStateSshReady -SshHost $SshHost -SshPort $SshPort -ConnectTimeoutSeconds $SshConnectTimeoutSeconds -AllowWait:$AllowWait)) {
+    if (-not (Test-ProdicloudRunCommandAppStateSshReady -SshHost $SshHost -SshPort $SshPort -ConnectTimeoutSeconds $SshConnectTimeoutSeconds -AllowWait:$AllowWait)) {
         return [pscustomobject]@{
             RemainingTasks = @($pendingTasks)
             WarningTasks = @()
         }
     }
 
-    $pySsh = Ensure-ClagnosPySshTools -RepoRoot $RepoRoot -ConfiguredPySshClientPath $ConfiguredPySshClientPath
-    $bootstrap = Initialize-ClagnosSshHostKey `
+    $pySsh = Ensure-ProdicloudPySshTools -RepoRoot $RepoRoot -ConfiguredPySshClientPath $ConfiguredPySshClientPath
+    $bootstrap = Initialize-ProdicloudSshHostKey `
         -PySshPythonPath ([string]$pySsh.PythonPath) `
         -PySshClientPath ([string]$pySsh.ClientPath) `
         -HostName $SshHost `
@@ -377,7 +377,7 @@ function Invoke-ClagnosRunCommandDeferredAppStateFlush {
 
         $taskName = if ($taskBlock.PSObject.Properties.Match('Name').Count -gt 0) { [string]$taskBlock.Name } else { '(unknown-task)' }
         try {
-            $appStateResult = Invoke-ClagnosTaskAppStatePostProcess `
+            $appStateResult = Invoke-ProdicloudTaskAppStatePostProcess `
                 -Platform $Platform `
                 -RepoRoot $RepoRoot `
                 -TaskBlock $taskBlock `
@@ -388,7 +388,7 @@ function Invoke-ClagnosRunCommandDeferredAppStateFlush {
                 -Password $SshPassword `
                 -Port $SshPort `
                 -ConnectTimeoutSeconds $SshConnectTimeoutSeconds `
-                -TimeoutSeconds (Get-ClagnosTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds 180) `
+                -TimeoutSeconds (Get-ProdicloudTaskTimeoutSeconds -TaskBlock $taskBlock -DefaultTimeoutSeconds 180) `
                 -ManagerUser ([string]$ManagerUser) `
                 -AssistantUser ([string]$AssistantUser)
             if ($null -ne $appStateResult -and $appStateResult.PSObject.Properties.Match('Warning').Count -gt 0 -and [bool]$appStateResult.Warning) {
@@ -460,7 +460,7 @@ function Invoke-VmRunCommandBlocks {
         $taskResult = $null
 
         try {
-            $taskResult = Invoke-ClagnosSingleRunCommandTask -ResourceGroup $ResourceGroup -VmName $VmName -CommandId $CommandId -TaskBlock $taskBlock -CombinedShell $CombinedShell -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory $PerfTaskCategory
+            $taskResult = Invoke-ProdicloudSingleRunCommandTask -ResourceGroup $ResourceGroup -VmName $VmName -CommandId $CommandId -TaskBlock $taskBlock -CombinedShell $CombinedShell -TaskOutcomeMode $TaskOutcomeMode -PerfTaskCategory $PerfTaskCategory
         }
         catch {
             $failedTasks += $taskName
@@ -479,7 +479,7 @@ function Invoke-VmRunCommandBlocks {
             $totalSuccess += [int]$taskResult.SuccessCount
             $successfulTasks += $taskName
 
-            $appStateDisposition = Get-ClagnosRunCommandTaskAppStateDisposition -TaskBlock $taskBlock
+            $appStateDisposition = Get-ProdicloudRunCommandTaskAppStateDisposition -TaskBlock $taskBlock
             switch ([string]$appStateDisposition.Status) {
                 'ready' {
                     $pendingAppStateTaskBlocks.Add($taskBlock) | Out-Null
@@ -493,7 +493,7 @@ function Invoke-VmRunCommandBlocks {
 
             if ($pendingAppStateTaskBlocks.Count -gt 0) {
                 try {
-                    $flushResult = Invoke-ClagnosRunCommandDeferredAppStateFlush `
+                    $flushResult = Invoke-ProdicloudRunCommandDeferredAppStateFlush `
                         -Platform $Platform `
                         -RepoRoot $RepoRoot `
                         -PendingTaskBlocks @($pendingAppStateTaskBlocks.ToArray()) `
@@ -555,7 +555,7 @@ function Invoke-VmRunCommandBlocks {
             $rebootCount++
             $rebootRequestedTasks += $taskName
             $restartRequiresSsh = ($pendingAppStateTaskBlocks.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace([string]$SshPort))
-            $null = Invoke-ClagnosRestartAndWait `
+            $null = Invoke-ProdicloudRestartAndWait `
                 -ResourceGroup ([string]$ResourceGroup) `
                 -VmName ([string]$VmName) `
                 -StartMessage ("Task '{0}' requested a restart. Restarting VM now..." -f [string]$taskName) `
@@ -574,7 +574,7 @@ function Invoke-VmRunCommandBlocks {
 
             if ($pendingAppStateTaskBlocks.Count -gt 0) {
                 try {
-                    $postRestartFlushResult = Invoke-ClagnosRunCommandDeferredAppStateFlush `
+                    $postRestartFlushResult = Invoke-ProdicloudRunCommandDeferredAppStateFlush `
                         -Platform $Platform `
                         -RepoRoot $RepoRoot `
                         -PendingTaskBlocks @($pendingAppStateTaskBlocks.ToArray()) `
@@ -614,7 +614,7 @@ function Invoke-VmRunCommandBlocks {
 
     if ($pendingAppStateTaskBlocks.Count -gt 0) {
         try {
-            $finalFlushResult = Invoke-ClagnosRunCommandDeferredAppStateFlush `
+            $finalFlushResult = Invoke-ProdicloudRunCommandDeferredAppStateFlush `
                 -Platform $Platform `
                 -RepoRoot $RepoRoot `
                 -PendingTaskBlocks @($pendingAppStateTaskBlocks.ToArray()) `
@@ -684,7 +684,7 @@ function Invoke-VmRunCommandBlocks {
     }
     if (-not [string]::Equals([string]$PerfTaskCategory, 'task-run', [System.StringComparison]::OrdinalIgnoreCase)) {
         if ($stageWatch.IsRunning) { $stageWatch.Stop() }
-        Write-ClagnosTaskStageHistoryRecord `
+        Write-ProdicloudTaskStageHistoryRecord `
             -Stage 'init' `
             -Platform $Platform `
             -ResourceGroup $ResourceGroup `

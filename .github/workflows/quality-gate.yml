@@ -79,7 +79,7 @@ jobs:
       - name: Run non-live smoke contracts
         shell: powershell
         run: |
-          .\tests\clagnos-smoke-tests.ps1 -RepoRoot $PWD.Path
+          .\tests\prodicloud-smoke-tests.ps1 -RepoRoot $PWD.Path
 
   package-app-state-contracts:
     runs-on: windows-latest

@@ -1,5 +1,5 @@
 # Shared 'target' command option specification.
 
-function Get-ClagnosSharedTargetOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'target' -TakesValue)
+function Get-ProdicloudSharedTargetOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'target' -TakesValue)
 }

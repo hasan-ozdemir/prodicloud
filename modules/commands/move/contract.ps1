@@ -1,12 +1,12 @@
 # Contract for the 'move' command.
 
-function Get-ClagnosMoveOptionSpecifications {
+function Get-ProdicloudMoveOptionSpecifications {
     return @(
-        (Get-ClagnosMovePerfOptionSpecification),
-        (Get-ClagnosMoveHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosMoveGroupOptionSpecification),
-        (Get-ClagnosMoveVmNameOptionSpecification),
-        (Get-ClagnosMoveVmRegionOptionSpecification)
+        (Get-ProdicloudMovePerfOptionSpecification),
+        (Get-ProdicloudMoveHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudMoveGroupOptionSpecification),
+        (Get-ProdicloudMoveVmNameOptionSpecification),
+        (Get-ProdicloudMoveVmRegionOptionSpecification)
     )
 }

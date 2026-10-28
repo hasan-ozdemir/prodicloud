@@ -1,17 +1,17 @@
 # Do command runtime helpers.
 
-# Handles Get-ClagnosDoActionNames.
-function Get-ClagnosDoActionNames {
+# Handles Get-ProdicloudDoActionNames.
+function Get-ProdicloudDoActionNames {
     return @('status','start','resume','restart','reset','shutdown','stop','shutdown-deallocate','power-off','power-off-deallocate','deallocate','hibernate-deallocate','hibernate-stop','reapply','redeploy')
 }
 
-# Handles Get-ClagnosDoActionHintText.
-function Get-ClagnosDoActionHintText {
-    return ("Use --vm-action={0}." -f ((Get-ClagnosDoActionNames) -join '|'))
+# Handles Get-ProdicloudDoActionHintText.
+function Get-ProdicloudDoActionHintText {
+    return ("Use --vm-action={0}." -f ((Get-ProdicloudDoActionNames) -join '|'))
 }
 
-# Handles Resolve-ClagnosDoActionName.
-function Resolve-ClagnosDoActionName {
+# Handles Resolve-ProdicloudDoActionName.
+function Resolve-ProdicloudDoActionName {
     param(
         [string]$RawValue,
         [switch]$AllowEmpty
@@ -28,7 +28,7 @@ function Resolve-ClagnosDoActionName {
             -Detail "Option '--vm-action' requires a value." `
             -Code 2 `
             -Summary "VM action is missing." `
-            -Hint (Get-ClagnosDoActionHintText)
+            -Hint (Get-ProdicloudDoActionHintText)
     }
 
     if ($normalized -eq 'release') {
@@ -47,19 +47,19 @@ function Resolve-ClagnosDoActionName {
             -Hint "Use --vm-action=hibernate-deallocate or --vm-action=hibernate-stop."
     }
 
-    if ($normalized -notin @(Get-ClagnosDoActionNames)) {
+    if ($normalized -notin @(Get-ProdicloudDoActionNames)) {
         Throw-FriendlyError `
             -Detail ("Invalid --vm-action value '{0}'." -f $RawValue) `
             -Code 2 `
             -Summary "VM action is invalid." `
-            -Hint (Get-ClagnosDoActionHintText)
+            -Hint (Get-ProdicloudDoActionHintText)
     }
 
     return $normalized
 }
 
-# Handles Resolve-ClagnosVmLifecycleFieldText.
-function Resolve-ClagnosVmLifecycleFieldText {
+# Handles Resolve-ProdicloudVmLifecycleFieldText.
+function Resolve-ProdicloudVmLifecycleFieldText {
     param(
         [string]$DisplayText,
         [string]$CodeText,
@@ -77,8 +77,8 @@ function Resolve-ClagnosVmLifecycleFieldText {
     return [string]$DefaultText
 }
 
-# Handles Resolve-ClagnosVmLifecycleStateLabel.
-function Resolve-ClagnosVmLifecycleStateLabel {
+# Handles Resolve-ProdicloudVmLifecycleStateLabel.
+function Resolve-ProdicloudVmLifecycleStateLabel {
     param(
         [string]$PowerStateDisplay,
         [string]$PowerStateCode,
@@ -105,8 +105,8 @@ function Resolve-ClagnosVmLifecycleStateLabel {
     return 'other'
 }
 
-# Handles ConvertTo-ClagnosVmLifecycleSnapshot.
-function ConvertTo-ClagnosVmLifecycleSnapshot {
+# Handles ConvertTo-ProdicloudVmLifecycleSnapshot.
+function ConvertTo-ProdicloudVmLifecycleSnapshot {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -163,7 +163,7 @@ function ConvertTo-ClagnosVmLifecycleSnapshot {
         }
     }
 
-    $normalizedState = Resolve-ClagnosVmLifecycleStateLabel `
+    $normalizedState = Resolve-ProdicloudVmLifecycleStateLabel `
         -PowerStateDisplay $powerStateDisplay `
         -PowerStateCode $powerStateCode `
         -HibernationStateDisplay $hibernationStateDisplay `
@@ -185,8 +185,8 @@ function ConvertTo-ClagnosVmLifecycleSnapshot {
     }
 }
 
-# Handles Get-ClagnosVmLifecycleSnapshot.
-function Get-ClagnosVmLifecycleSnapshot {
+# Handles Get-ProdicloudVmLifecycleSnapshot.
+function Get-ProdicloudVmLifecycleSnapshot {
     param(
         [string]$ResourceGroup,
         [string]$VmName
@@ -211,25 +211,25 @@ function Get-ClagnosVmLifecycleSnapshot {
         throw "VM instance view could not be parsed."
     }
 
-    return (ConvertTo-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName -VmObject $vmObject -InstanceViewObject $instanceViewObject)
+    return (ConvertTo-ProdicloudVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName -VmObject $vmObject -InstanceViewObject $instanceViewObject)
 }
 
-# Handles Format-ClagnosVmLifecycleSummaryText.
-function Format-ClagnosVmLifecycleSummaryText {
+# Handles Format-ProdicloudVmLifecycleSummaryText.
+function Format-ProdicloudVmLifecycleSummaryText {
     param(
         [psobject]$Snapshot
     )
 
-    $powerStateText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)
-    $hibernationStateText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)
-    $provisioningStateText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'
+    $powerStateText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)
+    $hibernationStateText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)
+    $provisioningStateText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'
     $hibernationEnabledText = if ([bool]$Snapshot.HibernationEnabled) { 'true' } else { 'false' }
 
     return ("lifecycle={0}; power={1}; hibernation={2}; provisioning={3}; hibernationEnabled={4}" -f [string]$Snapshot.NormalizedState, $powerStateText, $hibernationStateText, $provisioningStateText, $hibernationEnabledText)
 }
 
-# Handles Get-ClagnosDoAllowedSourceStates.
-function Get-ClagnosDoAllowedSourceStates {
+# Handles Get-ProdicloudDoAllowedSourceStates.
+function Get-ProdicloudDoAllowedSourceStates {
     param(
         [string]$ActionName
     )
@@ -253,8 +253,8 @@ function Get-ClagnosDoAllowedSourceStates {
     }
 }
 
-# Handles Assert-ClagnosDoActionAllowed.
-function Assert-ClagnosDoActionAllowed {
+# Handles Assert-ProdicloudDoActionAllowed.
+function Assert-ProdicloudDoActionAllowed {
     param(
         [string]$ActionName,
         [psobject]$Snapshot
@@ -274,7 +274,7 @@ function Assert-ClagnosDoActionAllowed {
 
     if (($ActionName -notin @('reapply','redeploy')) -and -not $provisioningSucceeded) {
         Throw-FriendlyError `
-            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because provisioning is not ready. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot)) `
+            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because provisioning is not ready. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ProdicloudVmLifecycleSummaryText -Snapshot $Snapshot)) `
             -Code 66 `
             -Summary "VM action cannot continue because provisioning is not in succeeded state." `
             -Hint "Wait until provisioning succeeds, run '--vm-action=status', then retry."
@@ -282,7 +282,7 @@ function Assert-ClagnosDoActionAllowed {
 
     if (($ActionName -in @('hibernate-deallocate','hibernate-stop')) -and -not [bool]$Snapshot.HibernationEnabled) {
         Throw-FriendlyError `
-            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because hibernation is not enabled. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot)) `
+            -Detail ("Requested action '{0}' cannot continue for VM '{1}' in resource group '{2}' because hibernation is not enabled. {3}" -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ProdicloudVmLifecycleSummaryText -Snapshot $Snapshot)) `
             -Code 66 `
             -Summary "Hibernate action is not available for this VM." `
             -Hint "Enable hibernation support first, or use stop/deallocate instead."
@@ -296,22 +296,22 @@ function Assert-ClagnosDoActionAllowed {
             -Hint "Use --vm-action=hibernate-deallocate for Azure-managed hibernation."
     }
 
-    $allowedStates = @(Get-ClagnosDoAllowedSourceStates -ActionName $ActionName)
+    $allowedStates = @(Get-ProdicloudDoAllowedSourceStates -ActionName $ActionName)
     if ($allowedStates.Count -eq 0) {
         return
     }
 
     if ($allowedStates -notcontains [string]$Snapshot.NormalizedState) {
         Throw-FriendlyError `
-            -Detail ("Requested action '{0}' cannot run for VM '{1}' in resource group '{2}'. {3}. Allowed source states: {4}." -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot), ($allowedStates -join ', ')) `
+            -Detail ("Requested action '{0}' cannot run for VM '{1}' in resource group '{2}'. {3}. Allowed source states: {4}." -f $ActionName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ProdicloudVmLifecycleSummaryText -Snapshot $Snapshot), ($allowedStates -join ', ')) `
             -Code 66 `
             -Summary ("VM action '{0}' is not valid for the current VM state." -f $ActionName) `
             -Hint ("Run '--vm-action=status' for current state details and retry only from: {0}." -f ($allowedStates -join ', '))
     }
 }
 
-# Handles Resolve-ClagnosDoBoundedTimeoutSeconds.
-function Resolve-ClagnosDoBoundedTimeoutSeconds {
+# Handles Resolve-ProdicloudDoBoundedTimeoutSeconds.
+function Resolve-ProdicloudDoBoundedTimeoutSeconds {
     param(
         [hashtable]$ConfigMap,
         [string]$Key,
@@ -336,30 +336,30 @@ function Resolve-ClagnosDoBoundedTimeoutSeconds {
     return [int]$resolvedValue
 }
 
-# Handles Initialize-ClagnosDoHibernateStopRuntime.
-function Initialize-ClagnosDoHibernateStopRuntime {
+# Handles Initialize-ProdicloudDoHibernateStopRuntime.
+function Initialize-ProdicloudDoHibernateStopRuntime {
     param(
         [string]$ResourceGroup,
         [string]$VmName
     )
 
-    return (Initialize-ClagnosConnectionCommandContext -Options @{
+    return (Initialize-ProdicloudConnectionCommandContext -Options @{
             group = [string]$ResourceGroup
             'vm-name' = [string]$VmName
             user = 'manager'
         } -OperationName 'hibernate-stop')
 }
 
-# Handles Invoke-ClagnosDoGuestHibernateStopCommand.
-function Invoke-ClagnosDoGuestHibernateStopCommand {
+# Handles Invoke-ProdicloudDoGuestHibernateStopCommand.
+function Invoke-ProdicloudDoGuestHibernateStopCommand {
     param(
         [string]$ResourceGroup,
         [string]$VmName
     )
 
-    $runtime = Initialize-ClagnosDoHibernateStopRuntime -ResourceGroup $ResourceGroup -VmName $VmName
-    $sshPort = Resolve-ClagnosConnectionPortNumber -PortText ([string]$runtime.VmSshPort) -PortLabel 'SSH'
-    $sshReachable = Wait-ClagnosTcpPortReachable -HostName ([string]$runtime.ConnectionHost) -Port $sshPort -MaxAttempts 3 -DelaySeconds 5 -TimeoutSeconds 5 -Label 'ssh'
+    $runtime = Initialize-ProdicloudDoHibernateStopRuntime -ResourceGroup $ResourceGroup -VmName $VmName
+    $sshPort = Resolve-ProdicloudConnectionPortNumber -PortText ([string]$runtime.VmSshPort) -PortLabel 'SSH'
+    $sshReachable = Wait-ProdicloudTcpPortReachable -HostName ([string]$runtime.ConnectionHost) -Port $sshPort -MaxAttempts 3 -DelaySeconds 5 -TimeoutSeconds 5 -Label 'ssh'
     if (-not $sshReachable) {
         Throw-FriendlyError `
             -Detail ("VM '{0}' in resource group '{1}' is running, but SSH port {2} is not reachable on host '{3}'." -f [string]$runtime.VmName, [string]$runtime.ResourceGroup, $sshPort, [string]$runtime.ConnectionHost) `
@@ -368,12 +368,12 @@ function Invoke-ClagnosDoGuestHibernateStopCommand {
             -Hint "Confirm the guest SSH service is ready and retry, or use --vm-action=hibernate-deallocate."
     }
 
-    $repoRoot = Get-ClagnosRepoRoot
+    $repoRoot = Get-ProdicloudRepoRoot
     $configuredPySshClientPath = [string](Get-ConfigValue -Config $runtime.ConfigMap -Key 'PYSSH_CLIENT_PATH' -DefaultValue '')
-    $pySshTools = Ensure-ClagnosPySshTools -RepoRoot $repoRoot -ConfiguredPySshClientPath $configuredPySshClientPath
-    $connectTimeoutSeconds = Resolve-ClagnosDoBoundedTimeoutSeconds -ConfigMap $runtime.ConfigMap -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -DefaultValue 30 -MinimumValue 5 -MaximumValue 300
+    $pySshTools = Ensure-ProdicloudPySshTools -RepoRoot $repoRoot -ConfiguredPySshClientPath $configuredPySshClientPath
+    $connectTimeoutSeconds = Resolve-ProdicloudDoBoundedTimeoutSeconds -ConfigMap $runtime.ConfigMap -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -DefaultValue 30 -MinimumValue 5 -MaximumValue 300
 
-    $launchResult = Invoke-ClagnosProcessWithRetry `
+    $launchResult = Invoke-ProdicloudProcessWithRetry `
         -FilePath ([string]$pySshTools.PythonPath) `
         -Arguments @(
             [string]$pySshTools.ClientPath,
@@ -395,8 +395,8 @@ function Invoke-ClagnosDoGuestHibernateStopCommand {
     }
 }
 
-# Handles Wait-ClagnosDoHibernateStopCompletion.
-function Wait-ClagnosDoHibernateStopCompletion {
+# Handles Wait-ProdicloudDoHibernateStopCompletion.
+function Wait-ProdicloudDoHibernateStopCompletion {
     param(
         [psobject]$Runtime,
         [string]$ResourceGroup,
@@ -409,17 +409,17 @@ function Wait-ClagnosDoHibernateStopCompletion {
     if ($MaxAttempts -gt 120) { $MaxAttempts = 120 }
     if ($DelaySeconds -lt 1) { $DelaySeconds = 1 }
 
-    $sshPort = Resolve-ClagnosConnectionPortNumber -PortText ([string]$Runtime.VmSshPort) -PortLabel 'SSH'
+    $sshPort = Resolve-ProdicloudConnectionPortNumber -PortText ([string]$Runtime.VmSshPort) -PortLabel 'SSH'
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
-        $powerText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
-        $hibernationText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
-        $sshReachable = Test-ClagnosTcpPortReachable -HostName ([string]$Runtime.ConnectionHost) -Port $sshPort -TimeoutSeconds 3
-        Write-ClagnosActionProgress -Action ("verify hibernate-stop state: lifecycle={0}; power={1}; hibernation={2}; ssh-open={3} (attempt {4}/{5})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, [bool]$sshReachable, $attempt, $MaxAttempts)
+        $snapshot = Get-ProdicloudVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
+        $powerText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
+        $hibernationText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
+        $sshReachable = Test-ProdicloudTcpPortReachable -HostName ([string]$Runtime.ConnectionHost) -Port $sshPort -TimeoutSeconds 3
+        Write-ProdicloudActionProgress -Action ("verify hibernate-stop state: lifecycle={0}; power={1}; hibernation={2}; ssh-open={3} (attempt {4}/{5})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, [bool]$sshReachable, $attempt, $MaxAttempts)
 
         if ([string]::Equals([string]$snapshot.NormalizedState, 'deallocated', [System.StringComparison]::OrdinalIgnoreCase)) {
             Throw-FriendlyError `
-                -Detail ("VM '{0}' in resource group '{1}' became deallocated while waiting for hibernate-stop. {2}" -f [string]$snapshot.VmName, [string]$snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $snapshot)) `
+                -Detail ("VM '{0}' in resource group '{1}' became deallocated while waiting for hibernate-stop. {2}" -f [string]$snapshot.VmName, [string]$snapshot.ResourceGroup, (Format-ProdicloudVmLifecycleSummaryText -Snapshot $snapshot)) `
                 -Code 66 `
                 -Summary "Hibernate-stop ended in a deallocated VM." `
                 -Hint "Use --vm-action=hibernate-deallocate when the Azure deallocation-based hibernate path is intended."
@@ -429,15 +429,15 @@ function Wait-ClagnosDoHibernateStopCompletion {
             return $snapshot
         }
 
-        Write-ClagnosActionProgress -Action ("wait {0}s for VM hibernate-stop state" -f $DelaySeconds)
+        Write-ProdicloudActionProgress -Action ("wait {0}s for VM hibernate-stop state" -f $DelaySeconds)
         Start-Sleep -Seconds $DelaySeconds
     }
 
     return $null
 }
 
-# Handles Write-ClagnosDoStatusReport.
-function Write-ClagnosDoStatusReport {
+# Handles Write-ProdicloudDoStatusReport.
+function Write-ProdicloudDoStatusReport {
     param(
         [psobject]$Snapshot
     )
@@ -445,14 +445,14 @@ function Write-ClagnosDoStatusReport {
     $hibernationEnabledText = if ([bool]$Snapshot.HibernationEnabled) { 'true' } else { 'false' }
     Write-Host ("VM lifecycle status for '{0}' in group '{1}':" -f [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup) -ForegroundColor Cyan
     Write-Host ("- lifecycle = {0}" -f [string]$Snapshot.NormalizedState)
-    Write-Host ("- power-state = {0}" -f (Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)))
-    Write-Host ("- hibernation-state = {0}" -f (Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)))
-    Write-Host ("- provisioning-state = {0}" -f (Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'))
+    Write-Host ("- power-state = {0}" -f (Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$Snapshot.PowerStateDisplay) -CodeText ([string]$Snapshot.PowerStateCode)))
+    Write-Host ("- hibernation-state = {0}" -f (Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$Snapshot.HibernationStateDisplay) -CodeText ([string]$Snapshot.HibernationStateCode)))
+    Write-Host ("- provisioning-state = {0}" -f (Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$Snapshot.ProvisioningStateDisplay) -CodeText ([string]$Snapshot.ProvisioningStateCode) -DefaultText '(unknown)'))
     Write-Host ("- hibernation-enabled = {0}" -f $hibernationEnabledText)
 }
 
-# Handles Assert-ClagnosConnectionVmRunning.
-function Assert-ClagnosConnectionVmRunning {
+# Handles Assert-ProdicloudConnectionVmRunning.
+function Assert-ProdicloudConnectionVmRunning {
     param(
         [string]$OperationName,
         [psobject]$Snapshot
@@ -464,20 +464,20 @@ function Assert-ClagnosConnectionVmRunning {
 
     $commandLabel = ([string]$OperationName).ToUpperInvariant()
     Throw-FriendlyError `
-        -Detail ("The {0} command cannot launch because VM '{1}' in resource group '{2}' is not running. {3}" -f $OperationName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ClagnosVmLifecycleSummaryText -Snapshot $Snapshot)) `
+        -Detail ("The {0} command cannot launch because VM '{1}' in resource group '{2}' is not running. {3}" -f $OperationName, [string]$Snapshot.VmName, [string]$Snapshot.ResourceGroup, (Format-ProdicloudVmLifecycleSummaryText -Snapshot $Snapshot)) `
         -Code 66 `
         -Summary ("{0} requires the VM to be running." -f $commandLabel) `
-        -Hint ("Start the VM with 'clagnos do --vm-action=start --group={0} --vm-name={1}' and retry." -f [string]$Snapshot.ResourceGroup, [string]$Snapshot.VmName)
+        -Hint ("Start the VM with 'prodicloud do --vm-action=start --group={0} --vm-name={1}' and retry." -f [string]$Snapshot.ResourceGroup, [string]$Snapshot.VmName)
 }
 
-# Handles Read-ClagnosDoActionInteractive.
-function Read-ClagnosDoActionInteractive {
+# Handles Read-ProdicloudDoActionInteractive.
+function Read-ProdicloudDoActionInteractive {
     param(
         [psobject]$Snapshot
     )
 
     Write-Host ""
-    Write-ClagnosDoStatusReport -Snapshot $Snapshot
+    Write-ProdicloudDoStatusReport -Snapshot $Snapshot
     Write-Host ""
     Write-Host "Available VM actions (select by number, default=status):" -ForegroundColor Cyan
     $choices = @(
@@ -522,7 +522,7 @@ function Read-ClagnosDoActionInteractive {
         }
 
         try {
-            return (Resolve-ClagnosDoActionName -RawValue $trimmed)
+            return (Resolve-ProdicloudDoActionName -RawValue $trimmed)
         }
         catch {
             Write-Host "Invalid VM action selection. Please enter a valid number or action name." -ForegroundColor Yellow
@@ -530,8 +530,8 @@ function Read-ClagnosDoActionInteractive {
     }
 }
 
-# Handles Wait-ClagnosDoLifecycleState.
-function Wait-ClagnosDoLifecycleState {
+# Handles Wait-ProdicloudDoLifecycleState.
+function Wait-ProdicloudDoLifecycleState {
     param(
         [string]$ResourceGroup,
         [string]$VmName,
@@ -545,24 +545,24 @@ function Wait-ClagnosDoLifecycleState {
     if ($DelaySeconds -lt 1) { $DelaySeconds = 1 }
 
     for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
-        $snapshot = Get-ClagnosVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
-        $powerText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
-        $hibernationText = Resolve-ClagnosVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
-        Write-ClagnosActionProgress -Action ("verify VM lifecycle state: {0}; power: {1}; hibernation: {2} (attempt {3}/{4})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, $attempt, $MaxAttempts)
+        $snapshot = Get-ProdicloudVmLifecycleSnapshot -ResourceGroup $ResourceGroup -VmName $VmName
+        $powerText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$snapshot.PowerStateDisplay) -CodeText ([string]$snapshot.PowerStateCode)
+        $hibernationText = Resolve-ProdicloudVmLifecycleFieldText -DisplayText ([string]$snapshot.HibernationStateDisplay) -CodeText ([string]$snapshot.HibernationStateCode)
+        Write-ProdicloudActionProgress -Action ("verify VM lifecycle state: {0}; power: {1}; hibernation: {2} (attempt {3}/{4})" -f [string]$snapshot.NormalizedState, $powerText, $hibernationText, $attempt, $MaxAttempts)
 
         if ([string]::Equals([string]$snapshot.NormalizedState, [string]$DesiredState, [System.StringComparison]::OrdinalIgnoreCase)) {
             return $snapshot
         }
 
-        Write-ClagnosActionProgress -Action ("wait {0}s for VM lifecycle state '{1}'" -f $DelaySeconds,$DesiredState)
+        Write-ProdicloudActionProgress -Action ("wait {0}s for VM lifecycle state '{1}'" -f $DelaySeconds,$DesiredState)
         Start-Sleep -Seconds $DelaySeconds
     }
 
     return $null
 }
 
-# Handles Invoke-ClagnosDoAzureAction.
-function Invoke-ClagnosDoAzureAction {
+# Handles Invoke-ProdicloudDoAzureAction.
+function Invoke-ProdicloudDoAzureAction {
     param(
         [string]$ActionName,
         [string]$ResourceGroup,
@@ -573,7 +573,7 @@ function Invoke-ClagnosDoAzureAction {
 
     try {
         $timeoutSeconds = if ([string]::Equals([string]$ActionName,'restart',[System.StringComparison]::OrdinalIgnoreCase)) { 900 } else { [int]$script:AzCommandTimeoutSeconds }
-        Invoke-ClagnosWithAzCliTimeoutSeconds -TimeoutSeconds $timeoutSeconds -Action {
+        Invoke-ProdicloudWithAzCliTimeoutSeconds -TimeoutSeconds $timeoutSeconds -Action {
             Invoke-TrackedAction -Label ("az " + (@($AzArguments) -join ' ')) -Action {
                 az @AzArguments
                 Assert-LastExitCode $AzContext

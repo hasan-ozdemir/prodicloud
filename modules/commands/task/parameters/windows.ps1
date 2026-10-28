@@ -1,5 +1,5 @@
 # 'windows' option binding for 'task'.
 
-function Get-ClagnosTaskWindowsOptionSpecification {
-    return (Get-ClagnosSharedWindowsOptionSpecification)
+function Get-ProdicloudTaskWindowsOptionSpecification {
+    return (Get-ProdicloudSharedWindowsOptionSpecification)
 }

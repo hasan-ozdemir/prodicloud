@@ -10,8 +10,8 @@ from types import SimpleNamespace
 
 
 module_path = Path(sys.argv[1])
-source_home = str(Path(tempfile.gettempdir()) / "clagnos-source-profile")
-target_home = str(Path(tempfile.gettempdir()) / "clagnos-target-profile")
+source_home = str(Path(tempfile.gettempdir()) / "prodicloud-source-profile")
+target_home = str(Path(tempfile.gettempdir()) / "prodicloud-target-profile")
 
 
 def fake_getpwnam(user_name: str):
@@ -21,13 +21,13 @@ def fake_getpwnam(user_name: str):
 
 
 sys.modules["pwd"] = SimpleNamespace(getpwnam=fake_getpwnam)
-spec = importlib.util.spec_from_file_location("clagnos_app_state_portability", module_path)
+spec = importlib.util.spec_from_file_location("prodicloud_app_state_portability", module_path)
 module = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
-with tempfile.TemporaryDirectory(prefix="clagnos-linux-app-state-") as temp_root:
+with tempfile.TemporaryDirectory(prefix="prodicloud-linux-app-state-") as temp_root:
     payload = Path(temp_root) / "payload" / "profile-files" / "manager"
     payload.mkdir(parents=True)
     settings_path = payload / "settings.json"
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="clagnos-linux-app-state-") as temp_root
         "workspace": source_home + "/Documents",
         "hostname": "source-machine",
         "api_key": "must-be-removed",
-        "cpu_count": "%CLAGNOS_TARGET_CPU_COUNT%",
+        "cpu_count": "%PRODICLOUD_TARGET_CPU_COUNT%",
     }
     settings_path.write_text(json.dumps(original), encoding="utf-8")
     manifest = {
@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory(prefix="clagnos-linux-app-state-") as temp_root
         "profileFiles": [
             {
                 "sourcePath": "payload/profile-files/manager/settings.json",
-                "relativeDestinationPath": "%CLAGNOS_TARGET_HOME%/Documents/settings.json",
+                "relativeDestinationPath": "%PRODICLOUD_TARGET_HOME%/Documents/settings.json",
                 "targetProfiles": ["manager"],
             }
         ],
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="clagnos-linux-app-state-") as temp_root
 
     saved_manifest = module.normalize_captured_payload(temp_root, manifest, "source-user", "")
     saved_settings = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert saved_settings["workspace"] == "%CLAGNOS_TARGET_HOME%/Documents"
+    assert saved_settings["workspace"] == "%PRODICLOUD_TARGET_HOME%/Documents"
     assert "api_key" not in saved_settings
     assert saved_manifest["profileFiles"][0]["sourcePath"] == "payload/profile-files/manager/settings.json"
 

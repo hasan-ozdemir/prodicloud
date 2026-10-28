@@ -5,8 +5,8 @@
 .logs/
 *.log
 *.tmp
-clagnos-log-*.txt
-clagnos-win-e2e-*.log
+prodicloud-log-*.txt
+prodicloud-win-e2e-*.log
 _tmp_test.txt
 
 # Ignore temp runtime artifacts

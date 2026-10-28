@@ -1,5 +1,5 @@
 # 'vm-size' option binding for 'create'.
 
-function Get-ClagnosCreateVmSizeOptionSpecification {
-    return (Get-ClagnosSharedVmSizeOptionSpecification)
+function Get-ProdicloudCreateVmSizeOptionSpecification {
+    return (Get-ProdicloudSharedVmSizeOptionSpecification)
 }

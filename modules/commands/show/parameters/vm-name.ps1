@@ -1,5 +1,5 @@
 # 'vm-name' option binding for 'show'.
 
-function Get-ClagnosShowVmNameOptionSpecification {
-    return (Get-ClagnosSharedVmNameOptionSpecification)
+function Get-ProdicloudShowVmNameOptionSpecification {
+    return (Get-ProdicloudSharedVmNameOptionSpecification)
 }

@@ -1,6 +1,6 @@
 # SSH task asset-copy helpers.
 
-function ConvertTo-ClagnosPowerShellSingleQuotedLiteral {
+function ConvertTo-ProdicloudPowerShellSingleQuotedLiteral {
     param(
         [AllowNull()]
         [string]$Value
@@ -13,7 +13,7 @@ function ConvertTo-ClagnosPowerShellSingleQuotedLiteral {
     return ([string]$Value).Replace("'", "''")
 }
 
-function Test-ClagnosWindowsRemotePath {
+function Test-ProdicloudWindowsRemotePath {
     param(
         [string]$RemotePath
     )
@@ -25,7 +25,7 @@ function Test-ClagnosWindowsRemotePath {
     return ([string]$RemotePath -match '^[A-Za-z]:[\\/]')
 }
 
-function Get-ClagnosFileSha256 {
+function Get-ProdicloudFileSha256 {
     param(
         [string]$Path
     )
@@ -50,16 +50,16 @@ function Get-ClagnosFileSha256 {
     }
 }
 
-if ($null -eq $script:ClagnosWindowsScpHostKeyCache) {
-    $script:ClagnosWindowsScpHostKeyCache = @{}
+if ($null -eq $script:ProdicloudWindowsScpHostKeyCache) {
+    $script:ProdicloudWindowsScpHostKeyCache = @{}
 }
-if ($null -eq $script:ClagnosWindowsScpPathCache) {
-    $script:ClagnosWindowsScpPathCache = ''
+if ($null -eq $script:ProdicloudWindowsScpPathCache) {
+    $script:ProdicloudWindowsScpPathCache = ''
 }
 
-function Get-ClagnosPscpExecutablePath {
-    if (-not [string]::IsNullOrWhiteSpace([string]$script:ClagnosWindowsScpPathCache) -and (Test-Path -LiteralPath ([string]$script:ClagnosWindowsScpPathCache))) {
-        return [string]$script:ClagnosWindowsScpPathCache
+function Get-ProdicloudPscpExecutablePath {
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:ProdicloudWindowsScpPathCache) -and (Test-Path -LiteralPath ([string]$script:ProdicloudWindowsScpPathCache))) {
+        return [string]$script:ProdicloudWindowsScpPathCache
     }
 
     $command = Get-Command pscp.exe -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -75,11 +75,11 @@ function Get-ClagnosPscpExecutablePath {
         throw "Windows SCP transport could not resolve the pscp.exe path."
     }
 
-    $script:ClagnosWindowsScpPathCache = [string]$resolvedPath
-    return [string]$script:ClagnosWindowsScpPathCache
+    $script:ProdicloudWindowsScpPathCache = [string]$resolvedPath
+    return [string]$script:ProdicloudWindowsScpPathCache
 }
 
-function ConvertTo-ClagnosWindowsScpRemoteSpec {
+function ConvertTo-ProdicloudWindowsScpRemoteSpec {
     param(
         [string]$HostName,
         [string]$RemotePath
@@ -93,7 +93,7 @@ function ConvertTo-ClagnosWindowsScpRemoteSpec {
     return ('{0}:{1}' -f [string]$HostName, [string]$normalizedRemotePath)
 }
 
-function Try-Get-ClagnosWindowsScpHostKeyArguments {
+function Try-Get-ProdicloudWindowsScpHostKeyArguments {
     param(
         [string]$HostName,
         [string]$Port
@@ -101,10 +101,10 @@ function Try-Get-ClagnosWindowsScpHostKeyArguments {
 
     try {
         $cacheKey = ('{0}:{1}' -f [string]$HostName, [string]$Port)
-        if ($script:ClagnosWindowsScpHostKeyCache.ContainsKey($cacheKey)) {
+        if ($script:ProdicloudWindowsScpHostKeyCache.ContainsKey($cacheKey)) {
             return [pscustomobject]@{
                 Success = $true
-                Args = @($script:ClagnosWindowsScpHostKeyCache[$cacheKey])
+                Args = @($script:ProdicloudWindowsScpHostKeyCache[$cacheKey])
                 Message = ''
             }
         }
@@ -119,7 +119,7 @@ function Try-Get-ClagnosWindowsScpHostKeyArguments {
             }
         }
 
-        $scanResult = Invoke-ClagnosCapturedProcess -FilePath ([string]$sshKeyScan.Source) -Arguments @('-p', [string]$Port, [string]$HostName)
+        $scanResult = Invoke-ProdicloudCapturedProcess -FilePath ([string]$sshKeyScan.Source) -Arguments @('-p', [string]$Port, [string]$HostName)
         if ([int]$scanResult.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace([string]$scanResult.Output)) {
             return [pscustomobject]@{
                 Success = $false
@@ -144,10 +144,10 @@ function Try-Get-ClagnosWindowsScpHostKeyArguments {
                 continue
             }
 
-            $tempKeyPath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-scp-hostkey-' + ([guid]::NewGuid().ToString('N')) + '.pub')
+            $tempKeyPath = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-scp-hostkey-' + ([guid]::NewGuid().ToString('N')) + '.pub')
             try {
                 [System.IO.File]::WriteAllText($tempKeyPath, ([string]$scanLine + [Environment]::NewLine), [System.Text.Encoding]::ASCII)
-                $fingerprintResult = Invoke-ClagnosCapturedProcess -FilePath ([string]$sshKeyGen.Source) -Arguments @('-l', '-f', [string]$tempKeyPath)
+                $fingerprintResult = Invoke-ProdicloudCapturedProcess -FilePath ([string]$sshKeyGen.Source) -Arguments @('-l', '-f', [string]$tempKeyPath)
                 if ([int]$fingerprintResult.ExitCode -ne 0) {
                     continue
                 }
@@ -177,7 +177,7 @@ function Try-Get-ClagnosWindowsScpHostKeyArguments {
         }
 
         $cachedArgs = @($hostKeyArgs.ToArray())
-        $script:ClagnosWindowsScpHostKeyCache[$cacheKey] = $cachedArgs
+        $script:ProdicloudWindowsScpHostKeyCache[$cacheKey] = $cachedArgs
         return [pscustomobject]@{
             Success = $true
             Args = @($cachedArgs)
@@ -193,13 +193,13 @@ function Try-Get-ClagnosWindowsScpHostKeyArguments {
     }
 }
 
-function Get-ClagnosWindowsScpHostKeyArguments {
+function Get-ProdicloudWindowsScpHostKeyArguments {
     param(
         [string]$HostName,
         [string]$Port
     )
 
-    $resolution = Try-Get-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+    $resolution = Try-Get-ProdicloudWindowsScpHostKeyArguments -HostName $HostName -Port $Port
     if (-not [bool]$resolution.Success) {
         throw [string]$resolution.Message
     }
@@ -207,25 +207,25 @@ function Get-ClagnosWindowsScpHostKeyArguments {
     return @($resolution.Args)
 }
 
-function Resolve-ClagnosWindowsScpHostKeyArguments {
+function Resolve-ProdicloudWindowsScpHostKeyArguments {
     param(
         [string]$HostName,
         [string]$Port
     )
 
-    $resolution = Try-Get-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+    $resolution = Try-Get-ProdicloudWindowsScpHostKeyArguments -HostName $HostName -Port $Port
     if ([bool]$resolution.Success) {
         return $resolution
     }
 
-    if (-not (Test-ClagnosWindowsScpFallbackCandidate -Message $resolution.Message)) {
+    if (-not (Test-ProdicloudWindowsScpFallbackCandidate -Message $resolution.Message)) {
         throw [string]$resolution.Message
     }
 
     return $resolution
 }
 
-function Test-ClagnosWindowsScpFallbackCandidate {
+function Test-ProdicloudWindowsScpFallbackCandidate {
     param(
         [AllowNull()]
         [string]$Message
@@ -249,18 +249,18 @@ function Test-ClagnosWindowsScpFallbackCandidate {
     return $false
 }
 
-function New-ClagnosWindowsScpPasswordFilePath {
+function New-ProdicloudWindowsScpPasswordFilePath {
     param(
         [string]$Password
     )
 
-    $passwordFilePath = Join-Path ([System.IO.Path]::GetTempPath()) ('clagnos-pscp-password-' + ([guid]::NewGuid().ToString('N')) + '.txt')
+    $passwordFilePath = Join-Path ([System.IO.Path]::GetTempPath()) ('prodicloud-pscp-password-' + ([guid]::NewGuid().ToString('N')) + '.txt')
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($passwordFilePath, [string]$Password, $utf8NoBom)
     return [string]$passwordFilePath
 }
 
-function Invoke-ClagnosRemotePowerShellExec {
+function Invoke-ProdicloudRemotePowerShellExec {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -300,7 +300,7 @@ function Invoke-ClagnosRemotePowerShellExec {
             $arguments += @('--stdin-file-length', [string]$StdinFileLengthBytes)
         }
     }
-    return (Invoke-ClagnosProcessWithRetry `
+    return (Invoke-ProdicloudProcessWithRetry `
         -FilePath $PySshPythonPath `
         -Arguments $arguments `
         -Label $Label `
@@ -308,7 +308,7 @@ function Invoke-ClagnosRemotePowerShellExec {
         -SuppressTrackedLogging:$SuppressTrackedLogging)
 }
 
-function Invoke-ClagnosRemotePowerShellCommandTextExec {
+function Invoke-ProdicloudRemotePowerShellCommandTextExec {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -337,7 +337,7 @@ function Invoke-ClagnosRemotePowerShellCommandTextExec {
         '--command', ('powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "{0}"' -f [string]$commandScriptText)
     )
 
-    return (Invoke-ClagnosProcessWithRetry `
+    return (Invoke-ProdicloudProcessWithRetry `
         -FilePath $PySshPythonPath `
         -Arguments $arguments `
         -Label $Label `
@@ -345,7 +345,7 @@ function Invoke-ClagnosRemotePowerShellCommandTextExec {
         -SuppressTrackedLogging:$SuppressTrackedLogging)
 }
 
-function Get-ClagnosWindowsRemoteFileMetadata {
+function Get-ProdicloudWindowsRemoteFileMetadata {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -357,7 +357,7 @@ function Get-ClagnosWindowsRemoteFileMetadata {
         [int]$ConnectTimeoutSeconds = 30
     )
 
-    $escapedRemotePath = ConvertTo-ClagnosPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
+    $escapedRemotePath = ConvertTo-ProdicloudPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
     $metadataScript = @(
         "`$path = '$escapedRemotePath'"
         "if (-not (Test-Path -LiteralPath `$path)) {"
@@ -387,7 +387,7 @@ function Get-ClagnosWindowsRemoteFileMetadata {
         "exit 0"
     ) -join "`n"
 
-    $result = Invoke-ClagnosRemotePowerShellExec `
+    $result = Invoke-ProdicloudRemotePowerShellExec `
         -PySshPythonPath $PySshPythonPath `
         -PySshClientPath $PySshClientPath `
         -HostName $HostName `
@@ -416,7 +416,7 @@ function Get-ClagnosWindowsRemoteFileMetadata {
     }
 }
 
-function Copy-ClagnosAssetToWindowsViaExec {
+function Copy-ProdicloudAssetToWindowsViaExec {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -431,13 +431,13 @@ function Copy-ClagnosAssetToWindowsViaExec {
 
     $resolvedLocalPath = (Resolve-Path -LiteralPath $LocalPath).Path
     $fileInfo = Get-Item -LiteralPath $resolvedLocalPath -ErrorAction Stop
-    $fileHash = Get-ClagnosFileSha256 -Path $resolvedLocalPath
-    $escapedRemotePath = ConvertTo-ClagnosPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
+    $fileHash = Get-ProdicloudFileSha256 -Path $resolvedLocalPath
+    $escapedRemotePath = ConvertTo-ProdicloudPowerShellSingleQuotedLiteral -Value ([string]$RemotePath)
     $stagingRemotePath = ('{0}.upload-{1}' -f [string]$RemotePath, ([guid]::NewGuid().ToString('N')))
-    $escapedStagingRemotePath = ConvertTo-ClagnosPowerShellSingleQuotedLiteral -Value ([string]$stagingRemotePath)
+    $escapedStagingRemotePath = ConvertTo-ProdicloudPowerShellSingleQuotedLiteral -Value ([string]$stagingRemotePath)
     $remoteMetadata = $null
     try {
-        $remoteMetadata = Get-ClagnosWindowsRemoteFileMetadata `
+        $remoteMetadata = Get-ProdicloudWindowsRemoteFileMetadata `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -463,13 +463,13 @@ function Copy-ClagnosAssetToWindowsViaExec {
         }
     }
 
-    $remoteSpec = ConvertTo-ClagnosWindowsScpRemoteSpec -HostName $HostName -RemotePath $stagingRemotePath
-    Write-ClagnosActionProgress -Action ("copy guest task asset '{0}' to VM (mode=windows-scp, {1} bytes)" -f [System.IO.Path]::GetFileName($resolvedLocalPath),[int64]$fileInfo.Length)
+    $remoteSpec = ConvertTo-ProdicloudWindowsScpRemoteSpec -HostName $HostName -RemotePath $stagingRemotePath
+    Write-ProdicloudActionProgress -Action ("copy guest task asset '{0}' to VM (mode=windows-scp, {1} bytes)" -f [System.IO.Path]::GetFileName($resolvedLocalPath),[int64]$fileInfo.Length)
     $transferWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $passwordFilePath = ''
     try {
-        $pscpPath = Get-ClagnosPscpExecutablePath
-        $hostKeyResolution = Resolve-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+        $pscpPath = Get-ProdicloudPscpExecutablePath
+        $hostKeyResolution = Resolve-ProdicloudWindowsScpHostKeyArguments -HostName $HostName -Port $Port
         if (-not [bool]$hostKeyResolution.Success) {
             Write-Host ("Task asset copy fallback: pyssh windows copy -> {0} ({1})" -f [string]$RemotePath, [string]$hostKeyResolution.Message)
             $copyArgs = @(
@@ -483,11 +483,11 @@ function Copy-ClagnosAssetToWindowsViaExec {
                 "--local", [string]$resolvedLocalPath,
                 "--remote", [string]$stagingRemotePath
             )
-            Invoke-ClagnosProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
+            Invoke-ProdicloudProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
         }
         else {
             $hostKeyArgs = @($hostKeyResolution.Args)
-            $passwordFilePath = New-ClagnosWindowsScpPasswordFilePath -Password $Password
+            $passwordFilePath = New-ProdicloudWindowsScpPasswordFilePath -Password $Password
             $copyArgs = @(
                 '-batch',
                 '-scp',
@@ -499,7 +499,7 @@ function Copy-ClagnosAssetToWindowsViaExec {
                 [string]$remoteSpec
             )
 
-            Invoke-ClagnosProcessWithRetry -FilePath $pscpPath -Arguments $copyArgs -Label ("pscp copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
+            Invoke-ProdicloudProcessWithRetry -FilePath $pscpPath -Arguments $copyArgs -Label ("pscp copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
         }
 
         $finalizeScript = @(
@@ -512,7 +512,7 @@ function Copy-ClagnosAssetToWindowsViaExec {
             'if(Test-Path -LiteralPath $d){Remove-Item -LiteralPath $d -Force -EA SilentlyContinue}'
             'Move-Item -LiteralPath $s -Destination $d -Force'
         ) -join ';'
-        Invoke-ClagnosRemotePowerShellCommandTextExec `
+        Invoke-ProdicloudRemotePowerShellCommandTextExec `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -533,7 +533,7 @@ function Copy-ClagnosAssetToWindowsViaExec {
         }
     }
 
-    $verifiedMetadata = Get-ClagnosWindowsRemoteFileMetadata `
+    $verifiedMetadata = Get-ProdicloudWindowsRemoteFileMetadata `
         -PySshPythonPath $PySshPythonPath `
         -PySshClientPath $PySshClientPath `
         -HostName $HostName `
@@ -560,8 +560,8 @@ function Copy-ClagnosAssetToWindowsViaExec {
     }
 }
 
-# Handles Copy-ClagnosAssetToVm.
-function Copy-ClagnosAssetToVm {
+# Handles Copy-ProdicloudAssetToVm.
+function Copy-ProdicloudAssetToVm {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -583,8 +583,8 @@ function Copy-ClagnosAssetToVm {
     if ($ConnectTimeoutSeconds -lt 5) { $ConnectTimeoutSeconds = 5 }
     if ($ConnectTimeoutSeconds -gt 300) { $ConnectTimeoutSeconds = 300 }
 
-    if (Test-ClagnosWindowsRemotePath -RemotePath $RemotePath) {
-        return (Copy-ClagnosAssetToWindowsViaExec `
+    if (Test-ProdicloudWindowsRemotePath -RemotePath $RemotePath) {
+        return (Copy-ProdicloudAssetToWindowsViaExec `
             -PySshPythonPath $PySshPythonPath `
             -PySshClientPath $PySshClientPath `
             -HostName $HostName `
@@ -608,11 +608,11 @@ function Copy-ClagnosAssetToVm {
         "--remote", [string]$RemotePath
     )
 
-    Invoke-ClagnosProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
+    Invoke-ProdicloudProcessWithRetry -FilePath $PySshPythonPath -Arguments $copyArgs -Label ("pyssh copy asset -> {0}" -f [string]$RemotePath) -MaxAttempts 2 | Out-Null
 }
 
-# Handles Copy-ClagnosAssetFromVm.
-function Copy-ClagnosAssetFromVm {
+# Handles Copy-ProdicloudAssetFromVm.
+function Copy-ProdicloudAssetFromVm {
     param(
         [string]$PySshPythonPath,
         [string]$PySshClientPath,
@@ -642,16 +642,16 @@ function Copy-ClagnosAssetFromVm {
         Remove-Item -LiteralPath $LocalPath -Force -ErrorAction SilentlyContinue
     }
 
-    if (Test-ClagnosWindowsRemotePath -RemotePath $RemotePath) {
-        $pscpPath = Get-ClagnosPscpExecutablePath
-        $remoteSpec = ConvertTo-ClagnosWindowsScpRemoteSpec -HostName $HostName -RemotePath $RemotePath
-        $hostKeyResolution = Resolve-ClagnosWindowsScpHostKeyArguments -HostName $HostName -Port $Port
+    if (Test-ProdicloudWindowsRemotePath -RemotePath $RemotePath) {
+        $pscpPath = Get-ProdicloudPscpExecutablePath
+        $remoteSpec = ConvertTo-ProdicloudWindowsScpRemoteSpec -HostName $HostName -RemotePath $RemotePath
+        $hostKeyResolution = Resolve-ProdicloudWindowsScpHostKeyArguments -HostName $HostName -Port $Port
         if (-not [bool]$hostKeyResolution.Success) {
             Write-Host ("Task asset fetch fallback: pyssh windows fetch <- {0} ({1})" -f [string]$RemotePath, [string]$hostKeyResolution.Message)
         }
         else {
             $hostKeyArgs = @($hostKeyResolution.Args)
-            $passwordFilePath = New-ClagnosWindowsScpPasswordFilePath -Password $Password
+            $passwordFilePath = New-ProdicloudWindowsScpPasswordFilePath -Password $Password
             try {
                 $fetchArgs = @(
                     '-batch',
@@ -664,7 +664,7 @@ function Copy-ClagnosAssetFromVm {
                     [string]$LocalPath
                 )
 
-                Invoke-ClagnosProcessWithRetry -FilePath $pscpPath -Arguments $fetchArgs -Label ("pscp fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
+                Invoke-ProdicloudProcessWithRetry -FilePath $pscpPath -Arguments $fetchArgs -Label ("pscp fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 -SkipPythonBytecodeFlag | Out-Null
             }
             finally {
                 if (-not [string]::IsNullOrWhiteSpace([string]$passwordFilePath)) {
@@ -690,5 +690,5 @@ function Copy-ClagnosAssetFromVm {
         "--local", [string]$LocalPath
     )
 
-    Invoke-ClagnosProcessWithRetry -FilePath $PySshPythonPath -Arguments $fetchArgs -Label ("pyssh fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 | Out-Null
+    Invoke-ProdicloudProcessWithRetry -FilePath $PySshPythonPath -Arguments $fetchArgs -Label ("pyssh fetch asset <- {0}" -f [string]$RemotePath) -MaxAttempts 1 | Out-Null
 }

@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-python-tool"
 
-Import-Module 'C:\Windows\Temp\clagnos-store-install-state.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-store-install-state.psm1' -Force -DisableNameChecking
 
 function Resolve-PythonCommandPath {
     foreach ($candidatePath in @(
@@ -44,7 +44,7 @@ if (-not (Test-Path -LiteralPath $chocoExe)) {
 }
 
 $pythonCommandPath = ''
-Invoke-ClagnosRefreshSessionPath
+Invoke-ProdicloudRefreshSessionPath
 
 if ([string]::IsNullOrWhiteSpace([string](Resolve-PythonCommandPath))) {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
@@ -58,7 +58,7 @@ if ([string]::IsNullOrWhiteSpace([string](Resolve-PythonCommandPath))) {
         }
     }
     [Environment]::SetEnvironmentVariable("Path", ($entries -join ';'), "Machine")
-    Invoke-ClagnosRefreshSessionPath
+    Invoke-ProdicloudRefreshSessionPath
 }
 
 $pythonCommandPath = Resolve-PythonCommandPath
@@ -75,7 +75,7 @@ if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 2) {
     throw "choco install python312 failed with exit code $LASTEXITCODE."
 }
 
-Invoke-ClagnosRefreshSessionPath
+Invoke-ProdicloudRefreshSessionPath
 
 $pythonCommandPath = Resolve-PythonCommandPath
 if ([string]::IsNullOrWhiteSpace([string]$pythonCommandPath)) {

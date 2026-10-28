@@ -2,20 +2,20 @@ $ErrorActionPreference = 'Stop'
 $taskConfig = [ordered]@{
     ManagerUser = '__VM_ADMIN_USER__'
     ManagerPassword = '__VM_ADMIN_PASS__'
-    InteractiveHelperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+    InteractiveHelperPath = 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
     TaskName = '112-windscribe-unattended-two-phase-uninstall'
     TaskTimeoutSeconds = 480
     SecondPhaseTimeoutSeconds = 450
     AbsenceVerificationSeconds = 10
     UninstallerPath = 'C:\Program Files\Windscribe\uninstall.exe'
 }
-$packageSpec = '__CLAGNOS_PACKAGE_SPEC_B64__'
+$packageSpec = '__PRODICLOUD_PACKAGE_SPEC_B64__'
 
 if (-not (Test-Path -LiteralPath ([string]$taskConfig.InteractiveHelperPath) -PathType Leaf)) {
     throw 'The bounded Windows task helper required to run Windscribe unattended was not staged.'
 }
 . ([string]$taskConfig.InteractiveHelperPath)
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking -ErrorAction Stop
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking -ErrorAction Stop
 
 if (-not (Test-Path -LiteralPath ([string]$taskConfig.UninstallerPath) -PathType Leaf)) {
     throw 'The signed Windscribe uninstaller is missing; no package removal was attempted.'
@@ -26,7 +26,7 @@ if ([string]$launcherSignature.Status -ne 'Valid' -or $launcherSigner -notmatch 
     throw ('Windscribe uninstaller signature verification failed (status: {0}); no package removal was attempted.' -f [string]$launcherSignature.Status)
 }
 
-$firewallState = Get-ClagnosWindscribeUnattendedFirewallState
+$firewallState = Get-ProdicloudWindscribeUnattendedFirewallState
 if ($null -eq $firewallState -or [string]$firewallState.State -ne 'Off') {
     $reason = if ($null -ne $firewallState) { [string]$firewallState.Source } else { 'state reader returned no result' }
     $stateLabel = if ($null -ne $firewallState) { [string]$firewallState.State } else { 'unknown' }
@@ -43,7 +43,7 @@ if (Test-Path -LiteralPath $windscribeSettingsPath) {
 }
 Write-Output ("Doing: verified unattended Windscribe firewall state is Off ({0})" -f [string]$firewallState.Source)
 
-$interactivePaths = Get-ClagnosInteractivePaths -TaskName ([string]$taskConfig.TaskName)
+$interactivePaths = Get-ProdicloudInteractivePaths -TaskName ([string]$taskConfig.TaskName)
 $workerScript = @'
 $ErrorActionPreference = 'Stop'
 $taskName = '__WINDSCRIBE_TASK_NAME__'
@@ -53,14 +53,14 @@ $expectedInstallRoot = [IO.Path]::GetFullPath('C:\Program Files\Windscribe').Tri
 $uninstallerTimeoutSeconds = 20
 $secondPhaseTimeoutSeconds = 450
 $absenceVerificationSeconds = 10
-. 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
-Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking -ErrorAction Stop
-Stop-ClagnosStaleWindscribeUninstallerProcesses -MaximumAgeSeconds 480 -WaitTimeoutSeconds 60
+. 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
+Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking -ErrorAction Stop
+Stop-ProdicloudStaleWindscribeUninstallerProcesses -MaximumAgeSeconds 480 -WaitTimeoutSeconds 60
 
 function Get-WindscribeWorkerFirewallState {
-    $module = Get-Module -Name 'clagnos-package-operations' -ErrorAction SilentlyContinue
-    if ($null -eq $module) { $module = Import-Module 'C:\Windows\Temp\clagnos-package-operations.psm1' -Force -DisableNameChecking -PassThru -ErrorAction Stop }
-    return (& $module { Get-ClagnosWindscribeUnattendedFirewallState })
+    $module = Get-Module -Name 'prodicloud-package-operations' -ErrorAction SilentlyContinue
+    if ($null -eq $module) { $module = Import-Module 'C:\Windows\Temp\prodicloud-package-operations.psm1' -Force -DisableNameChecking -PassThru -ErrorAction Stop }
+    return (& $module { Get-ProdicloudWindscribeUnattendedFirewallState })
 }
 
 function Get-WindscribeWorkerResultSummary {
@@ -164,17 +164,17 @@ try {
         Start-WindscribeServiceIfStillInstalled
         throw ('Windscribe second-phase uninstaller completed but executable or service remains after {0}s; absence was not verified.' -f $absenceVerificationSeconds)
     }
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'The signed unattended Windscribe second-phase uninstaller completed; application and service absence were verified.'
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'The signed unattended Windscribe second-phase uninstaller completed; application and service absence were verified.'
 }
 catch {
     Start-WindscribeServiceIfStillInstalled
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ([string]$_.Exception.Message)
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary ([string]$_.Exception.Message)
 }
 '@
 $workerScript = $workerScript.Replace('__WINDSCRIBE_TASK_NAME__',[string]$taskConfig.TaskName)
 $workerScript = $workerScript.Replace('__WINDSCRIBE_RESULT_PATH__',[string]$interactivePaths.ResultPath)
 
-$interactiveResult = Invoke-ClagnosInteractiveDesktopAutomation `
+$interactiveResult = Invoke-ProdicloudInteractiveDesktopAutomation `
     -TaskName ([string]$taskConfig.TaskName) `
     -RunAsUser ([string]$taskConfig.ManagerUser) `
     -RunAsPassword ([string]$taskConfig.ManagerPassword) `
@@ -186,7 +186,7 @@ if ($null -eq $interactiveResult -or -not [bool]$interactiveResult.Success) {
     throw ('The unattended Windscribe second-phase uninstaller failed verification: ' + $summary)
 }
 
-$previousUninstallMarker = [string]$env:CLAGNOS_WINDSCRIBE_UNINSTALL_COMPLETED
-$env:CLAGNOS_WINDSCRIBE_UNINSTALL_COMPLETED = 'true'
-try { Invoke-ClagnosPackageLifecycle -Action uninstall -PackageSpecBase64 $packageSpec }
-finally { $env:CLAGNOS_WINDSCRIBE_UNINSTALL_COMPLETED = $previousUninstallMarker }
+$previousUninstallMarker = [string]$env:PRODICLOUD_WINDSCRIBE_UNINSTALL_COMPLETED
+$env:PRODICLOUD_WINDSCRIBE_UNINSTALL_COMPLETED = 'true'
+try { Invoke-ProdicloudPackageLifecycle -Action uninstall -PackageSpecBase64 $packageSpec }
+finally { $env:PRODICLOUD_WINDSCRIBE_UNINSTALL_COMPLETED = $previousUninstallMarker }

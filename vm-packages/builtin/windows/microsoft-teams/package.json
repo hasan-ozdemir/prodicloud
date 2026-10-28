@@ -19,8 +19,8 @@
   },
   "assets": [
     {
-      "local": "../../../../modules/core/tasks/clagnos-store-install-state.psm1",
-      "remote": "C:/Windows/Temp/clagnos-store-install-state.psm1"
+      "local": "../../../../modules/core/tasks/prodicloud-store-install-state.psm1",
+      "remote": "C:/Windows/Temp/prodicloud-store-install-state.psm1"
     }
   ],
   "appStateKey": "114-install-teams-application",

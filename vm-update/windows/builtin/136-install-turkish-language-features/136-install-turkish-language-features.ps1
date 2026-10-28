@@ -6,13 +6,13 @@ $managerUser = '__VM_ADMIN_USER__'
 $managerPassword = '__VM_ADMIN_PASS__'
 $assistantUser = '__ASSISTANT_USER__'
 $assistantPassword = '__ASSISTANT_PASS__'
-$helperPath = 'C:\Windows\Temp\clagnos-interactive-session-helper.ps1'
+$helperPath = 'C:\Windows\Temp\prodicloud-interactive-session-helper.ps1'
 
 $primaryLanguage = '__WIN_DEFAULT_UI_LANGUAGE__'
 $additionalLanguages = @('__WIN_ADDITIONAL_LANGUAGES__' -split ',' | ForEach-Object { ([string]$_).Trim() } | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
 $secondaryLanguage = if (@($additionalLanguages).Count -gt 0) { [string]$additionalLanguages[0] } else { 'tr-TR' }
 $script:LanguagePolicyChanged = $true
-$script:LanguagePolicyMarkerPath = Join-Path $env:ProgramData 'clagnos\state\language-policy.json'
+$script:LanguagePolicyMarkerPath = Join-Path $env:ProgramData 'prodicloud\state\language-policy.json'
 
 if (-not (Test-Path -LiteralPath $helperPath)) {
     throw ("Interactive session helper was not found: {0}" -f $helperPath)
@@ -234,7 +234,7 @@ function Test-LanguageCapabilityStateSatisfied {
 
 $script:LanguageSourceIsoUrl = 'https://software-static.download.prss.microsoft.com/dbazure/888969d5-f34g-4e03-ac9d-1f9786c66749/26100.1.240331-1435.ge_release_amd64fre_CLIENT_LOF_PACKAGES_OEM.iso'
 $script:LanguageSourceIsoBytes = [int64]6251841536
-$script:LanguageSourceRoot = 'C:\ProgramData\clagnos\cache\language-source'
+$script:LanguageSourceRoot = 'C:\ProgramData\prodicloud\cache\language-source'
 $script:LanguageSourceIsoPath = Join-Path $script:LanguageSourceRoot 'windows-11-24h2-25h2-language-features-x64.iso'
 $script:LanguageOperationDeadlineUtc = [DateTime]::UtcNow.AddMinutes(14)
 
@@ -534,10 +534,10 @@ function Invoke-LanguageInteractiveAutomation {
         [int]$WaitTimeoutSeconds = 180
     )
 
-    $paths = Get-ClagnosInteractivePaths -TaskName $InteractiveTaskName
-    Ensure-ClagnosDirectory -Path $paths.RootPath
+    $paths = Get-ProdicloudInteractivePaths -TaskName $InteractiveTaskName
+    Ensure-ProdicloudDirectory -Path $paths.RootPath
 
-    $staleProcessIds = @(Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
+    $staleProcessIds = @(Stop-ProdicloudInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
     if (@($staleProcessIds).Count -gt 0) {
         Write-Host ("Stopped stale interactive worker process(es) for '{0}': {1}" -f [string]$paths.TaskName, ((@($staleProcessIds) | ForEach-Object { [string]$_ }) -join ', ')) -ForegroundColor DarkCyan
     }
@@ -548,8 +548,8 @@ function Invoke-LanguageInteractiveAutomation {
 
     try {
         Write-Host ("Interactive task '{0}' will run for {1} using service-account." -f [string]$paths.TaskName, [string]$RunAsUser) -ForegroundColor DarkCyan
-        Register-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -WorkerPath $paths.WorkerPath -RunAsPassword $RunAsPassword -RunAsMode 'password'
-        Start-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+        Register-ProdicloudInteractiveScheduledTask -TaskName $paths.ScheduledTaskName -RunAsUser $RunAsUser -WorkerPath $paths.WorkerPath -RunAsPassword $RunAsPassword -RunAsMode 'password'
+        Start-ProdicloudInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
         Write-Host ("Running interactive task '{0}'..." -f [string]$paths.TaskName) -ForegroundColor Cyan
 
         $deadline = [DateTime]::UtcNow.AddSeconds([Math]::Max(30, [int]$WaitTimeoutSeconds))
@@ -560,7 +560,7 @@ function Invoke-LanguageInteractiveAutomation {
             if (Test-Path -LiteralPath $paths.ResultPath) {
                 $fileInfo = Get-Item -LiteralPath $paths.ResultPath -ErrorAction SilentlyContinue
                 if ($null -ne $fileInfo -and [int64]$fileInfo.Length -gt 0) {
-                    return (Read-ClagnosJsonFile -Path $paths.ResultPath)
+                    return (Read-ProdicloudJsonFile -Path $paths.ResultPath)
                 }
             }
 
@@ -587,12 +587,12 @@ function Invoke-LanguageInteractiveAutomation {
 
             if ([DateTime]::UtcNow -ge $nextHeartbeatUtc) {
                 $elapsedSeconds = [Math]::Round(([DateTime]::UtcNow - $startTime).TotalSeconds, 0)
-                $snapshot = Get-ClagnosInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
+                $snapshot = Get-ProdicloudInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
                 if ($null -eq $snapshot) {
                     Write-Host ("Waiting for interactive task '{0}'... elapsed={1}s; state=not-found" -f [string]$paths.TaskName, [int]$elapsedSeconds) -ForegroundColor DarkCyan
                 }
                 else {
-                    $stateLabel = Get-ClagnosInteractiveScheduledTaskStateLabel -State ([int]$snapshot.State)
+                    $stateLabel = Get-ProdicloudInteractiveScheduledTaskStateLabel -State ([int]$snapshot.State)
                     Write-Host ("Waiting for interactive task '{0}'... elapsed={1}s; state={2}; last-task-result={3}" -f [string]$paths.TaskName, [int]$elapsedSeconds, [string]$stateLabel, [int]$snapshot.LastTaskResult) -ForegroundColor DarkCyan
                 }
 
@@ -602,7 +602,7 @@ function Invoke-LanguageInteractiveAutomation {
             Start-Sleep -Seconds 2
         }
 
-        $snapshot = Get-ClagnosInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
+        $snapshot = Get-ProdicloudInteractiveScheduledTaskSnapshot -TaskName $paths.ScheduledTaskName
         if ($null -ne $snapshot -and [int]$snapshot.State -eq 4 -and [int]$snapshot.LastTaskResult -eq 267009) {
             $capabilityState = Get-LanguageCapabilityStateMap -LanguageTag $LanguageTag
             $capabilitySummary = Convert-LanguageCapabilityStateMapToSummary -StateMap $capabilityState
@@ -644,12 +644,12 @@ function Invoke-LanguageInteractiveAutomation {
     }
     finally {
         try {
-            Remove-ClagnosInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
+            Remove-ProdicloudInteractiveScheduledTask -TaskName $paths.ScheduledTaskName
         }
         catch {
             Write-Host ("interactive-task-cleanup-info: {0}" -f $_.Exception.Message) -ForegroundColor DarkCyan
         }
-        $stoppedProcessIds = @(Stop-ClagnosInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
+        $stoppedProcessIds = @(Stop-ProdicloudInteractiveWorkerProcesses -WorkerPath $paths.WorkerPath)
         if (@($stoppedProcessIds).Count -gt 0) {
             Write-Host ("Stopped lingering interactive worker process(es) for '{0}': {1}" -f [string]$paths.TaskName, ((@($stoppedProcessIds) | ForEach-Object { [string]$_ }) -join ', ')) -ForegroundColor DarkCyan
         }
@@ -843,7 +843,7 @@ function Invoke-UserLanguageConfiguration {
     }
 
     $interactiveTaskName = ('{0}-{1}' -f $taskName, [string]$UserName)
-    $paths = Get-ClagnosInteractivePaths -TaskName $interactiveTaskName
+    $paths = Get-ProdicloudInteractivePaths -TaskName $interactiveTaskName
     $workerScript = @'
 $ErrorActionPreference = "Stop"
 $helperPath = "__HELPER_PATH__"
@@ -868,7 +868,7 @@ try {
                     ("{0}:{1}" -f [string]$_.LanguageTag,$tips)
                 }
             ) -join '; '
-            Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Existing Windows language selection preserved.' -Details @(("ui-language={0}" -f $currentUi),("language-list={0}" -f $currentSummary))
+            Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Existing Windows language selection preserved.' -Details @(("ui-language={0}" -f $currentUi),("language-list={0}" -f $currentSummary))
             return
         }
     }
@@ -900,10 +900,10 @@ try {
         ("language-list={0}" -f [string]$languageSummary),
         ("culture={0}" -f [string]$cultureName)
     )
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language settings applied.' -Details $details
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $true -Summary 'Language settings applied.' -Details $details
 }
 catch {
-    Write-ClagnosInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language settings failed.' -Details @([string]$_.Exception.Message)
+    Write-ProdicloudInteractiveResult -ResultPath $resultPath -TaskName $taskName -Success $false -Summary 'Language settings failed.' -Details @([string]$_.Exception.Message)
     throw
 }
 '@
@@ -915,7 +915,7 @@ catch {
     $workerScript = $workerScript.Replace('__SECONDARY_LANGUAGE__', $secondaryLanguage)
     $workerScript = $workerScript.Replace('__LANGUAGE_POLICY_CHANGED__',([bool]$script:LanguagePolicyChanged).ToString().ToLowerInvariant())
 
-    $null = Invoke-ClagnosInteractiveDesktopAutomation `
+    $null = Invoke-ProdicloudInteractiveDesktopAutomation `
         -TaskName $interactiveTaskName `
         -RunAsUser $UserName `
         -RunAsPassword $UserPassword `

@@ -1,5 +1,5 @@
 # 'group' option binding for 'show'.
 
-function Get-ClagnosShowGroupOptionSpecification {
-    return (Get-ClagnosSharedGroupOptionSpecification)
+function Get-ProdicloudShowGroupOptionSpecification {
+    return (Get-ProdicloudSharedGroupOptionSpecification)
 }

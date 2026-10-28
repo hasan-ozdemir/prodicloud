@@ -1,5 +1,5 @@
 # Shared 'group' command option specification.
 
-function Get-ClagnosSharedGroupOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'group' -ShortNames @('g') -TakesValue)
+function Get-ProdicloudSharedGroupOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'group' -ShortNames @('g') -TakesValue)
 }

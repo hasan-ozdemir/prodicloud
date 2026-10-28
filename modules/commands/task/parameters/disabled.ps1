@@ -1,5 +1,5 @@
 # 'disabled' option binding for 'task'.
 
-function Get-ClagnosTaskDisabledOptionSpecification {
-    return (Get-ClagnosSharedDisabledOptionSpecification)
+function Get-ProdicloudTaskDisabledOptionSpecification {
+    return (Get-ProdicloudSharedDisabledOptionSpecification)
 }

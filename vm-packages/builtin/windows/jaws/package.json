@@ -24,7 +24,7 @@
   "assets": [
     {
       "local": "app-state/app-state.zip",
-      "remote": "C:/Windows/Temp/clagnos-jaws-app-state.zip"
+      "remote": "C:/Windows/Temp/prodicloud-jaws-app-state.zip"
     }
   ],
   "appStateKey": "133-install-jaws-application",

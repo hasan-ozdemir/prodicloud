@@ -1,6 +1,6 @@
 # Create command entry.
 
-function Invoke-ClagnosCreateCommand {
+function Invoke-ProdicloudCreateCommand {
     param(
         [hashtable]$Options,
         [switch]$WindowsFlag,
@@ -10,8 +10,8 @@ function Invoke-ClagnosCreateCommand {
         [switch]$WizardMode
     )
 
-    $runtime = New-ClagnosCreateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode -WizardValues $WizardValues -WizardMode:$WizardMode
+    $runtime = New-ProdicloudCreateCommandRuntime -Options $Options -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -AutoMode:$AutoMode -WizardValues $WizardValues -WizardMode:$WizardMode
     $script:UpdateMode = $false
     $script:ExecutionMode = 'default'
-    Invoke-ClagnosMain -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -CommandName 'create' -Step1OperationName ([string]$runtime.Step1OperationName) -InitialConfigOverrides $runtime.InitialConfigOverrides -ActionPlan $runtime.ActionPlan -WizardMode:([bool]$runtime.WizardMode)
+    Invoke-ProdicloudMain -WindowsFlag:$WindowsFlag -LinuxFlag:$LinuxFlag -CommandName 'create' -Step1OperationName ([string]$runtime.Step1OperationName) -InitialConfigOverrides $runtime.InitialConfigOverrides -ActionPlan $runtime.ActionPlan -WizardMode:([bool]$runtime.WizardMode)
 }

@@ -536,16 +536,16 @@ def run_session(args: argparse.Namespace) -> int:
             try:
                 request = json.loads(line)
             except Exception as exc:
-                write_stdout(f"CLAGNOS_SESSION_ERROR:invalid-json:{exc}\n")
+                write_stdout(f"PRODICLOUD_SESSION_ERROR:invalid-json:{exc}\n")
                 continue
 
             action = str(request.get("action", "")).strip().lower()
             if action == "close":
-                write_stdout("CLAGNOS_SESSION_CLOSED\n")
+                write_stdout("PRODICLOUD_SESSION_CLOSED\n")
                 return 0
 
             if action != "run":
-                write_stdout(f"CLAGNOS_SESSION_ERROR:unsupported-action:{action}\n")
+                write_stdout(f"PRODICLOUD_SESSION_ERROR:unsupported-action:{action}\n")
                 continue
 
             task_name = str(request.get("task", "task")).strip() or "task"
@@ -557,7 +557,7 @@ def run_session(args: argparse.Namespace) -> int:
             if task_timeout < 5:
                 task_timeout = 5
 
-            write_stdout(f"CLAGNOS_TASK_BEGIN:{task_name}\n")
+            write_stdout(f"PRODICLOUD_TASK_BEGIN:{task_name}\n")
 
             task_exit_code = 1
             last_exception = None
@@ -582,16 +582,16 @@ def run_session(args: argparse.Namespace) -> int:
                     if attempt >= reconnect_retries:
                         break
                     write_stdout(
-                        f"[stderr] CLAGNOS_SESSION_RECONNECT_RETRY:{task_name}:{attempt}/{reconnect_retries}:{exc}\n"
+                        f"[stderr] PRODICLOUD_SESSION_RECONNECT_RETRY:{task_name}:{attempt}/{reconnect_retries}:{exc}\n"
                     )
                     time.sleep(2)
                     client = reconnect_client(client, args)
 
             if last_exception is not None:
-                write_stdout(f"[stderr] CLAGNOS_SESSION_TASK_ERROR:{task_name}:{last_exception}\n")
+                write_stdout(f"[stderr] PRODICLOUD_SESSION_TASK_ERROR:{task_name}:{last_exception}\n")
                 task_exit_code = 1
 
-            write_stdout(f"CLAGNOS_TASK_END:{task_name}:{task_exit_code}\n")
+            write_stdout(f"PRODICLOUD_TASK_END:{task_name}:{task_exit_code}\n")
 
         return 0
     finally:

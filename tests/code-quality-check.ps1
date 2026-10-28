@@ -154,7 +154,7 @@ Invoke-AuditStep -Name "Versioned release package" -Action {
 Invoke-AuditStep -Name "Python syntax (Linux app-state portability)" -Action {
     $python = Get-Command python -ErrorAction SilentlyContinue
     if (-not $python) { throw "python command was not found." }
-    $helperPath = Join-Path $RepoRoot "modules\core\tasks\clagnos-app-state-portability.py"
+    $helperPath = Join-Path $RepoRoot "modules\core\tasks\prodicloud-app-state-portability.py"
     if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) { throw "Linux app-state portability helper was not found." }
     $syntaxProbe = @'
 import pathlib
@@ -171,7 +171,7 @@ compile(source, str(path), "exec")
 Invoke-AuditStep -Name "Linux app-state placeholder round trip" -Action {
     $python = Get-Command python -ErrorAction SilentlyContinue
     if (-not $python) { throw "python command was not found." }
-    $helperPath = Join-Path $RepoRoot "modules\core\tasks\clagnos-app-state-portability.py"
+    $helperPath = Join-Path $RepoRoot "modules\core\tasks\prodicloud-app-state-portability.py"
     $contractPath = Join-Path $RepoRoot "tests\linux-app-state-portability-check.py"
     if (-not (Test-Path -LiteralPath $contractPath -PathType Leaf)) { throw "Linux app-state portability contract test was not found." }
     & $python.Source -B $contractPath $helperPath
@@ -237,7 +237,7 @@ Invoke-AuditStep -Name "Python cache artifact hygiene (tools/pyssh)" -Action {
 }
 
 Invoke-AuditStep -Name "CLI help smoke" -Action {
-    $scriptPath = Join-Path $RepoRoot "clagnos.ps1"
+    $scriptPath = Join-Path $RepoRoot "prodicloud.ps1"
     $ps = Get-Command powershell.exe -ErrorAction SilentlyContinue
     if (-not $ps) {
         $ps = Get-Command pwsh -ErrorAction SilentlyContinue

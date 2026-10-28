@@ -1,5 +1,5 @@
 # Shared 'command' command option specification.
 
-function Get-ClagnosSharedCommandOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'command' -ShortNames @('c') -TakesValue)
+function Get-ProdicloudSharedCommandOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'command' -ShortNames @('c') -TakesValue)
 }

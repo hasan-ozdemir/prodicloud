@@ -1,8 +1,8 @@
 # Contract for the 'configure' command.
 
-function Get-ClagnosConfigureOptionSpecifications {
+function Get-ProdicloudConfigureOptionSpecifications {
     return @(
-        (Get-ClagnosConfigurePerfOptionSpecification),
-        (Get-ClagnosConfigureHelpOptionSpecification)
+        (Get-ProdicloudConfigurePerfOptionSpecification),
+        (Get-ProdicloudConfigureHelpOptionSpecification)
     )
 }

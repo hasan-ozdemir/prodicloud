@@ -1,13 +1,13 @@
 # Connect command runtime helpers.
 
-function Resolve-ClagnosConnectMode {
+function Resolve-ProdicloudConnectMode {
     param(
         [hashtable]$Options
     )
 
-    $sshRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'ssh'
-    $rdpRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'rdp'
-    $powerShellRequested = Test-ClagnosCliOptionPresent -Options $Options -Name 'powershell'
+    $sshRequested = Test-ProdicloudCliOptionPresent -Options $Options -Name 'ssh'
+    $rdpRequested = Test-ProdicloudCliOptionPresent -Options $Options -Name 'rdp'
+    $powerShellRequested = Test-ProdicloudCliOptionPresent -Options $Options -Name 'powershell'
     $selectedModes = @(
         if ($sshRequested) { 'ssh' }
         if ($rdpRequested) { 'rdp' }
@@ -36,5 +36,5 @@ function Resolve-ClagnosConnectMode {
         -Detail "Connect command requires one transport selector." `
         -Code 66 `
         -Summary "Connect mode is missing." `
-        -Hint "Use clagnos connect with exactly one of --ssh, --rdp, or --powershell."
+        -Hint "Use prodicloud connect with exactly one of --ssh, --rdp, or --powershell."
 }

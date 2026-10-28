@@ -1,5 +1,5 @@
 # 'vm-name' option binding for 'set'.
 
-function Get-ClagnosSetVmNameOptionSpecification {
-    return (Get-ClagnosSharedVmNameOptionSpecification)
+function Get-ProdicloudSetVmNameOptionSpecification {
+    return (Get-ProdicloudSharedVmNameOptionSpecification)
 }

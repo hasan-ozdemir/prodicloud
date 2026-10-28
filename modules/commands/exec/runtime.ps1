@@ -1,12 +1,12 @@
 # Exec command runtime helpers.
 
-function Initialize-ClagnosExecCommandRuntimeContext {
+function Initialize-ProdicloudExecCommandRuntimeContext {
     param()
 
-    $repoRoot = Get-ClagnosRepoRoot
-    $envFilePath = Join-Path $repoRoot 'clagnos.env'
+    $repoRoot = Get-ProdicloudRepoRoot
+    $envFilePath = Join-Path $repoRoot 'prodicloud.env'
     $configMap = Read-DotEnvFile -Path $envFilePath
-    $configuredPySshClientPath = [string](Get-ConfigValue -Config $configMap -Key 'PYSSH_CLIENT_PATH' -DefaultValue (Get-ClagnosDefaultPySshClientPathText))
+    $configuredPySshClientPath = [string](Get-ConfigValue -Config $configMap -Key 'PYSSH_CLIENT_PATH' -DefaultValue (Get-ProdicloudDefaultPySshClientPathText))
 
     $sshConnectTimeoutText = [string](Get-ConfigValue -Config $configMap -Key 'SSH_CONNECT_TIMEOUT_SECONDS' -DefaultValue ([string]$script:SshConnectTimeoutSeconds))
     $sshConnectTimeoutSeconds = $script:SshConnectTimeoutSeconds
@@ -33,7 +33,7 @@ function Initialize-ClagnosExecCommandRuntimeContext {
     }
 }
 
-function ConvertTo-ClagnosExecRemoteCommandText {
+function ConvertTo-ProdicloudExecRemoteCommandText {
     param(
         [string]$CommandText,
         [string]$Platform,
@@ -70,21 +70,21 @@ function ConvertTo-ClagnosExecRemoteCommandText {
     return ("powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {0}" -f [string]$encodedCommand)
 }
 
-function Resolve-ClagnosExecCommandTextFromOptions {
+function Resolve-ProdicloudExecCommandTextFromOptions {
     param(
         [hashtable]$Options,
         [string]$RepoRoot
     )
 
-    $commandText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'command')
-    $filePathText = [string](Get-ClagnosCliOptionText -Options $Options -Name 'file')
+    $commandText = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'command')
+    $filePathText = [string](Get-ProdicloudCliOptionText -Options $Options -Name 'file')
 
     if (-not [string]::IsNullOrWhiteSpace([string]$commandText) -and -not [string]::IsNullOrWhiteSpace([string]$filePathText)) {
         Throw-FriendlyError `
             -Detail 'exec accepts either --command or --file, but not both.' `
             -Code 61 `
             -Summary 'Exec command source is ambiguous.' `
-            -Hint 'Use either clagnos exec --command "<remote-command>" or clagnos exec --file <script-file>.'
+            -Hint 'Use either prodicloud exec --command "<remote-command>" or prodicloud exec --file <script-file>.'
     }
 
     if ([string]::IsNullOrWhiteSpace([string]$filePathText)) {
@@ -118,7 +118,7 @@ function Resolve-ClagnosExecCommandTextFromOptions {
             -Detail ("Script file was not found: {0}" -f [string]$filePathText) `
             -Code 61 `
             -Summary 'Exec script file was not found.' `
-            -Hint 'Pass one existing local script file path to clagnos exec --file.'
+            -Hint 'Pass one existing local script file path to prodicloud exec --file.'
     }
 
     $scriptText = [string][System.IO.File]::ReadAllText($resolvedPath)
@@ -127,7 +127,7 @@ function Resolve-ClagnosExecCommandTextFromOptions {
             -Detail ("Script file is empty: {0}" -f [string]$resolvedPath) `
             -Code 61 `
             -Summary 'Exec script file is empty.' `
-            -Hint 'Add remote command content to the script file before using clagnos exec --file.'
+            -Hint 'Add remote command content to the script file before using prodicloud exec --file.'
     }
 
     return [pscustomobject]@{

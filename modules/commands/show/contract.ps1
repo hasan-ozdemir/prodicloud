@@ -1,13 +1,13 @@
 # Contract for the 'show' command.
 
-function Get-ClagnosShowOptionSpecifications {
+function Get-ProdicloudShowOptionSpecifications {
     return @(
-        (Get-ClagnosShowPerfOptionSpecification),
-        (Get-ClagnosShowHelpOptionSpecification),
-        (Get-ClagnosSharedSubscriptionIdOptionSpecification),
-        (Get-ClagnosShowGroupOptionSpecification),
-        (Get-ClagnosShowVmNameOptionSpecification),
-        (Get-ClagnosShowExportJsonOptionSpecification),
-        (Get-ClagnosShowOverwriteOptionSpecification)
+        (Get-ProdicloudShowPerfOptionSpecification),
+        (Get-ProdicloudShowHelpOptionSpecification),
+        (Get-ProdicloudSharedSubscriptionIdOptionSpecification),
+        (Get-ProdicloudShowGroupOptionSpecification),
+        (Get-ProdicloudShowVmNameOptionSpecification),
+        (Get-ProdicloudShowExportJsonOptionSpecification),
+        (Get-ProdicloudShowOverwriteOptionSpecification)
     )
 }

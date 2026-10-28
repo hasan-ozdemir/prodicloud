@@ -1,10 +1,10 @@
 $ErrorActionPreference = "Stop"
 Write-Host "Update task started: install-wsl-feature"
 
-Import-Module 'C:\Windows\Temp\clagnos-session-environment.psm1' -Force -DisableNameChecking
+Import-Module 'C:\Windows\Temp\prodicloud-session-environment.psm1' -Force -DisableNameChecking
 
 function Refresh-SessionPath {
-    Refresh-ClagnosSessionPath | Out-Null
+    Refresh-ProdicloudSessionPath | Out-Null
 }
 
 function Invoke-NativeStep {
@@ -58,7 +58,7 @@ function Test-WslBenignBootstrapLine {
         ([string]$Text -match '^(?i)wsl\.exe : The Windows Subsystem for Linux is not installed\. You\s*$') -or
         ([string]$Text -match '^(?i)can install by running ''wsl\.exe --install''\.$') -or
         ([string]$Text -match '^(?i)For more information please visit https://aka\.ms/wslinstall$') -or
-        ([string]$Text -match '^(?i)At .+clagnos-task-.*\.ps1:\d+ char:\d+$') -or
+        ([string]$Text -match '^(?i)At .+prodicloud-task-.*\.ps1:\d+ char:\d+$') -or
         ([string]$Text -match '^(?i)\+\s+wsl\.exe --install --no-distribution$') -or
         ([string]$Text -match '^(?i)\+\s+~+$') -or
         ([string]$Text -match '^(?i)\+\s+CategoryInfo\s+:.*NativeCommandError$') -or
@@ -91,7 +91,7 @@ function Install-WslMsiUnattended {
     $previousSecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/WSL/releases/latest' -Headers @{ 'User-Agent' = 'Clagnos-WSL-MSI-Bootstrap' } -TimeoutSec 60 -ErrorAction Stop
+        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/microsoft/WSL/releases/latest' -Headers @{ 'User-Agent' = 'Prodicloud-WSL-MSI-Bootstrap' } -TimeoutSec 60 -ErrorAction Stop
     }
     finally { [Net.ServicePointManager]::SecurityProtocol = $previousSecurityProtocol }
 
@@ -106,7 +106,7 @@ function Install-WslMsiUnattended {
     }
     if ($expectedHash -notmatch '^[a-f0-9]{64}$') { throw 'The official WSL release metadata did not include a valid SHA-256 digest.' }
 
-    $cacheRoot = Join-Path $env:ProgramData 'clagnos\cache\wsl'
+    $cacheRoot = Join-Path $env:ProgramData 'prodicloud\cache\wsl'
     if (-not (Test-Path -LiteralPath $cacheRoot -PathType Container)) { New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null }
     $msiPath = Join-Path $cacheRoot $assetName
     $cachedHash = ''

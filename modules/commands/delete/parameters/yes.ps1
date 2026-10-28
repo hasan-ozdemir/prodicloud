@@ -1,5 +1,5 @@
 # 'yes' option binding for 'delete'.
 
-function Get-ClagnosDeleteYesOptionSpecification {
-    return (Get-ClagnosSharedYesOptionSpecification)
+function Get-ProdicloudDeleteYesOptionSpecification {
+    return (Get-ProdicloudSharedYesOptionSpecification)
 }

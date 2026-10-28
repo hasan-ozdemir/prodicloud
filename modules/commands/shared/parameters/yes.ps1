@@ -1,5 +1,5 @@
 # Shared 'yes' command option specification.
 
-function Get-ClagnosSharedYesOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'yes' -ShortNames @('y'))
+function Get-ProdicloudSharedYesOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'yes' -ShortNames @('y'))
 }

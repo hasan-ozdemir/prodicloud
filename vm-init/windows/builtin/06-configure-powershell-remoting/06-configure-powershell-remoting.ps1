@@ -90,8 +90,8 @@ function Ensure-LocalGroupMember {
     }
 
     $detail = ''
-    $stdoutFile = Join-Path $env:TEMP ("clagnos-net-localgroup-{0}-stdout.txt" -f ([guid]::NewGuid().ToString('N')))
-    $stderrFile = Join-Path $env:TEMP ("clagnos-net-localgroup-{0}-stderr.txt" -f ([guid]::NewGuid().ToString('N')))
+    $stdoutFile = Join-Path $env:TEMP ("prodicloud-net-localgroup-{0}-stdout.txt" -f ([guid]::NewGuid().ToString('N')))
+    $stderrFile = Join-Path $env:TEMP ("prodicloud-net-localgroup-{0}-stderr.txt" -f ([guid]::NewGuid().ToString('N')))
     try {
         $process = Start-Process -FilePath 'net.exe' -ArgumentList @('localgroup', $GroupName, $MemberName, '/add') -NoNewWindow -PassThru -Wait -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
         $stdoutLines = if (Test-Path -LiteralPath $stdoutFile) { @(Get-Content -LiteralPath $stdoutFile -ErrorAction SilentlyContinue) } else { @() }

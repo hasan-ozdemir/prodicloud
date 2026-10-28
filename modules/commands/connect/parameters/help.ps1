@@ -1,5 +1,5 @@
 # 'help' option binding for 'connect'.
 
-function Get-ClagnosConnectHelpOptionSpecification {
-    return (Get-ClagnosSharedHelpOptionSpecification)
+function Get-ProdicloudConnectHelpOptionSpecification {
+    return (Get-ProdicloudSharedHelpOptionSpecification)
 }

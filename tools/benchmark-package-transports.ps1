@@ -10,15 +10,15 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $envPath = Join-Path $repoRoot ($VmName + '.env')
-$entryPoint = Join-Path $repoRoot 'clagnos.ps1'
+$entryPoint = Join-Path $repoRoot 'prodicloud.ps1'
 if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { throw ("The VC profile '{0}.env' is required for package transport benchmarking." -f $VmName) }
-if (-not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) { throw 'The Clagnos entrypoint was not found.' }
+if (-not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) { throw 'The Prodicloud entrypoint was not found.' }
 
 $lines = @([IO.File]::ReadAllLines($envPath))
 $transportLine = @($lines | Where-Object { $_ -match '^\s*PACKAGE_TRANSPORT\s*=' } | Select-Object -First 1)
 if ($transportLine.Count -ne 1 -or $transportLine[0] -notmatch '^\s*PACKAGE_TRANSPORT\s*=(.*)$') { throw ("The VC profile '{0}.env' must define PACKAGE_TRANSPORT before benchmarking." -f $VmName) }
 $originalTransport = [string]$Matches[1]
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('clagnos-package-benchmark-' + [guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('prodicloud-package-benchmark-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $tempRoot -Force
 $powerShellExe = (Get-Command pwsh -ErrorAction Stop).Source
 $samples = [Collections.Generic.List[object]]::new()
@@ -57,15 +57,15 @@ try {
             }
             $watch.Stop()
             $combinedOutput = [string](Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue) + "`n" + [string](Get-Content -LiteralPath $stderrPath -Raw -ErrorAction SilentlyContinue)
-            $resultMatch = [regex]::Match($combinedOutput,'CLAGNOS_PACKAGE_RESULT:(?<json>\{[^\r\n]*\})')
+            $resultMatch = [regex]::Match($combinedOutput,'PRODICLOUD_PACKAGE_RESULT:(?<json>\{[^\r\n]*\})')
             $status = ''
             $failure = ''
             if ($resultMatch.Success) {
                 try { $status = [string]((ConvertFrom-Json -InputObject $resultMatch.Groups['json'].Value).status) }
-                catch { $failure = 'Clagnos returned an invalid structured package status.' }
+                catch { $failure = 'Prodicloud returned an invalid structured package status.' }
             }
-            else { $failure = 'Clagnos did not return a structured package status.' }
-            if ([int]$process.ExitCode -ne 0) { $failure = ('Clagnos exited with {0}.' -f [int]$process.ExitCode) }
+            else { $failure = 'Prodicloud did not return a structured package status.' }
+            if ([int]$process.ExitCode -ne 0) { $failure = ('Prodicloud exited with {0}.' -f [int]$process.ExitCode) }
             $samples.Add([pscustomobject]@{ Transport = $transport; Iteration = $iteration; Milliseconds = [long]$watch.ElapsedMilliseconds; Status = $status; Failure = $failure })
             if ([string]::IsNullOrWhiteSpace($failure)) { Write-Output ("Completed: {0} status {1} in {2} ms" -f $transport,$status,[long]$watch.ElapsedMilliseconds) }
             else { Write-Output ("Completed with error: {0} status attempt in {1} ms ({2})" -f $transport,[long]$watch.ElapsedMilliseconds,$failure) }

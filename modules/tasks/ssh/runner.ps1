@@ -1,7 +1,7 @@
 # Persistent SSH task runner.
 
-# Handles Invoke-ClagnosPersistentSshTask.
-function Invoke-ClagnosPersistentSshTask {
+# Handles Invoke-ProdicloudPersistentSshTask.
+function Invoke-ProdicloudPersistentSshTask {
     param(
         [psobject]$Session,
         [string]$TaskName,
@@ -31,7 +31,7 @@ function Invoke-ClagnosPersistentSshTask {
         script = [string]$TaskScript
     } | ConvertTo-Json -Compress -Depth 20
 
-    Write-ClagnosPersistentSshProtocolLine -Session $Session -Line ([string]$payload)
+    Write-ProdicloudPersistentSshProtocolLine -Session $Session -Line ([string]$payload)
 
     $proc = $Session.Process
     $stdoutReader = $Session.StdoutReader
@@ -52,8 +52,8 @@ function Invoke-ClagnosPersistentSshTask {
         $Session.PendingStderrTask = $stderrReader.ReadLineAsync()
     }
     $outputLines = New-Object 'System.Collections.Generic.List[string]'
-    $endMarkerRegex = '^CLAGNOS_TASK_END:(?<task>.+?):(?<code>-?\d+)$'
-    $beginMarkerRegex = '^CLAGNOS_TASK_BEGIN:(?<task>.+)$'
+    $endMarkerRegex = '^PRODICLOUD_TASK_END:(?<task>.+?):(?<code>-?\d+)$'
+    $beginMarkerRegex = '^PRODICLOUD_TASK_BEGIN:(?<task>.+)$'
     $taskWatch = [System.Diagnostics.Stopwatch]::StartNew()
     $exitCode = $null
 
@@ -67,15 +67,15 @@ function Invoke-ClagnosPersistentSshTask {
             $Session.PendingStdoutTask = $stdoutReader.ReadLineAsync()
             if ($null -ne $line) {
                 $lineText = [string]$line
-                $normalizedLine = Normalize-ClagnosProtocolLine -Text $lineText
+                $normalizedLine = Normalize-ProdicloudProtocolLine -Text $lineText
                 if ($null -eq $normalizedLine) { $normalizedLine = "" }
-                if (($normalizedLine -as [string]) -like "CLAGNOS_SESSION_ERROR:*") {
+                if (($normalizedLine -as [string]) -like "PRODICLOUD_SESSION_ERROR:*") {
                     throw ("Persistent SSH session reported protocol error for task '{0}': {1}" -f $TaskName, [string]$normalizedLine)
                 }
                 if ($normalizedLine -match $endMarkerRegex) {
                     $markerTask = [string]$Matches.task
                     if ([string]::Equals($markerTask, [string]$TaskName, [System.StringComparison]::OrdinalIgnoreCase)) {
-                        $exitCode = Convert-ClagnosProtocolTaskExitCode -Text ([string]$Matches.code)
+                        $exitCode = Convert-ProdicloudProtocolTaskExitCode -Text ([string]$Matches.code)
                         break
                     }
                     continue
@@ -83,11 +83,11 @@ function Invoke-ClagnosPersistentSshTask {
                 if ($normalizedLine -match $beginMarkerRegex) {
                     continue
                 }
-                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
+                if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
                     continue
                 }
-                if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedLine)) {
-                    Write-ClagnosTransientConsoleText -Text ([string]$normalizedLine)
+                if (Test-ProdicloudTransientSpinnerLine -Text ([string]$normalizedLine)) {
+                    Write-ProdicloudTransientConsoleText -Text ([string]$normalizedLine)
                     $Session.TransientConsoleActive = $true
                     continue
                 }
@@ -95,7 +95,7 @@ function Invoke-ClagnosPersistentSshTask {
                     continue
                 }
                 if ($Session.TransientConsoleActive) {
-                    Clear-ClagnosTransientConsoleText
+                    Clear-ProdicloudTransientConsoleText
                     $Session.TransientConsoleActive = $false
                 }
                 [void]$outputLines.Add([string]$normalizedLine)
@@ -107,13 +107,13 @@ function Invoke-ClagnosPersistentSshTask {
             $Session.PendingStderrTask = $stderrReader.ReadLineAsync()
             if ($null -ne $line) {
                 $lineText = [string]$line
-                $normalizedLine = Normalize-ClagnosProtocolLine -Text $lineText
+                $normalizedLine = Normalize-ProdicloudProtocolLine -Text $lineText
                 if ($null -eq $normalizedLine) { $normalizedLine = "" }
-                if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
+                if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedLine)) {
                     continue
                 }
-                if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedLine)) {
-                    Write-ClagnosTransientConsoleText -Text ([string]$normalizedLine)
+                if (Test-ProdicloudTransientSpinnerLine -Text ([string]$normalizedLine)) {
+                    Write-ProdicloudTransientConsoleText -Text ([string]$normalizedLine)
                     $Session.TransientConsoleActive = $true
                     continue
                 }
@@ -121,7 +121,7 @@ function Invoke-ClagnosPersistentSshTask {
                     continue
                 }
                 if ($Session.TransientConsoleActive) {
-                    Clear-ClagnosTransientConsoleText
+                    Clear-ProdicloudTransientConsoleText
                     $Session.TransientConsoleActive = $false
                 }
                 [void]$outputLines.Add([string]$normalizedLine)
@@ -136,21 +136,21 @@ function Invoke-ClagnosPersistentSshTask {
             try { $stderrTail = [string]$stderrReader.ReadToEnd() } catch { }
             if (-not [string]::IsNullOrWhiteSpace($stdoutTail)) {
                 foreach ($line in ($stdoutTail -split "`r?`n")) {
-                    $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$line)
+                    $normalizedTailLine = Normalize-ProdicloudProtocolLine -Text ([string]$line)
                     if ([string]::IsNullOrWhiteSpace($normalizedTailLine)) { continue }
-                    if (($normalizedTailLine -as [string]) -like "CLAGNOS_SESSION_ERROR:*") {
+                    if (($normalizedTailLine -as [string]) -like "PRODICLOUD_SESSION_ERROR:*") {
                         throw ("Persistent SSH session reported protocol error for task '{0}': {1}" -f $TaskName, [string]$normalizedTailLine)
                     }
                     if ($normalizedTailLine -match $beginMarkerRegex) { continue }
                     if ($normalizedTailLine -match $endMarkerRegex) { continue }
-                    if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
-                    if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
-                        Write-ClagnosTransientConsoleText -Text ([string]$normalizedTailLine)
+                    if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                    if (Test-ProdicloudTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
+                        Write-ProdicloudTransientConsoleText -Text ([string]$normalizedTailLine)
                         $Session.TransientConsoleActive = $true
                         continue
                     }
                     if ($Session.TransientConsoleActive) {
-                        Clear-ClagnosTransientConsoleText
+                        Clear-ProdicloudTransientConsoleText
                         $Session.TransientConsoleActive = $false
                     }
                     [void]$outputLines.Add([string]$normalizedTailLine)
@@ -159,16 +159,16 @@ function Invoke-ClagnosPersistentSshTask {
             }
             if (-not [string]::IsNullOrWhiteSpace($stderrTail)) {
                 foreach ($line in ($stderrTail -split "`r?`n")) {
-                    $normalizedTailLine = Normalize-ClagnosProtocolLine -Text ([string]$line)
+                    $normalizedTailLine = Normalize-ProdicloudProtocolLine -Text ([string]$line)
                     if ([string]::IsNullOrWhiteSpace($normalizedTailLine)) { continue }
-                    if (Test-ClagnosTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
-                    if (Test-ClagnosTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
-                        Write-ClagnosTransientConsoleText -Text ([string]$normalizedTailLine)
+                    if (Test-ProdicloudTaskOutputNoiseLine -Text ([string]$normalizedTailLine)) { continue }
+                    if (Test-ProdicloudTransientSpinnerLine -Text ([string]$normalizedTailLine)) {
+                        Write-ProdicloudTransientConsoleText -Text ([string]$normalizedTailLine)
                         $Session.TransientConsoleActive = $true
                         continue
                     }
                     if ($Session.TransientConsoleActive) {
-                        Clear-ClagnosTransientConsoleText
+                        Clear-ProdicloudTransientConsoleText
                         $Session.TransientConsoleActive = $false
                     }
                     [void]$outputLines.Add([string]$normalizedTailLine)
@@ -184,7 +184,7 @@ function Invoke-ClagnosPersistentSshTask {
 
     if ($taskWatch.IsRunning) { $taskWatch.Stop() }
     if ($Session.TransientConsoleActive) {
-        Clear-ClagnosTransientConsoleText
+        Clear-ProdicloudTransientConsoleText
         $Session.TransientConsoleActive = $false
     }
     return [pscustomobject]@{

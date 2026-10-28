@@ -7,13 +7,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $packageRoot = Join-Path $repoRoot 'vm-packages'
-$script:ClagnosPackageStateSourceAddresses = @()
+$script:ProdicloudPackageStateSourceAddresses = @()
 try {
-    $script:ClagnosPackageStateSourceAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' } | Select-Object -ExpandProperty IPAddress)
+    $script:ProdicloudPackageStateSourceAddresses = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop | Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.)' } | Select-Object -ExpandProperty IPAddress)
 }
-catch { $script:ClagnosPackageStateSourceAddresses = @() }
+catch { $script:ProdicloudPackageStateSourceAddresses = @() }
 
-function New-ClagnosProfileFileRule {
+function New-ProdicloudProfileFileRule {
     param([string]$Path, [string[]]$TargetProfiles = @())
 
     return [ordered]@{
@@ -22,7 +22,7 @@ function New-ClagnosProfileFileRule {
     }
 }
 
-function Set-ClagnosPackageAppStatePolicy {
+function Set-ProdicloudPackageAppStatePolicy {
     param(
         [string]$PackageId,
         [AllowNull()]$AppState,
@@ -54,7 +54,7 @@ function Set-ClagnosPackageAppStatePolicy {
     Write-Output ("{0}: {1}" -f $PackageId, $(if ($null -eq $AppState) { 'no portable app-state policy' } else { 'portable app-state policy' }))
 }
 
-function Get-ClagnosArchiveEntryBytes {
+function Get-ProdicloudArchiveEntryBytes {
     param([System.IO.Compression.ZipArchiveEntry]$Entry)
 
     $stream = $Entry.Open()
@@ -69,7 +69,7 @@ function Get-ClagnosArchiveEntryBytes {
     finally { $stream.Dispose() }
 }
 
-function Get-ClagnosAppStateProfileLabelFromEntry {
+function Get-ProdicloudAppStateProfileLabelFromEntry {
     param([string]$EntryName)
 
     $normalized = ([string]$EntryName).Replace('\','/')
@@ -79,35 +79,35 @@ function Get-ClagnosAppStateProfileLabelFromEntry {
     return ''
 }
 
-function ConvertTo-ClagnosPortableAppStateString {
+function ConvertTo-ProdicloudPortableAppStateString {
     param([string]$Value)
 
     $result = [string]$Value
-    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Users\\[^\\/"'']+', '%CLAGNOS_TARGET_PROFILE_PATH%')
-    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Program Files \(x86\)', '%CLAGNOS_PROGRAM_FILES_X86%')
-    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Program Files', '%CLAGNOS_PROGRAM_FILES%')
-    $result = [regex]::Replace($result, '(?i)[A-Z]:\\ProgramData', '%CLAGNOS_PROGRAM_DATA%')
-    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Windows', '%CLAGNOS_WINDOWS_DIRECTORY%')
-    $result = [regex]::Replace($result, '(?i)17\.0_[A-Za-z0-9]+', '%CLAGNOS_VS_INSTANCE_DIRECTORY%')
-    $result = [regex]::Replace($result, '(?i)S-1-5-21-\d+-\d+-\d+-\d+', '%CLAGNOS_TARGET_USER_SID%')
-    $result = [regex]::Replace($result, '(?i)(?<![A-Z0-9_])([A-Z]):\\', '%CLAGNOS_SYSTEM_DRIVE%\')
-    $result = [regex]::Replace($result, '(?i)(?<![A-Z0-9_.-])' + [regex]::Escape([string]$env:COMPUTERNAME) + '(?![A-Z0-9_.-])', '%CLAGNOS_COMPUTER_NAME%')
-    foreach ($address in @($script:ClagnosPackageStateSourceAddresses)) {
+    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Users\\[^\\/"'']+', '%PRODICLOUD_TARGET_PROFILE_PATH%')
+    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Program Files \(x86\)', '%PRODICLOUD_PROGRAM_FILES_X86%')
+    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Program Files', '%PRODICLOUD_PROGRAM_FILES%')
+    $result = [regex]::Replace($result, '(?i)[A-Z]:\\ProgramData', '%PRODICLOUD_PROGRAM_DATA%')
+    $result = [regex]::Replace($result, '(?i)[A-Z]:\\Windows', '%PRODICLOUD_WINDOWS_DIRECTORY%')
+    $result = [regex]::Replace($result, '(?i)17\.0_[A-Za-z0-9]+', '%PRODICLOUD_VS_INSTANCE_DIRECTORY%')
+    $result = [regex]::Replace($result, '(?i)S-1-5-21-\d+-\d+-\d+-\d+', '%PRODICLOUD_TARGET_USER_SID%')
+    $result = [regex]::Replace($result, '(?i)(?<![A-Z0-9_])([A-Z]):\\', '%PRODICLOUD_SYSTEM_DRIVE%\')
+    $result = [regex]::Replace($result, '(?i)(?<![A-Z0-9_.-])' + [regex]::Escape([string]$env:COMPUTERNAME) + '(?![A-Z0-9_.-])', '%PRODICLOUD_COMPUTER_NAME%')
+    foreach ($address in @($script:ProdicloudPackageStateSourceAddresses)) {
         if (-not [string]::IsNullOrWhiteSpace([string]$address)) {
-            $result = [regex]::Replace($result, '(?<![0-9.])' + [regex]::Escape([string]$address) + '(?![0-9.])', '%CLAGNOS_PRIMARY_IPV4_ADDRESS%')
+            $result = [regex]::Replace($result, '(?<![0-9.])' + [regex]::Escape([string]$address) + '(?![0-9.])', '%PRODICLOUD_PRIMARY_IPV4_ADDRESS%')
         }
     }
     return [string]$result
 }
 
-function ConvertTo-ClagnosPortableAppStateObject {
+function ConvertTo-ProdicloudPortableAppStateObject {
     param([AllowNull()]$Value, [string]$PropertyName = '')
 
     if ($null -eq $Value) { return $null }
-    if ($Value -is [string]) { return (ConvertTo-ClagnosPortableAppStateString -Value ([string]$Value)) }
+    if ($Value -is [string]) { return (ConvertTo-ProdicloudPortableAppStateString -Value ([string]$Value)) }
     if ($Value -is [System.Array]) {
         $items = @()
-        foreach ($item in @($Value)) { $items += (ConvertTo-ClagnosPortableAppStateObject -Value $item -PropertyName $PropertyName) }
+        foreach ($item in @($Value)) { $items += (ConvertTo-ProdicloudPortableAppStateObject -Value $item -PropertyName $PropertyName) }
         return ,$items
     }
     if ($Value -is [pscustomobject]) {
@@ -116,14 +116,14 @@ function ConvertTo-ClagnosPortableAppStateObject {
                 $Value.PSObject.Properties.Remove([string]$property.Name)
                 continue
             }
-            $property.Value = ConvertTo-ClagnosPortableAppStateObject -Value $property.Value -PropertyName ([string]$property.Name)
+            $property.Value = ConvertTo-ProdicloudPortableAppStateObject -Value $property.Value -PropertyName ([string]$property.Name)
         }
         return $Value
     }
     return $Value
 }
 
-function ConvertTo-ClagnosPortableAppStatePayloadBytes {
+function ConvertTo-ProdicloudPortableAppStatePayloadBytes {
     param([string]$EntryName, [byte[]]$Bytes)
 
     $extension = [IO.Path]::GetExtension([string]$EntryName).ToLowerInvariant()
@@ -139,11 +139,11 @@ function ConvertTo-ClagnosPortableAppStatePayloadBytes {
     if ($extension -eq '.json') {
         try {
             $document = ConvertFrom-Json -InputObject $content -ErrorAction Stop
-            $document = ConvertTo-ClagnosPortableAppStateObject -Value $document
+            $document = ConvertTo-ProdicloudPortableAppStateObject -Value $document
             $content = ConvertTo-Json -InputObject $document -Depth 100
         }
         catch {
-            $content = ConvertTo-ClagnosPortableAppStateString -Value $content
+            $content = ConvertTo-ProdicloudPortableAppStateString -Value $content
         }
     }
     elseif ($extension -in @('.xml','.vssettings','.config')) {
@@ -156,19 +156,19 @@ function ConvertTo-ClagnosPortableAppStatePayloadBytes {
                     [void]$node.ParentNode.RemoveChild($node)
                     continue
                 }
-                foreach ($attribute in @($node.Attributes)) { $attribute.Value = ConvertTo-ClagnosPortableAppStateString -Value ([string]$attribute.Value) }
+                foreach ($attribute in @($node.Attributes)) { $attribute.Value = ConvertTo-ProdicloudPortableAppStateString -Value ([string]$attribute.Value) }
                 foreach ($textNode in @($node.ChildNodes | Where-Object { $_.NodeType -in @([System.Xml.XmlNodeType]::Text,[System.Xml.XmlNodeType]::CDATA) })) {
-                    $textNode.Value = ConvertTo-ClagnosPortableAppStateString -Value ([string]$textNode.Value)
+                    $textNode.Value = ConvertTo-ProdicloudPortableAppStateString -Value ([string]$textNode.Value)
                 }
             }
             $content = [string]$document.OuterXml
         }
         catch {
-            $content = ConvertTo-ClagnosPortableAppStateString -Value $content
+            $content = ConvertTo-ProdicloudPortableAppStateString -Value $content
         }
     }
     else {
-        $content = ConvertTo-ClagnosPortableAppStateString -Value $content
+        $content = ConvertTo-ProdicloudPortableAppStateString -Value $content
         if ($extension -in @('.ini','.jcf','.jdf','.vpf','.vlcrc','.toml','.yml','.yaml','.reg','.properties') -or [IO.Path]::GetFileName([string]$EntryName) -eq 'config') {
             $lines = New-Object 'System.Collections.Generic.List[string]'
             $skipRecentSection = $false
@@ -186,7 +186,7 @@ function ConvertTo-ClagnosPortableAppStatePayloadBytes {
     return ,([System.Text.Encoding]::UTF8.GetBytes([string]$content))
 }
 
-function Set-ClagnosPortablePackageSnapshot {
+function Set-ProdicloudPortablePackageSnapshot {
     param(
         [string]$PackageId,
         [hashtable]$FileRules
@@ -211,7 +211,7 @@ function Set-ClagnosPortablePackageSnapshot {
         finally { $reader.Dispose() }
 
         $existingPayload = @($sourceArchive.Entries | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.Name) })
-        $hasDynamicArchiveSourcePath = @($oldManifest.profileFiles | Where-Object { [string]$_.sourcePath -match '%CLAGNOS_[A-Z0-9_]+%' }).Count -gt 0
+        $hasDynamicArchiveSourcePath = @($oldManifest.profileFiles | Where-Object { [string]$_.sourcePath -match '%PRODICLOUD_[A-Z0-9_]+%' }).Count -gt 0
         if ($PackageId -ne 'azure-developer-cli' -and -not $hasDynamicArchiveSourcePath -and @($oldManifest.profileFiles).Count -gt 0 -and @($oldManifest.profileDirectories).Count -eq 0 -and @($oldManifest.registryImports).Count -eq 0 -and
             @($existingPayload | Where-Object { -not [string]::Equals([string]$_.FullName, 'app-state.manifest.json', [System.StringComparison]::OrdinalIgnoreCase) -and -not [string]$_.FullName.StartsWith('payload/profile-files/', [System.StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) {
             Write-Output ("{0}: snapshot is already in the portable profile-file format" -f $PackageId)
@@ -224,7 +224,7 @@ function Set-ClagnosPortablePackageSnapshot {
                 $destinationPath = [string]$rule.Destination
                 $candidate = @($sourceArchive.Entries | Where-Object {
                     -not [string]::IsNullOrWhiteSpace([string]$_.Name) -and
-                    [string]::Equals((Get-ClagnosAppStateProfileLabelFromEntry -EntryName ([string]$_.FullName)), [string]$profileLabel, [System.StringComparison]::OrdinalIgnoreCase) -and
+                    [string]::Equals((Get-ProdicloudAppStateProfileLabelFromEntry -EntryName ([string]$_.FullName)), [string]$profileLabel, [System.StringComparison]::OrdinalIgnoreCase) -and
                     ([string]$_.FullName).Replace('\','/') -match [string]$rule.Pattern
                 } | Sort-Object { $_.FullName.Length }, FullName | Select-Object -First 1)
                 if (@($candidate).Count -lt 1) { continue }
@@ -233,7 +233,7 @@ function Set-ClagnosPortablePackageSnapshot {
                 $sourceLeaf = [IO.Path]::GetFileName($destinationPath)
                 $payloadPath = ('payload/profile-files/{0}/{1}' -f [string]$profileLabel, $sourceLeaf)
                 $newEntry = $targetArchive.CreateEntry($payloadPath, [System.IO.Compression.CompressionLevel]::Optimal)
-                $payloadBytes = ConvertTo-ClagnosPortableAppStatePayloadBytes -EntryName ([string]$candidate[0].FullName) -Bytes (Get-ClagnosArchiveEntryBytes -Entry $candidate[0])
+                $payloadBytes = ConvertTo-ProdicloudPortableAppStatePayloadBytes -EntryName ([string]$candidate[0].FullName) -Bytes (Get-ProdicloudArchiveEntryBytes -Entry $candidate[0])
                 $outStream = $newEntry.Open()
                 try { $outStream.Write([byte[]]$payloadBytes, 0, ([byte[]]$payloadBytes).Length) }
                 finally { $outStream.Dispose() }
@@ -287,7 +287,7 @@ function Set-ClagnosPortablePackageSnapshot {
     Write-Output ("{0}: curated {1} portable preference files" -f $PackageId, [int]$profileFiles.Count)
 }
 
-function Set-ClagnosPortableJawsPackageSnapshot {
+function Set-ProdicloudPortableJawsPackageSnapshot {
     param()
 
     $zipPath = Join-Path $packageRoot 'builtin\windows\jaws\app-state\app-state.zip'
@@ -326,7 +326,7 @@ function Set-ClagnosPortableJawsPackageSnapshot {
             $leaf = [IO.Path]::GetFileName([string]$file.Relative)
             $payloadPath = 'payload/profile-files/manager/{0}' -f $leaf
             $newEntry = $targetArchive.CreateEntry($payloadPath,[System.IO.Compression.CompressionLevel]::Optimal)
-            $payloadBytes = ConvertTo-ClagnosPortableAppStatePayloadBytes -EntryName ([string]$file.Relative) -Bytes ([IO.File]::ReadAllBytes([string]$file.Source))
+            $payloadBytes = ConvertTo-ProdicloudPortableAppStatePayloadBytes -EntryName ([string]$file.Relative) -Bytes ([IO.File]::ReadAllBytes([string]$file.Source))
             $outStream = $newEntry.Open()
             try { $outStream.Write([byte[]]$payloadBytes,0,([byte[]]$payloadBytes).Length) }
             finally { $outStream.Dispose() }
@@ -364,42 +364,42 @@ $dropAppState = @(
 )
 foreach ($id in @($dropAppState)) {
     if ($JawsOnly) { continue }
-    Set-ClagnosPackageAppStatePolicy -PackageId $id -AppState $null -RemoveSnapshot
+    Set-ProdicloudPackageAppStatePolicy -PackageId $id -AppState $null -RemoveSnapshot
 }
 
 $jawsEnuRules = @()
 $jawsEnuRoot = Join-Path (Join-Path $env:APPDATA 'Freedom Scientific\JAWS\2025\Settings') 'enu'
 foreach ($jawsFile in @(Get-ChildItem -LiteralPath $jawsEnuRoot -File -Filter '*.j*' -ErrorAction SilentlyContinue | Sort-Object Name)) {
-    $jawsEnuRules += New-ClagnosProfileFileRule -Path ('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\{0}' -f [string]$jawsFile.Name) -TargetProfiles @('manager','assistant')
+    $jawsEnuRules += New-ProdicloudProfileFileRule -Path ('AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\{0}' -f [string]$jawsFile.Name) -TargetProfiles @('manager','assistant')
 }
-$jawsEnuRules += New-ClagnosProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\*.VPF' -TargetProfiles @('manager','assistant')
+$jawsEnuRules += New-ProdicloudProfileFileRule -Path 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\VoiceProfiles\*.VPF' -TargetProfiles @('manager','assistant')
 
 $policies = [ordered]@{
     'azure-cli' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path '.azure\config'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path '.azure\config'))
         removeSnapshot = $false
     }
     'azure-developer-cli' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path '.azd\config.json'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path '.azd\config.json'))
         removeSnapshot = $false
     }
     'github-cli' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path 'AppData\Roaming\GitHub CLI\config.yml'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path 'AppData\Roaming\GitHub CLI\config.yml'))
         removeSnapshot = $false
     }
     'visual-studio-code' = [ordered]@{
         profileFiles = @(
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Code\User\settings.json'),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Code\User\keybindings.json')
+            (New-ProdicloudProfileFileRule -Path 'AppData\Roaming\Code\User\settings.json'),
+            (New-ProdicloudProfileFileRule -Path 'AppData\Roaming\Code\User\keybindings.json')
         )
         removeSnapshot = $false
     }
     'visual-studio-community' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path 'AppData\Local\Microsoft\VisualStudio\17.0_*\Settings\CurrentSettings.vssettings'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path 'AppData\Local\Microsoft\VisualStudio\17.0_*\Settings\CurrentSettings.vssettings'))
         removeSnapshot = $false
     }
     'nvda' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path 'AppData\Roaming\nvda\nvda.ini'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path 'AppData\Roaming\nvda\nvda.ini'))
         removeSnapshot = $false
     }
     'jaws' = [ordered]@{
@@ -408,28 +408,28 @@ $policies = [ordered]@{
     }
     'vlc' = [ordered]@{
         profileFiles = @(
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\vlc\vlcrc'),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\vlc\vlc-qt-interface.ini')
+            (New-ProdicloudProfileFileRule -Path 'AppData\Roaming\vlc\vlcrc'),
+            (New-ProdicloudProfileFileRule -Path 'AppData\Roaming\vlc\vlc-qt-interface.ini')
         )
         removeSnapshot = $false
     }
     'windows-subsystem-linux' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path '.wslconfig'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path '.wslconfig'))
         removeSnapshot = $true
     }
     'google-gemini-cli' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path '.gemini\settings.json'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path '.gemini\settings.json'))
         removeSnapshot = $true
     }
     'openai-codex-cli' = [ordered]@{
-        profileFiles = @((New-ClagnosProfileFileRule -Path '.codex\config.toml'))
+        profileFiles = @((New-ProdicloudProfileFileRule -Path '.codex\config.toml'))
         removeSnapshot = $true
     }
     'ollama' = [ordered]@{
         profileFiles = @(
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\ollama app.exe\config.json'),
-            (New-ClagnosProfileFileRule -Path 'AppData\Roaming\Ollama\config.json'),
-            (New-ClagnosProfileFileRule -Path 'AppData\Local\Ollama\config.json')
+            (New-ProdicloudProfileFileRule -Path 'AppData\Roaming\ollama app.exe\config.json'),
+            (New-ProdicloudProfileFileRule -Path 'AppData\Roaming\Ollama\config.json'),
+            (New-ProdicloudProfileFileRule -Path 'AppData\Local\Ollama\config.json')
         )
         removeSnapshot = $true
     }
@@ -445,7 +445,7 @@ foreach ($id in @($policies.Keys)) {
         machineRegistryKeys = @()
         userRegistryKeys = @()
     }
-    Set-ClagnosPackageAppStatePolicy -PackageId $id -AppState $state -RemoveSnapshot:([bool]$policies[$id].removeSnapshot)
+    Set-ProdicloudPackageAppStatePolicy -PackageId $id -AppState $state -RemoveSnapshot:([bool]$policies[$id].removeSnapshot)
 }
 
 $snapshotRules = [ordered]@{
@@ -462,7 +462,7 @@ $snapshotRules = [ordered]@{
             @{ Pattern = '(?i)Code_User(?:/(?:AppData_Roaming_Code_User/)?)?keybindings\.json$|Code_User_keybindings\.json$'; Destination = 'AppData\Roaming\Code\User\keybindings.json' }
         )
     }
-    'visual-studio-community' = @{ manager = @(@{ Pattern = '(?i)(?:Microsoft_VisualStudio/[^/]+/Settings/CurrentSettings\.vssettings|Microsoft_VisualStudio_.*_Settings_CurrentSettings\.vssettings)$'; Destination = 'AppData\Local\Microsoft\VisualStudio\%CLAGNOS_VS_INSTANCE_DIRECTORY%\Settings\CurrentSettings.vssettings' }) }
+    'visual-studio-community' = @{ manager = @(@{ Pattern = '(?i)(?:Microsoft_VisualStudio/[^/]+/Settings/CurrentSettings\.vssettings|Microsoft_VisualStudio_.*_Settings_CurrentSettings\.vssettings)$'; Destination = 'AppData\Local\Microsoft\VisualStudio\%PRODICLOUD_VS_INSTANCE_DIRECTORY%\Settings\CurrentSettings.vssettings' }) }
     'nvda' = @{ manager = @(@{ Pattern = '(?i)(?:AppData_Roaming_nvda/nvda\.ini|AppData_Roaming_nvda_nvda\.ini)$'; Destination = 'AppData\Roaming\nvda\nvda.ini' }) }
     'jaws' = @{ manager = @(
         @{ Pattern = '(?i)(?:Freedom_Scientific_JAWS_2025_Settings/enu/DEFAULT\.JCF|Freedom Scientific_JAWS_2025_Settings_enu_DEFAULT\.JCF)$'; Destination = 'AppData\Roaming\Freedom Scientific\JAWS\2025\Settings\enu\DEFAULT.JCF'; TargetProfiles = @('manager','assistant') },
@@ -486,8 +486,8 @@ $snapshotRules = [ordered]@{
 foreach ($id in @($snapshotRules.Keys)) {
     if ($JawsOnly -and [string]$id -ne 'jaws') { continue }
     if (-not $Apply) { Write-Output ("{0}: snapshot would be curated" -f $id); continue }
-    if ([string]$id -eq 'jaws') { Set-ClagnosPortableJawsPackageSnapshot }
-    else { Set-ClagnosPortablePackageSnapshot -PackageId $id -FileRules $snapshotRules[$id] }
+    if ([string]$id -eq 'jaws') { Set-ProdicloudPortableJawsPackageSnapshot }
+    else { Set-ProdicloudPortablePackageSnapshot -PackageId $id -FileRules $snapshotRules[$id] }
 }
 
 if ($Apply) { Write-Output 'Package app-state maintenance completed.' }

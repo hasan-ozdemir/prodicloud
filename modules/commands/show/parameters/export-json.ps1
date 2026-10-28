@@ -1,5 +1,5 @@
 # 'export-json' option binding for 'show'.
 
-function Get-ClagnosShowExportJsonOptionSpecification {
-    return (New-ClagnosCommandOptionSpecification -Name 'export-json' -TakesValue)
+function Get-ProdicloudShowExportJsonOptionSpecification {
+    return (New-ProdicloudCommandOptionSpecification -Name 'export-json' -TakesValue)
 }
